@@ -1,0 +1,327 @@
+"""SQLite-backed persistence for research sessions, iterations, and promotions."""
+
+from __future__ import annotations
+
+import logging
+import os
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+import aiosqlite
+
+logger = logging.getLogger(__name__)
+
+_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS research_sessions (
+    id TEXT PRIMARY KEY,
+    instrument TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
+    model_type TEXT NOT NULL,
+    tag TEXT NOT NULL,
+    skill_name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running',
+    quick_mode INTEGER DEFAULT 0,
+    max_iterations INTEGER DEFAULT 15,
+    max_budget_usd REAL DEFAULT 10.0,
+    focus_hint TEXT,
+    workspace_path TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    total_api_cost_usd REAL DEFAULT 0.0,
+    best_iteration INTEGER,
+    best_metric REAL,
+    error_message TEXT
+);
+
+CREATE TABLE IF NOT EXISTS iterations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    research_id TEXT NOT NULL REFERENCES research_sessions(id),
+    iteration INTEGER NOT NULL,
+    primary_metric REAL,
+    metric_name TEXT,
+    all_gates_passed INTEGER,
+    decision TEXT,
+    description TEXT,
+    config_snapshot TEXT,
+    metrics_json TEXT,
+    training_time_s REAL,
+    api_cost_usd REAL DEFAULT 0.0,
+    created_at TEXT NOT NULL,
+    UNIQUE(research_id, iteration)
+);
+
+CREATE TABLE IF NOT EXISTS promotions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    research_id TEXT NOT NULL REFERENCES research_sessions(id),
+    iteration INTEGER NOT NULL,
+    model_type TEXT NOT NULL,
+    instrument TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
+    target_path TEXT NOT NULL,
+    config_yaml TEXT NOT NULL,
+    previous_yaml TEXT,
+    promoted_at TEXT NOT NULL
+);
+"""
+
+_MODEL_TO_SKILL = {
+    "direction": "direction-autotuner",
+    "volatility": "volatility-autotuner",
+    "rl": "rl-autotuner",
+}
+
+
+class ResultsStore:
+    """Async SQLite store for experiment data."""
+
+    def __init__(self, db_path: str) -> None:
+        self._db_path = db_path
+
+    async def initialize(self) -> None:
+        os.makedirs(os.path.dirname(self._db_path), exist_ok=True)
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.executescript(_SCHEMA_SQL)
+            await db.commit()
+        logger.info("Results store initialized at %s", self._db_path)
+
+    # ------------------------------------------------------------------
+    # Sessions
+    # ------------------------------------------------------------------
+
+    async def create_session(
+        self,
+        *,
+        session_id: str,
+        instrument: str,
+        timeframe: str,
+        model_type: str,
+        tag: str,
+        quick_mode: bool,
+        max_iterations: int,
+        max_budget_usd: float,
+        focus_hint: Optional[str],
+        workspace_path: str,
+    ) -> Dict[str, Any]:
+        skill_name = _MODEL_TO_SKILL[model_type]
+        now = datetime.now(timezone.utc).isoformat()
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute(
+                """INSERT INTO research_sessions
+                   (id, instrument, timeframe, model_type, tag, skill_name,
+                    status, quick_mode, max_iterations, max_budget_usd,
+                    focus_hint, workspace_path, started_at)
+                   VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?, ?, ?)""",
+                (
+                    session_id, instrument, timeframe, model_type, tag,
+                    skill_name, int(quick_mode), max_iterations,
+                    max_budget_usd, focus_hint, workspace_path, now,
+                ),
+            )
+            await db.commit()
+        return await self.get_session(session_id)
+
+    async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "SELECT * FROM research_sessions WHERE id = ?", (session_id,),
+            )
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def list_sessions(
+        self,
+        status: Optional[str] = None,
+        model_type: Optional[str] = None,
+        instrument: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        clauses = []
+        params: list = []
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if model_type:
+            clauses.append("model_type = ?")
+            params.append(model_type)
+        if instrument:
+            clauses.append("instrument = ?")
+            params.append(instrument)
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                f"SELECT * FROM research_sessions{where} ORDER BY started_at DESC",
+                params,
+            )
+            return [dict(r) for r in await cursor.fetchall()]
+
+    async def update_session(
+        self, session_id: str, **fields: Any,
+    ) -> Optional[Dict[str, Any]]:
+        if not fields:
+            return await self.get_session(session_id)
+        set_clause = ", ".join(f"{k} = ?" for k in fields)
+        values = list(fields.values()) + [session_id]
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute(
+                f"UPDATE research_sessions SET {set_clause} WHERE id = ?",
+                values,
+            )
+            await db.commit()
+        return await self.get_session(session_id)
+
+    async def delete_session(self, session_id: str) -> bool:
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute(
+                "DELETE FROM iterations WHERE research_id = ?", (session_id,),
+            )
+            await db.execute(
+                "DELETE FROM promotions WHERE research_id = ?", (session_id,),
+            )
+            cursor = await db.execute(
+                "DELETE FROM research_sessions WHERE id = ?", (session_id,),
+            )
+            await db.commit()
+            return cursor.rowcount > 0
+
+    # ------------------------------------------------------------------
+    # Iterations
+    # ------------------------------------------------------------------
+
+    async def add_iteration(
+        self,
+        *,
+        research_id: str,
+        iteration: int,
+        primary_metric: Optional[float],
+        metric_name: Optional[str],
+        all_gates_passed: Optional[bool],
+        decision: Optional[str],
+        description: Optional[str],
+        config_snapshot: Optional[str],
+        metrics_json: Optional[str],
+        training_time_s: Optional[float],
+        api_cost_usd: float = 0.0,
+    ) -> Dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute(
+                """INSERT INTO iterations
+                   (research_id, iteration, primary_metric, metric_name,
+                    all_gates_passed, decision, description, config_snapshot,
+                    metrics_json, training_time_s, api_cost_usd, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    research_id, iteration, primary_metric, metric_name,
+                    int(all_gates_passed) if all_gates_passed is not None else None,
+                    decision, description, config_snapshot, metrics_json,
+                    training_time_s, api_cost_usd, now,
+                ),
+            )
+            await db.commit()
+
+            # Update session best if this is a keep + gates passed
+            if decision == "keep" and all_gates_passed:
+                session = await self.get_session(research_id)
+                if session and (
+                    session["best_metric"] is None
+                    or (primary_metric is not None and primary_metric > session["best_metric"])
+                ):
+                    await self.update_session(
+                        research_id,
+                        best_iteration=iteration,
+                        best_metric=primary_metric,
+                    )
+
+        return {
+            "research_id": research_id,
+            "iteration": iteration,
+            "primary_metric": primary_metric,
+            "metric_name": metric_name,
+            "all_gates_passed": all_gates_passed,
+            "decision": decision,
+            "description": description,
+            "created_at": now,
+        }
+
+    async def get_iterations(
+        self, research_id: str,
+    ) -> List[Dict[str, Any]]:
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "SELECT * FROM iterations WHERE research_id = ? ORDER BY iteration",
+                (research_id,),
+            )
+            return [dict(r) for r in await cursor.fetchall()]
+
+    async def get_iteration(
+        self, research_id: str, iteration: int,
+    ) -> Optional[Dict[str, Any]]:
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "SELECT * FROM iterations WHERE research_id = ? AND iteration = ?",
+                (research_id, iteration),
+            )
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def get_best_iteration(
+        self, research_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """SELECT * FROM iterations
+                   WHERE research_id = ? AND all_gates_passed = 1 AND decision = 'keep'
+                   ORDER BY primary_metric DESC LIMIT 1""",
+                (research_id,),
+            )
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    # ------------------------------------------------------------------
+    # Promotions
+    # ------------------------------------------------------------------
+
+    async def record_promotion(
+        self,
+        *,
+        research_id: str,
+        iteration: int,
+        model_type: str,
+        instrument: str,
+        timeframe: str,
+        target_path: str,
+        config_yaml: str,
+        previous_yaml: Optional[str],
+    ) -> Dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        async with aiosqlite.connect(self._db_path) as db:
+            cursor = await db.execute(
+                """INSERT INTO promotions
+                   (research_id, iteration, model_type, instrument, timeframe,
+                    target_path, config_yaml, previous_yaml, promoted_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    research_id, iteration, model_type, instrument, timeframe,
+                    target_path, config_yaml, previous_yaml, now,
+                ),
+            )
+            await db.commit()
+            return {
+                "id": cursor.lastrowid,
+                "research_id": research_id,
+                "iteration": iteration,
+                "target_path": target_path,
+                "promoted_at": now,
+            }
+
+    async def list_promotions(self) -> List[Dict[str, Any]]:
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "SELECT * FROM promotions ORDER BY promoted_at DESC",
+            )
+            return [dict(r) for r in await cursor.fetchall()]

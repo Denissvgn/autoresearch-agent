@@ -1,0 +1,30 @@
+# Workspace venv requirements for autotuner scripts (prepare.py, setup.py, promote.py).
+# These are the ML dependencies that the agent's prepare.py scripts import
+# (directly or via the training pipeline they invoke).
+#
+# Installed into /app/workspace/.venv/ at Docker build time.
+
+# Core ML
+numpy==2.2.6
+pandas>=2.3.2
+scikit-learn==1.8.0
+lightgbm==4.6.0
+xgboost==2.1.4
+joblib>=1.3.0
+optuna>=3.5.0
+
+# MLflow tracking
+mlflow>=2.10.2,<3.0.0
+
+# Data / IO
+pyyaml>=6.0
+boto3>=1.34.0
+httpx>=0.27.0
+requests>=2.31.0
+
+# Monitoring / metrics (used by training scripts)
+prometheus-client>=0.23.1,<1.0.0
+
+# Config utilities
+pydantic>=2.6.3,<3.0.0
+pydantic-settings>=2.2.1,<3.0.0
