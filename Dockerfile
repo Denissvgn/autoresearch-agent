@@ -69,6 +69,12 @@ COPY scripts/autotuner/ /app/workspace/scripts/autotuner/
 # Training scripts invoked by prepare.py
 COPY scripts/training/ /app/workspace/scripts/training/
 
+# Ensemble-trainer source (required by training scripts for DirectionModelConfig, etc.)
+COPY services/ml/ensemble-trainer/src/ /app/workspace/services/ml/ensemble-trainer/src/
+
+# RL-trainer source (required by RL training scripts for RLTrainingConfig, etc.)
+COPY services/ml/rl-trainer/src/ /app/workspace/services/ml/rl-trainer/src/
+
 # SKILL.md files the agent follows
 COPY .github/skills/direction-autotuner/ /app/workspace/.github/skills/direction-autotuner/
 COPY .github/skills/volatility-autotuner/ /app/workspace/.github/skills/volatility-autotuner/

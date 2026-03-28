@@ -34,13 +34,13 @@ class StartResearchRequest(BaseModel):
     instrument: str = Field(..., examples=["DOGE_USDT"])
     timeframe: str = Field(..., examples=["15m"])
     model_type: str = Field(..., pattern="^(direction|volatility|rl)$")
-    tag: str = Field(..., examples=["doge-apr01"])
+    tag: Optional[str] = Field(default=None, examples=["doge-apr01"])
     quick_mode: Optional[bool] = Field(
         default=None,
         description="If null, uses server default (standard/full mode)",
     )
-    max_iterations: Optional[int] = Field(default=None, ge=1, le=100)
-    max_budget_usd: Optional[float] = Field(default=None, ge=0.1, le=100.0)
+    max_iterations: Optional[int] = Field(default=None, ge=1, le=500)
+    max_budget_usd: Optional[float] = Field(default=None, ge=0.1, le=500.0)
     focus_hint: Optional[str] = Field(
         default=None, max_length=1000,
         description="Optional hint for the agent about what to focus on",

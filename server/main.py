@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from server.config import settings
@@ -130,4 +131,16 @@ async def websocket_events(websocket: WebSocket):
 
 _ui_dist = os.path.join(os.path.dirname(__file__), "..", "ui", "dist")
 if os.path.isdir(_ui_dist):
-    app.mount("/", StaticFiles(directory=_ui_dist, html=True), name="ui")
+    # Serve static assets (JS, CSS, images) from the build output
+    app.mount("/assets", StaticFiles(directory=os.path.join(_ui_dist, "assets")), name="ui-assets")
+
+    # SPA catch-all: any non-API path returns index.html for client-side routing
+    _index_html = os.path.join(_ui_dist, "index.html")
+
+    @app.get("/{full_path:path}")
+    async def spa_fallback(full_path: str):
+        # Serve actual files if they exist (favicon.ico, etc.)
+        file_path = os.path.join(_ui_dist, full_path)
+        if full_path and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(_index_html)

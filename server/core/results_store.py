@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from datetime import datetime, timezone
@@ -254,6 +255,46 @@ class ResultsStore:
                 (research_id,),
             )
             return [dict(r) for r in await cursor.fetchall()]
+
+    async def update_iteration(
+        self,
+        research_id: str,
+        iteration: int,
+        marker: Dict[str, Any],
+    ) -> None:
+        """Overwrite an existing iteration with richer data from an explicit
+        ITERATION_RESULT marker.  Only updates non-None fields from marker."""
+        fields: Dict[str, Any] = {}
+        if "primary_metric" in marker:
+            fields["primary_metric"] = marker["primary_metric"]
+        if "metric_name" in marker:
+            fields["metric_name"] = marker["metric_name"]
+        if "all_gates_passed" in marker:
+            v = marker["all_gates_passed"]
+            fields["all_gates_passed"] = int(v) if isinstance(v, bool) else v
+        if "decision" in marker:
+            fields["decision"] = marker["decision"]
+        if "description" in marker:
+            fields["description"] = marker["description"]
+        if "config_snapshot" in marker:
+            fields["config_snapshot"] = marker["config_snapshot"]
+        if "training_time_s" in marker:
+            fields["training_time_s"] = marker["training_time_s"]
+        if marker:
+            fields["metrics_json"] = json.dumps(marker)
+
+        if not fields:
+            return
+
+        set_clause = ", ".join(f"{k} = ?" for k in fields)
+        values = list(fields.values()) + [research_id, iteration]
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute(
+                f"UPDATE iterations SET {set_clause} "
+                f"WHERE research_id = ? AND iteration = ?",
+                values,
+            )
+            await db.commit()
 
     async def get_iteration(
         self, research_id: str, iteration: int,

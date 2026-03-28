@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import subprocess
@@ -95,7 +96,8 @@ class ConfigPromoter:
                 "--instrument", instrument,
                 "--timeframe", timeframe,
             ]
-            result = subprocess.run(
+            result = await asyncio.to_thread(
+                subprocess.run,
                 cmd,
                 cwd=settings.workspace_root,
                 capture_output=True,
@@ -109,8 +111,10 @@ class ConfigPromoter:
             logger.info("promote.py succeeded: %s", result.stdout[:500])
         else:
             # Direct write fallback
-            os.makedirs(os.path.dirname(target_path), exist_ok=True)
-            Path(target_path).write_text(preview["best_yaml"], encoding="utf-8")
+            await asyncio.to_thread(os.makedirs, os.path.dirname(target_path), exist_ok=True)
+            await asyncio.to_thread(
+                Path(target_path).write_text, preview["best_yaml"], encoding="utf-8",
+            )
             logger.info("Wrote promoted config to %s", target_path)
 
         # Record promotion

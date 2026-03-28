@@ -45,7 +45,7 @@ class SessionManager:
         instrument: str,
         timeframe: str,
         model_type: str,
-        tag: str,
+        tag: Optional[str] = None,
         quick_mode: Optional[bool] = None,
         max_iterations: Optional[int] = None,
         max_budget_usd: Optional[float] = None,
@@ -71,6 +71,7 @@ class SessionManager:
                 )
 
         research_id = f"res_{uuid.uuid4().hex[:12]}"
+        effective_tag = tag or f"run-{research_id[-8:]}"
         workspace_path = (
             f"{settings.runs_dir}/{instrument}_{timeframe}/{model_type}"
         )
@@ -80,7 +81,7 @@ class SessionManager:
             instrument=instrument,
             timeframe=timeframe,
             model_type=model_type,
-            tag=tag,
+            tag=effective_tag,
             quick_mode=quick_mode if quick_mode is not None else settings.default_quick_mode,
             max_iterations=max_iterations or settings.max_iterations,
             max_budget_usd=max_budget_usd or settings.max_budget_usd,
@@ -94,7 +95,7 @@ class SessionManager:
             instrument=instrument,
             timeframe=timeframe,
             model_type=model_type,
-            tag=tag,
+            tag=effective_tag,
             quick_mode=config.quick_mode,
             max_iterations=config.max_iterations,
             max_budget_usd=config.max_budget_usd,

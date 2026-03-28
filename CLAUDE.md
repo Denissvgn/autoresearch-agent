@@ -1,52 +1,52 @@
 # Autoresearch Agent Workspace
 
 You are running inside the autoresearch-agent Docker container.
-Your job is to autonomously tune ML models by following the SKILL.md instructions.
+Your job is to autonomously tune ML models. Act immediately — do NOT explore the filesystem. The workspace is already set up for you.
+
+## CRITICAL: Act, Don't Explore
+
+You have a LIMITED number of tool calls. **Do not waste them** on `ls`, `find`, `cat`, `docker ps`, or service health checks. The services are pre-verified and working. Jump straight to running experiments.
+
+## Quick Reference
+
+- **Python**: `/app/workspace/.venv/bin/python` (never system python)
+- **Working dir**: `/app/workspace/`
+- **Setup**: `/app/workspace/.venv/bin/python scripts/autotuner/setup.py --instrument {INSTRUMENT} --timeframe {TIMEFRAME}`
+- **Train**: `/app/workspace/.venv/bin/python scripts/autotuner/{MODEL_TYPE}/prepare.py --config {WORKSPACE}/train.yaml`
+- **Promote**: `/app/workspace/.venv/bin/python scripts/autotuner/promote.py --config {WORKSPACE}/best_train.yaml`
+- ML services reachable (pre-verified): mlflow:5000, data-ingest:8000, ensemble-trainer:8000, rl-trainer:8000, feature-service:8000, minio:9000
+
+## Exact Experiment Loop
+
+**Step 1** — Setup (1 tool call):
+```bash
+cd /app/workspace && .venv/bin/python scripts/autotuner/setup.py --instrument {INSTRUMENT} --timeframe {TIMEFRAME}
+```
+
+**Step 2** — Read the model README and train.yaml (1 tool call):
+Use read_file on `scripts/autotuner/{MODEL_TYPE}/README.md` and `{WORKSPACE}/train.yaml`.
+
+**Step 3** — Baseline run (1 tool call):
+```bash
+cd /app/workspace && .venv/bin/python scripts/autotuner/{MODEL_TYPE}/prepare.py --config {WORKSPACE}/train.yaml 2>&1
+```
+After this completes, copy `train.yaml` to `best_train.yaml`:
+```bash
+cp {WORKSPACE}/train.yaml {WORKSPACE}/best_train.yaml
+```
+
+**Step 4** — For each subsequent iteration:
+1. Edit `train.yaml` (change ONE parameter per the README strategy)
+2. Run prepare.py (same command as Step 3)
+3. Check the `---` delimited output: if `primary_metric` improved AND `all_gates_passed: true`, keep it (copy yaml to best). Otherwise revert from best.
+4. Output: `ITERATION_RESULT: {"iteration": N, "primary_metric": X.XXXX, "metric_name": "...", "all_gates_passed": true|false, "decision": "keep|discard", "description": "brief description"}`
 
 ## Rules
 
-- All paths are relative to `/app/workspace/`
-- Python: always use `/app/workspace/.venv/bin/python` (never system python)
-- ML services are reachable via Docker network:
-  - MLflow Tracking: http://mlflow:5000
-  - Data Ingest: http://data-ingest:8000
-  - Ensemble Trainer: http://ensemble-trainer:8000
-  - RL Trainer: http://rl-trainer:8000
-  - Feature Service: http://feature-service:8000
-- NEVER write outside `/app/workspace/` except during config promotion
-- Use `scripts/autotuner/setup.py` to initialize workspaces
-- Use `scripts/autotuner/{model}/prepare.py` to run experiments
-- Use `scripts/autotuner/promote.py` to promote winning configs
-
-## Iteration Output Protocol
-
-After **each** experiment iteration, output a JSON line in exactly this format:
-
-```
-ITERATION_RESULT: {"iteration": N, "primary_metric": X.XXXX, "metric_name": "...", "all_gates_passed": true|false, "decision": "keep|discard|crash", "description": "brief change description", "training_time_s": NNN.N}
-```
-
-The orchestrator monitors your output for these `ITERATION_RESULT:` markers
-to track progress and broadcast updates to the web UI.
-
-## Experiment Loop
-
-1. Run `setup.py` to create the workspace (if not already done)
-2. Read the model's README.md for strategy guidance
-3. Establish a baseline by running the current config as-is
-4. For each iteration:
-   - Read `train.yaml` and `results.tsv`
-   - Form a hypothesis (change ONE parameter at a time)
-   - Edit `train.yaml`
-   - Run `prepare.py --config <path>/train.yaml`
-   - Parse the output metrics
-   - If improved AND gates passed: keep → copy to `best_train.yaml`
-   - Otherwise: revert `train.yaml` from `best_train.yaml`
-   - Output the `ITERATION_RESULT:` marker
-5. Stop when improvements plateau (3 consecutive < 0.5% improvement)
-
-## Environment
-
-- S3 endpoint: http://minio:9000 (via AWS_ACCESS_KEY_ID/SECRET)
-- MLflow artifacts: s3://mlflow-artifacts
-- Shared feature library: v2.1.0 (93 features)
+- NEVER write outside `/app/workspace/`
+- Do NOT run `docker`, `git`, `make`, or `apt` — they are not installed
+- Do NOT check service health — services are verified before you start
+- Spend at most 2-3 tool calls on setup/reading, then START TRAINING
+- **NEVER pipe prepare.py output** through `| tail`, `| head`, `| grep`, or `timeout`. The full stdout is critical for iteration detection. Just run prepare.py directly — the tool has a 30-minute timeout built in.
+- Do NOT set `timeout_s` below 1800 for prepare.py commands. Training takes 5-20 minutes.
+- If training crashes with connection errors (data-ingest, mlflow, feature-service), wait 15 seconds and retry. Do NOT debug the connection — these are transient Docker DNS issues.

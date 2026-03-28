@@ -18,7 +18,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 import anthropic
 
 from server.config import settings
-from server.core.experiment_parser import parse_iteration_marker
+from server.core.experiment_parser import parse_iteration_marker, parse_prepare_output
 from server.core.results_store import ResultsStore
 from server.ws.events import broadcaster
 
@@ -35,7 +35,7 @@ class ResearchConfig:
     instrument: str
     timeframe: str
     model_type: str
-    tag: str
+    tag: str = ""
     quick_mode: bool = False
     max_iterations: int = 30
     max_budget_usd: float = 10.0
@@ -53,7 +53,9 @@ AGENT_TOOLS: List[Dict[str, Any]] = [
         "description": (
             "Execute a shell command in the workspace. "
             "The working directory is the workspace root. "
-            "Use /app/workspace/.venv/bin/python for Python scripts."
+            "Use /app/workspace/.venv/bin/python for Python scripts. "
+            "Default timeout is 30 minutes (1800s). Do NOT set timeout_s "
+            "below 1800 for training commands."
         ),
         "input_schema": {
             "type": "object",
@@ -64,7 +66,7 @@ AGENT_TOOLS: List[Dict[str, Any]] = [
                 },
                 "timeout_s": {
                     "type": "integer",
-                    "description": "Timeout in seconds (default: 600).",
+                    "description": "Timeout in seconds (default: 1800). Do not set below 1800 for training.",
                 },
             },
             "required": ["command"],
@@ -187,7 +189,7 @@ def _execute_tool(
 
 def _tool_bash(input_data: Dict[str, Any], workspace: str) -> str:
     command = input_data["command"]
-    timeout = input_data.get("timeout_s", 600)
+    timeout = input_data.get("timeout_s", 1800)
     try:
         result = subprocess.run(
             ["bash", "-c", command],
@@ -299,6 +301,15 @@ class AgentOrchestrator:
                 return
             await asyncio.sleep(2)
 
+    async def _load_skill_async(self, model_type: str) -> str:
+        return await asyncio.to_thread(self._load_skill, model_type)
+
+    async def _load_claude_md_async(self) -> str:
+        return await asyncio.to_thread(self._load_claude_md)
+
+    async def _read_marker_file_async(self, config: ResearchConfig) -> Optional[str]:
+        return await asyncio.to_thread(self._read_marker_file, config)
+
     def _load_skill(self, model_type: str) -> str:
         skill_map = {
             "direction": "direction-autotuner",
@@ -317,19 +328,61 @@ class AgentOrchestrator:
             return Path(claude_md_path).read_text(encoding="utf-8")
         return ""
 
+    def _read_marker_file(self, config: ResearchConfig) -> Optional[str]:
+        """Read and consume last_metrics.txt marker file if it exists.
+
+        prepare.py writes this file on completion so the orchestrator
+        can detect iterations even when the bash tool times out.
+        """
+        instrument_underscore = config.instrument.replace("-", "_")
+        marker_path = os.path.join(
+            settings.workspace_root,
+            "runs", "autotuner",
+            f"{instrument_underscore}_{config.timeframe}",
+            config.model_type,
+            "last_metrics.txt",
+        )
+        if os.path.exists(marker_path):
+            try:
+                content = Path(marker_path).read_text(encoding="utf-8")
+                os.remove(marker_path)  # Consume so we don't recount
+                return content
+            except Exception:
+                return None
+        return None
+
     def _build_prompt(self, config: ResearchConfig) -> str:
-        quick_flag = " Use --quick flag for fast iterations." if config.quick_mode else ""
+        quick_flag = " --quick" if config.quick_mode else ""
         focus = f"\nFocus hint: {config.focus_hint}" if config.focus_hint else ""
+        instrument_underscore = config.instrument.replace("-", "_")
+        workspace = (
+            f"runs/autotuner/{instrument_underscore}_{config.timeframe}"
+            f"/{config.model_type}"
+        )
         return (
-            f"Start autotuning {config.model_type} for {config.instrument} "
-            f"{config.timeframe}.\n"
-            f"Tag: {config.tag}.{quick_flag}\n"
-            f"Follow the skill instructions completely. "
-            f"Run autonomously — do not ask questions.\n"
-            f"After each experiment iteration, output a JSON line starting with "
-            f"ITERATION_RESULT: followed by the metrics JSON.\n"
-            f"Stop after {config.max_iterations} iterations or when "
-            f"improvements plateau (3 consecutive iterations with < 0.5% improvement)."
+            f"Tune {config.model_type} model for {config.instrument} "
+            f"{config.timeframe} (tag: {config.tag}). "
+            f"Max {config.max_iterations} iterations.\n\n"
+            f"Execute these commands IN ORDER — do not explore first:\n\n"
+            f"1. Setup:\n"
+            f"```bash\n"
+            f"cd /app/workspace && .venv/bin/python scripts/autotuner/setup.py "
+            f"--instrument {instrument_underscore} "
+            f"--timeframe {config.timeframe}\n"
+            f"```\n\n"
+            f"2. Read guidance (use read_file tool):\n"
+            f"   - `scripts/autotuner/{config.model_type}/README.md`\n"
+            f"   - `{workspace}/train.yaml`\n\n"
+            f"3. Baseline run:\n"
+            f"```bash\n"
+            f"cd /app/workspace && .venv/bin/python "
+            f"scripts/autotuner/{config.model_type}/prepare.py "
+            f"--config {workspace}/train.yaml{quick_flag} 2>&1\n"
+            f"```\n\n"
+            f"4. After baseline, iterate: edit train.yaml → run prepare.py → "
+            f"check metrics → keep or revert.\n\n"
+            f"Run autonomously. Do NOT check service health or explore the "
+            f"filesystem — everything is pre-verified and ready."
             f"{focus}"
         )
 
@@ -342,9 +395,9 @@ class AgentOrchestrator:
             config.model_type,
         )
 
-        # Load system prompt
-        skill_content = self._load_skill(config.model_type)
-        claude_md = self._load_claude_md()
+        # Load system prompt (async to avoid blocking event loop)
+        skill_content = await self._load_skill_async(config.model_type)
+        claude_md = await self._load_claude_md_async()
         system_prompt = f"{claude_md}\n\n---\n\n{skill_content}"
 
         # Build initial user message
@@ -398,16 +451,32 @@ class AgentOrchestrator:
                 assistant_content = response.content
                 tool_results = []
                 agent_text = ""
+                turn_recorded_iteration = False
 
                 for block in assistant_content:
                     if block.type == "text":
                         agent_text += block.text
+                        if block.text.strip():
+                            logger.info(
+                                "Research %s turn %d: text=%s",
+                                research_id, turn, block.text[:200],
+                            )
                     elif block.type == "tool_use":
+                        logger.info(
+                            "Research %s turn %d: tool=%s input=%s",
+                            research_id, turn, block.name,
+                            str(block.input)[:200],
+                        )
                         tool_result = await asyncio.to_thread(
                             _execute_tool,
                             block.name,
                             block.input,
                             settings.workspace_root,
+                        )
+                        logger.info(
+                            "Research %s turn %d: tool=%s result=%s",
+                            research_id, turn, block.name,
+                            tool_result[:200],
                         )
                         tool_results.append({
                             "type": "tool_result",
@@ -415,14 +484,110 @@ class AgentOrchestrator:
                             "content": tool_result,
                         })
 
-                # Check for iteration markers in agent text output
+                        # Universal detection: scan bash output for
+                        # prepare.py --- delimited metrics blocks.
+                        # This works regardless of LLM model since it's
+                        # parsing deterministic Python script output.
+                        if (
+                            block.name == "bash"
+                            and not turn_recorded_iteration
+                            and "---" in tool_result
+                        ):
+                            metrics = parse_prepare_output(tool_result)
+                            if (
+                                metrics.primary_metric is not None
+                                and metrics.status in ("completed", "success")
+                            ):
+                                iteration_count += 1
+                                marker_from_tool = metrics.to_dict()
+                                marker_from_tool["decision"] = (
+                                    "keep" if metrics.all_gates_passed
+                                    else "discard"
+                                )
+                                marker_from_tool["description"] = (
+                                    f"Auto-detected from prepare.py output "
+                                    f"(turn {turn})"
+                                )
+                                await self._record_iteration(
+                                    research_id, iteration_count,
+                                    marker_from_tool, total_cost,
+                                )
+                                turn_recorded_iteration = True
+                                logger.info(
+                                    "Research %s turn %d: auto-detected "
+                                    "iteration %d from bash output "
+                                    "(%s=%.4f, gates=%s)",
+                                    research_id, turn, iteration_count,
+                                    metrics.metric_name,
+                                    metrics.primary_metric,
+                                    metrics.all_gates_passed,
+                                )
+
+                        # Fallback: if bash timed out or output was piped,
+                        # check for a last_metrics.txt marker file written
+                        # by prepare.py on completion.
+                        if (
+                            block.name == "bash"
+                            and not turn_recorded_iteration
+                            and "prepare.py" in str(block.input.get("command", ""))
+                        ):
+                            marker_text = await self._read_marker_file_async(config)
+                            if marker_text:
+                                metrics = parse_prepare_output(marker_text)
+                                if (
+                                    metrics.primary_metric is not None
+                                    and metrics.status in ("completed", "success")
+                                ):
+                                    iteration_count += 1
+                                    marker_from_file = metrics.to_dict()
+                                    marker_from_file["decision"] = (
+                                        "keep" if metrics.all_gates_passed
+                                        else "discard"
+                                    )
+                                    marker_from_file["description"] = (
+                                        f"Auto-detected from marker file "
+                                        f"(turn {turn})"
+                                    )
+                                    await self._record_iteration(
+                                        research_id, iteration_count,
+                                        marker_from_file, total_cost,
+                                    )
+                                    turn_recorded_iteration = True
+                                    logger.info(
+                                        "Research %s turn %d: auto-detected "
+                                        "iteration %d from marker file "
+                                        "(%s=%.4f, gates=%s)",
+                                        research_id, turn, iteration_count,
+                                        metrics.metric_name,
+                                        metrics.primary_metric,
+                                        metrics.all_gates_passed,
+                                    )
+
+                # Secondary: check for explicit ITERATION_RESULT: markers
+                # in agent text. If the model emits one, it may carry richer
+                # fields (decision, description) so we prefer it over the
+                # auto-detected one.  If this turn already recorded an
+                # iteration from bash output, overwrite it with the richer
+                # marker instead of creating a duplicate.
                 if agent_text:
                     marker = parse_iteration_marker(agent_text)
                     if marker:
-                        iteration_count += 1
-                        await self._record_iteration(
-                            research_id, iteration_count, marker, total_cost,
-                        )
+                        if turn_recorded_iteration:
+                            # Overwrite last iteration with richer marker
+                            await self._store.update_iteration(
+                                research_id, iteration_count, marker,
+                            )
+                            logger.info(
+                                "Research %s turn %d: overwrote iteration "
+                                "%d with explicit ITERATION_RESULT marker",
+                                research_id, turn, iteration_count,
+                            )
+                        else:
+                            iteration_count += 1
+                            await self._record_iteration(
+                                research_id, iteration_count, marker,
+                                total_cost,
+                            )
 
                 # Check if we've hit max iterations
                 if iteration_count >= config.max_iterations:
