@@ -62,8 +62,8 @@ class ConfigPromoter:
             "instrument": instrument,
             "timeframe": timeframe,
             "target_path": target_path,
-            "best_yaml": best_yaml,
-            "previous_yaml": previous_yaml,
+            "new_config": best_yaml,
+            "current_config": previous_yaml,
             "best_metric": best["primary_metric"],
             "gates_passed": bool(best["all_gates_passed"]),
         }
@@ -113,7 +113,7 @@ class ConfigPromoter:
             # Direct write fallback
             await asyncio.to_thread(os.makedirs, os.path.dirname(target_path), exist_ok=True)
             await asyncio.to_thread(
-                Path(target_path).write_text, preview["best_yaml"], encoding="utf-8",
+                Path(target_path).write_text, preview["new_config"], encoding="utf-8",
             )
             logger.info("Wrote promoted config to %s", target_path)
 
@@ -125,8 +125,8 @@ class ConfigPromoter:
             instrument=instrument,
             timeframe=timeframe,
             target_path=target_path,
-            config_yaml=preview["best_yaml"],
-            previous_yaml=preview["previous_yaml"],
+            config_yaml=preview["new_config"],
+            previous_yaml=preview["current_config"],
         )
 
         return promotion

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -132,9 +133,22 @@ async def health():
 async def websocket_events(websocket: WebSocket):
     await broadcaster.connect(websocket)
     try:
-        while True:
-            # Keep connection alive; client can send pings
-            await websocket.receive_text()
+        # Server-side ping loop keeps the TCP connection alive during long
+        # training runs when no application-level events are being sent.
+        async def _heartbeat():
+            try:
+                while True:
+                    await asyncio.sleep(15)
+                    await websocket.send_json({"type": "ping"})
+            except Exception:
+                pass  # connection closed — let the outer handler clean up
+
+        heartbeat_task = asyncio.create_task(_heartbeat())
+        try:
+            while True:
+                await websocket.receive_text()
+        finally:
+            heartbeat_task.cancel()
     except WebSocketDisconnect:
         broadcaster.disconnect(websocket)
     except Exception:
