@@ -576,10 +576,14 @@ class AgentOrchestrator:
                             ):
                                 iteration_count += 1
                                 marker_from_tool = metrics.to_dict()
-                                marker_from_tool["decision"] = (
-                                    "keep" if metrics.all_gates_passed
-                                    else "discard"
+                                # Determine keep/discard by comparing against
+                                # current session best — not just gates.
+                                decision = await self._infer_decision(
+                                    research_id,
+                                    metrics.primary_metric,
+                                    metrics.all_gates_passed,
                                 )
+                                marker_from_tool["decision"] = decision
                                 marker_from_tool["description"] = (
                                     f"Auto-detected from prepare.py output "
                                     f"(turn {turn})"
@@ -624,10 +628,12 @@ class AgentOrchestrator:
                                 ):
                                     iteration_count += 1
                                     marker_from_file = metrics.to_dict()
-                                    marker_from_file["decision"] = (
-                                        "keep" if metrics.all_gates_passed
-                                        else "discard"
+                                    decision = await self._infer_decision(
+                                        research_id,
+                                        metrics.primary_metric,
+                                        metrics.all_gates_passed,
                                     )
+                                    marker_from_file["decision"] = decision
                                     marker_from_file["description"] = (
                                         f"Auto-detected from marker file "
                                         f"(turn {turn})"
@@ -750,6 +756,34 @@ class AgentOrchestrator:
         finally:
             self._stop_flags.pop(research_id, None)
             self._pause_flags.pop(research_id, None)
+
+    async def _infer_decision(
+        self,
+        research_id: str,
+        primary_metric: Optional[float],
+        all_gates_passed: bool,
+    ) -> str:
+        """Determine keep/discard by comparing against session best.
+
+        - 'keep' only if gates passed AND metric is strictly better than
+          the current best (or this is the first iteration with no best yet).
+        - 'discard' otherwise.
+        """
+        if not all_gates_passed or primary_metric is None:
+            return "discard"
+
+        session = await self._store.get_session(research_id)
+        if not session:
+            return "keep"  # shouldn't happen, but safe default
+
+        best = session.get("best_metric")
+        if best is None:
+            return "keep"  # first iteration — always keep
+
+        if primary_metric > best:
+            return "keep"
+
+        return "discard"
 
     async def _record_iteration(
         self,
