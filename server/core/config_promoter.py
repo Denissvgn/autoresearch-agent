@@ -91,8 +91,12 @@ class ConfigPromoter:
         mlflow_run_id: Optional[str] = None
         model_version: Optional[str] = None
         model_registry_name: Optional[str] = None
+        metric_name: Optional[str] = None
+        metric_value: Optional[float] = None
         if best:
             mlflow_run_id = best.get("mlflow_run_id")
+            metric_name = best.get("metric_name")
+            metric_value = best.get("primary_metric")
             metrics_raw = best.get("metrics_json")
             if metrics_raw:
                 try:
@@ -119,6 +123,10 @@ class ConfigPromoter:
             ]
             if mlflow_run_id:
                 cmd.extend(["--mlflow-run-id", mlflow_run_id])
+            if metric_name:
+                cmd.extend(["--metric-name", metric_name])
+            if metric_value is not None:
+                cmd.extend(["--metric-value", str(metric_value)])
             result = await asyncio.to_thread(
                 subprocess.run,
                 cmd,

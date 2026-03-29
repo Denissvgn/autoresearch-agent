@@ -41,6 +41,10 @@ class StartResearchRequest(BaseModel):
     )
     max_iterations: Optional[int] = Field(default=None, ge=1, le=500)
     max_budget_usd: Optional[float] = Field(default=None, ge=0.1, le=500.0)
+    timeout_minutes: Optional[int] = Field(
+        default=None, ge=30, le=1440,
+        description="Session timeout in minutes (default: server setting, typically 120)",
+    )
     focus_hint: Optional[str] = Field(
         default=None, max_length=1000,
         description="Optional hint for the agent about what to focus on",
@@ -63,6 +67,7 @@ async def start_research(req: StartResearchRequest):
             quick_mode=req.quick_mode,
             max_iterations=req.max_iterations,
             max_budget_usd=req.max_budget_usd,
+            timeout_minutes=req.timeout_minutes,
             focus_hint=req.focus_hint,
         )
         return session

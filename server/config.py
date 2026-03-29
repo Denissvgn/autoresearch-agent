@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     # --- Experiment Limits ---
     max_iterations: int = Field(default=30)
     max_budget_usd: float = Field(default=10.0)
-    experiment_timeout_s: int = Field(default=7200)
+    experiment_timeout_s: int = Field(default=14400)
     default_quick_mode: bool = Field(
         default=False,
         description="Standard (full) research mode by default",

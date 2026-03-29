@@ -40,6 +40,7 @@ class ResearchConfig:
     quick_mode: bool = False
     max_iterations: int = 30
     max_budget_usd: float = 10.0
+    timeout_s: int = 0  # 0 = use server default
     focus_hint: Optional[str] = None
     workspace_path: str = ""
 
@@ -490,9 +491,10 @@ class AgentOrchestrator:
                 if self._should_stop(research_id):
                     break
 
-                # Check timeout
+                # Check timeout (per-session override or server default)
                 elapsed = time.monotonic() - start_time
-                if elapsed > settings.experiment_timeout_s:
+                _timeout = config.timeout_s if config.timeout_s > 0 else settings.experiment_timeout_s
+                if elapsed > _timeout:
                     logger.info("Research %s: timeout after %.0fs", research_id, elapsed)
                     await agent_log.append("system", f"Timeout after {elapsed:.0f}s", turn=turn)
                     break

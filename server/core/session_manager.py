@@ -49,6 +49,7 @@ class SessionManager:
         quick_mode: Optional[bool] = None,
         max_iterations: Optional[int] = None,
         max_budget_usd: Optional[float] = None,
+        timeout_minutes: Optional[int] = None,
         focus_hint: Optional[str] = None,
     ) -> Dict:
         """Start a new research session. Returns the created session dict."""
@@ -85,6 +86,7 @@ class SessionManager:
             quick_mode=quick_mode if quick_mode is not None else settings.default_quick_mode,
             max_iterations=max_iterations or settings.max_iterations,
             max_budget_usd=max_budget_usd or settings.max_budget_usd,
+            timeout_s=timeout_minutes * 60 if timeout_minutes else 0,
             focus_hint=focus_hint,
             workspace_path=workspace_path,
         )
