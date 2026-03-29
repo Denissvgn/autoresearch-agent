@@ -139,8 +139,10 @@ COPY --chown=appuser:appuser services/autoresearch-agent/server/ /app/server/
 RUN mkdir -p /app/workspace/runs /app/workspace/db && \
     chown -R appuser:appuser /app/workspace/runs /app/workspace/db
 
-# Switch to non-root user
-USER appuser
+# Entrypoint script (fixes volume ownership, then drops to appuser)
+COPY services/autoresearch-agent/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 WORKDIR /app
 
 # Environment
@@ -156,4 +158,5 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=15s \
 EXPOSE 8000
 
 # Entrypoint
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["uvicorn", "server.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
