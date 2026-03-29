@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import httpx
 import yaml
 
 from server.config import settings
@@ -81,7 +83,25 @@ class ConfigPromoter:
         model_type = preview["model_type"]
         instrument = preview["instrument"]
         timeframe = preview["timeframe"]
-        workspace_path = (await self._store.get_session(research_id))["workspace_path"]
+        session = await self._store.get_session(research_id)
+        workspace_path = session["workspace_path"]
+
+        # Extract model metadata from best iteration for composite update
+        best = await self._store.get_best_iteration(research_id)
+        mlflow_run_id: Optional[str] = None
+        model_version: Optional[str] = None
+        model_registry_name: Optional[str] = None
+        if best:
+            mlflow_run_id = best.get("mlflow_run_id")
+            metrics_raw = best.get("metrics_json")
+            if metrics_raw:
+                try:
+                    metrics = json.loads(metrics_raw) if isinstance(metrics_raw, str) else metrics_raw
+                    mlflow_run_id = mlflow_run_id or metrics.get("mlflow_run_id")
+                    model_version = metrics.get("model_version")
+                    model_registry_name = metrics.get("model_registry_name")
+                except (json.JSONDecodeError, TypeError):
+                    pass
 
         # Use promote.py script if available, otherwise write directly
         promote_script = os.path.join(
@@ -95,7 +115,10 @@ class ConfigPromoter:
                 "--workspace", os.path.dirname(workspace_path),
                 "--instrument", instrument,
                 "--timeframe", timeframe,
+                "--configs-dir", settings.host_configs_path,
             ]
+            if mlflow_run_id:
+                cmd.extend(["--mlflow-run-id", mlflow_run_id])
             result = await asyncio.to_thread(
                 subprocess.run,
                 cmd,
@@ -129,7 +152,69 @@ class ConfigPromoter:
             previous_yaml=preview["current_config"],
         )
 
+        # ML-52: Update composite model versions in mlflow-service
+        if model_registry_name and model_version:
+            version_tag = f"{model_registry_name}:{model_version}"
+            await self._update_composite_versions(
+                instrument=instrument,
+                model_type=model_type,
+                version_tag=version_tag,
+            )
+
         return promotion
+
+    async def _update_composite_versions(
+        self,
+        instrument: str,
+        model_type: str,
+        version_tag: str,
+    ) -> None:
+        """PATCH the composite in mlflow-service with the new model version.
+
+        Uses the unauthenticated PATCH /by-instrument/{instrument}/versions
+        endpoint. If no composite exists (404), logs a warning and moves on.
+        """
+        version_key = {
+            "direction": "direction_model_version",
+            "volatility": "volatility_model_version",
+            "rl": "rl_model_version",
+        }.get(model_type)
+        if not version_key:
+            logger.warning(
+                "Unknown model_type %r — skipping composite update", model_type,
+            )
+            return
+
+        url = (
+            f"{settings.mlflow_service_url}/api/v1/composites"
+            f"/by-instrument/{instrument}/versions"
+        )
+        body = {version_key: version_tag}
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.patch(url, json=body)
+            if resp.status_code == 200:
+                data = resp.json()
+                logger.info(
+                    "Composite versions updated for %s: %s (updated %d composite(s))",
+                    instrument, version_tag, data.get("updated", 0),
+                )
+            elif resp.status_code == 404:
+                logger.warning(
+                    "No composite found for %s — skipping composite update. "
+                    "Create one via POST /api/v1/composites first.",
+                    instrument,
+                )
+            else:
+                logger.error(
+                    "Failed to update composite for %s: %d %s",
+                    instrument, resp.status_code, resp.text[:300],
+                )
+        except httpx.HTTPError as exc:
+            logger.error(
+                "HTTP error updating composite for %s: %s", instrument, exc,
+            )
 
     @staticmethod
     def _get_target_path(

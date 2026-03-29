@@ -58,6 +58,7 @@ class Settings(BaseSettings):
 
     # --- ML Service URLs (Docker DNS) ---
     mlflow_tracking_uri: str = Field(default="http://mlflow:5000")
+    mlflow_service_url: str = Field(default="http://mlflow-service:8000")
     data_ingest_url: str = Field(default="http://data-ingest:8000")
     ensemble_trainer_url: str = Field(default="http://ensemble-trainer:8000")
     rl_trainer_url: str = Field(default="http://rl-trainer:8000")

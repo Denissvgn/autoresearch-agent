@@ -82,6 +82,13 @@ class ResultsStore:
         os.makedirs(os.path.dirname(self._db_path), exist_ok=True)
         async with aiosqlite.connect(self._db_path) as db:
             await db.executescript(_SCHEMA_SQL)
+            # ML-52: Add mlflow_run_id column (safe for existing DBs)
+            try:
+                await db.execute(
+                    "ALTER TABLE iterations ADD COLUMN mlflow_run_id TEXT"
+                )
+            except Exception:
+                pass  # Column already exists
             await db.commit()
         logger.info("Results store initialized at %s", self._db_path)
 
@@ -203,6 +210,7 @@ class ResultsStore:
         metrics_json: Optional[str],
         training_time_s: Optional[float],
         api_cost_usd: float = 0.0,
+        mlflow_run_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
         async with aiosqlite.connect(self._db_path) as db:
@@ -210,13 +218,14 @@ class ResultsStore:
                 """INSERT INTO iterations
                    (research_id, iteration, primary_metric, metric_name,
                     all_gates_passed, decision, description, config_snapshot,
-                    metrics_json, training_time_s, api_cost_usd, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    metrics_json, training_time_s, api_cost_usd, created_at,
+                    mlflow_run_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     research_id, iteration, primary_metric, metric_name,
                     int(all_gates_passed) if all_gates_passed is not None else None,
                     decision, description, config_snapshot, metrics_json,
-                    training_time_s, api_cost_usd, now,
+                    training_time_s, api_cost_usd, now, mlflow_run_id,
                 ),
             )
             await db.commit()

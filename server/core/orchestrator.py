@@ -811,6 +811,7 @@ class AgentOrchestrator:
             config_snapshot=marker.get("config_snapshot"),
             metrics_json=json.dumps(marker),
             training_time_s=training_time,
+            mlflow_run_id=marker.get("mlflow_run_id"),
         )
 
         event = {

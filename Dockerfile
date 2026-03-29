@@ -120,8 +120,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Non-root user
-RUN groupadd -r appuser && useradd -r -g appuser -m appuser
+# Non-root user (UID 1000 to match host for bind-mount writes)
+RUN groupadd -g 1000 appuser && useradd -u 1000 -g appuser -m appuser
 
 # Copy server venv from builder
 COPY --from=python-builder /app/.venv /app/.venv
