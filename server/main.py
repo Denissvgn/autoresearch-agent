@@ -45,6 +45,22 @@ async def lifespan(app: FastAPI):
     _store = ResultsStore(settings.db_path)
     await _store.initialize()
 
+    # Mark any sessions left in 'running' state from a previous process as
+    # stopped. Their asyncio tasks no longer exist after restart, so they
+    # would be permanently frozen otherwise.
+    zombie_sessions = await _store.list_sessions(status="running")
+    if zombie_sessions:
+        logger.warning(
+            "Found %d orphaned 'running' session(s) from previous process — marking as stopped",
+            len(zombie_sessions),
+        )
+        for s in zombie_sessions:
+            await _store.update_session(
+                s["id"],
+                status="stopped",
+                error_message="Session aborted: service restarted while session was active",
+            )
+
     # Initialize session manager and promoter
     _session_manager = SessionManager(_store)
     _promoter = ConfigPromoter(_store)

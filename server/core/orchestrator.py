@@ -19,6 +19,7 @@ import anthropic
 
 from server.config import settings
 from server.core.experiment_parser import parse_iteration_marker, parse_prepare_output
+from server.core.log_writer import AgentLogWriter
 from server.core.results_store import ResultsStore
 from server.ws.events import broadcaster
 
@@ -412,11 +413,22 @@ class AgentOrchestrator:
         start_time = time.monotonic()
         max_turns = config.max_iterations * 10  # ~10 turns per iteration
 
+        # Agent log capture
+        agent_log = AgentLogWriter(
+            Path(workspace) / "agent_log.jsonl", research_id,
+        )
+        await agent_log.append(
+            "system",
+            f"Research session started: {config.instrument} {config.timeframe} "
+            f"{config.model_type} tag={config.tag} max_iter={config.max_iterations}",
+        )
+
         try:
             for turn in range(max_turns):
                 # Check stop/pause conditions
                 if self._should_stop(research_id):
                     logger.info("Research %s: stop requested", research_id)
+                    await agent_log.append("system", "Stop requested by user", turn=turn)
                     break
 
                 await self._wait_while_paused(research_id)
@@ -428,6 +440,7 @@ class AgentOrchestrator:
                 elapsed = time.monotonic() - start_time
                 if elapsed > settings.experiment_timeout_s:
                     logger.info("Research %s: timeout after %.0fs", research_id, elapsed)
+                    await agent_log.append("system", f"Timeout after {elapsed:.0f}s", turn=turn)
                     break
 
                 # Call Claude
@@ -461,11 +474,16 @@ class AgentOrchestrator:
                                 "Research %s turn %d: text=%s",
                                 research_id, turn, block.text[:200],
                             )
+                            await agent_log.append("text", block.text, turn=turn)
                     elif block.type == "tool_use":
                         logger.info(
                             "Research %s turn %d: tool=%s input=%s",
                             research_id, turn, block.name,
                             str(block.input)[:200],
+                        )
+                        await agent_log.append(
+                            "tool_call", block.name, turn=turn,
+                            meta={"tool_id": block.id, "input": block.input},
                         )
                         tool_result = await asyncio.to_thread(
                             _execute_tool,
@@ -477,6 +495,10 @@ class AgentOrchestrator:
                             "Research %s turn %d: tool=%s result=%s",
                             research_id, turn, block.name,
                             tool_result[:200],
+                        )
+                        await agent_log.append(
+                            "tool_result", tool_result[:5000], turn=turn,
+                            meta={"tool_id": block.id, "tool_name": block.name},
                         )
                         tool_results.append({
                             "type": "tool_result",
@@ -630,6 +652,11 @@ class AgentOrchestrator:
                 "Research %s completed: %d iterations, $%.4f, %.0fs",
                 research_id, iteration_count, total_cost, elapsed_total,
             )
+            await agent_log.append(
+                "system",
+                f"Completed: {iteration_count} iterations, "
+                f"${total_cost:.4f}, {elapsed_total:.0f}s",
+            )
 
         except asyncio.CancelledError:
             await self._store.update_session(
@@ -639,6 +666,7 @@ class AgentOrchestrator:
                 total_api_cost_usd=round(total_cost, 4),
             )
             logger.info("Research %s: cancelled", research_id)
+            await agent_log.append("system", "Session cancelled")
             raise
 
         except Exception as exc:
@@ -655,6 +683,7 @@ class AgentOrchestrator:
                 "research_id": research_id,
                 "error": str(exc)[:500],
             })
+            await agent_log.append("error", str(exc)[:2000])
 
         finally:
             self._stop_flags.pop(research_id, None)

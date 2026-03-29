@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from pathlib import Path
 from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Query
+
+from server.core.log_writer import AgentLogWriter
 
 router = APIRouter(prefix="/api", tags=["results"])
 
@@ -63,18 +67,38 @@ async def get_best_iteration(research_id: str):
 
 
 @router.get("/research/{research_id}/agent-log")
-async def get_agent_log(research_id: str):
-    """Placeholder — agent conversation log.
-
-    In a full implementation, this would read from a stored log file
-    written by the orchestrator during the agent session.
-    """
+async def get_agent_log(
+    research_id: str,
+    after: Optional[int] = Query(default=None, description="Return only entries after this line number (0-based)"),
+    format: Optional[str] = Query(default=None, description="Set to 'json' for raw structured entries"),
+):
+    """Agent conversation log — full Claude transcript captured during execution."""
     session = await _store.get_session(research_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    # TODO: Read from agent log file when implemented
-    return {
-        "research_id": research_id,
-        "log": "(Agent log capture not yet implemented)",
-        "note": "Agent conversation is streamed via WebSocket during execution",
-    }
+
+    workspace = session.get("workspace_path", "")
+    log_path = Path(workspace) / "agent_log.jsonl"
+
+    if not log_path.exists():
+        if format == "json":
+            return {"research_id": research_id, "entries": [], "total_lines": 0}
+        return {"research_id": research_id, "log": "No log available yet."}
+
+    if format == "json":
+        entries = AgentLogWriter.read_lines(log_path, after_line=after or 0)
+        return {
+            "research_id": research_id,
+            "entries": entries,
+            "total_lines": sum(1 for _ in open(log_path, encoding="utf-8")),
+        }
+
+    # Default: human-readable text
+    if after is not None and after > 0:
+        entries = AgentLogWriter.read_lines(log_path, after_line=after)
+        from server.core.log_writer import _format_entry
+        text = "\n".join(_format_entry(e) for e in entries)
+    else:
+        text = AgentLogWriter.read_all(log_path)
+
+    return {"research_id": research_id, "log": text or "No log entries yet."}
