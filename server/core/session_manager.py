@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Dict, Optional
 
 from server.config import settings
@@ -105,6 +107,12 @@ class SessionManager:
             workspace_path=workspace_path,
         )
 
+        # Archive any stale workspace from a previous session before spawning
+        # so that DB session boundaries match artifact boundaries.  Prevents
+        # old best_train.yaml, results.json, and training.log from bleeding
+        # into a fresh research run.
+        await self._archive_stale_workspace(workspace_path)
+
         # Spawn background task
         task = asyncio.create_task(
             self._run_and_cleanup(research_id, config),
@@ -132,6 +140,26 @@ class SessionManager:
             await self._orchestrator.run(config)
         finally:
             self._active.pop(research_id, None)
+
+    async def _archive_stale_workspace(self, workspace_path: str) -> None:
+        """Move an existing model workspace to a timestamped archive directory.
+
+        Called before each new session so that DB session boundaries align
+        with filesystem artifact boundaries.  The archive directory sits
+        alongside the model directory:
+
+            runs/autotuner/{instrument}_{timeframe}/archive/{model}.{ts}/
+        """
+        ws = Path(workspace_path)
+        if not ws.exists():
+            return
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        archive_dir = ws.parent / "archive" / f"{ws.name}.{ts}"
+        archive_dir.parent.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(shutil.move, str(ws), str(archive_dir))
+        logger.info(
+            "Archived stale workspace %s -> %s", ws, archive_dir,
+        )
 
     async def stop_session(self, research_id: str) -> bool:
         """Request a graceful stop for a running session."""

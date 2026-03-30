@@ -40,14 +40,17 @@ class ConfigPromoter:
         instrument = session["instrument"]
         timeframe = session["timeframe"]
 
-        # Read best_train.yaml from workspace
-        best_config_path = os.path.join(workspace_path, "best_train.yaml")
-        if not os.path.exists(best_config_path):
-            raise FileNotFoundError(
-                f"best_train.yaml not found at {best_config_path}"
+        # Use the immutable config snapshot stored in the DB — not the
+        # mutable workspace best_train.yaml which can diverge from the DB
+        # best iteration when the agent mismanages checkpoints.
+        config_snapshot = best.get("config_snapshot")
+        if not config_snapshot:
+            raise ValueError(
+                f"Iteration {best['iteration']} for session {research_id} "
+                f"has no stored config snapshot. Re-run a session with the "
+                f"updated orchestrator to generate per-iteration snapshots."
             )
-
-        best_yaml = Path(best_config_path).read_text(encoding="utf-8")
+        best_yaml = config_snapshot
 
         # Determine target path on host
         target_path = self._get_target_path(model_type, instrument, timeframe)
@@ -112,6 +115,17 @@ class ConfigPromoter:
             settings.autotuner_scripts_dir, "promote.py",
         )
         if os.path.exists(promote_script):
+            # Write the DB config snapshot to a versioned, immutable path
+            # so promote.py reads the server-confirmed config and never
+            # touches the mutable workspace best_train.yaml.
+            snap_filename = f"snapshot_iter_{preview['iteration']}.yaml"
+            snap_path = os.path.join(workspace_path, snap_filename)
+            await asyncio.to_thread(
+                Path(snap_path).write_text,
+                preview["new_config"],
+                encoding="utf-8",
+            )
+
             cmd = [
                 settings.venv_python,
                 promote_script,
@@ -120,6 +134,7 @@ class ConfigPromoter:
                 "--instrument", instrument,
                 "--timeframe", timeframe,
                 "--configs-dir", settings.host_configs_path,
+                "--config-file", snap_path,
             ]
             if mlflow_run_id:
                 cmd.extend(["--mlflow-run-id", mlflow_run_id])

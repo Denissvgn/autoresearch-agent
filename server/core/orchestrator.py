@@ -541,6 +541,26 @@ class AgentOrchestrator:
                             "tool_call", block.name, turn=turn,
                             meta={"tool_id": block.id, "input": block.input},
                         )
+
+                        # Pre-snapshot: capture train.yaml BEFORE running
+                        # prepare.py so we have an immutable config record
+                        # for this attempt — preserved even on crash/timeout.
+                        _pending_snapshot: Optional[str] = None
+                        if (
+                            block.name == "bash"
+                            and "prepare.py" in str(block.input.get("command", ""))
+                        ):
+                            try:
+                                _pending_snapshot = Path(
+                                    os.path.join(workspace, "train.yaml")
+                                ).read_text(encoding="utf-8")
+                            except OSError:
+                                logger.warning(
+                                    "Research %s: could not pre-snapshot "
+                                    "train.yaml before prepare.py run",
+                                    research_id,
+                                )
+
                         tool_result = await asyncio.to_thread(
                             _execute_tool,
                             block.name,
@@ -586,6 +606,9 @@ class AgentOrchestrator:
                                     metrics.all_gates_passed,
                                 )
                                 marker_from_tool["decision"] = decision
+                                # Attach the pre-captured snapshot so the DB
+                                # is the sole source of truth for the config.
+                                marker_from_tool["config_snapshot"] = _pending_snapshot
                                 marker_from_tool["description"] = (
                                     f"Auto-detected from prepare.py output "
                                     f"(turn {turn})"
@@ -603,6 +626,36 @@ class AgentOrchestrator:
                                     metrics.metric_name,
                                     metrics.primary_metric,
                                     metrics.all_gates_passed,
+                                )
+                            elif (
+                                metrics.status in (
+                                    "crash", "timeout", "failed", "error"
+                                )
+                                and metrics.primary_metric is not None
+                            ):
+                                # Record failed attempts as first-class discard
+                                # iterations so the full audit trail is in DB
+                                # and the agent cannot revisit the same invalid
+                                # config region without a recorded trace.
+                                iteration_count += 1
+                                crash_marker = metrics.to_dict()
+                                crash_marker["decision"] = "discard"
+                                crash_marker["config_snapshot"] = _pending_snapshot
+                                crash_marker["description"] = (
+                                    f"Failed ({metrics.status}) — "
+                                    f"auto-detected from prepare.py output "
+                                    f"(turn {turn})"
+                                )
+                                await self._record_iteration(
+                                    research_id, iteration_count,
+                                    crash_marker, total_cost,
+                                )
+                                turn_recorded_iteration = True
+                                logger.info(
+                                    "Research %s turn %d: recorded failed "
+                                    "attempt %d (%s) from bash output",
+                                    research_id, turn, iteration_count,
+                                    metrics.status,
                                 )
 
                         # Fallback: if bash timed out or output was piped,
@@ -636,6 +689,8 @@ class AgentOrchestrator:
                                         metrics.all_gates_passed,
                                     )
                                     marker_from_file["decision"] = decision
+                                    # Attach snapshot for marker-file path too.
+                                    marker_from_file["config_snapshot"] = _pending_snapshot
                                     marker_from_file["description"] = (
                                         f"Auto-detected from marker file "
                                         f"(turn {turn})"
