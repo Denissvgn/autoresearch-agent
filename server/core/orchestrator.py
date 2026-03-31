@@ -56,7 +56,7 @@ AGENT_TOOLS: List[Dict[str, Any]] = [
             "Execute a shell command in the workspace. "
             "The working directory is the workspace root. "
             "Use /app/workspace/.venv/bin/python for Python scripts. "
-            "Default timeout is 30 minutes (1800s). Do NOT set timeout_s "
+            "Default timeout is 60 minutes (3600s). Do NOT set timeout_s "
             "below 1800 for training commands."
         ),
         "input_schema": {
@@ -68,7 +68,7 @@ AGENT_TOOLS: List[Dict[str, Any]] = [
                 },
                 "timeout_s": {
                     "type": "integer",
-                    "description": "Timeout in seconds (default: 1800). Do not set below 1800 for training.",
+                    "description": "Timeout in seconds (default: 3600). Set higher for full RL training (up to 5400).",
                 },
             },
             "required": ["command"],
@@ -191,10 +191,13 @@ def _execute_tool(
 
 def _tool_bash(input_data: Dict[str, Any], workspace: str) -> str:
     command = input_data["command"]
-    timeout = input_data.get("timeout_s", 1800)
+    timeout = input_data.get("timeout_s", 5400)
     # Enforce minimum timeout — agents routinely ignore tool-description hints
-    if timeout < 1800:
-        timeout = 1800
+    if timeout < 900:
+        timeout = 900
+    # Auto-escalate timeout for training commands (prepare.py, run_phase)
+    if timeout < 5400 and ("prepare.py" in command or "run_phase" in command):
+        timeout = 5400
     try:
         result = subprocess.run(
             ["bash", "-c", command],
@@ -214,8 +217,19 @@ def _tool_bash(input_data: Dict[str, Any], workspace: str) -> str:
         if len(output) > 60_000:
             output = output[:30_000] + "\n...(truncated)...\n" + output[-30_000:]
         return output or "(no output)"
-    except subprocess.TimeoutExpired:
-        return f"Command timed out after {timeout}s"
+    except subprocess.TimeoutExpired as exc:
+        # Preserve any output captured before the timeout
+        partial = ""
+        if exc.stdout:
+            text = exc.stdout if isinstance(exc.stdout, str) else exc.stdout.decode("utf-8", errors="replace")
+            partial += text
+        if exc.stderr:
+            text = exc.stderr if isinstance(exc.stderr, str) else exc.stderr.decode("utf-8", errors="replace")
+            partial += ("\n--- stderr ---\n" + text) if partial else text
+        if partial and len(partial) > 60_000:
+            partial = partial[:30_000] + "\n...(truncated)...\n" + partial[-30_000:]
+        timeout_msg = f"\n[Command timed out after {timeout}s]"
+        return (partial + timeout_msg) if partial else f"Command timed out after {timeout}s"
 
 
 def _tool_read_file(input_data: Dict[str, Any], workspace: str) -> str:
