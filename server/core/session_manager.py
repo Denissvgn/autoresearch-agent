@@ -149,6 +149,10 @@ class SessionManager:
         alongside the model directory:
 
             runs/autotuner/{instrument}_{timeframe}/archive/{model}.{ts}/
+
+        Handles PermissionError gracefully (e.g. files created by docker exec
+        as root while the server runs as appuser) by falling back to
+        copytree+rmtree, then to a plain rmtree if archiving is impossible.
         """
         ws = Path(workspace_path)
         if not ws.exists():
@@ -156,10 +160,44 @@ class SessionManager:
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         archive_dir = ws.parent / "archive" / f"{ws.name}.{ts}"
         archive_dir.parent.mkdir(parents=True, exist_ok=True)
-        await asyncio.to_thread(shutil.move, str(ws), str(archive_dir))
-        logger.info(
-            "Archived stale workspace %s -> %s", ws, archive_dir,
-        )
+
+        try:
+            await asyncio.to_thread(shutil.move, str(ws), str(archive_dir))
+            logger.info(
+                "Archived stale workspace %s -> %s", ws, archive_dir,
+            )
+            return
+        except PermissionError:
+            logger.warning(
+                "shutil.move failed (permission denied) for %s — "
+                "falling back to copytree+rmtree",
+                ws,
+            )
+
+        # Fallback: copy what we can, then remove the original
+        try:
+            await asyncio.to_thread(
+                shutil.copytree, str(ws), str(archive_dir),
+                dirs_exist_ok=True,
+            )
+            await asyncio.to_thread(
+                shutil.rmtree, str(ws), ignore_errors=True,
+            )
+            logger.info(
+                "Archived stale workspace (copy fallback) %s -> %s",
+                ws, archive_dir,
+            )
+            return
+        except Exception as exc:
+            logger.warning(
+                "copytree fallback also failed for %s: %s — "
+                "removing stale workspace instead",
+                ws, exc,
+            )
+
+        # Last resort: just remove it so the fresh session can proceed
+        await asyncio.to_thread(shutil.rmtree, str(ws), ignore_errors=True)
+        logger.warning("Removed stale workspace %s (could not archive)", ws)
 
     async def stop_session(self, research_id: str) -> bool:
         """Request a graceful stop for a running session."""

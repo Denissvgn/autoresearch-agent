@@ -39,7 +39,13 @@ cp {WORKSPACE}/train.yaml {WORKSPACE}/best_train.yaml
 1. Edit `train.yaml` (change ONE parameter per the README strategy)
 2. Run prepare.py (same command as Step 3)
 3. Check the `---` delimited output: if `primary_metric` improved AND `all_gates_passed: true`, keep it (copy yaml to best). Otherwise revert from best.
-4. Output: `ITERATION_RESULT: {"iteration": N, "primary_metric": X.XXXX, "metric_name": "...", "all_gates_passed": true|false, "decision": "keep|discard", "description": "brief description"}`
+4. **Fold stability check**: The `---` output includes walk-forward fold metrics:
+   - `folds_passed: X/Y` — how many folds passed all 4 anti-overfit gates (higher = more robust)
+   - `sharpe_cv` — coefficient of variation of Sharpe across folds (lower = more stable, <0.5 is good)
+   - `std_oos_sharpe` — standard deviation of OOS Sharpe across folds
+   - `trading_score` — composite score: `1.0×sharpe + 0.5×return - 2.0×drawdown`
+   If `primary_metric` improved but `folds_passed` dropped or `sharpe_cv` increased significantly, the improvement is fragile — consider discarding.
+5. Output: `ITERATION_RESULT: {"iteration": N, "primary_metric": X.XXXX, "metric_name": "...", "all_gates_passed": true|false, "decision": "keep|discard", "description": "brief description"}`
 
 ## Rules
 

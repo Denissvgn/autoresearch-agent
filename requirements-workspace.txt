@@ -31,3 +31,8 @@ prometheus-client>=0.23.1,<1.0.0
 # Config utilities
 pydantic>=2.6.3,<3.0.0
 pydantic-settings>=2.2.1,<3.0.0
+
+# RL training (stable-baselines3 pulls torch + gymnasium as transitive deps)
+# On aarch64, torch installs as CPU-only from PyPI (~200MB).
+stable-baselines3>=2.2.0
+shimmy>=2.0.0

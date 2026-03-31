@@ -364,16 +364,22 @@ class AgentOrchestrator:
                 )
 
                 if config.model_type == "rl":
-                    # RL results use aggregate.mean_oos_sharpe etc.
+                    # RL results use aggregate metrics. Compute composite_rl_score
+                    # matching prepare.py: 1.0×sharpe + 0.5×return - 2.0×drawdown
                     agg = results_data.get("aggregate", {})
-                    primary = agg.get("mean_oos_sharpe") or 0.0
+                    mean_sharpe = agg.get("mean_oos_sharpe") or 0.0
+                    mean_return = agg.get("mean_oos_return") or 0.0
+                    mean_dd = agg.get("mean_oos_drawdown") or 0.0
+                    primary = (
+                        1.0 * mean_sharpe + 0.5 * mean_return - 2.0 * mean_dd
+                    )
                     n_folds = agg.get("n_folds", 1)
                     folds_passed = agg.get("folds_passed", 0)
                     passed = (
                         agg.get("all_folds_passed", False)
                         and folds_passed / max(n_folds, 1) >= 0.5
                     )
-                    metric_name = "mean_oos_sharpe"
+                    metric_name = "composite_rl_score"
                 else:
                     # Direction / volatility results
                     wf = results_data.get("walkforward", {})
@@ -415,6 +421,45 @@ class AgentOrchestrator:
             f"runs/autotuner/{instrument_underscore}_{config.timeframe}"
             f"/{config.model_type}"
         )
+
+        # RL needs an enrichment step before the first training run
+        if config.model_type == "rl":
+            enrich_step = (
+                f"2. Enrich RL dataset (REQUIRED before any training):\n"
+                f"```bash\n"
+                f"cd /app/workspace && .venv/bin/python "
+                f"scripts/autotuner/enrich_rl_dataset.py "
+                f"--instrument {instrument_underscore} "
+                f"--timeframe {config.timeframe}\n"
+                f"```\n"
+                f"Verify direction_proba mean is NOT ~0.5 (should show real signal).\n\n"
+                f"3. Read guidance (use read_file tool):\n"
+                f"   - `scripts/autotuner/{config.model_type}/README.md`\n"
+                f"   - `{workspace}/train.yaml`\n\n"
+                f"4. Baseline run:\n"
+                f"```bash\n"
+                f"cd /app/workspace && .venv/bin/python "
+                f"scripts/autotuner/{config.model_type}/prepare.py "
+                f"--config {workspace}/train.yaml{quick_flag} 2>&1\n"
+                f"```\n\n"
+                f"5. After baseline, iterate: edit train.yaml → run prepare.py → "
+                f"check metrics → keep or revert."
+            )
+        else:
+            enrich_step = (
+                f"2. Read guidance (use read_file tool):\n"
+                f"   - `scripts/autotuner/{config.model_type}/README.md`\n"
+                f"   - `{workspace}/train.yaml`\n\n"
+                f"3. Baseline run:\n"
+                f"```bash\n"
+                f"cd /app/workspace && .venv/bin/python "
+                f"scripts/autotuner/{config.model_type}/prepare.py "
+                f"--config {workspace}/train.yaml{quick_flag} 2>&1\n"
+                f"```\n\n"
+                f"4. After baseline, iterate: edit train.yaml → run prepare.py → "
+                f"check metrics → keep or revert."
+            )
+
         return (
             f"Tune {config.model_type} model for {config.instrument} "
             f"{config.timeframe} (tag: {config.tag}). "
@@ -424,19 +469,10 @@ class AgentOrchestrator:
             f"```bash\n"
             f"cd /app/workspace && .venv/bin/python scripts/autotuner/setup.py "
             f"--instrument {instrument_underscore} "
-            f"--timeframe {config.timeframe}\n"
+            f"--timeframe {config.timeframe} "
+            f"--models {config.model_type}\n"
             f"```\n\n"
-            f"2. Read guidance (use read_file tool):\n"
-            f"   - `scripts/autotuner/{config.model_type}/README.md`\n"
-            f"   - `{workspace}/train.yaml`\n\n"
-            f"3. Baseline run:\n"
-            f"```bash\n"
-            f"cd /app/workspace && .venv/bin/python "
-            f"scripts/autotuner/{config.model_type}/prepare.py "
-            f"--config {workspace}/train.yaml{quick_flag} 2>&1\n"
-            f"```\n\n"
-            f"4. After baseline, iterate: edit train.yaml → run prepare.py → "
-            f"check metrics → keep or revert.\n\n"
+            f"{enrich_step}\n\n"
             f"Run autonomously. Do NOT check service health or explore the "
             f"filesystem — everything is pre-verified and ready."
             f"{focus}"
