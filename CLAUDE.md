@@ -54,5 +54,5 @@ cp {WORKSPACE}/train.yaml {WORKSPACE}/best_train.yaml
 - Do NOT check service health — services are verified before you start
 - Spend at most 2-3 tool calls on setup/reading, then START TRAINING
 - **NEVER pipe prepare.py output** through `| tail`, `| head`, `| grep`, or `timeout`. The full stdout is critical for iteration detection. Just run prepare.py directly — the tool has a 30-minute timeout built in.
-- Do NOT set `timeout_s` below 1800 for prepare.py commands. Training takes 5-20 minutes.
+- Do NOT set `timeout_s` below 1800 for ANY Python script (prepare.py, enrich_rl_dataset.py, etc.). Data fetching and training take 2-20 minutes. Use the default timeout.
 - If training crashes with connection errors (data-ingest, mlflow, feature-service), wait 15 seconds and retry. Do NOT debug the connection — these are transient Docker DNS issues.
