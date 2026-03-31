@@ -192,6 +192,9 @@ def _execute_tool(
 def _tool_bash(input_data: Dict[str, Any], workspace: str) -> str:
     command = input_data["command"]
     timeout = input_data.get("timeout_s", 1800)
+    # Enforce minimum timeout — agents routinely ignore tool-description hints
+    if timeout < 1800:
+        timeout = 1800
     try:
         result = subprocess.run(
             ["bash", "-c", command],
