@@ -44,6 +44,7 @@ cp {WORKSPACE}/train.yaml {WORKSPACE}/best_train.yaml
    - `sharpe_cv` — coefficient of variation of Sharpe across folds (lower = more stable, <0.5 is good)
    - `std_oos_sharpe` — standard deviation of OOS Sharpe across folds
    - `trading_score` — composite score: `1.0×sharpe + 0.5×return - 2.0×drawdown`
+   Sharpe is annualized with √252 (daily convention). Typical good OOS Sharpe: 0.05–0.30. Values >1.0 are exceptional.
    If `primary_metric` improved but `folds_passed` dropped or `sharpe_cv` increased significantly, the improvement is fragile — consider discarding.
 5. Output: `ITERATION_RESULT: {"iteration": N, "primary_metric": X.XXXX, "metric_name": "...", "all_gates_passed": true|false, "decision": "keep|discard", "description": "brief description"}`
 
