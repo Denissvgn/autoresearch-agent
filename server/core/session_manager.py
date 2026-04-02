@@ -53,6 +53,9 @@ class SessionManager:
         max_budget_usd: Optional[float] = None,
         timeout_minutes: Optional[int] = None,
         focus_hint: Optional[str] = None,
+        trading_mode: Optional[str] = None,
+        agent_strategy: Optional[str] = None,
+        initial_balance: Optional[float] = None,
     ) -> Dict:
         """Start a new research session. Returns the created session dict."""
         if self.active_count >= settings.max_concurrent_sessions:
@@ -91,6 +94,9 @@ class SessionManager:
             timeout_s=timeout_minutes * 60 if timeout_minutes else 0,
             focus_hint=focus_hint,
             workspace_path=workspace_path,
+            trading_mode=trading_mode,
+            agent_strategy=agent_strategy,
+            initial_balance=initial_balance,
         )
 
         # Persist session to DB

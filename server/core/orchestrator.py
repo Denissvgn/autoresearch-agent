@@ -43,6 +43,10 @@ class ResearchConfig:
     timeout_s: int = 0  # 0 = use server default
     focus_hint: Optional[str] = None
     workspace_path: str = ""
+    # RL-specific fixed settings (not in tuning space)
+    trading_mode: Optional[str] = None   # stock | margin
+    agent_strategy: Optional[str] = None  # AGGR | CONS | BALA | SCAL
+    initial_balance: Optional[float] = None
 
 
 # ---------------------------------------------------------------------------
@@ -439,6 +443,31 @@ class AgentOrchestrator:
             f"/{config.model_type}"
         )
 
+        # RL fixed settings — build setup.py args + constraint notice for Claude
+        setup_extra_args = ""
+        fixed_settings_notice = ""
+        if config.model_type == "rl":
+            rl_args = []
+            fixed_fields = []
+            if config.trading_mode:
+                rl_args.append(f"--trading-mode {config.trading_mode}")
+                fixed_fields.append(f"trading_mode: {config.trading_mode}")
+            if config.agent_strategy:
+                rl_args.append(f"--agent-strategy {config.agent_strategy}")
+                fixed_fields.append(f"agent_strategy: {config.agent_strategy}")
+            if config.initial_balance is not None:
+                rl_args.append(f"--initial-balance {config.initial_balance}")
+                fixed_fields.append(f"initial_balance: {config.initial_balance}")
+            if rl_args:
+                setup_extra_args = " " + " ".join(rl_args)
+            if fixed_fields:
+                fields_str = ", ".join(fixed_fields)
+                fixed_settings_notice = (
+                    f"\n\n**FIXED SETTINGS (do NOT modify in train.yaml):** "
+                    f"{fields_str}. These are user-configured and must remain "
+                    f"unchanged throughout the research session."
+                )
+
         # RL needs an enrichment step before the first training run
         if config.model_type == "rl":
             enrich_step = (
@@ -487,11 +516,12 @@ class AgentOrchestrator:
             f"cd /app/workspace && .venv/bin/python scripts/autotuner/setup.py "
             f"--instrument {instrument_underscore} "
             f"--timeframe {config.timeframe} "
-            f"--models {config.model_type}\n"
+            f"--models {config.model_type}{setup_extra_args}\n"
             f"```\n\n"
             f"{enrich_step}\n\n"
             f"Run autonomously. Do NOT check service health or explore the "
             f"filesystem — everything is pre-verified and ready."
+            f"{fixed_settings_notice}"
             f"{focus}"
         )
 

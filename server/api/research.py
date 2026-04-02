@@ -49,6 +49,19 @@ class StartResearchRequest(BaseModel):
         default=None, max_length=1000,
         description="Optional hint for the agent about what to focus on",
     )
+    # RL-specific fixed settings (not part of tuning space)
+    trading_mode: Optional[str] = Field(
+        default=None, pattern="^(stock|margin)$",
+        description="Market type: stock (no leverage) or margin (3x leverage). RL only.",
+    )
+    agent_strategy: Optional[str] = Field(
+        default=None, pattern="^(AGGR|CONS|BALA|SCAL)$",
+        description="Agent strategy: AGGR, CONS, BALA, SCAL. RL only.",
+    )
+    initial_balance: Optional[float] = Field(
+        default=None, ge=1000, le=1_000_000,
+        description="Starting balance in USD for RL training.",
+    )
 
 
 # ------------------------------------------------------------------
@@ -69,6 +82,9 @@ async def start_research(req: StartResearchRequest):
             max_budget_usd=req.max_budget_usd,
             timeout_minutes=req.timeout_minutes,
             focus_hint=req.focus_hint,
+            trading_mode=req.trading_mode,
+            agent_strategy=req.agent_strategy,
+            initial_balance=req.initial_balance,
         )
         return session
     except RuntimeError as e:
