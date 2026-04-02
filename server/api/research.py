@@ -59,7 +59,7 @@ class StartResearchRequest(BaseModel):
         description="Agent strategy: AGGR, CONS, BALA, SCAL. RL only.",
     )
     initial_balance: Optional[float] = Field(
-        default=None, ge=1000, le=1_000_000,
+        default=None, ge=100, le=1_000_000,
         description="Starting balance in USD for RL training.",
     )
 
