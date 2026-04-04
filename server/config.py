@@ -41,6 +41,18 @@ class Settings(BaseSettings):
         default="claude-sonnet-4-20250514",
         description="Model to use for agent sessions",
     )
+    anthropic_default_haiku_model: str = Field(
+        default="claude-haiku-4-20250514",
+        description="Haiku-tier model alias (cheap/fast tasks like insight extraction)",
+    )
+    anthropic_default_sonnet_model: str = Field(
+        default="claude-sonnet-4-20250514",
+        description="Sonnet-tier model alias",
+    )
+    anthropic_default_opus_model: str = Field(
+        default="claude-opus-4-20250514",
+        description="Opus-tier model alias",
+    )
 
     # --- Workspace ---
     workspace_root: str = Field(default="/app/workspace")

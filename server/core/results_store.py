@@ -115,6 +115,13 @@ class ResultsStore:
                 )
             except Exception:
                 pass
+            # ML-60: Add insights column for smart resume compaction
+            try:
+                await db.execute(
+                    "ALTER TABLE research_sessions ADD COLUMN insights TEXT"
+                )
+            except Exception:
+                pass
             await db.commit()
         logger.info("Results store initialized at %s", self._db_path)
 

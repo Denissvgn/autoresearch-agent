@@ -701,6 +701,82 @@ class AgentOrchestrator:
         except Exception as exc:
             logger.warning("Failed to update research resume: %s", exc)
 
+    async def _extract_session_insights(self, research_id: str) -> None:
+        """ML-60: Use Claude to extract compact insights from a completed session.
+
+        Stores a short text summary (≤500 chars) of what was learned:
+        which parameter changes helped/hurt, key metric sensitivities,
+        and actionable takeaways for future sessions.
+        """
+        try:
+            session = await self._store.get_session(research_id)
+            if not session:
+                return
+            iterations = await self._store.list_iterations(research_id)
+            if not iterations:
+                return
+
+            # Build a compact iteration summary for the extraction prompt
+            iter_lines = []
+            for it in iterations:
+                pm = it.get("primary_metric")
+                metric_s = f"{pm:.4f}" if pm is not None else "—"
+                decision = it.get("decision", "?")
+                desc = (it.get("description") or "")[:200]
+                config_snap = (it.get("config_snapshot") or "")[:300]
+                iter_lines.append(
+                    f"Iter {it.get('iteration', '?')}: metric={metric_s} "
+                    f"decision={decision} desc={desc}"
+                )
+                if config_snap:
+                    iter_lines.append(f"  config_diff: {config_snap}")
+
+            iter_text = "\n".join(iter_lines)
+
+            prompt = (
+                f"You are analyzing a completed ML research session.\n"
+                f"Model: {session.get('model_type', '?')} | "
+                f"Instrument: {session.get('instrument', '?')} "
+                f"{session.get('timeframe', '?')}\n"
+                f"Tag: {session.get('tag', '?')} | "
+                f"Best metric: {session.get('best_metric')}\n\n"
+                f"Iterations:\n{iter_text}\n\n"
+                f"Summarize KEY LEARNINGS in 3-5 bullet points (max 500 chars total).\n"
+                f"Focus on: which params improved/degraded the metric, "
+                f"what ranges worked, what to avoid.\n"
+                f"Format: plain bullet points, no markdown headers.\n"
+                f"Example:\n"
+                f"- Increasing learning_rate from 3e-4 to 1e-3 degraded Sharpe by 0.15\n"
+                f"- entropy_coef=0.005 with clip_range=0.15 gave best composite (1.82)\n"
+                f"- gamma > 0.995 caused instability (OOS return went negative)"
+            )
+
+            response = await self._client.messages.create(
+                model=settings.anthropic_default_haiku_model,
+                max_tokens=300,
+                messages=[{"role": "user", "content": prompt}],
+            )
+
+            insights = ""
+            for block in response.content:
+                if block.type == "text":
+                    insights += block.text
+
+            # Trim to 500 chars max
+            insights = insights.strip()[:500]
+
+            if insights:
+                await self._store.update_session(research_id, insights=insights)
+                logger.info(
+                    "ML-60: Extracted insights for session %s (%d chars)",
+                    research_id[:8], len(insights),
+                )
+        except Exception as exc:
+            logger.warning(
+                "ML-60: Failed to extract insights for %s: %s",
+                research_id[:8], exc,
+            )
+
     async def run(self, config: ResearchConfig) -> None:
         """Run the autonomous research loop for a single session."""
         research_id = config.id
@@ -1083,6 +1159,9 @@ class AgentOrchestrator:
                 f"${total_cost:.4f}, {elapsed_total:.0f}s",
             )
 
+            # ML-60: Extract compact insights before rebuilding resume
+            await self._extract_session_insights(research_id)
+
             # Auto-update research resume for this instrument
             await self._update_research_resume(
                 config.instrument, config.timeframe,
@@ -1097,6 +1176,8 @@ class AgentOrchestrator:
             )
             logger.info("Research %s: cancelled", research_id)
             await agent_log.append("system", "Session cancelled")
+            # ML-60: Still extract insights from partial sessions
+            await self._extract_session_insights(research_id)
             raise
 
         except Exception as exc:
