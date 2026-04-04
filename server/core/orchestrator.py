@@ -443,6 +443,34 @@ class AgentOrchestrator:
 
         return None
 
+    def _load_research_resume(self, config: ResearchConfig) -> str:
+        """Load the research resume for this instrument if it exists."""
+        instrument_underscore = config.instrument.replace("-", "_")
+        resume_path = os.path.join(
+            settings.runs_dir,
+            f"{instrument_underscore}_{config.timeframe}",
+            "research_resume.md",
+        )
+        if not os.path.exists(resume_path):
+            return ""
+        try:
+            with open(resume_path) as f:
+                content = f.read()
+            if not content.strip():
+                return ""
+            # Truncate to avoid context window bloat
+            if len(content) > 12_000:
+                content = content[:6000] + "\n\n*[truncated]*\n\n" + content[-6000:]
+            return (
+                "\n\n## Research Resume (prior experiments on this instrument)\n\n"
+                "Use this context to avoid repeating failed experiments and "
+                "build on what worked.\n\n"
+                f"{content}"
+            )
+        except Exception as exc:
+            logger.warning("Failed to load research resume: %s", exc)
+            return ""
+
     def _build_prompt(self, config: ResearchConfig) -> str:
         quick_flag = " --quick" if config.quick_mode else ""
         focus = f"\nFocus hint: {config.focus_hint}" if config.focus_hint else ""
@@ -451,6 +479,9 @@ class AgentOrchestrator:
             f"runs/autotuner/{instrument_underscore}_{config.timeframe}"
             f"/{config.model_type}"
         )
+
+        # Load research resume for cross-session context
+        resume_block = self._load_research_resume(config)
 
         # RL fixed settings — build setup.py args + constraint notice for Claude
         setup_extra_args = ""
@@ -539,6 +570,7 @@ class AgentOrchestrator:
             f"filesystem — everything is pre-verified and ready."
             f"{fixed_settings_notice}"
             f"{focus}"
+            f"{resume_block}"
         )
 
     def _build_prompt_rl_hpo(
@@ -554,6 +586,9 @@ class AgentOrchestrator:
         """Build prompt for 3-phase HPO workflow (ML-59)."""
         hpo_trials = config.hpo_trials
         hpo_timesteps = config.hpo_timesteps
+
+        # Load research resume for cross-session context
+        resume_block = self._load_research_resume(config)
 
         return (
             f"Tune RL model for {config.instrument} {config.timeframe} "
@@ -624,7 +659,47 @@ class AgentOrchestrator:
             f"Run autonomously. Do NOT check service health."
             f"{fixed_settings_notice}"
             f"{focus}"
+            f"{resume_block}"
         )
+
+    async def _update_research_resume(
+        self, instrument: str, timeframe: str,
+    ) -> None:
+        """Rebuild the research resume for an instrument after session ends."""
+        try:
+            instrument_underscore = instrument.replace("-", "_")
+            resume_script = os.path.join(
+                settings.workspace_root, "scripts", "autotuner", "resume.py"
+            )
+            if not os.path.exists(resume_script):
+                logger.warning("Resume script not found: %s", resume_script)
+                return
+            cmd = [
+                os.path.join(settings.workspace_root, ".venv", "bin", "python"),
+                resume_script,
+                "--instrument", instrument_underscore,
+                "--timeframe", timeframe,
+                "--db", settings.db_path,
+                "--runs-dir", settings.runs_dir,
+            ]
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc.communicate()
+            if proc.returncode == 0:
+                logger.info(
+                    "Research resume updated for %s_%s",
+                    instrument_underscore, timeframe,
+                )
+            else:
+                logger.warning(
+                    "Resume update failed (rc=%d): %s",
+                    proc.returncode, stderr.decode()[:500],
+                )
+        except Exception as exc:
+            logger.warning("Failed to update research resume: %s", exc)
 
     async def run(self, config: ResearchConfig) -> None:
         """Run the autonomous research loop for a single session."""
@@ -1006,6 +1081,11 @@ class AgentOrchestrator:
                 "system",
                 f"Completed: {iteration_count} iterations, "
                 f"${total_cost:.4f}, {elapsed_total:.0f}s",
+            )
+
+            # Auto-update research resume for this instrument
+            await self._update_research_resume(
+                config.instrument, config.timeframe,
             )
 
         except asyncio.CancelledError:
