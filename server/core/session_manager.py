@@ -56,6 +56,9 @@ class SessionManager:
         trading_mode: Optional[str] = None,
         agent_strategy: Optional[str] = None,
         initial_balance: Optional[float] = None,
+        enable_hpo: Optional[bool] = None,
+        hpo_trials: Optional[int] = None,
+        hpo_timesteps: Optional[int] = None,
     ) -> Dict:
         """Start a new research session. Returns the created session dict."""
         if self.active_count >= settings.max_concurrent_sessions:
@@ -97,6 +100,9 @@ class SessionManager:
             trading_mode=trading_mode,
             agent_strategy=agent_strategy,
             initial_balance=initial_balance,
+            enable_hpo=enable_hpo or False,
+            hpo_trials=hpo_trials or 20,
+            hpo_timesteps=hpo_timesteps or 50000,
         )
 
         # Persist session to DB

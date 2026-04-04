@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, Response
@@ -14,11 +15,114 @@ from server.core.log_writer import AgentLogWriter
 router = APIRouter(prefix="/api", tags=["results"])
 
 _store = None
+_mlflow_external_url: str = "http://localhost:5000"
 
 
-def init(store):
-    global _store
+def init(store, *, mlflow_external_url: str = "http://localhost:5000"):
+    global _store, _mlflow_external_url
     _store = store
+    _mlflow_external_url = mlflow_external_url
+
+
+# ------------------------------------------------------------------
+# Iteration enrichment — parse metrics_json into structured fields
+# ------------------------------------------------------------------
+
+# Secondary metrics to surface per model type.
+# Keys → display labels used by the frontend.
+_SECONDARY_METRICS: Dict[str, Dict[str, str]] = {
+    "direction": {
+        "walkforward_auc": "WF AUC",
+        "auc": "AUC",
+        "meta_auc_oof": "Meta AUC (OOF)",
+        "walkforward_cv": "WF CV",
+        "precision": "Precision",
+        "recall": "Recall",
+        "f1": "F1",
+        "signal_rate": "Signal Rate",
+        "optimal_threshold": "Threshold",
+        "prediction_horizon": "Horizon",
+    },
+    "volatility": {
+        "walkforward_auc": "WF AUC",
+        "auc": "AUC",
+        "walkforward_cv": "WF CV",
+        "precision": "Precision",
+        "recall": "Recall",
+        "f1": "F1",
+        "positive_rate": "Positive Rate",
+        "atr_mult": "ATR Mult",
+        "signal_rate": "Signal Rate",
+        "optimal_threshold": "Threshold",
+    },
+    "rl": {
+        "mean_oos_sharpe": "OOS Sharpe",
+        "mean_oos_return": "OOS Return",
+        "mean_oos_drawdown": "OOS Drawdown",
+        "std_oos_sharpe": "Sharpe Std",
+        "sharpe_cv": "Sharpe CV",
+        "mean_oos_trades": "OOS Trades",
+        "trading_score": "Trading Score",
+        "mean_oos_trading_score": "Trading Score",
+        "folds_passed": "Folds Passed",
+    },
+}
+
+
+def _enrich_iteration(row: Dict[str, Any], model_type: str) -> Dict[str, Any]:
+    """Add parsed metrics, MLflow link, and secondary metrics to an iteration dict."""
+    enriched = dict(row)
+
+    # Parse metrics_json
+    raw_json = row.get("metrics_json")
+    metrics: Dict[str, Any] = {}
+    if raw_json:
+        try:
+            metrics = json.loads(raw_json) if isinstance(raw_json, str) else raw_json
+        except (json.JSONDecodeError, TypeError):
+            pass
+    enriched["metrics"] = metrics
+
+    # Resolve mlflow_run_id: column first, then metrics_json
+    run_id = row.get("mlflow_run_id") or metrics.get("mlflow_run_id") or ""
+    enriched["mlflow_run_id"] = run_id
+
+    # MLflow deep-link
+    if run_id:
+        enriched["mlflow_url"] = f"{_mlflow_external_url}/#/experiments/0/runs/{run_id}"
+    else:
+        enriched["mlflow_url"] = None
+
+    # Model registry info
+    enriched["model_version"] = metrics.get("model_version")
+    enriched["model_registry_name"] = metrics.get("model_registry_name")
+
+    # Training time
+    enriched["training_time_s"] = row.get("training_time_s") or metrics.get("training_time_s")
+
+    # Training mode (gpu/local)
+    enriched["training_mode"] = metrics.get("training_mode")
+
+    # Description
+    enriched["description"] = row.get("description") or metrics.get("description")
+
+    # ML-59: Search phase (hpo_screening, validation, robustness, or None)
+    enriched["search_phase"] = row.get("search_phase") or metrics.get("search_phase")
+
+    # Secondary metrics (model-type-aware)
+    spec = _SECONDARY_METRICS.get(model_type, {})
+    secondary: Dict[str, Any] = {}
+    for key, label in spec.items():
+        val = metrics.get(key)
+        if val is not None:
+            secondary[key] = {"label": label, "value": val}
+    enriched["secondary_metrics"] = secondary
+
+    return enriched
+
+
+def _enrich_iterations(rows: List[Dict[str, Any]], model_type: str) -> List[Dict[str, Any]]:
+    return [_enrich_iteration(r, model_type) for r in rows]
 
 
 @router.get("/research/{research_id}/results")
@@ -28,10 +132,11 @@ async def get_results(research_id: str):
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     iterations = await _store.get_iterations(research_id)
+    model_type = session.get("model_type", "")
     return {
         "research_id": research_id,
         "session": session,
-        "iterations": iterations,
+        "iterations": _enrich_iterations(iterations, model_type),
     }
 
 
@@ -41,7 +146,8 @@ async def get_iterations(research_id: str):
     session = await _store.get_session(research_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    return await _store.get_iterations(research_id)
+    iterations = await _store.get_iterations(research_id)
+    return _enrich_iterations(iterations, session.get("model_type", ""))
 
 
 @router.get("/research/{research_id}/iterations/{iteration_num}")
@@ -50,7 +156,10 @@ async def get_iteration(research_id: str, iteration_num: int):
     iteration = await _store.get_iteration(research_id, iteration_num)
     if not iteration:
         raise HTTPException(status_code=404, detail="Iteration not found")
-    return iteration
+    # Need session for model_type
+    session = await _store.get_session(research_id)
+    model_type = session.get("model_type", "") if session else ""
+    return _enrich_iteration(iteration, model_type)
 
 
 @router.get("/research/{research_id}/best")
@@ -65,7 +174,7 @@ async def get_best_iteration(research_id: str):
             status_code=404,
             detail="No winning iteration found (no iteration with all gates passed)",
         )
-    return best
+    return _enrich_iteration(best, session.get("model_type", ""))
 
 
 @router.get("/research/{research_id}/agent-log")
@@ -104,6 +213,26 @@ async def get_agent_log(
         text = AgentLogWriter.read_all(log_path)
 
     return {"research_id": research_id, "log": text or "No log entries yet."}
+
+
+@router.get("/research/{research_id}/hpo-studies")
+async def get_hpo_studies(research_id: str):
+    """HPO study results for a research session (ML-59)."""
+    session = await _store.get_session(research_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    studies = await _store.get_hpo_studies(research_id)
+    # Parse top_trials_json for each study
+    for study in studies:
+        raw = study.get("top_trials_json")
+        if raw:
+            try:
+                study["top_trials"] = json.loads(raw) if isinstance(raw, str) else raw
+            except (json.JSONDecodeError, TypeError):
+                study["top_trials"] = []
+        else:
+            study["top_trials"] = []
+    return {"research_id": research_id, "hpo_studies": studies}
 
 
 # ------------------------------------------------------------------
@@ -179,11 +308,12 @@ async def download_results(research_id: str):
         raise HTTPException(status_code=404, detail="Session not found")
 
     iterations = await _store.get_iterations(research_id)
+    model_type = session.get("model_type", "")
 
     payload = {
         "research_id": research_id,
         "session": session,
-        "iterations": iterations,
+        "iterations": _enrich_iterations(iterations, model_type),
     }
 
     instrument = session.get("instrument", "unknown")

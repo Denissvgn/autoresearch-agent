@@ -18,7 +18,12 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 import anthropic
 
 from server.config import settings
-from server.core.experiment_parser import parse_iteration_marker, parse_prepare_output
+from server.core.experiment_parser import (
+    is_hpo_study_output,
+    parse_hpo_study_output,
+    parse_iteration_marker,
+    parse_prepare_output,
+)
 from server.core.log_writer import AgentLogWriter
 from server.core.results_store import ResultsStore
 from server.ws.events import broadcaster
@@ -47,6 +52,10 @@ class ResearchConfig:
     trading_mode: Optional[str] = None   # stock | margin
     agent_strategy: Optional[str] = None  # AGGR | CONS | BALA | SCAL
     initial_balance: Optional[float] = None
+    # ML-59: HPO configuration
+    enable_hpo: bool = False
+    hpo_trials: int = 20
+    hpo_timesteps: int = 50000
 
 
 # ---------------------------------------------------------------------------
@@ -468,6 +477,13 @@ class AgentOrchestrator:
                     f"unchanged throughout the research session."
                 )
 
+        # ML-59: 3-phase HPO workflow for RL when enable_hpo is set
+        if config.model_type == "rl" and config.enable_hpo:
+            return self._build_prompt_rl_hpo(
+                config, workspace, setup_extra_args, fixed_settings_notice,
+                quick_flag, focus, instrument_underscore,
+            )
+
         # RL needs an enrichment step before the first training run
         if config.model_type == "rl":
             enrich_step = (
@@ -521,6 +537,91 @@ class AgentOrchestrator:
             f"{enrich_step}\n\n"
             f"Run autonomously. Do NOT check service health or explore the "
             f"filesystem — everything is pre-verified and ready."
+            f"{fixed_settings_notice}"
+            f"{focus}"
+        )
+
+    def _build_prompt_rl_hpo(
+        self,
+        config: ResearchConfig,
+        workspace: str,
+        setup_extra_args: str,
+        fixed_settings_notice: str,
+        quick_flag: str,
+        focus: str,
+        instrument_underscore: str,
+    ) -> str:
+        """Build prompt for 3-phase HPO workflow (ML-59)."""
+        hpo_trials = config.hpo_trials
+        hpo_timesteps = config.hpo_timesteps
+
+        return (
+            f"Tune RL model for {config.instrument} {config.timeframe} "
+            f"(tag: {config.tag}) using **3-phase HPO workflow**. "
+            f"Max {config.max_iterations} refinement iterations.\n\n"
+            f"Execute these phases IN ORDER:\n\n"
+            f"## Phase 1: Setup + HPO Screening\n\n"
+            f"1. Setup workspace:\n"
+            f"```bash\n"
+            f"cd /app/workspace && .venv/bin/python scripts/autotuner/setup.py "
+            f"--instrument {instrument_underscore} "
+            f"--timeframe {config.timeframe} "
+            f"--models rl{setup_extra_args}\n"
+            f"```\n\n"
+            f"2. Enrich RL dataset (REQUIRED):\n"
+            f"```bash\n"
+            f"cd /app/workspace && .venv/bin/python "
+            f"scripts/autotuner/enrich_rl_dataset.py "
+            f"--instrument {instrument_underscore} "
+            f"--timeframe {config.timeframe}\n"
+            f"```\n"
+            f"Verify direction_proba mean is NOT ~0.5.\n\n"
+            f"3. Run Optuna HPO study ({hpo_trials} trials, Bayesian sampling "
+            f"with early stopping):\n"
+            f"```bash\n"
+            f"cd /app/workspace && .venv/bin/python "
+            f"scripts/autotuner/rl/prepare.py "
+            f"--config {workspace}/train.yaml "
+            f"--hpo --hpo-trials {hpo_trials} "
+            f"--hpo-timesteps {hpo_timesteps}{quick_flag} 2>&1\n"
+            f"```\n"
+            f"This will take ~60-120 minutes. The output contains the top-3 "
+            f"parameter configs ranked by composite_rl_score.\n\n"
+            f"## Phase 2: Validate & Refine\n\n"
+            f"4. Read HPO results:\n"
+            f"```bash\n"
+            f"cat {workspace}/hpo_results.json\n"
+            f"```\n\n"
+            f"5. For each of the top-3 configs from Phase 1:\n"
+            f"   a. Write the trial's params into the `training:` section of "
+            f"`{workspace}/train.yaml`\n"
+            f"   b. Run full walk-forward validation:\n"
+            f"```bash\n"
+            f"cd /app/workspace && .venv/bin/python "
+            f"scripts/autotuner/rl/prepare.py "
+            f"--config {workspace}/train.yaml{quick_flag} 2>&1\n"
+            f"```\n"
+            f"   c. If `all_gates_passed` and composite is best so far, copy to "
+            f"`best_train.yaml`\n\n"
+            f"6. Take the best validated config. Then refine using the RL "
+            f"diagnostic playbook:\n"
+            f"   - Fine-tune `reward_weights` (HPO doesn't search these by "
+            f"default)\n"
+            f"   - Adjust based on fold-level metrics and trade counts\n"
+            f"   - Use the Phase 1-6 diagnostic table in README.md\n\n"
+            f"## Phase 3: Robustness Validation\n\n"
+            f"7. Run best config with different seeds to confirm stability:\n"
+            f"```bash\n"
+            f"cd /app/workspace && .venv/bin/python "
+            f"scripts/autotuner/rl/prepare.py "
+            f"--config {workspace}/best_train.yaml --seed 43{quick_flag} 2>&1\n"
+            f"cd /app/workspace && .venv/bin/python "
+            f"scripts/autotuner/rl/prepare.py "
+            f"--config {workspace}/best_train.yaml --seed 44{quick_flag} 2>&1\n"
+            f"```\n"
+            f"If composite_rl_score is consistent across seeds (not wildly "
+            f"different), the config is robust.\n\n"
+            f"Run autonomously. Do NOT check service health."
             f"{fixed_settings_notice}"
             f"{focus}"
         )
@@ -669,7 +770,48 @@ class AgentOrchestrator:
                         # prepare.py --- delimited metrics blocks.
                         # This works regardless of LLM model since it's
                         # parsing deterministic Python script output.
+
+                        # ML-59: Check for HPO study output first (mode: hpo_study)
                         if (
+                            block.name == "bash"
+                            and not turn_recorded_iteration
+                            and "---" in tool_result
+                            and is_hpo_study_output(tool_result)
+                        ):
+                            hpo_result = parse_hpo_study_output(tool_result)
+                            if hpo_result and hpo_result.status in ("completed", "success"):
+                                # Record as a special HPO study iteration
+                                iteration_count += 1
+                                hpo_marker = hpo_result.to_dict()
+                                hpo_marker["decision"] = "hpo_screening"
+                                hpo_marker["config_snapshot"] = _pending_snapshot
+                                hpo_marker["primary_metric"] = hpo_result.best_composite
+                                hpo_marker["metric_name"] = "hpo_best_composite"
+                                hpo_marker["search_phase"] = "hpo_screening"
+                                hpo_marker["description"] = (
+                                    f"HPO study completed: {hpo_result.completed_trials}/"
+                                    f"{hpo_result.n_trials} trials, best composite="
+                                    f"{hpo_result.best_composite:.4f} (turn {turn})"
+                                )
+                                await self._record_iteration(
+                                    research_id, iteration_count,
+                                    hpo_marker, total_cost,
+                                )
+                                turn_recorded_iteration = True
+                                logger.info(
+                                    "Research %s turn %d: HPO study completed "
+                                    "(%d/%d trials, best=%.4f)",
+                                    research_id, turn,
+                                    hpo_result.completed_trials,
+                                    hpo_result.n_trials,
+                                    hpo_result.best_composite or 0.0,
+                                )
+                                await agent_log.append(
+                                    "hpo_study", json.dumps(hpo_marker)[:5000],
+                                    turn=turn,
+                                )
+
+                        elif (
                             block.name == "bash"
                             and not turn_recorded_iteration
                             and "---" in tool_result
@@ -954,6 +1096,19 @@ class AgentOrchestrator:
             mlflow_run_id=marker.get("mlflow_run_id"),
         )
 
+        # ML-59: If this is an HPO study result, also persist to hpo_studies
+        if marker.get("mode") == "hpo_study":
+            top_trials = marker.get("top_trials")
+            await self._store.add_hpo_study(
+                research_id=research_id,
+                iteration=iteration,
+                n_trials=marker.get("n_trials", 0),
+                completed_trials=marker.get("completed_trials", 0),
+                best_composite=marker.get("best_composite"),
+                training_time_s=training_time,
+                top_trials_json=json.dumps(top_trials) if top_trials else None,
+            )
+
         event = {
             "event": "iteration_complete",
             "research_id": research_id,
@@ -965,6 +1120,7 @@ class AgentOrchestrator:
             "description": description,
             "training_time_s": training_time,
             "cumulative_api_cost_usd": round(cumulative_cost, 4),
+            "search_phase": marker.get("search_phase"),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         await broadcaster.broadcast(event)

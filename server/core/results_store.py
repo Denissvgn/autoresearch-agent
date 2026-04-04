@@ -63,6 +63,19 @@ CREATE TABLE IF NOT EXISTS promotions (
     previous_yaml TEXT,
     promoted_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS hpo_studies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    research_id TEXT NOT NULL REFERENCES research_sessions(id),
+    iteration INTEGER NOT NULL,
+    n_trials INTEGER NOT NULL DEFAULT 0,
+    completed_trials INTEGER NOT NULL DEFAULT 0,
+    best_composite REAL,
+    training_time_s REAL,
+    top_trials_json TEXT,
+    status TEXT NOT NULL DEFAULT 'running',
+    created_at TEXT NOT NULL
+);
 """
 
 _MODEL_TO_SKILL = {
@@ -89,6 +102,19 @@ class ResultsStore:
                 )
             except Exception:
                 pass  # Column already exists
+            # ML-59: Add search_phase + hpo_study_id columns
+            try:
+                await db.execute(
+                    "ALTER TABLE iterations ADD COLUMN search_phase TEXT"
+                )
+            except Exception:
+                pass
+            try:
+                await db.execute(
+                    "ALTER TABLE iterations ADD COLUMN hpo_study_id INTEGER"
+                )
+            except Exception:
+                pass
             await db.commit()
         logger.info("Results store initialized at %s", self._db_path)
 
@@ -330,6 +356,59 @@ class ResultsStore:
             )
             row = await cursor.fetchone()
             return dict(row) if row else None
+
+    # ------------------------------------------------------------------
+    # HPO Studies (ML-59)
+    # ------------------------------------------------------------------
+
+    async def add_hpo_study(
+        self,
+        *,
+        research_id: str,
+        iteration: int,
+        n_trials: int,
+        completed_trials: int,
+        best_composite: Optional[float],
+        training_time_s: Optional[float],
+        top_trials_json: Optional[str],
+        status: str = "completed",
+    ) -> Dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        async with aiosqlite.connect(self._db_path) as db:
+            cursor = await db.execute(
+                """INSERT INTO hpo_studies
+                   (research_id, iteration, n_trials, completed_trials,
+                    best_composite, training_time_s, top_trials_json,
+                    status, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    research_id, iteration, n_trials, completed_trials,
+                    best_composite, training_time_s, top_trials_json,
+                    status, now,
+                ),
+            )
+            await db.commit()
+            return {
+                "id": cursor.lastrowid,
+                "research_id": research_id,
+                "iteration": iteration,
+                "n_trials": n_trials,
+                "completed_trials": completed_trials,
+                "best_composite": best_composite,
+                "status": status,
+                "created_at": now,
+            }
+
+    async def get_hpo_studies(
+        self, research_id: str,
+    ) -> List[Dict[str, Any]]:
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "SELECT * FROM hpo_studies WHERE research_id = ? ORDER BY created_at",
+                (research_id,),
+            )
+            return [dict(r) for r in await cursor.fetchall()]
 
     # ------------------------------------------------------------------
     # Promotions

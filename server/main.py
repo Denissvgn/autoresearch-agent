@@ -70,7 +70,7 @@ async def lifespan(app: FastAPI):
     from server.api import promotion, research, results
 
     research.init(_session_manager, _store)
-    results.init(_store)
+    results.init(_store, mlflow_external_url=settings.mlflow_external_url)
     promotion.init(_promoter, _store)
 
     logger.info("Autoresearch-agent ready")

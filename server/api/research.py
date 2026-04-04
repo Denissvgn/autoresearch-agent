@@ -62,6 +62,19 @@ class StartResearchRequest(BaseModel):
         default=None, ge=100, le=1_000_000,
         description="Starting balance in USD for RL training.",
     )
+    # ML-59: HPO settings (RL only)
+    enable_hpo: Optional[bool] = Field(
+        default=None,
+        description="Enable Optuna HPO screening phase before LLM refinement. RL only.",
+    )
+    hpo_trials: Optional[int] = Field(
+        default=None, ge=5, le=200,
+        description="Number of Optuna trials for HPO screening (default: 20). RL only.",
+    )
+    hpo_timesteps: Optional[int] = Field(
+        default=None, ge=10000, le=500000,
+        description="Timesteps per HPO trial (default: 50000). RL only.",
+    )
 
 
 # ------------------------------------------------------------------
@@ -85,6 +98,9 @@ async def start_research(req: StartResearchRequest):
             trading_mode=req.trading_mode,
             agent_strategy=req.agent_strategy,
             initial_balance=req.initial_balance,
+            enable_hpo=req.enable_hpo,
+            hpo_trials=req.hpo_trials,
+            hpo_timesteps=req.hpo_timesteps,
         )
         return session
     except RuntimeError as e:
