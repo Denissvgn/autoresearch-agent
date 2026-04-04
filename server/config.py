@@ -63,8 +63,8 @@ class Settings(BaseSettings):
     max_budget_usd: float = Field(default=10.0)
     experiment_timeout_s: int = Field(default=14400)
     default_quick_mode: bool = Field(
-        default=False,
-        description="Standard (full) research mode by default",
+        default=True,
+        description="Quick mode by default (2 folds, 50k steps). Override per-session with quick_mode=false.",
     )
     max_concurrent_sessions: int = Field(default=2)
 

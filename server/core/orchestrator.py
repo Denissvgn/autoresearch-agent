@@ -69,8 +69,8 @@ AGENT_TOOLS: List[Dict[str, Any]] = [
             "Execute a shell command in the workspace. "
             "The working directory is the workspace root. "
             "Use /app/workspace/.venv/bin/python for Python scripts. "
-            "Default timeout is 60 minutes (3600s). Do NOT set timeout_s "
-            "below 1800 for training commands."
+            "Default timeout is 7200s (2 hours). Set timeout_s for "
+            "shorter commands. Minimum enforced: 900s."
         ),
         "input_schema": {
             "type": "object",
@@ -81,7 +81,7 @@ AGENT_TOOLS: List[Dict[str, Any]] = [
                 },
                 "timeout_s": {
                     "type": "integer",
-                    "description": "Timeout in seconds (default: 3600). Set higher for full RL training (up to 5400).",
+                    "description": "Timeout in seconds (default: 7200). Minimum 900.",
                 },
             },
             "required": ["command"],
@@ -204,20 +204,19 @@ def _execute_tool(
 
 def _tool_bash(input_data: Dict[str, Any], workspace: str) -> str:
     command = input_data["command"]
-    timeout = input_data.get("timeout_s", 5400)
+    timeout = input_data.get("timeout_s", 7200)
     # Enforce minimum timeout — agents routinely ignore tool-description hints
     if timeout < 900:
         timeout = 900
-    # Auto-escalate timeout for training commands (prepare.py, run_phase)
-    if timeout < 5400 and ("prepare.py" in command or "run_phase" in command):
-        timeout = 5400
     try:
+        # Start in a new process group so we can kill the entire tree on timeout
         result = subprocess.run(
             ["bash", "-c", command],
             cwd=workspace,
             capture_output=True,
             text=True,
             timeout=timeout,
+            start_new_session=True,
         )
         output = ""
         if result.stdout:
@@ -231,6 +230,9 @@ def _tool_bash(input_data: Dict[str, Any], workspace: str) -> str:
             output = output[:30_000] + "\n...(truncated)...\n" + output[-30_000:]
         return output or "(no output)"
     except subprocess.TimeoutExpired as exc:
+        # start_new_session=True ensures subprocess.run kills the entire
+        # process group (bash + prepare.py + any children) on timeout,
+        # so orphaned GPU-polling processes no longer block future runs.
         # Preserve any output captured before the timeout
         partial = ""
         if exc.stdout:
@@ -395,13 +397,15 @@ class AgentOrchestrator:
 
                 if config.model_type == "rl":
                     # RL results use aggregate metrics. Compute composite_rl_score
-                    # matching prepare.py: 1.0×sharpe + 0.5×return - 2.0×drawdown
+                    # ML-61: matching prepare.py: 1.0×sharpe + 0.5×return - 2.0×drawdown - 0.1×cv
                     agg = results_data.get("aggregate", {})
                     mean_sharpe = agg.get("mean_oos_sharpe") or 0.0
                     mean_return = agg.get("mean_oos_return") or 0.0
                     mean_dd = agg.get("mean_oos_drawdown") or 0.0
+                    sharpe_cv = agg.get("sharpe_cv") or 0.0
                     primary = (
-                        1.0 * mean_sharpe + 0.5 * mean_return - 2.0 * mean_dd
+                        1.0 * mean_sharpe + 0.5 * mean_return
+                        - 2.0 * mean_dd - 0.1 * sharpe_cv
                     )
                     n_folds = agg.get("n_folds", 1)
                     folds_passed = agg.get("folds_passed", 0)
