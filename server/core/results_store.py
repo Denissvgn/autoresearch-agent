@@ -256,8 +256,8 @@ class ResultsStore:
             )
             await db.commit()
 
-            # Update session best if this is a keep + gates passed
-            if decision == "keep" and all_gates_passed:
+            # ML-53: Update session best for keep OR improve (research progress)
+            if decision in ("keep", "improve"):
                 session = await self.get_session(research_id)
                 if session and (
                     session["best_metric"] is None
@@ -348,9 +348,10 @@ class ResultsStore:
     ) -> Optional[Dict[str, Any]]:
         async with aiosqlite.connect(self._db_path) as db:
             db.row_factory = aiosqlite.Row
+            # ML-53: Include 'improve' decisions (research progress)
             cursor = await db.execute(
                 """SELECT * FROM iterations
-                   WHERE research_id = ? AND all_gates_passed = 1 AND decision = 'keep'
+                   WHERE research_id = ? AND decision IN ('keep', 'improve')
                    ORDER BY primary_metric DESC LIMIT 1""",
                 (research_id,),
             )

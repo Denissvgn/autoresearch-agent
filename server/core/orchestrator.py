@@ -1125,27 +1125,27 @@ class AgentOrchestrator:
         primary_metric: Optional[float],
         all_gates_passed: bool,
     ) -> str:
-        """Determine keep/discard by comparing against session best.
+        """Determine keep/improve/discard by comparing against session best.
 
-        - 'keep' only if gates passed AND metric is strictly better than
-          the current best (or this is the first iteration with no best yet).
-        - 'discard' otherwise.
+        ML-53: Three-way decision taxonomy:
+        - 'keep'    — gates passed AND metric improved (production-worthy)
+        - 'improve' — gates NOT passed but metric improved (research progress)
+        - 'discard' — metric did not improve or is None
         """
-        if not all_gates_passed or primary_metric is None:
+        if primary_metric is None:
             return "discard"
 
         session = await self._store.get_session(research_id)
-        if not session:
-            return "keep"  # shouldn't happen, but safe default
+        best = session.get("best_metric") if session else None
 
-        best = session.get("best_metric")
-        if best is None:
-            return "keep"  # first iteration — always keep
+        metric_improved = (best is None) or (primary_metric > best)
 
-        if primary_metric > best:
+        if all_gates_passed and metric_improved:
             return "keep"
-
-        return "discard"
+        elif metric_improved:
+            return "improve"
+        else:
+            return "discard"
 
     async def _record_iteration(
         self,
