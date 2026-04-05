@@ -156,6 +156,43 @@ async def resume_research(research_id: str):
     return {"status": "running", "research_id": research_id}
 
 
+class ContinueResearchRequest(BaseModel):
+    """ML-62: Request body for continuing a timed-out/completed session."""
+    max_iterations: Optional[int] = Field(default=None, ge=1, le=500)
+    max_budget_usd: Optional[float] = Field(default=None, ge=0.1, le=500.0)
+    timeout_minutes: Optional[int] = Field(
+        default=None, ge=30, le=1440,
+        description="Session timeout in minutes",
+    )
+    focus_hint: Optional[str] = Field(
+        default=None, max_length=1000,
+        description="Optional hint for what to focus on in the continuation",
+    )
+
+
+@router.post("/research/{research_id}/continue", status_code=201)
+async def continue_research(research_id: str, req: ContinueResearchRequest = None):
+    """ML-62: Continue a timed-out or completed session as a new chained session.
+
+    Creates a new session that inherits all settings from the parent and
+    picks up where it left off — workspace is preserved, no setup/baseline
+    re-run.
+    """
+    if req is None:
+        req = ContinueResearchRequest()
+    try:
+        session = await _session_manager.continue_session(
+            research_id,
+            max_iterations=req.max_iterations,
+            max_budget_usd=req.max_budget_usd,
+            timeout_minutes=req.timeout_minutes,
+            focus_hint=req.focus_hint,
+        )
+        return session
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
 @router.delete("/research/{research_id}")
 async def delete_research(research_id: str):
     if _session_manager.is_running(research_id):

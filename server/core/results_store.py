@@ -122,6 +122,13 @@ class ResultsStore:
                 )
             except Exception:
                 pass
+            # ML-62: Add resumed_from column for session chaining on timeout
+            try:
+                await db.execute(
+                    "ALTER TABLE research_sessions ADD COLUMN resumed_from TEXT"
+                )
+            except Exception:
+                pass
             await db.commit()
         logger.info("Results store initialized at %s", self._db_path)
 

@@ -56,6 +56,8 @@ class ResearchConfig:
     enable_hpo: bool = False
     hpo_trials: int = 20
     hpo_timesteps: int = 50000
+    # ML-62: Session resume on timeout
+    resumed_from: Optional[str] = None  # parent session ID when continuing
 
 
 # ---------------------------------------------------------------------------
@@ -577,6 +579,112 @@ class AgentOrchestrator:
             f"{resume_block}"
         )
 
+    async def _build_resume_prompt(self, config: ResearchConfig) -> str:
+        """ML-62: Build a prompt for resuming a timed-out session.
+
+        Instead of setup → enrich → baseline, this tells Claude to continue
+        from where the parent session left off, using the preserved workspace
+        (train.yaml, best_train.yaml, results).
+        """
+        parent_id = config.resumed_from
+        quick_flag = " --quick" if config.quick_mode else ""
+        focus = f"\nFocus hint: {config.focus_hint}" if config.focus_hint else ""
+        instrument_underscore = config.instrument.replace("-", "_")
+        workspace = (
+            f"runs/autotuner/{instrument_underscore}_{config.timeframe}"
+            f"/{config.model_type}"
+        )
+
+        # Load iteration history from parent session
+        parent_session = await self._store.get_session(parent_id) if parent_id else None
+        parent_iterations = await self._store.get_iterations(parent_id) if parent_id else []
+        parent_insights = (parent_session or {}).get("insights", "") or ""
+        parent_best_iter = (parent_session or {}).get("best_iteration")
+        parent_best_metric = (parent_session or {}).get("best_metric")
+        parent_iter_count = len(parent_iterations)
+
+        # Build compact iteration history
+        iter_summary_lines = []
+        for it in parent_iterations:
+            num = it.get("iteration", "?")
+            pm = it.get("primary_metric")
+            metric_s = f"{pm:.4f}" if pm is not None else "—"
+            gates = "✅" if it.get("all_gates_passed") else "❌"
+            decision = it.get("decision", "?")
+            desc = (it.get("description") or "")[:150]
+            iter_summary_lines.append(
+                f"  {num}. metric={metric_s} gates={gates} "
+                f"decision={decision} — {desc}"
+            )
+        iter_summary = "\n".join(iter_summary_lines) if iter_summary_lines else "  (no iterations recorded)"
+
+        # RL fixed settings notice
+        fixed_settings_notice = ""
+        if config.model_type == "rl":
+            fixed_fields = []
+            if config.trading_mode:
+                fixed_fields.append(f"trading_mode: {config.trading_mode}")
+            if config.agent_strategy:
+                fixed_fields.append(f"agent_strategy: {config.agent_strategy}")
+            if config.initial_balance is not None:
+                fixed_fields.append(f"initial_balance: {config.initial_balance}")
+            if fixed_fields:
+                fields_str = ", ".join(fixed_fields)
+                fixed_settings_notice = (
+                    f"\n\n**FIXED SETTINGS (do NOT modify in train.yaml):** "
+                    f"{fields_str}. These are user-configured and must remain "
+                    f"unchanged throughout the research session."
+                )
+
+        # Load research resume for broader cross-session context
+        resume_block = self._load_research_resume(config)
+
+        best_info = ""
+        if parent_best_metric is not None:
+            best_info = (
+                f"Best result so far: iteration {parent_best_iter}, "
+                f"metric={parent_best_metric:.4f}\n"
+            )
+
+        insights_block = ""
+        if parent_insights.strip():
+            insights_block = (
+                f"\n**Insights from parent session:**\n{parent_insights.strip()}\n"
+            )
+
+        return (
+            f"**CONTINUATION SESSION** — Resuming timed-out research for "
+            f"{config.model_type} model on {config.instrument} "
+            f"{config.timeframe} (tag: {config.tag}).\n\n"
+            f"The previous session (id: {parent_id[:12] if parent_id else '?'}) "
+            f"completed {parent_iter_count} iterations before timing out.\n"
+            f"{best_info}"
+            f"You have {config.max_iterations} iterations remaining.\n\n"
+            f"## Parent session iteration history\n"
+            f"{iter_summary}\n"
+            f"{insights_block}\n"
+            f"## Instructions\n\n"
+            f"The workspace is ALREADY SET UP from the previous session. "
+            f"Do NOT run setup.py, enrich, or baseline again.\n\n"
+            f"1. Read the current state:\n"
+            f"   - `{workspace}/train.yaml` (current config)\n"
+            f"   - `{workspace}/best_train.yaml` (best validated config, if exists)\n"
+            f"   - `{workspace}/results.json` (last run results, if exists)\n\n"
+            f"2. Continue iterating from where the parent left off:\n"
+            f"```bash\n"
+            f"cd /app/workspace && .venv/bin/python "
+            f"scripts/autotuner/{config.model_type}/prepare.py "
+            f"--config {workspace}/train.yaml{quick_flag} 2>&1\n"
+            f"```\n\n"
+            f"3. After each run, analyze results and iterate: "
+            f"edit train.yaml → run prepare.py → check metrics → keep or revert.\n\n"
+            f"Build on the parent session's findings. Do NOT repeat experiments "
+            f"that already failed. Run autonomously."
+            f"{fixed_settings_notice}"
+            f"{focus}"
+            f"{resume_block}"
+        )
+
     def _build_prompt_rl_hpo(
         self,
         config: ResearchConfig,
@@ -716,7 +824,7 @@ class AgentOrchestrator:
             session = await self._store.get_session(research_id)
             if not session:
                 return
-            iterations = await self._store.list_iterations(research_id)
+            iterations = await self._store.get_iterations(research_id)
             if not iterations:
                 return
 
@@ -796,7 +904,11 @@ class AgentOrchestrator:
         system_prompt = f"{claude_md}\n\n---\n\n{skill_content}"
 
         # Build initial user message
-        user_prompt = self._build_prompt(config)
+        # ML-62: Use resume prompt for continuation sessions
+        if config.resumed_from:
+            user_prompt = await self._build_resume_prompt(config)
+        else:
+            user_prompt = self._build_prompt(config)
 
         messages: List[Dict[str, Any]] = [
             {"role": "user", "content": user_prompt},
@@ -818,6 +930,7 @@ class AgentOrchestrator:
         )
 
         try:
+            _timed_out = False  # ML-62: track timeout vs normal completion
             for turn in range(max_turns):
                 # Check stop/pause conditions
                 if self._should_stop(research_id):
@@ -836,6 +949,7 @@ class AgentOrchestrator:
                 if elapsed > _timeout:
                     logger.info("Research %s: timeout after %.0fs", research_id, elapsed)
                     await agent_log.append("system", f"Timeout after {elapsed:.0f}s", turn=turn)
+                    _timed_out = True
                     break
 
                 # Call Claude
@@ -1138,28 +1252,30 @@ class AgentOrchestrator:
                     # Model generated text only — no more tool calls → done
                     break
 
-            # Update session as completed
+            # ML-62: Distinguish timeout from normal completion
+            final_status = "timed_out" if _timed_out else "completed"
             elapsed_total = time.monotonic() - start_time
             await self._store.update_session(
                 research_id,
-                status="completed",
+                status=final_status,
                 completed_at=datetime.now(timezone.utc).isoformat(),
                 total_api_cost_usd=round(total_cost, 4),
             )
             await broadcaster.broadcast({
                 "event": "research_completed",
                 "research_id": research_id,
+                "status": final_status,
                 "iterations": iteration_count,
                 "total_cost_usd": round(total_cost, 4),
                 "elapsed_s": round(elapsed_total, 1),
             })
             logger.info(
-                "Research %s completed: %d iterations, $%.4f, %.0fs",
-                research_id, iteration_count, total_cost, elapsed_total,
+                "Research %s %s: %d iterations, $%.4f, %.0fs",
+                research_id, final_status, iteration_count, total_cost, elapsed_total,
             )
             await agent_log.append(
                 "system",
-                f"Completed: {iteration_count} iterations, "
+                f"{final_status.replace('_', ' ').title()}: {iteration_count} iterations, "
                 f"${total_cost:.4f}, {elapsed_total:.0f}s",
             )
 

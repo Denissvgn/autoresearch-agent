@@ -211,6 +211,119 @@ class SessionManager:
         await asyncio.to_thread(shutil.rmtree, str(ws), ignore_errors=True)
         logger.warning("Removed stale workspace %s (could not archive)", ws)
 
+    async def continue_session(
+        self,
+        parent_id: str,
+        *,
+        max_iterations: Optional[int] = None,
+        max_budget_usd: Optional[float] = None,
+        timeout_minutes: Optional[int] = None,
+        focus_hint: Optional[str] = None,
+    ) -> Dict:
+        """ML-62: Continue a timed-out session as a new chained session.
+
+        Creates a new session that inherits instrument/timeframe/model_type
+        and all fixed settings from the parent. Crucially, it does NOT
+        archive the workspace — the new session picks up where the parent
+        left off with the same train.yaml, best_train.yaml, and results.
+        """
+        # Validate parent session
+        parent = await self._store.get_session(parent_id)
+        if not parent:
+            raise RuntimeError(f"Parent session {parent_id} not found")
+        if parent["status"] not in ("timed_out", "completed", "failed"):
+            raise RuntimeError(
+                f"Can only continue sessions with status timed_out/completed/failed, "
+                f"got: {parent['status']}"
+            )
+
+        instrument = parent["instrument"]
+        timeframe = parent["timeframe"]
+        model_type = parent["model_type"]
+
+        if self.active_count >= settings.max_concurrent_sessions:
+            raise RuntimeError(
+                f"Max concurrent sessions ({settings.max_concurrent_sessions}) reached"
+            )
+
+        # Block duplicate if already running
+        for session in self._active.values():
+            c = session.config
+            if (
+                c.instrument == instrument
+                and c.timeframe == timeframe
+                and c.model_type == model_type
+            ):
+                raise RuntimeError(
+                    f"A {model_type} session for {instrument} {timeframe} "
+                    f"is already running (id={session.research_id})"
+                )
+
+        # Compute remaining iterations (parent max - parent completed)
+        parent_iterations = await self._store.get_iterations(parent_id)
+        parent_iter_count = len(parent_iterations)
+        parent_max = parent.get("max_iterations") or settings.max_iterations
+        remaining = max(parent_max - parent_iter_count, 5)  # at least 5
+
+        research_id = f"res_{uuid.uuid4().hex[:12]}"
+        effective_tag = f"cont-{parent_id[-8:]}"
+        workspace_path = parent["workspace_path"]
+
+        config = ResearchConfig(
+            id=research_id,
+            instrument=instrument,
+            timeframe=timeframe,
+            model_type=model_type,
+            tag=effective_tag,
+            quick_mode=bool(parent.get("quick_mode")),
+            max_iterations=max_iterations or remaining,
+            max_budget_usd=max_budget_usd or settings.max_budget_usd,
+            timeout_s=timeout_minutes * 60 if timeout_minutes else 0,
+            focus_hint=focus_hint or parent.get("focus_hint"),
+            workspace_path=workspace_path,
+            resumed_from=parent_id,
+        )
+
+        # Persist session to DB with resumed_from link
+        session_dict = await self._store.create_session(
+            session_id=research_id,
+            instrument=instrument,
+            timeframe=timeframe,
+            model_type=model_type,
+            tag=effective_tag,
+            quick_mode=config.quick_mode,
+            max_iterations=config.max_iterations,
+            max_budget_usd=config.max_budget_usd,
+            focus_hint=config.focus_hint,
+            workspace_path=workspace_path,
+        )
+        # Set resumed_from (not in create_session signature)
+        await self._store.update_session(research_id, resumed_from=parent_id)
+
+        # ML-62: Do NOT archive the workspace — it IS the continuation state.
+        # The workspace contains train.yaml, best_train.yaml, results from
+        # the parent session that the new session needs.
+
+        # Spawn background task
+        task = asyncio.create_task(
+            self._run_and_cleanup(research_id, config),
+            name=f"research-{research_id}",
+        )
+        self._active[research_id] = ActiveSession(
+            research_id=research_id,
+            task=task,
+            config=config,
+            started_at=datetime.now(timezone.utc),
+        )
+
+        logger.info(
+            "ML-62: Continuing session %s from parent %s: %s %s %s (remaining_iter=%d)",
+            research_id, parent_id, model_type, instrument, timeframe,
+            config.max_iterations,
+        )
+        # Re-fetch to include resumed_from in the response
+        return await self._store.get_session(research_id)
+
     async def stop_session(self, research_id: str) -> bool:
         """Request a graceful stop for a running session."""
         active = self._active.get(research_id)

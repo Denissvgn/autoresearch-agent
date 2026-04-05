@@ -135,6 +135,11 @@ def parse_prepare_output(stdout: str) -> IterationMetrics:
                 metrics.training_time_s = float(value)
             except ValueError:
                 pass
+        elif key == "gate_failures":
+            # Semicolon-separated list of gate failure reasons
+            metrics.extra[key] = [
+                s.strip() for s in value.split(";") if s.strip()
+            ]
         else:
             # Store any extra metrics
             try:
