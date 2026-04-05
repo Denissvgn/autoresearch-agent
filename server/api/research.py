@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import glob
 import os
-from typing import Optional
+from typing import Dict, Optional
 
 import yaml
 from fastapi import APIRouter, HTTPException
@@ -33,7 +33,7 @@ def init(session_manager, store):
 class StartResearchRequest(BaseModel):
     instrument: str = Field(..., examples=["DOGE_USDT"])
     timeframe: str = Field(..., examples=["15m"])
-    model_type: str = Field(..., pattern="^(direction|volatility|rl)$")
+    model_type: str = Field(..., pattern="^(direction|volatility|rl|pipeline)$")
     tag: Optional[str] = Field(default=None, examples=["doge-apr01"])
     quick_mode: Optional[bool] = Field(
         default=None,
@@ -75,6 +75,11 @@ class StartResearchRequest(BaseModel):
         default=None, ge=10000, le=500000,
         description="Timesteps per HPO trial (default: 50000). RL only.",
     )
+    # ML-63: Pipeline settings
+    phase_budgets: Optional[Dict[str, int]] = Field(
+        default=None,
+        description="Per-phase iteration budget for pipeline mode: {direction: N, volatility: N, rl: N}",
+    )
 
 
 # ------------------------------------------------------------------
@@ -85,6 +90,25 @@ class StartResearchRequest(BaseModel):
 @router.post("/research/start", status_code=201)
 async def start_research(req: StartResearchRequest):
     try:
+        # ML-63: Route pipeline requests to the pipeline controller
+        if req.model_type == "pipeline":
+            return await _session_manager.start_pipeline(
+                instrument=req.instrument,
+                timeframe=req.timeframe,
+                tag=req.tag,
+                quick_mode=req.quick_mode,
+                max_iterations=req.max_iterations,
+                max_budget_usd=req.max_budget_usd,
+                timeout_minutes=req.timeout_minutes,
+                focus_hint=req.focus_hint,
+                phase_budgets=req.phase_budgets,
+                trading_mode=req.trading_mode,
+                agent_strategy=req.agent_strategy,
+                initial_balance=req.initial_balance,
+                enable_hpo=req.enable_hpo,
+                hpo_trials=req.hpo_trials,
+                hpo_timesteps=req.hpo_timesteps,
+            )
         session = await _session_manager.start_session(
             instrument=req.instrument,
             timeframe=req.timeframe,
@@ -120,6 +144,11 @@ async def list_research(
 
 @router.get("/research/{research_id}")
 async def get_research(research_id: str):
+    # ML-63: Check pipelines first if ID starts with pipe_
+    if research_id.startswith("pipe_"):
+        pipe = await _store.get_pipeline(research_id)
+        if pipe:
+            return pipe
     session = await _store.get_session(research_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -128,6 +157,11 @@ async def get_research(research_id: str):
 
 @router.post("/research/{research_id}/stop")
 async def stop_research(research_id: str):
+    # ML-63: Handle pipeline stop
+    if research_id.startswith("pipe_"):
+        ok = await _session_manager.stop_pipeline(research_id)
+        if ok:
+            return {"status": "stop_requested", "pipeline_id": research_id}
     ok = await _session_manager.stop_session(research_id)
     if not ok:
         raise HTTPException(
@@ -181,6 +215,15 @@ async def continue_research(research_id: str, req: ContinueResearchRequest = Non
     if req is None:
         req = ContinueResearchRequest()
     try:
+        # ML-63: Handle pipeline continue
+        if research_id.startswith("pipe_"):
+            return await _session_manager.continue_pipeline(
+                research_id,
+                max_iterations=req.max_iterations,
+                max_budget_usd=req.max_budget_usd,
+                timeout_minutes=req.timeout_minutes,
+                focus_hint=req.focus_hint,
+            )
         session = await _session_manager.continue_session(
             research_id,
             max_iterations=req.max_iterations,
@@ -253,13 +296,28 @@ async def list_models():
         {"id": "direction", "name": "Direction", "skill": "direction-autotuner"},
         {"id": "volatility", "name": "Volatility", "skill": "volatility-autotuner"},
         {"id": "rl", "name": "RL (PPO)", "skill": "rl-autotuner"},
+        {"id": "pipeline", "name": "Pipeline (dir→vol→rl)", "skill": "pipeline"},
     ]
+
+
+# ------------------------------------------------------------------
+# ML-63: Pipeline-specific endpoints
+# ------------------------------------------------------------------
+
+
+@router.get("/pipelines")
+async def list_pipelines(
+    status: Optional[str] = None,
+    instrument: Optional[str] = None,
+):
+    return await _store.list_pipelines(status=status, instrument=instrument)
 
 
 @router.get("/status")
 async def system_status():
     return {
         "active_sessions": _session_manager.active_count,
+        "active_pipelines": len(_session_manager._active_pipelines),
         "max_concurrent": settings.max_concurrent_sessions,
         "anthropic_model": settings.anthropic_model,
         "default_quick_mode": settings.default_quick_mode,

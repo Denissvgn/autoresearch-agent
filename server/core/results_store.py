@@ -76,6 +76,35 @@ CREATE TABLE IF NOT EXISTS hpo_studies (
     status TEXT NOT NULL DEFAULT 'running',
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS pipelines (
+    id TEXT PRIMARY KEY,
+    instrument TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
+    tag TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running',
+    current_phase TEXT,
+    completed_phases TEXT DEFAULT '[]',
+    direction_session_id TEXT,
+    volatility_session_id TEXT,
+    rl_session_id TEXT,
+    max_iterations INTEGER DEFAULT 30,
+    max_budget_usd REAL DEFAULT 30.0,
+    total_api_cost_usd REAL DEFAULT 0.0,
+    phase_budgets TEXT,
+    quick_mode INTEGER DEFAULT 0,
+    timeout_s INTEGER DEFAULT 0,
+    focus_hint TEXT,
+    trading_mode TEXT,
+    agent_strategy TEXT,
+    initial_balance REAL,
+    enable_hpo INTEGER DEFAULT 0,
+    hpo_trials INTEGER,
+    hpo_timesteps INTEGER,
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    error_message TEXT
+);
 """
 
 _MODEL_TO_SKILL = {
@@ -126,6 +155,13 @@ class ResultsStore:
             try:
                 await db.execute(
                     "ALTER TABLE research_sessions ADD COLUMN resumed_from TEXT"
+                )
+            except Exception:
+                pass
+            # ML-63: Add pipeline_id column to research_sessions
+            try:
+                await db.execute(
+                    "ALTER TABLE research_sessions ADD COLUMN pipeline_id TEXT"
                 )
             except Exception:
                 pass
@@ -469,3 +505,95 @@ class ResultsStore:
                 "SELECT * FROM promotions ORDER BY promoted_at DESC",
             )
             return [dict(r) for r in await cursor.fetchall()]
+
+    # ------------------------------------------------------------------
+    # Pipelines (ML-63)
+    # ------------------------------------------------------------------
+
+    async def create_pipeline(
+        self,
+        *,
+        pipeline_id: str,
+        instrument: str,
+        timeframe: str,
+        tag: str,
+        max_iterations: int,
+        max_budget_usd: float,
+        quick_mode: bool,
+        timeout_s: int,
+        focus_hint: Optional[str],
+        phase_budgets: Optional[str],
+        trading_mode: Optional[str],
+        agent_strategy: Optional[str],
+        initial_balance: Optional[float],
+        enable_hpo: bool,
+        hpo_trials: Optional[int],
+        hpo_timesteps: Optional[int],
+    ) -> Dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute(
+                """INSERT INTO pipelines
+                   (id, instrument, timeframe, tag, status, current_phase,
+                    completed_phases, max_iterations, max_budget_usd,
+                    quick_mode, timeout_s, focus_hint, phase_budgets,
+                    trading_mode, agent_strategy, initial_balance,
+                    enable_hpo, hpo_trials, hpo_timesteps, started_at)
+                   VALUES (?, ?, ?, ?, 'running', NULL, '[]',
+                           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    pipeline_id, instrument, timeframe, tag,
+                    max_iterations, max_budget_usd, int(quick_mode),
+                    timeout_s, focus_hint, phase_budgets,
+                    trading_mode, agent_strategy, initial_balance,
+                    int(enable_hpo), hpo_trials, hpo_timesteps, now,
+                ),
+            )
+            await db.commit()
+        return await self.get_pipeline(pipeline_id)
+
+    async def get_pipeline(self, pipeline_id: str) -> Optional[Dict[str, Any]]:
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "SELECT * FROM pipelines WHERE id = ?", (pipeline_id,),
+            )
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def list_pipelines(
+        self,
+        status: Optional[str] = None,
+        instrument: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        clauses = []
+        params: list = []
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if instrument:
+            clauses.append("instrument = ?")
+            params.append(instrument)
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                f"SELECT * FROM pipelines{where} ORDER BY started_at DESC",
+                params,
+            )
+            return [dict(r) for r in await cursor.fetchall()]
+
+    async def update_pipeline(
+        self, pipeline_id: str, **fields: Any,
+    ) -> Optional[Dict[str, Any]]:
+        if not fields:
+            return await self.get_pipeline(pipeline_id)
+        set_clause = ", ".join(f"{k} = ?" for k in fields)
+        values = list(fields.values()) + [pipeline_id]
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute(
+                f"UPDATE pipelines SET {set_clause} WHERE id = ?",
+                values,
+            )
+            await db.commit()
+        return await self.get_pipeline(pipeline_id)

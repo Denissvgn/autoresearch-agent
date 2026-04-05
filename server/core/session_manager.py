@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import shutil
 import uuid
@@ -13,6 +14,7 @@ from typing import Dict, Optional
 
 from server.config import settings
 from server.core.orchestrator import AgentOrchestrator, ResearchConfig
+from server.core.pipeline_controller import PipelineConfig, PipelineController
 from server.core.results_store import ResultsStore
 
 logger = logging.getLogger(__name__)
@@ -32,7 +34,9 @@ class SessionManager:
     def __init__(self, store: ResultsStore) -> None:
         self._store = store
         self._orchestrator = AgentOrchestrator(store)
+        self._pipeline_ctrl = PipelineController(store, self)
         self._active: Dict[str, ActiveSession] = {}
+        self._active_pipelines: Dict[str, asyncio.Task] = {}
 
     @property
     def active_count(self) -> int:
@@ -324,6 +328,282 @@ class SessionManager:
         # Re-fetch to include resumed_from in the response
         return await self._store.get_session(research_id)
 
+    # ------------------------------------------------------------------
+    # Pipeline sessions (ML-63)
+    # ------------------------------------------------------------------
+
+    async def start_pipeline(
+        self,
+        *,
+        instrument: str,
+        timeframe: str,
+        tag: Optional[str] = None,
+        quick_mode: Optional[bool] = None,
+        max_iterations: Optional[int] = None,
+        max_budget_usd: Optional[float] = None,
+        timeout_minutes: Optional[int] = None,
+        focus_hint: Optional[str] = None,
+        phase_budgets: Optional[Dict] = None,
+        trading_mode: Optional[str] = None,
+        agent_strategy: Optional[str] = None,
+        initial_balance: Optional[float] = None,
+        enable_hpo: Optional[bool] = None,
+        hpo_trials: Optional[int] = None,
+        hpo_timesteps: Optional[int] = None,
+    ) -> Dict:
+        """Start a pipeline that trains direction → volatility → rl in sequence."""
+        # Block duplicate pipeline for same instrument
+        for pid, task in list(self._active_pipelines.items()):
+            if not task.done():
+                pipe = await self._store.get_pipeline(pid)
+                if (
+                    pipe
+                    and pipe["instrument"] == instrument
+                    and pipe["timeframe"] == timeframe
+                    and pipe["status"] == "running"
+                ):
+                    raise RuntimeError(
+                        f"A pipeline for {instrument} {timeframe} is already "
+                        f"running (id={pid})"
+                    )
+
+        pipeline_id = f"pipe_{uuid.uuid4().hex[:12]}"
+        effective_tag = tag or f"pipeline-{pipeline_id[-8:]}"
+
+        config = PipelineConfig(
+            id=pipeline_id,
+            instrument=instrument,
+            timeframe=timeframe,
+            tag=effective_tag,
+            quick_mode=quick_mode if quick_mode is not None else settings.default_quick_mode,
+            max_iterations=max_iterations or settings.max_iterations,
+            max_budget_usd=max_budget_usd or (settings.max_budget_usd * 3),
+            timeout_s=timeout_minutes * 60 if timeout_minutes else 0,
+            focus_hint=focus_hint,
+            phase_budgets=phase_budgets,
+            trading_mode=trading_mode,
+            agent_strategy=agent_strategy,
+            initial_balance=initial_balance,
+            enable_hpo=enable_hpo or False,
+            hpo_trials=hpo_trials or 20,
+            hpo_timesteps=hpo_timesteps or 50000,
+        )
+
+        # Persist pipeline to DB
+        pipeline_dict = await self._store.create_pipeline(
+            pipeline_id=pipeline_id,
+            instrument=instrument,
+            timeframe=timeframe,
+            tag=effective_tag,
+            max_iterations=config.max_iterations,
+            max_budget_usd=config.max_budget_usd,
+            quick_mode=config.quick_mode,
+            timeout_s=config.timeout_s,
+            focus_hint=focus_hint,
+            phase_budgets=json.dumps(phase_budgets) if phase_budgets else None,
+            trading_mode=trading_mode,
+            agent_strategy=agent_strategy,
+            initial_balance=initial_balance,
+            enable_hpo=config.enable_hpo,
+            hpo_trials=config.hpo_trials if config.enable_hpo else None,
+            hpo_timesteps=config.hpo_timesteps if config.enable_hpo else None,
+        )
+
+        # Spawn pipeline task
+        task = asyncio.create_task(
+            self._run_pipeline_and_cleanup(pipeline_id, config),
+            name=f"pipeline-{pipeline_id}",
+        )
+        self._active_pipelines[pipeline_id] = task
+
+        logger.info(
+            "Started pipeline %s: %s %s (max_iter=%d, quick=%s)",
+            pipeline_id, instrument, timeframe,
+            config.max_iterations, config.quick_mode,
+        )
+        return pipeline_dict
+
+    async def _run_pipeline_and_cleanup(
+        self, pipeline_id: str, config: PipelineConfig,
+    ) -> None:
+        try:
+            await self._pipeline_ctrl.run(config)
+        finally:
+            self._active_pipelines.pop(pipeline_id, None)
+
+    async def start_phase_session(
+        self,
+        *,
+        instrument: str,
+        timeframe: str,
+        model_type: str,
+        tag: str,
+        quick_mode: bool,
+        max_iterations: int,
+        max_budget_usd: float,
+        timeout_minutes: int,
+        focus_hint: Optional[str] = None,
+        pipeline_id: Optional[str] = None,
+        trading_mode: Optional[str] = None,
+        agent_strategy: Optional[str] = None,
+        initial_balance: Optional[float] = None,
+        enable_hpo: bool = False,
+        hpo_trials: Optional[int] = None,
+        hpo_timesteps: Optional[int] = None,
+    ) -> Dict:
+        """Start a sub-session for a pipeline phase.
+
+        Unlike start_session(), this:
+        - Does NOT check max_concurrent (pipeline manages concurrency)
+        - Does NOT block on duplicate model+instrument (pipeline manages this)
+        - Archives the workspace (fresh start per phase)
+        - Sets pipeline_id on the session record for linkage
+        """
+        research_id = f"res_{uuid.uuid4().hex[:12]}"
+        workspace_path = (
+            f"{settings.runs_dir}/{instrument}_{timeframe}/{model_type}"
+        )
+
+        config = ResearchConfig(
+            id=research_id,
+            instrument=instrument,
+            timeframe=timeframe,
+            model_type=model_type,
+            tag=tag,
+            quick_mode=quick_mode,
+            max_iterations=max_iterations,
+            max_budget_usd=max_budget_usd,
+            timeout_s=timeout_minutes * 60 if timeout_minutes else 0,
+            focus_hint=focus_hint,
+            workspace_path=workspace_path,
+            trading_mode=trading_mode,
+            agent_strategy=agent_strategy,
+            initial_balance=initial_balance,
+            enable_hpo=enable_hpo,
+            hpo_trials=hpo_trials or 20,
+            hpo_timesteps=hpo_timesteps or 50000,
+        )
+
+        session_dict = await self._store.create_session(
+            session_id=research_id,
+            instrument=instrument,
+            timeframe=timeframe,
+            model_type=model_type,
+            tag=tag,
+            quick_mode=quick_mode,
+            max_iterations=max_iterations,
+            max_budget_usd=max_budget_usd,
+            focus_hint=focus_hint,
+            workspace_path=workspace_path,
+        )
+        # Link to pipeline
+        if pipeline_id:
+            await self._store.update_session(
+                research_id, pipeline_id=pipeline_id,
+            )
+
+        await self._archive_stale_workspace(workspace_path)
+
+        # Spawn and track — the pipeline controller will wait for completion
+        task = asyncio.create_task(
+            self._run_and_cleanup(research_id, config),
+            name=f"research-{research_id}",
+        )
+        self._active[research_id] = ActiveSession(
+            research_id=research_id,
+            task=task,
+            config=config,
+            started_at=datetime.now(timezone.utc),
+        )
+
+        logger.info(
+            "Started phase session %s: %s %s %s (pipeline=%s, max_iter=%d)",
+            research_id, model_type, instrument, timeframe,
+            pipeline_id, max_iterations,
+        )
+        return await self._store.get_session(research_id)
+
+    async def stop_pipeline(self, pipeline_id: str) -> bool:
+        """Stop a running pipeline and its current phase session."""
+        task = self._active_pipelines.get(pipeline_id)
+        if not task or task.done():
+            return False
+
+        self._pipeline_ctrl.request_stop(pipeline_id)
+
+        # Also stop the currently running phase session
+        pipe = await self._store.get_pipeline(pipeline_id)
+        if pipe:
+            for phase in ("direction", "volatility", "rl"):
+                sid = pipe.get(f"{phase}_session_id")
+                if sid and self.is_running(sid):
+                    self._orchestrator.request_stop(sid)
+
+        await self._store.update_pipeline(pipeline_id, status="stopped")
+        logger.info("Stop requested for pipeline %s", pipeline_id)
+        return True
+
+    async def continue_pipeline(
+        self,
+        pipeline_id: str,
+        *,
+        max_iterations: Optional[int] = None,
+        max_budget_usd: Optional[float] = None,
+        timeout_minutes: Optional[int] = None,
+        focus_hint: Optional[str] = None,
+    ) -> Dict:
+        """Resume a timed_out or phase_failed pipeline from last incomplete phase."""
+        pipe = await self._store.get_pipeline(pipeline_id)
+        if not pipe:
+            raise RuntimeError(f"Pipeline {pipeline_id} not found")
+        if pipe["status"] not in ("timed_out", "phase_failed", "completed", "failed"):
+            raise RuntimeError(
+                f"Can only continue pipelines with terminal status, got: {pipe['status']}"
+            )
+
+        completed_phases = json.loads(pipe.get("completed_phases") or "[]")
+        phase_budgets = (
+            json.loads(pipe["phase_budgets"])
+            if pipe.get("phase_budgets")
+            else None
+        )
+
+        config = PipelineConfig(
+            id=pipeline_id,
+            instrument=pipe["instrument"],
+            timeframe=pipe["timeframe"],
+            tag=pipe["tag"],
+            quick_mode=bool(pipe.get("quick_mode")),
+            max_iterations=max_iterations or pipe.get("max_iterations", 30),
+            max_budget_usd=max_budget_usd or pipe.get("max_budget_usd", 30.0),
+            timeout_s=timeout_minutes * 60 if timeout_minutes else pipe.get("timeout_s", 0),
+            focus_hint=focus_hint or pipe.get("focus_hint"),
+            phase_budgets=phase_budgets,
+            completed_phases=completed_phases,
+            trading_mode=pipe.get("trading_mode"),
+            agent_strategy=pipe.get("agent_strategy"),
+            initial_balance=pipe.get("initial_balance"),
+            enable_hpo=bool(pipe.get("enable_hpo")),
+            hpo_trials=pipe.get("hpo_trials") or 20,
+            hpo_timesteps=pipe.get("hpo_timesteps") or 50000,
+        )
+
+        await self._store.update_pipeline(
+            pipeline_id, status="running", error_message=None,
+        )
+
+        task = asyncio.create_task(
+            self._run_pipeline_and_cleanup(pipeline_id, config),
+            name=f"pipeline-{pipeline_id}",
+        )
+        self._active_pipelines[pipeline_id] = task
+
+        logger.info(
+            "Continuing pipeline %s from phases %s",
+            pipeline_id, completed_phases,
+        )
+        return await self._store.get_pipeline(pipeline_id)
+
     async def stop_session(self, research_id: str) -> bool:
         """Request a graceful stop for a running session."""
         active = self._active.get(research_id)
@@ -353,18 +633,25 @@ class SessionManager:
         return True
 
     async def shutdown(self) -> None:
-        """Gracefully cancel all active sessions (called during app shutdown)."""
-        if not self._active:
+        """Gracefully cancel all active sessions and pipelines."""
+        total = len(self._active) + len(self._active_pipelines)
+        if not total:
             return
-        logger.info("Shutting down %d active sessions...", len(self._active))
+        logger.info("Shutting down %d active sessions/pipelines...", total)
         for research_id in list(self._active):
             self._orchestrator.request_stop(research_id)
+        for pipeline_id in list(self._active_pipelines):
+            self._pipeline_ctrl.request_stop(pipeline_id)
         # Wait a few seconds for graceful completion
-        tasks = [s.task for s in self._active.values()]
+        tasks = (
+            [s.task for s in self._active.values()]
+            + list(self._active_pipelines.values())
+        )
         if tasks:
             await asyncio.wait(tasks, timeout=15)
             for task in tasks:
                 if not task.done():
                     task.cancel()
         self._active.clear()
+        self._active_pipelines.clear()
         logger.info("All sessions shut down")
