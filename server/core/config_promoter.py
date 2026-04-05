@@ -142,6 +142,16 @@ class ConfigPromoter:
                 cmd.extend(["--metric-name", metric_name])
             if metric_value is not None:
                 cmd.extend(["--metric-value", str(metric_value)])
+            # ML-64: Pass model artifacts dir for stable model persistence
+            artifacts_dir = self._resolve_artifacts_dir(
+                workspace_path, model_type, instrument, timeframe,
+            )
+            if artifacts_dir:
+                cmd.extend(["--model-artifacts-dir", artifacts_dir])
+            cmd.extend([
+                "--stable-models-dir",
+                os.path.join(settings.workspace_root, "runs", "promoted_models"),
+            ])
             result = await asyncio.to_thread(
                 subprocess.run,
                 cmd,
@@ -185,6 +195,43 @@ class ConfigPromoter:
             )
 
         return promotion
+
+    def _resolve_artifacts_dir(
+        self,
+        workspace_path: str,
+        model_type: str,
+        instrument: str,
+        timeframe: str,
+    ) -> Optional[str]:
+        """Find the directory containing trained model .pkl files."""
+        inst_under = instrument.replace("-", "_")
+
+        # Check results.json for explicit model_path
+        results_json = os.path.join(
+            settings.workspace_root, "runs", "autotuner",
+            f"{inst_under}_{timeframe}", model_type, "results.json",
+        )
+        if os.path.exists(results_json):
+            try:
+                with open(results_json) as f:
+                    data = json.load(f)
+                model_rel = data.get("model_path")
+                if model_rel:
+                    model_abs = os.path.join(settings.workspace_root, model_rel)
+                    if os.path.exists(model_abs):
+                        return os.path.dirname(model_abs)
+            except Exception:
+                pass
+
+        # Fallback: workspace model_type subdir
+        direct = os.path.join(
+            settings.workspace_root, "runs", "autotuner",
+            f"{inst_under}_{timeframe}", model_type,
+        )
+        if os.path.isdir(direct):
+            return direct
+
+        return None
 
     async def _update_composite_versions(
         self,

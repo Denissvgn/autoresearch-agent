@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -360,6 +361,15 @@ class PipelineController:
                 "--metric-name", metric_map.get(phase, "unknown"),
                 "--metric-value", str(session["best_metric"]),
             ]
+        # ML-64: Pass model artifacts dir for stable model persistence
+        if phase in ("direction", "volatility"):
+            artifacts_dir = self._resolve_phase_artifacts_dir(phase, config)
+            if artifacts_dir:
+                cmd += ["--model-artifacts-dir", artifacts_dir]
+            cmd += [
+                "--stable-models-dir",
+                f"{settings.workspace_root}/runs/promoted_models",
+            ]
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -378,6 +388,32 @@ class PipelineController:
                 "Pipeline auto-promote failed for %s (rc=%d): %s",
                 phase, proc.returncode, stderr.decode()[:500],
             )
+
+    def _resolve_phase_artifacts_dir(
+        self, phase: str, config: PipelineConfig,
+    ) -> str | None:
+        """Locate the training output directory for a pipeline phase."""
+        inst = config.instrument.replace("-", "_")
+        results_json = os.path.join(
+            settings.workspace_root, "runs", "autotuner",
+            f"{inst}_{config.timeframe}", phase, "results.json",
+        )
+        if os.path.exists(results_json):
+            try:
+                with open(results_json) as f:
+                    data = json.load(f)
+                model_rel = data.get("model_path")
+                if model_rel:
+                    model_abs = os.path.join(settings.workspace_root, model_rel)
+                    if os.path.exists(model_abs):
+                        return os.path.dirname(model_abs)
+            except Exception:
+                pass
+        direct = os.path.join(
+            settings.workspace_root, "runs", "autotuner",
+            f"{inst}_{config.timeframe}", phase,
+        )
+        return direct if os.path.isdir(direct) else None
 
     async def _run_enrichment(self, config: PipelineConfig) -> None:
         """Run enrich_rl_dataset.py between volatility and rl phases."""
