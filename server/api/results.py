@@ -10,12 +10,13 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, Response
 
-from server.core.log_writer import AgentLogWriter
+from server.core.log_writer import AgentLogWriter, _format_entry
 
 router = APIRouter(prefix="/api", tags=["results"])
 
 _store = None
 _mlflow_external_url: str = "http://localhost:5000"
+_PIPELINE_PHASES = ("direction", "volatility", "rl")
 
 
 def init(store, *, mlflow_external_url: str = "http://localhost:5000"):
@@ -125,17 +126,109 @@ def _enrich_iterations(rows: List[Dict[str, Any]], model_type: str) -> List[Dict
     return [_enrich_iteration(r, model_type) for r in rows]
 
 
-@router.get("/research/{research_id}/results")
-async def get_results(research_id: str):
-    """Full experiment history for a research session."""
+async def _resolve_result_context(
+    research_id: str,
+) -> tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Resolve a research or pipeline ID to the most relevant session context.
+
+    Returns:
+        pipeline: pipeline row for pipe_* IDs, else None
+        session: current/latest phase session for pipelines, or the session itself
+        sessions: ordered phase sessions for pipelines, or [session] for a session
+    """
+    if research_id.startswith("pipe_"):
+        pipeline = await _store.get_pipeline(research_id)
+        if not pipeline:
+            raise HTTPException(status_code=404, detail="Pipeline not found")
+
+        sessions: list[Dict[str, Any]] = []
+        for phase in _PIPELINE_PHASES:
+            session_id = pipeline.get(f"{phase}_session_id")
+            if not session_id:
+                continue
+            session = await _store.get_session(session_id)
+            if not session:
+                continue
+            session = dict(session)
+            session["pipeline_phase"] = phase
+            sessions.append(session)
+
+        current_phase = pipeline.get("current_phase")
+        if current_phase:
+            current = next(
+                (s for s in sessions if s.get("pipeline_phase") == current_phase),
+                None,
+            )
+            if current:
+                return pipeline, current, sessions
+
+        return pipeline, (sessions[-1] if sessions else None), sessions
+
     session = await _store.get_session(research_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    iterations = await _store.get_iterations(research_id)
+    return None, session, [session]
+
+
+def _collect_log_entries(
+    sessions: List[Dict[str, Any]],
+    *,
+    after_line: int = 0,
+) -> List[Dict[str, Any]]:
+    """Read and flatten agent log entries across one or more sessions."""
+    entries: list[Dict[str, Any]] = []
+    line_index = 0
+
+    for session in sessions:
+        workspace = session.get("workspace_path", "")
+        if not workspace:
+            continue
+        log_path = Path(workspace) / "agent_log.jsonl"
+        if not log_path.exists():
+            continue
+
+        phase = session.get("pipeline_phase") or session.get("model_type")
+        session_id = session.get("id")
+        for raw_entry in AgentLogWriter.read_lines(log_path, after_line=0):
+            if line_index >= after_line:
+                entry = dict(raw_entry)
+                meta = entry.get("meta")
+                meta = dict(meta) if isinstance(meta, dict) else {}
+                if phase:
+                    meta.setdefault("phase", phase)
+                if session_id:
+                    meta.setdefault("research_id", session_id)
+                entry["meta"] = meta
+                if session_id:
+                    entry["research_id"] = session_id
+                if phase:
+                    entry["pipeline_phase"] = phase
+                entries.append(entry)
+            line_index += 1
+
+    return entries
+
+
+def _build_log_text(entries: List[Dict[str, Any]]) -> str:
+    return "\n".join(_format_entry(entry) for entry in entries)
+
+
+@router.get("/research/{research_id}/results")
+async def get_results(research_id: str):
+    """Full experiment history for a research session."""
+    pipeline, session, _ = await _resolve_result_context(research_id)
+    if not session:
+        return {
+            "research_id": research_id,
+            "session": pipeline,
+            "iterations": [],
+        }
+    iterations = await _store.get_iterations(session["id"])
     model_type = session.get("model_type", "")
     return {
         "research_id": research_id,
-        "session": session,
+        "resolved_research_id": session["id"],
+        "session": pipeline or session,
         "iterations": _enrich_iterations(iterations, model_type),
     }
 
@@ -143,32 +236,33 @@ async def get_results(research_id: str):
 @router.get("/research/{research_id}/iterations")
 async def get_iterations(research_id: str):
     """All iterations with metrics and config snapshots."""
-    session = await _store.get_session(research_id)
+    _, session, _ = await _resolve_result_context(research_id)
     if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    iterations = await _store.get_iterations(research_id)
+        return []
+    iterations = await _store.get_iterations(session["id"])
     return _enrich_iterations(iterations, session.get("model_type", ""))
 
 
 @router.get("/research/{research_id}/iterations/{iteration_num}")
 async def get_iteration(research_id: str, iteration_num: int):
     """Single iteration detail."""
-    iteration = await _store.get_iteration(research_id, iteration_num)
+    _, session, _ = await _resolve_result_context(research_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Phase session not found yet")
+
+    iteration = await _store.get_iteration(session["id"], iteration_num)
     if not iteration:
         raise HTTPException(status_code=404, detail="Iteration not found")
-    # Need session for model_type
-    session = await _store.get_session(research_id)
-    model_type = session.get("model_type", "") if session else ""
-    return _enrich_iteration(iteration, model_type)
+    return _enrich_iteration(iteration, session.get("model_type", ""))
 
 
 @router.get("/research/{research_id}/best")
 async def get_best_iteration(research_id: str):
     """Best iteration (highest primary metric with gates passed)."""
-    session = await _store.get_session(research_id)
+    _, session, _ = await _resolve_result_context(research_id)
     if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    best = await _store.get_best_iteration(research_id)
+        raise HTTPException(status_code=404, detail="Phase session not found yet")
+    best = await _store.get_best_iteration(session["id"])
     if not best:
         raise HTTPException(
             status_code=404,
@@ -184,44 +278,40 @@ async def get_agent_log(
     format: Optional[str] = Query(default=None, description="Set to 'json' for raw structured entries"),
 ):
     """Agent conversation log — full Claude transcript captured during execution."""
-    session = await _store.get_session(research_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    workspace = session.get("workspace_path", "")
-    log_path = Path(workspace) / "agent_log.jsonl"
-
-    if not log_path.exists():
+    after_line = after if isinstance(after, int) and after > 0 else 0
+    _, session, sessions = await _resolve_result_context(research_id)
+    if not session and research_id.startswith("pipe_"):
         if format == "json":
-            return {"research_id": research_id, "entries": [], "total_lines": 0}
+            return {
+                "research_id": research_id,
+                "resolved_research_id": None,
+                "entries": [],
+                "total_lines": 0,
+            }
         return {"research_id": research_id, "log": "No log available yet."}
 
+    entries = _collect_log_entries(sessions, after_line=after_line)
+    total_lines = len(_collect_log_entries(sessions, after_line=0))
+
     if format == "json":
-        entries = AgentLogWriter.read_lines(log_path, after_line=after or 0)
         return {
             "research_id": research_id,
+            "resolved_research_id": session["id"] if session else None,
             "entries": entries,
-            "total_lines": sum(1 for _ in open(log_path, encoding="utf-8")),
+            "total_lines": total_lines,
         }
 
-    # Default: human-readable text
-    if after is not None and after > 0:
-        entries = AgentLogWriter.read_lines(log_path, after_line=after)
-        from server.core.log_writer import _format_entry
-        text = "\n".join(_format_entry(e) for e in entries)
-    else:
-        text = AgentLogWriter.read_all(log_path)
-
-    return {"research_id": research_id, "log": text or "No log entries yet."}
+    text = _build_log_text(entries)
+    return {"research_id": research_id, "log": text or "No log available yet."}
 
 
 @router.get("/research/{research_id}/hpo-studies")
 async def get_hpo_studies(research_id: str):
     """HPO study results for a research session (ML-59)."""
-    session = await _store.get_session(research_id)
+    _, session, _ = await _resolve_result_context(research_id)
     if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    studies = await _store.get_hpo_studies(research_id)
+        raise HTTPException(status_code=404, detail="Phase session not found yet")
+    studies = await _store.get_hpo_studies(session["id"])
     # Parse top_trials_json for each study
     for study in studies:
         raw = study.get("top_trials_json")
@@ -252,9 +342,9 @@ def _resolve_workspace_file(workspace: str, filename: str) -> Path:
 @router.get("/research/{research_id}/download/config")
 async def download_config(research_id: str):
     """Download the best_train.yaml config as a YAML file."""
-    session = await _store.get_session(research_id)
+    _, session, _ = await _resolve_result_context(research_id)
     if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="Phase session not found yet")
 
     workspace = session.get("workspace_path", "")
     config_path = _resolve_workspace_file(workspace, "best_train.yaml")
@@ -279,40 +369,41 @@ async def download_config(research_id: str):
 @router.get("/research/{research_id}/download/agent-log")
 async def download_agent_log(research_id: str):
     """Download the agent_log.jsonl transcript as a file."""
-    session = await _store.get_session(research_id)
+    _, session, sessions = await _resolve_result_context(research_id)
+    if not session and research_id.startswith("pipe_"):
+        raise HTTPException(status_code=404, detail="Agent log not found")
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    workspace = session.get("workspace_path", "")
-    log_path = _resolve_workspace_file(workspace, "agent_log.jsonl")
-
-    if not log_path.exists():
+    entries = _collect_log_entries(sessions, after_line=0)
+    if not entries:
         raise HTTPException(status_code=404, detail="Agent log not found")
 
     instrument = session.get("instrument", "unknown")
     model_type = session.get("model_type", "model")
     filename = f"{instrument}_{model_type}_agent_log.jsonl"
 
-    return FileResponse(
-        path=str(log_path),
+    return Response(
+        content="".join(json.dumps(entry, default=str) + "\n" for entry in entries),
         media_type="application/x-ndjson",
-        filename=filename,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
 @router.get("/research/{research_id}/download/results")
 async def download_results(research_id: str):
     """Download the full session + iterations as a JSON file."""
-    session = await _store.get_session(research_id)
+    pipeline, session, _ = await _resolve_result_context(research_id)
     if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="Phase session not found yet")
 
-    iterations = await _store.get_iterations(research_id)
+    iterations = await _store.get_iterations(session["id"])
     model_type = session.get("model_type", "")
 
     payload = {
         "research_id": research_id,
-        "session": session,
+        "resolved_research_id": session["id"],
+        "session": pipeline or session,
         "iterations": _enrich_iterations(iterations, model_type),
     }
 

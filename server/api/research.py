@@ -148,7 +148,23 @@ async def get_research(research_id: str):
     if research_id.startswith("pipe_"):
         pipe = await _store.get_pipeline(research_id)
         if pipe:
-            return pipe
+            payload = dict(pipe)
+            payload.setdefault("model_type", "pipeline")
+            payload.setdefault("skill_name", "pipeline")
+            payload.setdefault("workspace_path", "")
+            payload.setdefault("best_iteration", None)
+            payload.setdefault("best_metric", None)
+            payload.setdefault("resumed_from", None)
+
+            current_phase = pipe.get("current_phase")
+            if current_phase in ("direction", "volatility", "rl"):
+                session_id = pipe.get(f"{current_phase}_session_id")
+                if session_id:
+                    session = await _store.get_session(session_id)
+                    if session:
+                        payload["workspace_path"] = session.get("workspace_path", "")
+                        payload["active_phase_session_id"] = session.get("id")
+            return payload
     session = await _store.get_session(research_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")

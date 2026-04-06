@@ -58,6 +58,8 @@ class ResearchConfig:
     hpo_timesteps: int = 50000
     # ML-62: Session resume on timeout
     resumed_from: Optional[str] = None  # parent session ID when continuing
+    # ML-63: Parent pipeline ID for phase sessions
+    pipeline_id: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -922,6 +924,8 @@ class AgentOrchestrator:
         # Agent log capture
         agent_log = AgentLogWriter(
             Path(workspace) / "agent_log.jsonl", research_id,
+            pipeline_id=config.pipeline_id,
+            phase=config.model_type if config.pipeline_id else None,
         )
         await agent_log.append(
             "system",

@@ -34,9 +34,18 @@ class AgentLogWriter:
         {"ts": str, "turn": int, "type": str, "content": str, "meta": dict}
     """
 
-    def __init__(self, log_path: Path, research_id: str) -> None:
+    def __init__(
+        self,
+        log_path: Path,
+        research_id: str,
+        *,
+        pipeline_id: Optional[str] = None,
+        phase: Optional[str] = None,
+    ) -> None:
         self._path = log_path
         self._research_id = research_id
+        self._pipeline_id = pipeline_id
+        self._phase = phase
         self._line_count = 0
         os.makedirs(log_path.parent, exist_ok=True)
 
@@ -52,12 +61,15 @@ class AgentLogWriter:
         meta: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Append one log entry to file and broadcast via WebSocket."""
+        meta = dict(meta) if isinstance(meta, dict) else {}
+        if self._phase:
+            meta.setdefault("phase", self._phase)
         entry = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "turn": turn,
             "type": entry_type,
             "content": content,
-            "meta": meta or {},
+            "meta": meta,
         }
         line = json.dumps(entry, default=str) + "\n"
         try:
@@ -68,11 +80,14 @@ class AgentLogWriter:
 
         # Broadcast to connected WS clients
         try:
-            await broadcaster.broadcast({
+            event = {
                 "event": "agent_log",
                 "research_id": self._research_id,
                 "entry": entry,
-            })
+            }
+            if self._pipeline_id:
+                event["pipeline_id"] = self._pipeline_id
+            await broadcaster.broadcast(event)
         except Exception:
             pass  # non-critical — don't break the agent loop
 

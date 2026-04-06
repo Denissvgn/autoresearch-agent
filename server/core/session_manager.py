@@ -482,6 +482,7 @@ class SessionManager:
             enable_hpo=enable_hpo,
             hpo_trials=hpo_trials or 20,
             hpo_timesteps=hpo_timesteps or 50000,
+            pipeline_id=pipeline_id,
         )
 
         session_dict = await self._store.create_session(
