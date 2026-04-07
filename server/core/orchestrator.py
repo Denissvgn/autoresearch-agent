@@ -1291,6 +1291,19 @@ class AgentOrchestrator:
                 config.instrument, config.timeframe,
             )
 
+            # ── ML-53 Fix 2.4: Auto-promote standalone sessions ──────────
+            # When a standalone (non-pipeline) session completes with a
+            # best iteration that passed all gates, automatically call
+            # config_promoter.confirm() to write the winning config and
+            # PATCH the composite in mlflow-service.  This closes the gap
+            # where winning models were "orphaned" after standalone tuning.
+            if (
+                final_status == "completed"
+                and not getattr(config, "pipeline_id", None)
+            ):
+                await self._try_auto_promote(research_id, config, agent_log)
+            # ── end ML-53 Fix 2.4 ────────────────────────────────────────
+
         except asyncio.CancelledError:
             await self._store.update_session(
                 research_id,
@@ -1323,6 +1336,76 @@ class AgentOrchestrator:
         finally:
             self._stop_flags.pop(research_id, None)
             self._pause_flags.pop(research_id, None)
+
+    # ── ML-53 Fix 2.4 helper ─────────────────────────────────────────────
+    async def _try_auto_promote(
+        self,
+        research_id: str,
+        config: ResearchConfig,
+        agent_log: AgentLogWriter,
+    ) -> None:
+        """Auto-promote the best iteration if it passed all gates.
+
+        Instantiates ConfigPromoter on-demand (not injected into __init__
+        to avoid circular dependencies or changing the constructor).
+        """
+        try:
+            session = await self._store.get_session(research_id)
+            if not session:
+                return
+
+            best_iter = session.get("best_iteration")
+            if best_iter is None:
+                return
+
+            # Fetch the best iteration record to check gates
+            iterations = await self._store.get_iterations(research_id)
+            best_record = None
+            for it in iterations:
+                if it.get("iteration") == best_iter:
+                    best_record = it
+                    break
+            if not best_record:
+                return
+
+            if not best_record.get("all_gates_passed", False):
+                logger.info(
+                    "ML-53: Auto-promote skipped for %s — best iteration %d did not pass all gates",
+                    research_id, best_iter,
+                )
+                return
+
+            # Import here to avoid circular dependency at module level
+            from server.core.config_promoter import ConfigPromoter
+
+            promoter = ConfigPromoter(self._store)
+            result = await promoter.confirm(research_id)
+            logger.info(
+                "ML-53: Auto-promoted session %s (iter=%d): %s",
+                research_id, best_iter, result,
+            )
+            await agent_log.append(
+                "system",
+                f"Auto-promoted best iteration {best_iter} to production config",
+            )
+            await broadcaster.broadcast({
+                "event": "auto_promoted",
+                "research_id": research_id,
+                "iteration": best_iter,
+                "instrument": config.instrument,
+                "model_type": config.model_type,
+            })
+
+        except Exception as exc:
+            logger.warning(
+                "ML-53: Auto-promotion failed for %s: %s",
+                research_id, exc, exc_info=True,
+            )
+            await agent_log.append(
+                "warning",
+                f"Auto-promotion failed: {exc}",
+            )
+    # ── end ML-53 Fix 2.4 helper ─────────────────────────────────────────
 
     async def _infer_decision(
         self,
