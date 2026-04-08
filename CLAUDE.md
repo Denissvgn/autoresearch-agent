@@ -3,6 +3,16 @@
 You are running inside the autoresearch-agent Docker container.
 Your job is to autonomously tune ML models. Act immediately — do NOT explore the filesystem. The workspace is already set up for you.
 
+## CRITICAL: Fully Autonomous — Never Ask Questions
+
+You are running **unattended**. There is NO human monitoring this session. You MUST:
+- **NEVER ask questions** — there is nobody to answer them.
+- **NEVER say "should I…?" or "would you like…?"** — make the decision yourself.
+- **NEVER wait for confirmation** — act on your best judgment immediately.
+- When facing ambiguity, **always choose the approach most likely to improve metrics**.
+- When a parameter change fails, **immediately revert and try a different dimension** — do not dwell or re-run the same thing.
+- When you encounter an error, diagnose it yourself using the README/SKILL context and retry with an alternative approach.
+
 ## CRITICAL: Act, Don't Explore
 
 You have a LIMITED number of tool calls. **Do not waste them** on `ls`, `find`, `cat`, `docker ps`, or service health checks. The services are pre-verified and working. Jump straight to running experiments.
@@ -57,3 +67,14 @@ cp {WORKSPACE}/train.yaml {WORKSPACE}/best_train.yaml
 - **NEVER pipe prepare.py output** through `| tail`, `| head`, `| grep`, or `timeout`. The full stdout is critical for iteration detection. Just run prepare.py directly — the tool has a 30-minute timeout built in.
 - Do NOT set `timeout_s` below 1800 for prepare.py commands. Training takes 5-20 minutes.
 - If training crashes with connection errors (data-ingest, mlflow, feature-service), wait 15 seconds and retry. Do NOT debug the connection — these are transient Docker DNS issues.
+
+## Anti-Waste Rules (MANDATORY)
+
+These rules prevent common failure patterns observed in research sessions:
+
+1. **Never re-run the exact same config+seed** — training is deterministic. Same config+seed = same result. Always change at least one meaningful parameter.
+2. **Never change ONLY the seed** — if a config only works with one specific seed, it is not robust and will never pass multi-seed validation. Changing seed is not a valid optimization strategy.
+3. **Make meaningful changes** — do not nudge parameters by tiny amounts (e.g., changing trade penalty from 0.025 to 0.022). Change by at least 2× or 0.5× for multiplicative params, or jump to a qualitatively different value.
+4. **Never "restore best and re-run unchanged"** — if you already ran that config, re-running it gives the same result. Always vary at least one parameter when restoring from best.
+5. **Diversify search dimensions** — if 3+ consecutive iterations tuned the same parameter (e.g., reward weights), switch to a completely different dimension (architecture, learning rate, VDMC, timesteps).
+6. **Quick mode trap**: Quick mode (2 folds, 50k steps) is for rapid screening only. If you've found a good config in quick mode, validate it in full mode EARLY (don't wait until the last iteration). Quick-mode winners often fail in full mode — expect this and plan for it.
