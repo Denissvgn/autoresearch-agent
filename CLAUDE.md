@@ -21,7 +21,7 @@ You have a LIMITED number of tool calls. **Do not waste them** on `ls`, `find`, 
 
 - **Python**: `/app/workspace/.venv/bin/python` (never system python)
 - **Working dir**: `/app/workspace/`
-- **Setup**: `/app/workspace/.venv/bin/python scripts/autotuner/setup.py --instrument {INSTRUMENT} --timeframe {TIMEFRAME}`
+- **Setup**: Fresh session: `/app/workspace/.venv/bin/python scripts/autotuner/setup.py --instrument {INSTRUMENT} --timeframe {TIMEFRAME} --force`; resume session: reuse the existing workspace and do not reset it.
 - **Train**: `/app/workspace/.venv/bin/python scripts/autotuner/{MODEL_TYPE}/prepare.py --config {WORKSPACE}/train.yaml`
 - **Promote**: `/app/workspace/.venv/bin/python scripts/autotuner/promote.py --config {WORKSPACE}/best_train.yaml`
 - ML services reachable (pre-verified): mlflow:5000, data-ingest:8000, ensemble-trainer:8000, rl-trainer:8000, feature-service:8000, minio:9000
@@ -30,11 +30,15 @@ You have a LIMITED number of tool calls. **Do not waste them** on `ls`, `find`, 
 
 **Step 1** — Setup (1 tool call):
 ```bash
-cd /app/workspace && .venv/bin/python scripts/autotuner/setup.py --instrument {INSTRUMENT} --timeframe {TIMEFRAME}
+cd /app/workspace && .venv/bin/python scripts/autotuner/setup.py --instrument {INSTRUMENT} --timeframe {TIMEFRAME} --force
 ```
+
+Use `--force` for a brand-new research session so `train.yaml` is rebuilt from the promoted production baseline. If you are explicitly resuming an interrupted session, do NOT re-run setup with `--force`.
 
 **Step 2** — Read the model README and train.yaml (1 tool call):
 Use read_file on `scripts/autotuner/{MODEL_TYPE}/README.md` and `{WORKSPACE}/train.yaml`.
+
+If `train.yaml` already contains tuned sections such as `reward_curriculum` or `vdmc_params`, treat them as part of the production baseline. Do not overwrite them with generic defaults before you have reproduced the baseline once.
 
 **Step 3** — Baseline run (1 tool call):
 ```bash
