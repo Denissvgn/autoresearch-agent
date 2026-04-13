@@ -1251,6 +1251,17 @@ class AgentOrchestrator:
                 messages.append({"role": "assistant", "content": assistant_content})
 
                 if tool_results:
+                    # Inject orchestrator iteration count so the agent's
+                    # numbering stays in sync with the DB record.
+                    tool_results.append({
+                        "type": "text",
+                        "text": (
+                            f"[system] Orchestrator iteration count: "
+                            f"{iteration_count}/{config.max_iterations}. "
+                            f"Use iteration={iteration_count + 1} for your "
+                            f"next experiment."
+                        ),
+                    })
                     messages.append({"role": "user", "content": tool_results})
                 else:
                     # Model generated text only — no more tool calls → done
