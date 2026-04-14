@@ -52,8 +52,12 @@ class ConfigPromoter:
             )
         best_yaml = config_snapshot
 
-        # Determine target path on host
-        target_path = self._get_target_path(model_type, instrument, timeframe)
+        # Determine target path on host (ML-67: extract strategy+market from config)
+        _strategy, _market = self._extract_strategy_market(best_yaml)
+        target_path = self._get_target_path(
+            model_type, instrument, timeframe,
+            strategy=_strategy, market_type=_market,
+        )
 
         # Read current config if it exists
         previous_yaml: Optional[str] = None
@@ -287,10 +291,32 @@ class ConfigPromoter:
             )
 
     @staticmethod
+    def _extract_strategy_market(yaml_str: str) -> tuple:
+        """Extract agent_strategy and trading_mode from a YAML config string.
+
+        Returns (strategy, market_type) with defaults if not found.
+        """
+        try:
+            import yaml as _yaml
+            cfg = _yaml.safe_load(yaml_str)
+            if not isinstance(cfg, dict):
+                return "BALA", "stock"
+            strategy = (cfg.get("agent_strategy") or "BALA").upper()
+            env = cfg.get("environment") or {}
+            market = (env.get("trading_mode") or cfg.get("trading_mode") or "stock").lower()
+            return strategy, market
+        except Exception:
+            return "BALA", "stock"
+
+    @staticmethod
     def _get_target_path(
         model_type: str, instrument: str, timeframe: str,
+        strategy: str = "BALA", market_type: str = "stock",
     ) -> str:
-        """Determine the host config file path for promotion."""
+        """Determine the host config file path for promotion.
+
+        ML-67: RL configs include strategy + market_type in the filename.
+        """
         host_configs = settings.host_configs_path
         if model_type in ("direction", "volatility"):
             return os.path.join(
@@ -299,10 +325,12 @@ class ConfigPromoter:
                 f"{instrument}_{timeframe}.yaml",
             )
         elif model_type == "rl":
+            strat = strategy.upper()
+            mkt = market_type.lower()
             return os.path.join(
                 host_configs,
                 "rl",
-                f"{instrument}_{timeframe}_production.yaml",
+                f"{instrument}_{timeframe}_{strat}_{mkt}_production.yaml",
             )
         else:
             raise ValueError(f"Unknown model type: {model_type}")

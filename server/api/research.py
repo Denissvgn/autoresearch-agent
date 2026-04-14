@@ -287,21 +287,42 @@ async def list_instruments():
             else:
                 instruments.append({"name": name, "instrument": name, "timeframe": "unknown"})
 
-    # Also check RL configs
+    # Also check RL configs (ML-67: handle new naming with strategy+market)
     rl_dir = os.path.join(settings.configs_dir, "rl")
+    _valid_strats = {"AGGR", "CONS", "BALA", "SCAL"}
+    _valid_mkts = {"stock", "margin"}
     if os.path.isdir(rl_dir):
         for path in sorted(glob.glob(os.path.join(rl_dir, "*_production.yaml"))):
             filename = os.path.basename(path)
-            name = filename.replace("_production.yaml", "")
+            stem = filename.replace("_production.yaml", "")
+            parts = stem.split("_")
+
+            # Try new format: {BASE}_{QUOTE}_{TF}_{STRAT}_{MKT}
+            instrument = None
+            timeframe = None
+            strategy = None
+            if (len(parts) >= 5
+                    and parts[-2].upper() in _valid_strats
+                    and parts[-1].lower() in _valid_mkts):
+                instrument = "_".join(parts[:-3])
+                timeframe = parts[-3]
+                strategy = parts[-2].upper()
+            elif len(parts) >= 3:
+                # Legacy: {BASE}_{QUOTE}_{TF}
+                timeframe = parts[-1]
+                instrument = "_".join(parts[:-1])
+
+            display_name = stem
             # Avoid duplicates
-            if not any(i["name"] == name for i in instruments):
-                parts = name.rsplit("_", 1)
-                if len(parts) == 2:
-                    instruments.append({
-                        "name": name,
-                        "instrument": "_".join(parts[0].split("_")[:2]),
-                        "timeframe": parts[1],
-                    })
+            if instrument and not any(i["name"] == display_name for i in instruments):
+                entry = {
+                    "name": display_name,
+                    "instrument": instrument,
+                    "timeframe": timeframe or "unknown",
+                }
+                if strategy:
+                    entry["strategy"] = strategy
+                instruments.append(entry)
 
     return instruments
 
