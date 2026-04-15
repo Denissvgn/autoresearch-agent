@@ -68,6 +68,20 @@ class Settings(BaseSettings):
     )
     max_concurrent_sessions: int = Field(default=2)
 
+    # --- API Robustness (ML-68) ---
+    anthropic_api_timeout_s: int = Field(
+        default=600,
+        description="Per-request timeout for Anthropic API calls (seconds).",
+    )
+    max_api_retries: int = Field(
+        default=3,
+        description="Max retries on transient API errors (timeout, 500, 429).",
+    )
+    context_compaction_threshold: int = Field(
+        default=80,
+        description="Number of messages before old tool results are compacted.",
+    )
+
     # --- ML Service URLs (Docker DNS) ---
     mlflow_tracking_uri: str = Field(default="http://mlflow:5000")
     mlflow_service_url: str = Field(default="http://mlflow-service:8000")

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import anthropic
+import httpx
 
 from server.config import settings
 from server.core.experiment_parser import (
@@ -317,6 +318,7 @@ class AgentOrchestrator:
         self._client = anthropic.AsyncAnthropic(
             base_url=settings.anthropic_base_url,
             api_key=settings.anthropic_auth_token,
+            timeout=httpx.Timeout(settings.anthropic_api_timeout_s, connect=30.0),
         )
         self._stop_flags: Dict[str, bool] = {}
         self._pause_flags: Dict[str, bool] = {}
@@ -329,6 +331,117 @@ class AgentOrchestrator:
 
     def request_resume(self, research_id: str) -> None:
         self._pause_flags.pop(research_id, None)
+
+    # ── ML-68: Transient-error retry ─────────────────────────────────────
+    _TRANSIENT_EXCEPTIONS = (
+        anthropic.APITimeoutError,
+        anthropic.APIConnectionError,
+        anthropic.InternalServerError,
+    )
+
+    async def _call_claude_with_retry(
+        self,
+        *,
+        messages: List[Dict[str, Any]],
+        system_prompt: str,
+        research_id: str,
+        agent_log: AgentLogWriter,
+        turn: int,
+    ) -> anthropic.types.Message:
+        """Call messages.create() with retry + backoff on transient errors.
+
+        Retries on APITimeoutError, APIConnectionError, InternalServerError,
+        and RateLimitError (429) / 502 / 503 / 529 status codes.
+        """
+        max_retries = settings.max_api_retries
+        backoff_base = 30  # seconds
+
+        for attempt in range(max_retries + 1):
+            try:
+                return await self._client.messages.create(
+                    model=settings.anthropic_model,
+                    max_tokens=8192,
+                    system=system_prompt,
+                    tools=AGENT_TOOLS,
+                    messages=messages,
+                )
+            except self._TRANSIENT_EXCEPTIONS as exc:
+                if attempt >= max_retries:
+                    raise
+                wait = backoff_base * (2 ** attempt)
+                logger.warning(
+                    "Research %s turn %d: transient API error (%s), "
+                    "retry %d/%d in %ds",
+                    research_id, turn, type(exc).__name__,
+                    attempt + 1, max_retries, wait,
+                )
+                await agent_log.append(
+                    "warning",
+                    f"API {type(exc).__name__}: retry {attempt + 1}/{max_retries} "
+                    f"in {wait}s — {str(exc)[:200]}",
+                    turn=turn,
+                )
+                await asyncio.sleep(wait)
+            except anthropic.APIStatusError as exc:
+                # Retry on 429 (rate-limit), 502, 503, 529 (overloaded)
+                if exc.status_code in (429, 502, 503, 529) and attempt < max_retries:
+                    wait = backoff_base * (2 ** attempt)
+                    logger.warning(
+                        "Research %s turn %d: API %d, retry %d/%d in %ds",
+                        research_id, turn, exc.status_code,
+                        attempt + 1, max_retries, wait,
+                    )
+                    await agent_log.append(
+                        "warning",
+                        f"API HTTP {exc.status_code}: retry {attempt + 1}/{max_retries} "
+                        f"in {wait}s — {str(exc)[:200]}",
+                        turn=turn,
+                    )
+                    await asyncio.sleep(wait)
+                else:
+                    raise
+
+        # Unreachable but satisfies type-checkers
+        raise RuntimeError("Retry loop exited without return or raise")  # pragma: no cover
+
+    # ── ML-68: Context compaction ────────────────────────────────────────
+    @staticmethod
+    def _compact_messages(
+        messages: List[Dict[str, Any]],
+        keep_recent: int = 40,
+    ) -> List[Dict[str, Any]]:
+        """Truncate old tool results to reduce context size.
+
+        Keeps the first message (initial prompt) and the last *keep_recent*
+        messages intact. For older messages, tool_result content blocks are
+        truncated to a short tail so the model retains awareness of what
+        happened without the full output.
+        """
+        if len(messages) <= keep_recent + 1:
+            return messages
+
+        compacted = [messages[0]]  # preserve initial user prompt
+
+        old_section = messages[1:-keep_recent]
+        for msg in old_section:
+            if msg.get("role") == "user" and isinstance(msg.get("content"), list):
+                # User messages with tool_result blocks
+                new_content = []
+                for block in msg["content"]:
+                    if isinstance(block, dict) and block.get("type") == "tool_result":
+                        text = block.get("content", "")
+                        if isinstance(text, str) and len(text) > 300:
+                            block = {
+                                **block,
+                                "content": f"[compacted — {len(text)} chars]\n…{text[-200:]}",
+                            }
+                    new_content.append(block)
+                compacted.append({**msg, "content": new_content})
+            else:
+                compacted.append(msg)
+
+        compacted.extend(messages[-keep_recent:])
+        return compacted
 
     def _should_stop(self, research_id: str) -> bool:
         return self._stop_flags.get(research_id, False)
@@ -956,13 +1069,16 @@ class AgentOrchestrator:
                     _timed_out = True
                     break
 
-                # Call Claude
-                response = await self._client.messages.create(
-                    model=settings.anthropic_model,
-                    max_tokens=8192,
-                    system=system_prompt,
-                    tools=AGENT_TOOLS,
-                    messages=messages,
+                # Call Claude (ML-68: with retry + context compaction)
+                _api_messages = self._compact_messages(
+                    messages, keep_recent=settings.context_compaction_threshold // 2,
+                )
+                response = await self._call_claude_with_retry(
+                    messages=_api_messages,
+                    system_prompt=system_prompt,
+                    research_id=research_id,
+                    agent_log=agent_log,
+                    turn=turn,
                 )
 
                 # Track cost (approximate from usage)
