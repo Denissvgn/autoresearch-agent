@@ -53,9 +53,16 @@ gate_tiers:
   calibration:
     checks:
       max_ece_calibrated: 0.05
+      max_threshold_cv: 0.20
+  economic_replay:
+    checks:
+      worsening_vs_baseline_blocks_promotion: true
 promotion_blockers:
   - weak_calibration
+  - signal_saturation
+  - unstable_fold_thresholds
   - missing_economic_replay
+  - worsening_post_cost_replay
 """,
         encoding="utf-8",
     )
@@ -78,8 +85,13 @@ def _passing_metrics() -> dict:
                 },
                 "threshold_stability_by_fold": {
                     "folds": [{"fold": 1, "threshold": 0.52}],
+                    "threshold_cv": 0.04,
                 },
-                "signal_rate_distribution": {"mean": 0.2, "by_fold": [0.2]},
+                "signal_rate_distribution": {
+                    "mean": 0.2,
+                    "max": 0.22,
+                    "by_fold": [0.18, 0.22],
+                },
                 "per_regime_calibration": {
                     "available": False,
                     "reason": "regime_labels_absent",
@@ -118,6 +130,83 @@ async def test_preview_includes_blocking_gate_bundle_result(tmp_path, monkeypatc
     assert gate_eval["passed"] is False
     assert "weak_calibration" in gate_eval["blockers"]
     assert "missing_reliability_diagram" in gate_eval["blockers"]
+    assert preview["candidate_pool_record"] == {
+        "source": "autoresearch.iterations",
+        "research_id": "research_1",
+        "iteration": 3,
+        "status": "blocked",
+        "blockers": gate_eval["blockers"],
+        "inspectable": True,
+        "promotion_record_created": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_preview_blocks_weak_calibration_and_signal_saturation_exactly(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+    metrics = _passing_metrics()
+    metrics["config"]["calibration_full_validation"]["selected"]["metrics"]["ece"] = 0.12
+    metrics["gate_results"]["operating_signal_rate"] = 0.82
+    store = FakePromotionStore(_best_iteration(metrics))
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    blockers = preview["gate_bundle_evaluation"]["blockers"]
+    assert "weak_calibration" in blockers
+    assert "signal_saturation" in blockers
+    assert "signal_saturation_or_missing" not in blockers
+
+
+@pytest.mark.asyncio
+async def test_preview_blocks_unstable_fold_thresholds(tmp_path, monkeypatch):
+    _write_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+    metrics = _passing_metrics()
+    metrics["config"]["calibration_full_validation"]["threshold_stability_by_fold"][
+        "threshold_cv"
+    ] = 0.31
+    store = FakePromotionStore(_best_iteration(metrics))
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    gate_eval = preview["gate_bundle_evaluation"]
+    assert "unstable_fold_thresholds" in gate_eval["blockers"]
+    assert any(
+        check["name"] == "max_threshold_cv"
+        and check["status"] == "failed"
+        and check["reason"] == "unstable_fold_thresholds"
+        for check in gate_eval["checks"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_preview_blocks_worsening_post_cost_replay_even_if_replay_gates_pass(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+    metrics = _passing_metrics()
+    metrics["economic_replay"] = {
+        "gates": {
+            "all_gates_passed": True,
+            "metrics": {"post_cost_return_delta_vs_baseline": -0.01},
+        }
+    }
+    store = FakePromotionStore(_best_iteration(metrics))
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    gate_eval = preview["gate_bundle_evaluation"]
+    assert "worsening_post_cost_replay" in gate_eval["blockers"]
+    assert preview["promotion_allowed"] is False
 
 
 @pytest.mark.asyncio

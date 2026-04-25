@@ -65,7 +65,7 @@ def evaluate_development_gate_bundle(
             }
         )
         if not passed and not waived:
-            blockers.append(reason)
+            _append_blocker(blockers, reason)
 
     policy = bundle.get("promotion_policy", {})
     add_check(
@@ -115,13 +115,14 @@ def evaluate_development_gate_bundle(
         blockers=blockers,
         waivers=waivers,
         name="max_signal_rate",
-        value=_first_number(
+        value=_max_number(
             gates.get("operating_signal_rate"),
             config.get("operating_signal_rate"),
+            metrics.get("signal_rate"),
         ),
         threshold=direction_checks.get("max_signal_rate"),
         comparator="<=",
-        reason="signal_saturation_or_missing",
+        reason="signal_saturation",
     )
 
     calibration_checks = bundle.get("gate_tiers", {}).get("calibration", {}).get(
@@ -161,11 +162,46 @@ def evaluate_development_gate_bundle(
         bool(_dict_at(cal_full, "threshold_stability_by_fold").get("folds")),
         "missing_threshold_stability_by_fold",
     )
+    threshold_stability = _dict_at(cal_full, "threshold_stability_by_fold")
+    _numeric_gate(
+        checks=checks,
+        blockers=blockers,
+        waivers=waivers,
+        name="max_threshold_cv",
+        value=_first_number(
+            threshold_stability.get("threshold_cv"),
+            metrics.get("threshold_cv"),
+            gates.get("threshold_cv"),
+        ),
+        threshold=_first_number(
+            calibration_checks.get("max_threshold_cv"),
+            calibration_checks.get("max_fold_threshold_cv"),
+        ),
+        comparator="<=",
+        reason="unstable_fold_thresholds",
+    )
     add_check(
         "signal_rate_distribution_required",
         bool(_dict_at(cal_full, "signal_rate_distribution")),
         "missing_signal_rate_distribution",
     )
+    signal_rate_distribution = _dict_at(cal_full, "signal_rate_distribution")
+    signal_distribution_value = _max_number(
+        signal_rate_distribution.get("max"),
+        signal_rate_distribution.get("mean"),
+        metrics.get("signal_rate_distribution_max"),
+    )
+    if signal_distribution_value is not None:
+        _numeric_gate(
+            checks=checks,
+            blockers=blockers,
+            waivers=waivers,
+            name="max_signal_rate_distribution",
+            value=signal_distribution_value,
+            threshold=direction_checks.get("max_signal_rate"),
+            comparator="<=",
+            reason="signal_saturation",
+        )
     per_regime = _dict_at(cal_full, "per_regime_calibration")
     add_check(
         "per_regime_calibration_graceful",
@@ -193,6 +229,20 @@ def evaluate_development_gate_bundle(
             "worsening_post_cost_replay",
             replay_gates,
         )
+        replay_checks = bundle.get("gate_tiers", {}).get("economic_replay", {}).get(
+            "checks", {}
+        )
+        if replay_checks.get("worsening_vs_baseline_blocks_promotion") is True:
+            worsening_details = _post_cost_replay_worsening_details(
+                replay,
+                replay_gates,
+            )
+            add_check(
+                "economic_replay_not_worse_than_baseline",
+                not worsening_details["worsened"],
+                "worsening_post_cost_replay",
+                worsening_details,
+            )
 
     add_check(
         "rollback_target_recorded",
@@ -280,6 +330,64 @@ def _first_number(*values: Any) -> float | None:
     return None
 
 
+def _max_number(*values: Any) -> float | None:
+    numbers = [_first_number(value) for value in values]
+    finite_numbers = [number for number in numbers if number is not None]
+    return max(finite_numbers) if finite_numbers else None
+
+
+def _append_blocker(blockers: list[str], reason: str) -> None:
+    if reason not in blockers:
+        blockers.append(reason)
+
+
+def _post_cost_replay_worsening_details(
+    replay: dict[str, Any],
+    replay_gates: dict[str, Any],
+) -> dict[str, Any]:
+    """Detect explicit post-cost replay worsening versus baseline evidence."""
+
+    indicators: list[dict[str, Any]] = []
+    boolean_keys = (
+        "worsening_vs_baseline",
+        "post_cost_worse_than_baseline",
+        "worse_than_baseline",
+    )
+    numeric_delta_keys = (
+        "post_cost_return_delta_vs_baseline",
+        "post_cost_pnl_delta_vs_baseline",
+        "net_return_delta_vs_baseline",
+        "net_pnl_delta_vs_baseline",
+        "post_cost_sharpe_delta_vs_baseline",
+        "profit_factor_delta_vs_baseline",
+    )
+    containers = [
+        ("replay", replay),
+        ("replay_gates", replay_gates),
+        ("replay.metrics", _dict_at(replay, "metrics")),
+        ("replay.post_cost_metrics", _dict_at(replay, "post_cost_metrics")),
+        ("replay_gates.metrics", _dict_at(replay_gates, "metrics")),
+    ]
+
+    for source, container in containers:
+        for key in boolean_keys:
+            if container.get(key) is True:
+                indicators.append(
+                    {"source": source, "key": key, "value": True}
+                )
+        for key in numeric_delta_keys:
+            value = _first_number(container.get(key))
+            if value is not None and value < 0.0:
+                indicators.append(
+                    {"source": source, "key": key, "value": value}
+                )
+
+    return {
+        "worsened": bool(indicators),
+        "indicators": indicators,
+    }
+
+
 def _numeric_gate(
     *,
     checks: list[dict[str, Any]],
@@ -314,4 +422,4 @@ def _numeric_gate(
         }
     )
     if not passed and not waived:
-        blockers.append(reason)
+        _append_blocker(blockers, reason)

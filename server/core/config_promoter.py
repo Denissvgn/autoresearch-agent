@@ -69,6 +69,19 @@ class ConfigPromoter:
             previous_yaml = Path(target_path).read_text(encoding="utf-8")
 
         gate_bundle_evaluation = self._evaluate_gate_bundle(model_type, best)
+        promotion_allowed = bool(best["all_gates_passed"]) and gate_bundle_evaluation.get(
+            "passed",
+            False,
+        )
+        candidate_pool_record = {
+            "source": "autoresearch.iterations",
+            "research_id": research_id,
+            "iteration": best["iteration"],
+            "status": "eligible" if promotion_allowed else "blocked",
+            "blockers": gate_bundle_evaluation.get("blockers", []),
+            "inspectable": True,
+            "promotion_record_created": False,
+        }
 
         return {
             "research_id": research_id,
@@ -82,8 +95,8 @@ class ConfigPromoter:
             "best_metric": best["primary_metric"],
             "gates_passed": bool(best["all_gates_passed"]),
             "gate_bundle_evaluation": gate_bundle_evaluation,
-            "promotion_allowed": bool(best["all_gates_passed"])
-            and gate_bundle_evaluation.get("passed", False),
+            "candidate_pool_record": candidate_pool_record,
+            "promotion_allowed": promotion_allowed,
         }
 
     async def confirm(self, research_id: str) -> Dict[str, Any]:
