@@ -14,6 +14,10 @@ import httpx
 import yaml
 
 from server.config import settings
+from server.core.development_gate_bundle import (
+    evaluate_development_gate_bundle,
+    load_gate_bundle,
+)
 from server.core.results_store import ResultsStore
 
 logger = logging.getLogger(__name__)
@@ -64,6 +68,8 @@ class ConfigPromoter:
         if os.path.exists(target_path):
             previous_yaml = Path(target_path).read_text(encoding="utf-8")
 
+        gate_bundle_evaluation = self._evaluate_gate_bundle(model_type, best)
+
         return {
             "research_id": research_id,
             "iteration": best["iteration"],
@@ -75,6 +81,9 @@ class ConfigPromoter:
             "current_config": previous_yaml,
             "best_metric": best["primary_metric"],
             "gates_passed": bool(best["all_gates_passed"]),
+            "gate_bundle_evaluation": gate_bundle_evaluation,
+            "promotion_allowed": bool(best["all_gates_passed"])
+            and gate_bundle_evaluation.get("passed", False),
         }
 
     async def confirm(self, research_id: str) -> Dict[str, Any]:
@@ -84,6 +93,13 @@ class ConfigPromoter:
         if not preview["gates_passed"]:
             raise ValueError(
                 "Cannot promote: best iteration did not pass all gates"
+            )
+        gate_eval = preview.get("gate_bundle_evaluation") or {}
+        if not gate_eval.get("passed", False):
+            blockers = ", ".join(gate_eval.get("blockers") or ["unknown"])
+            raise ValueError(
+                "Cannot promote: development gate bundle failed "
+                f"({blockers})"
             )
 
         target_path = preview["target_path"]
@@ -199,6 +215,43 @@ class ConfigPromoter:
             )
 
         return promotion
+
+    def _evaluate_gate_bundle(
+        self,
+        model_type: str,
+        best_iteration: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Evaluate the best iteration against the development gate bundle."""
+        try:
+            bundle = load_gate_bundle(settings.workspace_root)
+        except Exception as exc:
+            if model_type == "direction":
+                return {
+                    "gate_bundle_id": None,
+                    "version": None,
+                    "model_type": model_type,
+                    "applicable": True,
+                    "passed": False,
+                    "checks": [],
+                    "blockers": ["missing_development_gate_bundle"],
+                    "error": str(exc),
+                }
+            return {
+                "gate_bundle_id": None,
+                "version": None,
+                "model_type": model_type,
+                "applicable": False,
+                "passed": True,
+                "checks": [],
+                "blockers": [],
+                "error": str(exc),
+            }
+
+        return evaluate_development_gate_bundle(
+            bundle=bundle,
+            model_type=model_type,
+            best_iteration=best_iteration,
+        )
 
     def _resolve_artifacts_dir(
         self,
