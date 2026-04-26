@@ -244,6 +244,15 @@ def evaluate_development_gate_bundle(
                 worsening_details,
             )
 
+    _evaluate_rl_oos_gates(
+        bundle=bundle,
+        payload=payload,
+        checks=checks,
+        blockers=blockers,
+        waivers=waivers,
+        add_check=add_check,
+    )
+
     add_check(
         "rollback_target_recorded",
         bool(payload.get("rollback_target") or payload.get("previous_development_version")),
@@ -386,6 +395,181 @@ def _post_cost_replay_worsening_details(
         "worsened": bool(indicators),
         "indicators": indicators,
     }
+
+
+def _evaluate_rl_oos_gates(
+    *,
+    bundle: dict[str, Any],
+    payload: dict[str, Any],
+    checks: list[dict[str, Any]],
+    blockers: list[str],
+    waivers: set[str],
+    add_check: Any,
+) -> None:
+    """Evaluate DPU-063 RL OOS gate evidence when a candidate is a finalist."""
+
+    rl_tier = bundle.get("gate_tiers", {}).get("rl_oos", {})
+    if not rl_tier:
+        return
+
+    rl_oos = _first_dict(
+        payload.get("rl_oos"),
+        payload.get("rl_oos_gates"),
+        payload.get("rl_walk_forward"),
+        payload.get("rl"),
+    )
+    finalist = bool(
+        payload.get("finalist")
+        or payload.get("is_finalist")
+        or payload.get("requires_rl_oos")
+        or rl_oos
+    )
+    if not finalist:
+        return
+
+    add_check(
+        "rl_oos_required_for_finalist",
+        bool(rl_oos),
+        "missing_rl_oos_gate_results",
+        rl_oos,
+    )
+    if not rl_oos:
+        return
+
+    tier_checks = rl_tier.get("checks", {})
+    direction_provenance = _first_dict(
+        rl_oos.get("direction_probability_provenance"),
+        payload.get("direction_probability_provenance"),
+    )
+    if tier_checks.get("oof_direction_proba_required"):
+        honest_coverage = _first_number(
+            direction_provenance.get("honest_coverage"),
+            direction_provenance.get("oof_available_coverage"),
+        )
+        _numeric_gate(
+            checks=checks,
+            blockers=blockers,
+            waivers=waivers,
+            name="rl_oof_direction_proba_required",
+            value=honest_coverage,
+            threshold=0.95,
+            comparator=">=",
+            reason="missing_oof_provenance",
+        )
+
+    if tier_checks.get("proxy_or_neutral_fallback_blocks_promotion"):
+        unsafe_count = int(_first_number(direction_provenance.get("unsafe_count")) or 0)
+        unsafe_values = direction_provenance.get("unsafe_values") or []
+        add_check(
+            "rl_no_proxy_or_neutral_direction_fallback",
+            unsafe_count == 0 and not unsafe_values,
+            "proxy_or_neutral_direction_proba_fallback",
+            direction_provenance,
+        )
+
+    if tier_checks.get("nested_validation_required"):
+        add_check(
+            "rl_nested_validation_required",
+            _rl_nested_validation_present(rl_oos),
+            "missing_nested_validation",
+            rl_oos,
+        )
+
+    if tier_checks.get("multi_seed_required"):
+        add_check(
+            "rl_multi_seed_required",
+            _rl_multi_seed_present(rl_oos),
+            "missing_multi_seed_rl_validation",
+            rl_oos,
+        )
+
+    required_metrics = tier_checks.get("metrics_required") or []
+    if required_metrics:
+        metrics = _first_dict(
+            rl_oos.get("metrics"),
+            rl_oos.get("aggregate"),
+            rl_oos.get("oos"),
+            rl_oos,
+        )
+        missing = [
+            name
+            for name in required_metrics
+            if _rl_metric_value(metrics, name) is None
+        ]
+        add_check(
+            "rl_oos_metrics_required",
+            not missing,
+            "missing_rl_oos_metrics",
+            {"missing": missing, "metrics": metrics},
+        )
+
+
+def _rl_nested_validation_present(rl_oos: dict[str, Any]) -> bool:
+    if rl_oos.get("nested_validation_used") is True:
+        return True
+    if _first_number(rl_oos.get("wf_nested_eval_ratio")):
+        return True
+    folds = rl_oos.get("folds")
+    if isinstance(folds, list) and folds:
+        return all(bool(_dict_at(fold, "validation")) for fold in folds if isinstance(fold, dict))
+    return bool(_dict_at(rl_oos, "validation"))
+
+
+def _rl_metric_value(metrics: dict[str, Any], name: str) -> float | None:
+    aliases = {
+        "return": ("return", "oos_return", "mean_return", "mean_oos_return"),
+        "drawdown": (
+            "drawdown",
+            "oos_drawdown",
+            "max_drawdown",
+            "mean_oos_drawdown",
+        ),
+        "trade_count": (
+            "trade_count",
+            "trades",
+            "oos_trades",
+            "mean_trades",
+            "mean_oos_trades",
+        ),
+        "mean_absolute_position": (
+            "mean_absolute_position",
+            "mean_abs_position",
+            "mean_abs_pos",
+            "oos_mean_position",
+        ),
+        "flip_count": (
+            "flip_count",
+            "flips",
+            "oos_flips",
+            "mean_flip_count",
+        ),
+        "is_oos_ratio": ("is_oos_ratio", "is_oos_return_ratio"),
+        "folds_passed": ("folds_passed",),
+        "oos_sharpe": ("oos_sharpe", "mean_oos_sharpe", "sharpe"),
+    }
+    candidates = aliases.get(
+        name,
+        (name, f"mean_{name}", f"mean_oos_{name}", f"oos_{name}"),
+    )
+    return _first_number(*(metrics.get(candidate) for candidate in candidates))
+
+
+def _rl_multi_seed_present(rl_oos: dict[str, Any]) -> bool:
+    n_seed_trials = _first_number(rl_oos.get("n_seed_trials"))
+    if n_seed_trials is not None and n_seed_trials >= 2:
+        return True
+    folds = rl_oos.get("folds")
+    if isinstance(folds, list) and folds:
+        for fold in folds:
+            if isinstance(fold, dict):
+                fold_trials = _first_number(
+                    fold.get("n_seed_trials"),
+                    _dict_at(fold, "validation").get("n_seed_trials"),
+                    _dict_at(fold, "oos").get("n_seed_trials"),
+                )
+                if fold_trials is not None and fold_trials >= 2:
+                    return True
+    return rl_oos.get("multi_seed") is True
 
 
 def _numeric_gate(
