@@ -1508,12 +1508,12 @@ class AgentOrchestrator:
             promoter = ConfigPromoter(self._store)
             result = await promoter.confirm(research_id)
             logger.info(
-                "ML-53: Auto-promoted session %s (iter=%d): %s",
+                "ML-53: Auto-promoted development session %s (iter=%d): %s",
                 research_id, best_iter, result,
             )
             await agent_log.append(
                 "system",
-                f"Auto-promoted best iteration {best_iter} to production config",
+                f"Auto-promoted best iteration {best_iter} to development config",
             )
             await broadcaster.broadcast({
                 "event": "auto_promoted",

@@ -74,6 +74,22 @@ def evaluate_development_gate_bundle(
         "auc_only_promotion_allowed",
         {"auc_only_promotion_allowed": policy.get("auc_only_promotion_allowed")},
     )
+    add_check(
+        "live_production_promotion_disabled",
+        policy.get("live_production_promotion_allowed") is False,
+        "live_production_promotion_policy_missing_or_allowed",
+        {
+            "live_production_promotion_allowed": policy.get(
+                "live_production_promotion_allowed"
+            )
+        },
+    )
+    add_check(
+        "development_scope_required",
+        not _live_production_promotion_requested(payload),
+        "live_production_promotion_forbidden",
+        {"requested_scope": _requested_promotion_scope(payload)},
+    )
 
     gates = _dict_at(payload, "gate_results")
     metrics = _dict_at(payload, "metrics")
@@ -252,6 +268,11 @@ def evaluate_development_gate_bundle(
         waivers=waivers,
         add_check=add_check,
     )
+    _evaluate_inference_parity_gates(
+        bundle=bundle,
+        payload=payload,
+        add_check=add_check,
+    )
 
     add_check(
         "rollback_target_recorded",
@@ -268,6 +289,7 @@ def evaluate_development_gate_bundle(
     return {
         "gate_bundle_id": bundle.get("gate_bundle_id"),
         "version": bundle.get("version"),
+        "scope": bundle.get("scope") or "development",
         "model_type": model_type,
         "applicable": True,
         "passed": not blockers,
@@ -395,6 +417,255 @@ def _post_cost_replay_worsening_details(
         "worsened": bool(indicators),
         "indicators": indicators,
     }
+
+
+def _requested_promotion_scope(payload: dict[str, Any]) -> str:
+    request = _first_dict(
+        payload.get("promotion_request"),
+        payload.get("promotion"),
+        payload.get("promotion_policy"),
+    )
+    for container in (request, payload):
+        for key in (
+            "scope",
+            "target_scope",
+            "stage",
+            "target_stage",
+            "environment",
+            "target_environment",
+        ):
+            value = container.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip().lower()
+    return "development"
+
+
+def _live_production_promotion_requested(payload: dict[str, Any]) -> bool:
+    request = _first_dict(
+        payload.get("promotion_request"),
+        payload.get("promotion"),
+        payload.get("promotion_policy"),
+    )
+    boolean_keys = (
+        "live_production",
+        "live_production_requested",
+        "live_production_promotion_requested",
+        "production_promotion_requested",
+    )
+    if any(request.get(key) is True or payload.get(key) is True for key in boolean_keys):
+        return True
+    return _requested_promotion_scope(payload) in {"live", "prod", "production"}
+
+
+def _evaluate_inference_parity_gates(
+    *,
+    bundle: dict[str, Any],
+    payload: dict[str, Any],
+    add_check: Any,
+) -> None:
+    """Evaluate required inference parity evidence for development promotion."""
+
+    tier = bundle.get("gate_tiers", {}).get("inference_parity", {})
+    if not tier:
+        return
+    tier_checks = tier.get("checks", {})
+    if not (tier.get("required") or tier_checks):
+        return
+
+    inference = _first_dict(
+        payload.get("inference_parity"),
+        payload.get("inference_validation"),
+        payload.get("inference"),
+    )
+    add_check(
+        "inference_parity_required",
+        bool(inference),
+        "inference_feature_schema_mismatch",
+        inference,
+    )
+    if not inference:
+        return
+
+    feature_details = _first_dict(
+        inference.get("features"),
+        inference.get("feature_schema"),
+        payload.get("feature_parity"),
+    )
+    if tier_checks.get("feature_name_alignment_required"):
+        add_check(
+            "inference_feature_name_alignment",
+            _bool_field(
+                inference,
+                "feature_name_alignment_passed",
+                "feature_names_aligned",
+                "feature_name_alignment",
+            )
+            or _bool_field(
+                feature_details,
+                "feature_name_alignment_passed",
+                "feature_names_aligned",
+                "names_aligned",
+            ),
+            "inference_feature_schema_mismatch",
+            feature_details or inference,
+        )
+    if tier_checks.get("feature_count_alignment_required"):
+        add_check(
+            "inference_feature_count_alignment",
+            _bool_field(
+                inference,
+                "feature_count_alignment_passed",
+                "feature_count_aligned",
+                "feature_count_alignment",
+            )
+            or _bool_field(
+                feature_details,
+                "feature_count_alignment_passed",
+                "feature_count_aligned",
+                "count_aligned",
+            ),
+            "inference_feature_schema_mismatch",
+            feature_details or inference,
+        )
+
+    roster_details = _first_dict(
+        inference.get("roster"),
+        inference.get("model_roster"),
+        payload.get("roster_parity"),
+    )
+    if tier_checks.get("model_roster_parity_required"):
+        add_check(
+            "inference_model_roster_parity",
+            _bool_field(
+                inference,
+                "model_roster_parity_passed",
+                "roster_parity_passed",
+                "model_roster_matches",
+            )
+            or _bool_field(
+                roster_details,
+                "model_roster_parity_passed",
+                "roster_parity_passed",
+                "matches",
+            ),
+            "model_roster_mismatch",
+            roster_details or inference,
+        )
+
+    tsfm_candidate = _is_tsfm_candidate(payload, inference)
+    adapter_details = _first_dict(
+        inference.get("adapter"),
+        inference.get("tsfm_adapter"),
+        payload.get("tsfm_adapter"),
+    )
+    if tier_checks.get("adapter_loading_required") and tsfm_candidate:
+        fallback_ok = _bool_field(
+            inference,
+            "tabular_fallback_passed",
+            "fallback_check_passed",
+            "fallback_available",
+        ) or _bool_field(adapter_details, "tabular_fallback_passed", "fallback_available")
+        add_check(
+            "inference_tsfm_adapter_loading",
+            _bool_field(
+                inference,
+                "adapter_loading_passed",
+                "adapter_loaded",
+                "tsfm_adapter_loaded",
+            )
+            or _bool_field(adapter_details, "loaded", "adapter_loaded"),
+            "tsfm_adapter_load_failure_without_tabular_fallback",
+            {"adapter": adapter_details, "fallback_ok": fallback_ok},
+        )
+
+    rl_details = _first_dict(
+        inference.get("rl"),
+        inference.get("observation"),
+        payload.get("rl_inference_parity"),
+    )
+    rl_observation_changed = any(
+        value is True
+        for value in (
+            payload.get("rl_observation_changed"),
+            payload.get("obs_spec_changed"),
+            inference.get("rl_observation_changed"),
+            inference.get("obs_spec_changed"),
+            rl_details.get("observation_changed"),
+            rl_details.get("obs_spec_changed"),
+        )
+    )
+    if (
+        tier_checks.get("observation_dimension_parity_required_when_rl_changes")
+        and rl_observation_changed
+    ):
+        add_check(
+            "inference_rl_observation_dimension_parity",
+            _bool_field(
+                inference,
+                "observation_dimension_parity_passed",
+                "obs_dim_parity_passed",
+            )
+            or _bool_field(
+                rl_details,
+                "observation_dimension_parity_passed",
+                "obs_dim_parity_passed",
+                "dimension_parity_passed",
+            ),
+            "inference_feature_schema_mismatch",
+            rl_details or inference,
+        )
+
+    if tier_checks.get("latency_budget_required_for_tsfm") and tsfm_candidate:
+        add_check(
+            "inference_tsfm_latency_budget",
+            _bool_field(
+                inference,
+                "latency_budget_passed",
+                "tsfm_latency_budget_passed",
+            )
+            or _bool_field(adapter_details, "latency_budget_passed"),
+            "tsfm_latency_budget_failure",
+            adapter_details or inference,
+        )
+    if tier_checks.get("fallback_required_for_tsfm") and tsfm_candidate:
+        add_check(
+            "inference_tsfm_fallback_check",
+            _bool_field(
+                inference,
+                "fallback_check_passed",
+                "tabular_fallback_passed",
+                "fallback_available",
+            )
+            or _bool_field(adapter_details, "fallback_check_passed", "fallback_available"),
+            "tsfm_adapter_load_failure_without_tabular_fallback",
+            adapter_details or inference,
+        )
+
+
+def _bool_field(container: dict[str, Any], *keys: str) -> bool:
+    return any(container.get(key) is True for key in keys)
+
+
+def _is_tsfm_candidate(payload: dict[str, Any], inference: dict[str, Any]) -> bool:
+    if any(
+        value is True
+        for value in (
+            payload.get("is_tsfm_candidate"),
+            payload.get("tsfm_candidate"),
+            inference.get("is_tsfm_candidate"),
+            inference.get("tsfm_candidate"),
+        )
+    ):
+        return True
+    for value in (
+        payload.get("model_family"),
+        payload.get("candidate_family"),
+        inference.get("model_family"),
+        inference.get("candidate_family"),
+    ):
+        if isinstance(value, str) and value.lower() in {"tsfm", "ts-fm", "timesfm"}:
+            return True
+    return False
 
 
 def _evaluate_rl_oos_gates(

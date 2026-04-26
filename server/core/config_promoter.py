@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -21,6 +22,9 @@ from server.core.development_gate_bundle import (
 from server.core.results_store import ResultsStore
 
 logger = logging.getLogger(__name__)
+
+DEVELOPMENT_PROMOTION_METADATA_VERSION = "development_promotion_metadata.v1"
+DEVELOPMENT_PROMOTION_SCOPE = "development"
 
 
 class ConfigPromoter:
@@ -82,6 +86,21 @@ class ConfigPromoter:
             "inspectable": True,
             "promotion_record_created": False,
         }
+        metrics_payload = self._best_iteration_payload(best)
+        development_promotion_metadata = self._build_development_promotion_metadata(
+            research_id=research_id,
+            iteration=best["iteration"],
+            model_type=model_type,
+            instrument=instrument,
+            timeframe=timeframe,
+            target_path=target_path,
+            best_iteration=best,
+            metrics_payload=metrics_payload,
+            gates_passed=bool(best["all_gates_passed"]),
+            gate_bundle_evaluation=gate_bundle_evaluation,
+            candidate_pool_record=candidate_pool_record,
+            promotion_allowed=promotion_allowed,
+        )
 
         return {
             "research_id": research_id,
@@ -96,6 +115,7 @@ class ConfigPromoter:
             "gates_passed": bool(best["all_gates_passed"]),
             "gate_bundle_evaluation": gate_bundle_evaluation,
             "candidate_pool_record": candidate_pool_record,
+            "development_promotion_metadata": development_promotion_metadata,
             "promotion_allowed": promotion_allowed,
         }
 
@@ -113,6 +133,17 @@ class ConfigPromoter:
             raise ValueError(
                 "Cannot promote: development gate bundle failed "
                 f"({blockers})"
+            )
+        metadata = dict(preview.get("development_promotion_metadata") or {})
+        if metadata.get("scope") != DEVELOPMENT_PROMOTION_SCOPE:
+            raise ValueError(
+                "Cannot promote: development promotion metadata is not scoped "
+                f"to {DEVELOPMENT_PROMOTION_SCOPE}"
+            )
+        if metadata.get("live_production_promotion_requested") is True:
+            raise ValueError(
+                "Cannot promote: live production promotion is forbidden by "
+                "the development gate policy"
             )
 
         target_path = preview["target_path"]
@@ -206,6 +237,21 @@ class ConfigPromoter:
             )
             logger.info("Wrote promoted config to %s", target_path)
 
+        metadata_path = self._metadata_sidecar_path(target_path, preview["iteration"])
+        metadata = self._finalize_development_promotion_metadata(
+            metadata=metadata,
+            metadata_path=metadata_path,
+            promotion_record_created=True,
+        )
+        await asyncio.to_thread(
+            os.makedirs, os.path.dirname(metadata_path), exist_ok=True
+        )
+        await asyncio.to_thread(
+            Path(metadata_path).write_text,
+            json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
         # Record promotion
         promotion = await self._store.record_promotion(
             research_id=research_id,
@@ -216,6 +262,9 @@ class ConfigPromoter:
             target_path=target_path,
             config_yaml=preview["new_config"],
             previous_yaml=preview["current_config"],
+            scope=DEVELOPMENT_PROMOTION_SCOPE,
+            metadata_path=metadata_path,
+            promotion_metadata=metadata,
         )
 
         # ML-52: Update composite model versions in mlflow-service
@@ -228,6 +277,199 @@ class ConfigPromoter:
             )
 
         return promotion
+
+    def _build_development_promotion_metadata(
+        self,
+        *,
+        research_id: str,
+        iteration: int,
+        model_type: str,
+        instrument: str,
+        timeframe: str,
+        target_path: str,
+        best_iteration: Dict[str, Any],
+        metrics_payload: Dict[str, Any],
+        gates_passed: bool,
+        gate_bundle_evaluation: Dict[str, Any],
+        candidate_pool_record: Dict[str, Any],
+        promotion_allowed: bool,
+    ) -> Dict[str, Any]:
+        """Create the auditable development promotion decision artifact."""
+        return {
+            "schema_version": DEVELOPMENT_PROMOTION_METADATA_VERSION,
+            "scope": DEVELOPMENT_PROMOTION_SCOPE,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "research_id": research_id,
+            "iteration": iteration,
+            "model_type": model_type,
+            "instrument": instrument,
+            "timeframe": timeframe,
+            "target_path": target_path,
+            "best_metric": best_iteration.get("primary_metric"),
+            "metric_name": best_iteration.get("metric_name"),
+            "gates_passed": gates_passed,
+            "promotion_allowed": promotion_allowed,
+            "live_production_promotion_allowed": False,
+            "live_production_promotion_requested": self._live_production_requested(
+                metrics_payload
+            ),
+            "gate_bundle": {
+                "gate_bundle_id": gate_bundle_evaluation.get("gate_bundle_id"),
+                "version": gate_bundle_evaluation.get("version"),
+                "scope": gate_bundle_evaluation.get("scope") or DEVELOPMENT_PROMOTION_SCOPE,
+                "passed": gate_bundle_evaluation.get("passed"),
+                "blockers": gate_bundle_evaluation.get("blockers", []),
+                "checks": gate_bundle_evaluation.get("checks", []),
+                "waivers": gate_bundle_evaluation.get("waivers", []),
+            },
+            "candidate_pool_record": dict(candidate_pool_record),
+            "decision_record": {
+                "model_quality": self._check_statuses(
+                    gate_bundle_evaluation,
+                    "direction_quality",
+                    "min_direction_auc",
+                    "max_signal_rate",
+                ),
+                "calibration": self._check_statuses(
+                    gate_bundle_evaluation,
+                    "calibration",
+                    "max_ece",
+                    "ece",
+                    "brier",
+                    "reliability",
+                    "threshold",
+                    "signal_rate",
+                    "per_regime",
+                ),
+                "economic_replay": self._check_statuses(
+                    gate_bundle_evaluation, "economic_replay"
+                ),
+                "rl_oos": self._check_statuses(gate_bundle_evaluation, "rl_"),
+                "inference_parity": self._check_statuses(
+                    gate_bundle_evaluation, "inference_"
+                ),
+                "rollback": self._check_statuses(
+                    gate_bundle_evaluation, "rollback"
+                ),
+                "smoke_validation": self._check_statuses(
+                    gate_bundle_evaluation, "smoke"
+                ),
+            },
+            "registry_metadata": self._registry_metadata(
+                best_iteration, metrics_payload
+            ),
+            "composite_metadata": self._composite_metadata(metrics_payload),
+            "rollback_target": (
+                metrics_payload.get("rollback_target")
+                or metrics_payload.get("previous_development_version")
+            ),
+            "smoke_validation": (
+                metrics_payload.get("smoke_validation")
+                or {"passed": metrics_payload.get("smoke_validation_passed")}
+            ),
+        }
+
+    def _finalize_development_promotion_metadata(
+        self,
+        *,
+        metadata: Dict[str, Any],
+        metadata_path: str,
+        promotion_record_created: bool,
+    ) -> Dict[str, Any]:
+        finalized = dict(metadata)
+        finalized["metadata_path"] = metadata_path
+        finalized["promotion_record_created"] = promotion_record_created
+        candidate_pool = dict(finalized.get("candidate_pool_record") or {})
+        candidate_pool["promotion_record_created"] = promotion_record_created
+        finalized["candidate_pool_record"] = candidate_pool
+        return finalized
+
+    @staticmethod
+    def _best_iteration_payload(best_iteration: Dict[str, Any]) -> Dict[str, Any]:
+        raw = best_iteration.get("metrics_json")
+        if isinstance(raw, str) and raw.strip():
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                return {}
+            return parsed if isinstance(parsed, dict) else {}
+        return raw if isinstance(raw, dict) else {}
+
+    @staticmethod
+    def _live_production_requested(payload: Dict[str, Any]) -> bool:
+        request = payload.get("promotion_request") or payload.get("promotion") or {}
+        if not isinstance(request, dict):
+            request = {}
+        for key in (
+            "live_production",
+            "live_production_requested",
+            "live_production_promotion_requested",
+            "production_promotion_requested",
+        ):
+            if request.get(key) is True or payload.get(key) is True:
+                return True
+        for container in (request, payload):
+            for key in (
+                "scope",
+                "target_scope",
+                "stage",
+                "target_stage",
+                "environment",
+                "target_environment",
+            ):
+                value = container.get(key)
+                if isinstance(value, str) and value.strip().lower() in {
+                    "live",
+                    "prod",
+                    "production",
+                }:
+                    return True
+        return False
+
+    @staticmethod
+    def _check_statuses(
+        gate_bundle_evaluation: Dict[str, Any],
+        *prefixes: str,
+    ) -> list[dict[str, Any]]:
+        checks = gate_bundle_evaluation.get("checks") or []
+        return [
+            check
+            for check in checks
+            if isinstance(check, dict)
+            and any(str(check.get("name", "")).startswith(prefix) for prefix in prefixes)
+        ]
+
+    @staticmethod
+    def _registry_metadata(
+        best_iteration: Dict[str, Any],
+        metrics_payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        return {
+            "mlflow_run_id": (
+                best_iteration.get("mlflow_run_id")
+                or metrics_payload.get("mlflow_run_id")
+            ),
+            "model_registry_name": metrics_payload.get("model_registry_name"),
+            "model_version": metrics_payload.get("model_version"),
+            "artifact_uri": metrics_payload.get("artifact_uri"),
+        }
+
+    @staticmethod
+    def _composite_metadata(metrics_payload: Dict[str, Any]) -> Dict[str, Any]:
+        composite = metrics_payload.get("composite_metadata")
+        if isinstance(composite, dict):
+            return composite
+        composite = metrics_payload.get("composite")
+        return composite if isinstance(composite, dict) else {}
+
+    @staticmethod
+    def _metadata_sidecar_path(target_path: str, iteration: int) -> str:
+        path = Path(target_path)
+        return str(
+            path.with_name(
+                f"{path.name}.development-promotion.iter-{iteration}.json"
+            )
+        )
 
     def _evaluate_gate_bundle(
         self,

@@ -12,6 +12,7 @@ os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "test-token")
 from server.core import config_promoter
 from server.core.config_promoter import ConfigPromoter
 from server.core.development_gate_bundle import DEFAULT_GATE_BUNDLE_RELATIVE_PATH
+from server.core.results_store import ResultsStore
 
 
 class FakePromotionStore:
@@ -43,8 +44,11 @@ def _write_gate_bundle(root: Path) -> None:
         """
 version: 1
 gate_bundle_id: development_direction_prediction_v1
+scope: development
 promotion_policy:
   auc_only_promotion_allowed: false
+  live_production_promotion_allowed: false
+  required_decision_record: true
 gate_tiers:
   direction_quality:
     checks:
@@ -57,12 +61,25 @@ gate_tiers:
   economic_replay:
     checks:
       worsening_vs_baseline_blocks_promotion: true
+  inference_parity:
+    required: true
+    checks:
+      feature_name_alignment_required: true
+      feature_count_alignment_required: true
+      model_roster_parity_required: true
+      adapter_loading_required: true
+      observation_dimension_parity_required_when_rl_changes: true
+      latency_budget_required_for_tsfm: true
+      fallback_required_for_tsfm: true
 promotion_blockers:
   - weak_calibration
   - signal_saturation
   - unstable_fold_thresholds
   - missing_economic_replay
   - worsening_post_cost_replay
+  - inference_feature_schema_mismatch
+  - model_roster_mismatch
+  - live_production_promotion_forbidden
 """,
         encoding="utf-8",
     )
@@ -75,8 +92,10 @@ def _write_gate_bundle_with_rl(root: Path) -> None:
         """
 version: 1
 gate_bundle_id: development_direction_prediction_v1
+scope: development
 promotion_policy:
   auc_only_promotion_allowed: false
+  live_production_promotion_allowed: false
 gate_tiers:
   direction_quality:
     checks:
@@ -144,6 +163,19 @@ def _passing_metrics() -> dict:
             }
         },
         "economic_replay": {"gates": {"all_gates_passed": True}},
+        "inference_parity": {
+            "feature_name_alignment_passed": True,
+            "feature_count_alignment_passed": True,
+            "model_roster_parity_passed": True,
+        },
+        "model_registry_name": "direction-model",
+        "model_version": "12",
+        "mlflow_run_id": "run-direction-12",
+        "artifact_uri": "mlflow://runs/run-direction-12/model",
+        "composite_metadata": {
+            "composite_id": "DOGE_USDT_15m_development",
+            "reload_supported": True,
+        },
         "rollback_target": "direction_model:12",
         "smoke_validation": {"passed": True},
     }
@@ -295,15 +327,138 @@ async def test_confirm_records_promotion_when_bundle_passes(tmp_path, monkeypatc
     _write_gate_bundle(tmp_path)
     monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
     monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+
+    async def _skip_composite_update(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(
+        ConfigPromoter, "_update_composite_versions", _skip_composite_update
+    )
     store = FakePromotionStore(_best_iteration(_passing_metrics()))
 
     result = await ConfigPromoter(store).confirm("research_1")
 
     assert result["iteration"] == 3
+    assert result["scope"] == "development"
+    assert result["metadata_path"]
     assert store.promotions
     target_path = Path(store.promotions[0]["target_path"])
     assert target_path.exists()
     assert target_path.read_text(encoding="utf-8") == "agent_strategy: BALA\n"
+    metadata_path = Path(result["metadata_path"])
+    assert metadata_path.exists()
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert metadata["schema_version"] == "development_promotion_metadata.v1"
+    assert metadata["scope"] == "development"
+    assert metadata["live_production_promotion_allowed"] is False
+    assert metadata["live_production_promotion_requested"] is False
+    assert metadata["promotion_record_created"] is True
+    assert metadata["gate_bundle"]["gate_bundle_id"] == "development_direction_prediction_v1"
+    assert metadata["gate_bundle"]["passed"] is True
+    assert metadata["registry_metadata"]["model_registry_name"] == "direction-model"
+    assert metadata["composite_metadata"]["reload_supported"] is True
+    assert store.promotions[0]["promotion_metadata"]["metadata_path"] == str(metadata_path)
+
+
+@pytest.mark.asyncio
+async def test_preview_blocks_live_production_promotion_intent(tmp_path, monkeypatch):
+    _write_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+    metrics = _passing_metrics()
+    metrics["promotion_request"] = {"scope": "production"}
+    store = FakePromotionStore(_best_iteration(metrics))
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    gate_eval = preview["gate_bundle_evaluation"]
+    assert preview["promotion_allowed"] is False
+    assert preview["development_promotion_metadata"]["scope"] == "development"
+    assert preview["development_promotion_metadata"][
+        "live_production_promotion_requested"
+    ] is True
+    assert "live_production_promotion_forbidden" in gate_eval["blockers"]
+
+
+@pytest.mark.asyncio
+async def test_preview_blocks_missing_required_inference_parity(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+    metrics = _passing_metrics()
+    metrics.pop("inference_parity")
+    store = FakePromotionStore(_best_iteration(metrics))
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    gate_eval = preview["gate_bundle_evaluation"]
+    assert preview["promotion_allowed"] is False
+    assert "inference_feature_schema_mismatch" in gate_eval["blockers"]
+    assert any(
+        check["name"] == "inference_parity_required"
+        and check["status"] == "failed"
+        for check in gate_eval["checks"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_confirm_persists_development_metadata_with_results_store(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+
+    async def _skip_composite_update(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(
+        ConfigPromoter, "_update_composite_versions", _skip_composite_update
+    )
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = ResultsStore(str(tmp_path / "autoresearch.sqlite"))
+    await store.initialize()
+    await store.create_session(
+        session_id="research_1",
+        instrument="DOGE_USDT",
+        timeframe="15m",
+        model_type="direction",
+        tag="dpu070",
+        quick_mode=False,
+        max_iterations=3,
+        max_budget_usd=1.0,
+        focus_hint=None,
+        workspace_path=str(workspace),
+    )
+    await store.add_iteration(
+        research_id="research_1",
+        iteration=3,
+        primary_metric=0.61,
+        metric_name="auc",
+        all_gates_passed=True,
+        decision="keep",
+        description="passing candidate",
+        config_snapshot="agent_strategy: BALA\n",
+        metrics_json=json.dumps(_passing_metrics()),
+        training_time_s=1.0,
+    )
+
+    result = await ConfigPromoter(store).confirm("research_1")
+    promotions = await store.list_promotions()
+
+    assert result["scope"] == "development"
+    assert promotions[0]["scope"] == "development"
+    assert promotions[0]["metadata_path"] == result["metadata_path"]
+    assert promotions[0]["promotion_metadata"]["schema_version"] == (
+        "development_promotion_metadata.v1"
+    )
+    assert promotions[0]["promotion_metadata"]["gate_bundle"]["passed"] is True
 
 
 @pytest.mark.asyncio

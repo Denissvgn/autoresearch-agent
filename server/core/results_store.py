@@ -61,6 +61,9 @@ CREATE TABLE IF NOT EXISTS promotions (
     target_path TEXT NOT NULL,
     config_yaml TEXT NOT NULL,
     previous_yaml TEXT,
+    scope TEXT NOT NULL DEFAULT 'development',
+    metadata_path TEXT,
+    promotion_metadata_json TEXT,
     promoted_at TEXT NOT NULL
 );
 
@@ -162,6 +165,26 @@ class ResultsStore:
             try:
                 await db.execute(
                     "ALTER TABLE research_sessions ADD COLUMN pipeline_id TEXT"
+                )
+            except Exception:
+                pass
+            # DPU-070: versioned development-promotion decision metadata
+            try:
+                await db.execute(
+                    "ALTER TABLE promotions "
+                    "ADD COLUMN scope TEXT NOT NULL DEFAULT 'development'"
+                )
+            except Exception:
+                pass
+            try:
+                await db.execute(
+                    "ALTER TABLE promotions ADD COLUMN metadata_path TEXT"
+                )
+            except Exception:
+                pass
+            try:
+                await db.execute(
+                    "ALTER TABLE promotions ADD COLUMN promotion_metadata_json TEXT"
                 )
             except Exception:
                 pass
@@ -476,17 +499,27 @@ class ResultsStore:
         target_path: str,
         config_yaml: str,
         previous_yaml: Optional[str],
+        scope: str = "development",
+        metadata_path: Optional[str] = None,
+        promotion_metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
+        metadata_json = (
+            json.dumps(promotion_metadata, sort_keys=True)
+            if promotion_metadata is not None
+            else None
+        )
         async with aiosqlite.connect(self._db_path) as db:
             cursor = await db.execute(
                 """INSERT INTO promotions
                    (research_id, iteration, model_type, instrument, timeframe,
-                    target_path, config_yaml, previous_yaml, promoted_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    target_path, config_yaml, previous_yaml, scope, metadata_path,
+                    promotion_metadata_json, promoted_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     research_id, iteration, model_type, instrument, timeframe,
-                    target_path, config_yaml, previous_yaml, now,
+                    target_path, config_yaml, previous_yaml, scope, metadata_path,
+                    metadata_json, now,
                 ),
             )
             await db.commit()
@@ -495,6 +528,9 @@ class ResultsStore:
                 "research_id": research_id,
                 "iteration": iteration,
                 "target_path": target_path,
+                "scope": scope,
+                "metadata_path": metadata_path,
+                "promotion_metadata": promotion_metadata,
                 "promoted_at": now,
             }
 
@@ -504,7 +540,15 @@ class ResultsStore:
             cursor = await db.execute(
                 "SELECT * FROM promotions ORDER BY promoted_at DESC",
             )
-            return [dict(r) for r in await cursor.fetchall()]
+            rows = [dict(r) for r in await cursor.fetchall()]
+            for row in rows:
+                raw_metadata = row.get("promotion_metadata_json")
+                if raw_metadata:
+                    try:
+                        row["promotion_metadata"] = json.loads(raw_metadata)
+                    except (json.JSONDecodeError, TypeError):
+                        row["promotion_metadata"] = None
+            return rows
 
     # ------------------------------------------------------------------
     # Pipelines (ML-63)
