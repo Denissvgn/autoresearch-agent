@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -72,7 +73,30 @@ class ConfigPromoter:
         if os.path.exists(target_path):
             previous_yaml = Path(target_path).read_text(encoding="utf-8")
 
-        gate_bundle_evaluation = self._evaluate_gate_bundle(model_type, best)
+        metrics_payload = self._best_iteration_payload(best)
+        rollback_readiness = self._build_rollback_readiness(
+            research_id=research_id,
+            iteration=best["iteration"],
+            model_type=model_type,
+            instrument=instrument,
+            timeframe=timeframe,
+            target_path=target_path,
+            previous_yaml=previous_yaml,
+            metrics_payload=metrics_payload,
+        )
+        smoke_validation = self._build_smoke_validation(
+            best_yaml=best_yaml,
+            metrics_payload=metrics_payload,
+            rollback_readiness=rollback_readiness,
+        )
+        best_for_gate = self._best_iteration_with_preflight(
+            best,
+            rollback_readiness=rollback_readiness,
+            smoke_validation=smoke_validation,
+        )
+        gate_bundle_evaluation = self._evaluate_gate_bundle(
+            model_type, best_for_gate,
+        )
         promotion_allowed = bool(best["all_gates_passed"]) and gate_bundle_evaluation.get(
             "passed",
             False,
@@ -86,7 +110,6 @@ class ConfigPromoter:
             "inspectable": True,
             "promotion_record_created": False,
         }
-        metrics_payload = self._best_iteration_payload(best)
         development_promotion_metadata = self._build_development_promotion_metadata(
             research_id=research_id,
             iteration=best["iteration"],
@@ -100,6 +123,8 @@ class ConfigPromoter:
             gate_bundle_evaluation=gate_bundle_evaluation,
             candidate_pool_record=candidate_pool_record,
             promotion_allowed=promotion_allowed,
+            rollback_readiness=rollback_readiness,
+            smoke_validation=smoke_validation,
         )
 
         return {
@@ -173,6 +198,28 @@ class ConfigPromoter:
                     model_registry_name = metrics.get("model_registry_name")
                 except (json.JSONDecodeError, TypeError):
                     pass
+
+        rollback_readiness = dict(metadata.get("rollback_readiness") or {})
+        previous_yaml = preview.get("current_config")
+        if previous_yaml is not None:
+            rollback_snapshot_path = rollback_readiness.get(
+                "previous_config_snapshot_path"
+            ) or self._rollback_snapshot_path(
+                target_path=target_path,
+                research_id=research_id,
+                iteration=preview["iteration"],
+            )
+            await self._write_text_file(rollback_snapshot_path, previous_yaml)
+            rollback_readiness.update(
+                {
+                    "previous_config_snapshot_path": rollback_snapshot_path,
+                    "previous_development_version_addressable": True,
+                    "rollback_target": rollback_snapshot_path,
+                    "previous_config_sha256": self._sha256_text(previous_yaml),
+                }
+            )
+            metadata["rollback_target"] = rollback_snapshot_path
+            metadata["rollback_readiness"] = rollback_readiness
 
         # Use promote.py script if available, otherwise write directly
         promote_script = os.path.join(
@@ -278,6 +325,97 @@ class ConfigPromoter:
 
         return promotion
 
+    async def rollback(
+        self,
+        *,
+        model_type: str,
+        instrument: str,
+        timeframe: str,
+        reason: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Restore the latest development promotion for an instrument/timeframe."""
+        get_latest = getattr(
+            self._store, "get_latest_development_promotion", None
+        )
+        if get_latest is None:
+            raise ValueError("Promotion store does not support rollback lookup")
+        promotion = await get_latest(
+            model_type=model_type,
+            instrument=instrument,
+            timeframe=timeframe,
+        )
+        if not promotion:
+            raise ValueError(
+                "No development promotion found for "
+                f"{model_type} {instrument}/{timeframe}"
+            )
+
+        previous_yaml = promotion.get("previous_yaml")
+        promotion_metadata = promotion.get("promotion_metadata") or {}
+        rollback_readiness = promotion_metadata.get("rollback_readiness") or {}
+        snapshot_path = rollback_readiness.get("previous_config_snapshot_path")
+        if previous_yaml is None and snapshot_path and os.path.exists(snapshot_path):
+            previous_yaml = Path(snapshot_path).read_text(encoding="utf-8")
+        if previous_yaml is None:
+            raise ValueError(
+                "Latest development promotion has no previous config snapshot "
+                "to restore"
+            )
+
+        target_path = promotion["target_path"]
+        current_yaml = (
+            Path(target_path).read_text(encoding="utf-8")
+            if os.path.exists(target_path)
+            else None
+        )
+        await self._write_text_file(target_path, previous_yaml)
+
+        rollback_metadata_path = self._rollback_metadata_sidecar_path(
+            target_path, promotion["id"]
+        )
+        rollback_metadata = {
+            "schema_version": "development_promotion_rollback.v1",
+            "scope": DEVELOPMENT_PROMOTION_SCOPE,
+            "rolled_back_at": datetime.now(timezone.utc).isoformat(),
+            "promotion_id": promotion["id"],
+            "research_id": promotion["research_id"],
+            "iteration": promotion["iteration"],
+            "model_type": model_type,
+            "instrument": instrument,
+            "timeframe": timeframe,
+            "target_path": target_path,
+            "reason": reason,
+            "restored_config_sha256": self._sha256_text(previous_yaml),
+            "replaced_config_sha256": (
+                self._sha256_text(current_yaml) if current_yaml is not None else None
+            ),
+            "previous_config_snapshot_path": snapshot_path,
+            "rollback_method": "instrument_timeframe_development_config",
+        }
+        await self._write_text_file(
+            rollback_metadata_path,
+            json.dumps(rollback_metadata, indent=2, sort_keys=True) + "\n",
+        )
+
+        record_rollback = getattr(self._store, "record_promotion_rollback", None)
+        if record_rollback is not None:
+            await record_rollback(
+                promotion_id=promotion["id"],
+                rollback_metadata_path=rollback_metadata_path,
+                rollback_metadata=rollback_metadata,
+            )
+
+        return {
+            "rolled_back": True,
+            "promotion_id": promotion["id"],
+            "model_type": model_type,
+            "instrument": instrument,
+            "timeframe": timeframe,
+            "target_path": target_path,
+            "rollback_metadata_path": rollback_metadata_path,
+            "rollback_metadata": rollback_metadata,
+        }
+
     def _build_development_promotion_metadata(
         self,
         *,
@@ -293,8 +431,15 @@ class ConfigPromoter:
         gate_bundle_evaluation: Dict[str, Any],
         candidate_pool_record: Dict[str, Any],
         promotion_allowed: bool,
+        rollback_readiness: Dict[str, Any],
+        smoke_validation: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Create the auditable development promotion decision artifact."""
+        rollback_target = (
+            rollback_readiness.get("rollback_target")
+            or metrics_payload.get("rollback_target")
+            or metrics_payload.get("previous_development_version")
+        )
         return {
             "schema_version": DEVELOPMENT_PROMOTION_METADATA_VERSION,
             "scope": DEVELOPMENT_PROMOTION_SCOPE,
@@ -360,12 +505,12 @@ class ConfigPromoter:
             ),
             "composite_metadata": self._composite_metadata(metrics_payload),
             "rollback_target": (
-                metrics_payload.get("rollback_target")
-                or metrics_payload.get("previous_development_version")
+                rollback_target
             ),
-            "smoke_validation": (
-                metrics_payload.get("smoke_validation")
-                or {"passed": metrics_payload.get("smoke_validation_passed")}
+            "rollback_readiness": dict(rollback_readiness),
+            "smoke_validation": dict(smoke_validation),
+            "tsfm_fallback_validation": self._tsfm_fallback_validation(
+                metrics_payload
             ),
         }
 
@@ -470,6 +615,239 @@ class ConfigPromoter:
                 f"{path.name}.development-promotion.iter-{iteration}.json"
             )
         )
+
+    @staticmethod
+    def _rollback_snapshot_path(
+        *,
+        target_path: str,
+        research_id: str,
+        iteration: int,
+    ) -> str:
+        path = Path(target_path)
+        safe_research_id = "".join(
+            char if char.isalnum() or char in {"-", "_"} else "_"
+            for char in research_id
+        )
+        return str(
+            path.with_name(
+                f"{path.name}.development-rollback."
+                f"{safe_research_id}.iter-{iteration}.yaml"
+            )
+        )
+
+    @staticmethod
+    def _rollback_metadata_sidecar_path(target_path: str, promotion_id: int) -> str:
+        path = Path(target_path)
+        return str(
+            path.with_name(
+                f"{path.name}.development-rollback.promotion-{promotion_id}.json"
+            )
+        )
+
+    @staticmethod
+    def _sha256_text(value: str) -> str:
+        return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    async def _write_text_file(path: str, content: str) -> None:
+        await asyncio.to_thread(os.makedirs, os.path.dirname(path), exist_ok=True)
+        await asyncio.to_thread(
+            Path(path).write_text,
+            content,
+            encoding="utf-8",
+        )
+
+    def _build_rollback_readiness(
+        self,
+        *,
+        research_id: str,
+        iteration: int,
+        model_type: str,
+        instrument: str,
+        timeframe: str,
+        target_path: str,
+        previous_yaml: Optional[str],
+        metrics_payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        raw = metrics_payload.get("rollback_readiness")
+        readiness = dict(raw) if isinstance(raw, dict) else {}
+        planned_snapshot_path = self._rollback_snapshot_path(
+            target_path=target_path,
+            research_id=research_id,
+            iteration=iteration,
+        )
+        rollback_target = (
+            readiness.get("rollback_target")
+            or metrics_payload.get("rollback_target")
+            or metrics_payload.get("previous_development_version")
+            or (planned_snapshot_path if previous_yaml is not None else None)
+        )
+        previous_addressable = bool(
+            readiness.get("previous_development_version_addressable")
+            or rollback_target
+            or previous_yaml is not None
+        )
+        readiness.update(
+            {
+                "model_type": model_type,
+                "instrument": instrument,
+                "timeframe": timeframe,
+                "target_path": target_path,
+                "previous_config_present": previous_yaml is not None,
+                "previous_config_snapshot_path": (
+                    planned_snapshot_path if previous_yaml is not None else None
+                ),
+                "previous_config_sha256": (
+                    self._sha256_text(previous_yaml)
+                    if previous_yaml is not None
+                    else readiness.get("previous_config_sha256")
+                ),
+                "previous_development_version_addressable": previous_addressable,
+                "rollback_by_instrument_timeframe_supported": True,
+                "rollback_method": "instrument_timeframe_development_config",
+                "rollback_target_recorded": bool(rollback_target),
+                "rollback_target": rollback_target,
+                "prior_version_left_intact_on_failure": True,
+            }
+        )
+        return readiness
+
+    def _build_smoke_validation(
+        self,
+        *,
+        best_yaml: str,
+        metrics_payload: Dict[str, Any],
+        rollback_readiness: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        raw = metrics_payload.get("smoke_validation")
+        smoke = dict(raw) if isinstance(raw, dict) else {}
+        if "passed" not in smoke and "smoke_validation_passed" in metrics_payload:
+            smoke["passed"] = metrics_payload.get("smoke_validation_passed")
+
+        config_parse_error: Optional[str] = None
+        config_parse_passed = False
+        try:
+            parsed = yaml.safe_load(best_yaml)
+            config_parse_passed = isinstance(parsed, dict)
+        except Exception as exc:  # pragma: no cover - exact YAML errors vary
+            config_parse_error = str(exc)
+
+        composite = self._composite_metadata(metrics_payload)
+        inference = self._inference_payload(metrics_payload)
+        composite_reload_supported = any(
+            container.get(key) is True
+            for container in (smoke, composite, inference)
+            for key in (
+                "composite_reload_passed",
+                "composite_reload_supported",
+                "reload_supported",
+            )
+        )
+        fallback_validation = self._tsfm_fallback_validation(metrics_payload)
+        tsfm_fallback_required = bool(fallback_validation.get("required"))
+        tsfm_fallback_passed = (
+            bool(fallback_validation.get("passed"))
+            if tsfm_fallback_required
+            else True
+        )
+        evidence_passed = smoke.get("passed") is True
+        passed = (
+            evidence_passed
+            and config_parse_passed
+            and tsfm_fallback_passed
+        )
+        smoke.update(
+            {
+                "schema_version": "development_smoke_validation.v1",
+                "passed": passed,
+                "evidence_passed": evidence_passed,
+                "config_parse_passed": config_parse_passed,
+                "config_parse_error": config_parse_error,
+                "composite_reload_supported": composite_reload_supported,
+                "prior_version_left_intact_on_failure": bool(
+                    rollback_readiness.get(
+                        "prior_version_left_intact_on_failure"
+                    )
+                ),
+                "tsfm_fallback_required": tsfm_fallback_required,
+                "tsfm_fallback_passed": tsfm_fallback_passed,
+                "source": "autoresearch_config_promoter",
+            }
+        )
+        return smoke
+
+    def _best_iteration_with_preflight(
+        self,
+        best_iteration: Dict[str, Any],
+        *,
+        rollback_readiness: Dict[str, Any],
+        smoke_validation: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        payload = self._best_iteration_payload(best_iteration)
+        payload["rollback_readiness"] = rollback_readiness
+        payload["smoke_validation"] = smoke_validation
+        if rollback_readiness.get("rollback_target"):
+            payload["rollback_target"] = rollback_readiness["rollback_target"]
+        enriched = dict(best_iteration)
+        enriched["metrics_json"] = json.dumps(payload)
+        return enriched
+
+    @staticmethod
+    def _inference_payload(metrics_payload: Dict[str, Any]) -> Dict[str, Any]:
+        for key in ("inference_parity", "inference_validation", "inference"):
+            value = metrics_payload.get(key)
+            if isinstance(value, dict):
+                return value
+        return {}
+
+    def _tsfm_fallback_validation(
+        self,
+        metrics_payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        inference = self._inference_payload(metrics_payload)
+        adapter = inference.get("adapter") or inference.get("tsfm_adapter") or {}
+        if not isinstance(adapter, dict):
+            adapter = {}
+        is_tsfm = any(
+            value is True
+            for value in (
+                metrics_payload.get("is_tsfm_candidate"),
+                metrics_payload.get("tsfm_candidate"),
+                inference.get("is_tsfm_candidate"),
+                inference.get("tsfm_candidate"),
+            )
+        )
+        if not is_tsfm:
+            for value in (
+                metrics_payload.get("model_family"),
+                metrics_payload.get("candidate_family"),
+                inference.get("model_family"),
+                inference.get("candidate_family"),
+            ):
+                if isinstance(value, str) and value.lower() in {
+                    "tsfm",
+                    "ts-fm",
+                    "timesfm",
+                }:
+                    is_tsfm = True
+                    break
+        fallback_passed = any(
+            container.get(key) is True
+            for container in (inference, adapter)
+            for key in (
+                "fallback_check_passed",
+                "tabular_fallback_passed",
+                "fallback_available",
+            )
+        )
+        return {
+            "required": is_tsfm,
+            "passed": fallback_passed if is_tsfm else None,
+            "details": {
+                "inference": inference,
+                "adapter": adapter,
+            },
+        }
 
     def _evaluate_gate_bundle(
         self,

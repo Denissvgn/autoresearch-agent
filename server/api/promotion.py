@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api", tags=["promotion"])
 
@@ -14,6 +15,10 @@ def init(promoter, store):
     global _promoter, _store
     _promoter = promoter
     _store = store
+
+
+class PromotionRollbackRequest(BaseModel):
+    reason: str | None = None
 
 
 @router.post("/research/{research_id}/promote/preview")
@@ -44,3 +49,22 @@ async def promote_confirm(research_id: str):
 async def list_promotions():
     """History of all config promotions."""
     return await _store.list_promotions()
+
+
+@router.post("/promotions/{model_type}/{instrument}/{timeframe}/rollback")
+async def rollback_development_promotion(
+    model_type: str,
+    instrument: str,
+    timeframe: str,
+    request: PromotionRollbackRequest = PromotionRollbackRequest(),
+):
+    """Restore the latest development config for an instrument/timeframe."""
+    try:
+        return await _promoter.rollback(
+            model_type=model_type,
+            instrument=instrument,
+            timeframe=timeframe,
+            reason=request.reason,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

@@ -273,17 +273,15 @@ def evaluate_development_gate_bundle(
         payload=payload,
         add_check=add_check,
     )
-
-    add_check(
-        "rollback_target_recorded",
-        bool(payload.get("rollback_target") or payload.get("previous_development_version")),
-        "missing_rollback_target",
+    _evaluate_rollback_readiness_gates(
+        bundle=bundle,
+        payload=payload,
+        add_check=add_check,
     )
-    add_check(
-        "smoke_validation_passed",
-        payload.get("smoke_validation_passed") is True
-        or _dict_at(payload, "smoke_validation").get("passed") is True,
-        "failed_smoke_validation",
+    _evaluate_smoke_validation_gates(
+        bundle=bundle,
+        payload=payload,
+        add_check=add_check,
     )
 
     return {
@@ -457,6 +455,167 @@ def _live_production_promotion_requested(payload: dict[str, Any]) -> bool:
     return _requested_promotion_scope(payload) in {"live", "prod", "production"}
 
 
+def _evaluate_rollback_readiness_gates(
+    *,
+    bundle: dict[str, Any],
+    payload: dict[str, Any],
+    add_check: Any,
+) -> None:
+    """Evaluate rollback readiness evidence for development promotion."""
+
+    tier = bundle.get("gate_tiers", {}).get("rollback_readiness", {})
+    tier_checks = tier.get("checks", {}) if isinstance(tier, dict) else {}
+    rollback = _first_dict(
+        payload.get("rollback_readiness"),
+        payload.get("rollback"),
+        payload.get("rollback_plan"),
+    )
+    target_recorded = bool(
+        payload.get("rollback_target")
+        or payload.get("previous_development_version")
+        or rollback.get("rollback_target")
+        or rollback.get("previous_config_snapshot_path")
+    )
+
+    if not tier_checks:
+        add_check(
+            "rollback_target_recorded",
+            target_recorded,
+            "missing_rollback_target",
+            rollback,
+        )
+        return
+
+    if tier_checks.get("previous_development_version_addressable"):
+        add_check(
+            "rollback_previous_development_version_addressable",
+            _bool_field(
+                rollback,
+                "previous_development_version_addressable",
+                "previous_version_addressable",
+            )
+            or target_recorded,
+            "missing_rollback_target",
+            rollback,
+        )
+    if tier_checks.get("rollback_by_instrument_timeframe_supported"):
+        add_check(
+            "rollback_by_instrument_timeframe_supported",
+            _bool_field(
+                rollback,
+                "rollback_by_instrument_timeframe_supported",
+                "instrument_timeframe_rollback_supported",
+            )
+            or rollback.get("rollback_method")
+            in {
+                "instrument_timeframe",
+                "instrument_timeframe_development_config",
+            },
+            "missing_rollback_target",
+            rollback,
+        )
+    if tier_checks.get("rollback_target_recorded"):
+        add_check(
+            "rollback_target_recorded",
+            target_recorded,
+            "missing_rollback_target",
+            rollback,
+        )
+
+
+def _evaluate_smoke_validation_gates(
+    *,
+    bundle: dict[str, Any],
+    payload: dict[str, Any],
+    add_check: Any,
+) -> None:
+    """Evaluate smoke or paper validation evidence before promotion."""
+
+    tier = bundle.get("gate_tiers", {}).get("smoke_validation", {})
+    tier_checks = tier.get("checks", {}) if isinstance(tier, dict) else {}
+    smoke = _first_dict(
+        payload.get("smoke_validation"),
+        payload.get("paper_validation"),
+        payload.get("promotion_smoke_validation"),
+    )
+    inference = _first_dict(
+        payload.get("inference_parity"),
+        payload.get("inference_validation"),
+        payload.get("inference"),
+    )
+    composite = _first_dict(
+        payload.get("composite_metadata"),
+        payload.get("composite"),
+    )
+    rollback = _first_dict(
+        payload.get("rollback_readiness"),
+        payload.get("rollback"),
+        payload.get("rollback_plan"),
+    )
+    smoke_passed = (
+        payload.get("smoke_validation_passed") is True
+        or smoke.get("passed") is True
+        or smoke.get("paper_validation_passed") is True
+    )
+
+    if not tier_checks:
+        add_check(
+            "smoke_validation_passed",
+            smoke_passed,
+            "failed_smoke_validation",
+            smoke,
+        )
+        return
+
+    if tier_checks.get("paper_or_smoke_validation_required"):
+        add_check(
+            "smoke_validation_passed",
+            smoke_passed,
+            "failed_smoke_validation",
+            smoke,
+        )
+    if tier_checks.get("composite_reload_required"):
+        add_check(
+            "smoke_composite_reload_supported",
+            _bool_field(
+                smoke,
+                "composite_reload_passed",
+                "composite_reload_supported",
+                "reload_supported",
+            )
+            or _bool_field(
+                inference,
+                "composite_reload_passed",
+                "composite_reload_supported",
+                "reload_supported",
+            )
+            or _bool_field(
+                composite,
+                "composite_reload_passed",
+                "composite_reload_supported",
+                "reload_supported",
+            ),
+            "failed_smoke_validation",
+            {"smoke_validation": smoke, "composite_metadata": composite},
+        )
+    if tier_checks.get("prior_version_left_intact_on_failure"):
+        add_check(
+            "smoke_prior_version_left_intact_on_failure",
+            _bool_field(
+                smoke,
+                "prior_version_left_intact_on_failure",
+                "prior_version_left_intact",
+            )
+            or _bool_field(
+                rollback,
+                "prior_version_left_intact_on_failure",
+                "previous_development_version_addressable",
+            ),
+            "failed_smoke_validation",
+            {"smoke_validation": smoke, "rollback_readiness": rollback},
+        )
+
+
 def _evaluate_inference_parity_gates(
     *,
     bundle: dict[str, Any],
@@ -567,7 +726,8 @@ def _evaluate_inference_parity_gates(
         ) or _bool_field(adapter_details, "tabular_fallback_passed", "fallback_available")
         add_check(
             "inference_tsfm_adapter_loading",
-            _bool_field(
+            fallback_ok
+            or _bool_field(
                 inference,
                 "adapter_loading_passed",
                 "adapter_loaded",

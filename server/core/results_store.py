@@ -64,6 +64,9 @@ CREATE TABLE IF NOT EXISTS promotions (
     scope TEXT NOT NULL DEFAULT 'development',
     metadata_path TEXT,
     promotion_metadata_json TEXT,
+    rollback_metadata_path TEXT,
+    rollback_metadata_json TEXT,
+    rolled_back_at TEXT,
     promoted_at TEXT NOT NULL
 );
 
@@ -185,6 +188,25 @@ class ResultsStore:
             try:
                 await db.execute(
                     "ALTER TABLE promotions ADD COLUMN promotion_metadata_json TEXT"
+                )
+            except Exception:
+                pass
+            # DPU-071: development rollback audit metadata
+            try:
+                await db.execute(
+                    "ALTER TABLE promotions ADD COLUMN rollback_metadata_path TEXT"
+                )
+            except Exception:
+                pass
+            try:
+                await db.execute(
+                    "ALTER TABLE promotions ADD COLUMN rollback_metadata_json TEXT"
+                )
+            except Exception:
+                pass
+            try:
+                await db.execute(
+                    "ALTER TABLE promotions ADD COLUMN rolled_back_at TEXT"
                 )
             except Exception:
                 pass
@@ -542,13 +564,86 @@ class ResultsStore:
             )
             rows = [dict(r) for r in await cursor.fetchall()]
             for row in rows:
-                raw_metadata = row.get("promotion_metadata_json")
-                if raw_metadata:
-                    try:
-                        row["promotion_metadata"] = json.loads(raw_metadata)
-                    except (json.JSONDecodeError, TypeError):
-                        row["promotion_metadata"] = None
+                self._decode_promotion_metadata(row)
             return rows
+
+    async def get_latest_development_promotion(
+        self,
+        *,
+        model_type: str,
+        instrument: str,
+        timeframe: str,
+    ) -> Optional[Dict[str, Any]]:
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """SELECT * FROM promotions
+                   WHERE model_type = ?
+                     AND instrument = ?
+                     AND timeframe = ?
+                     AND scope = 'development'
+                   ORDER BY promoted_at DESC
+                   LIMIT 1""",
+                (model_type, instrument, timeframe),
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            result = dict(row)
+            self._decode_promotion_metadata(result)
+            return result
+
+    async def record_promotion_rollback(
+        self,
+        *,
+        promotion_id: int,
+        rollback_metadata_path: str,
+        rollback_metadata: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        now = datetime.now(timezone.utc).isoformat()
+        rollback_metadata_json = json.dumps(rollback_metadata, sort_keys=True)
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute(
+                """UPDATE promotions
+                   SET rollback_metadata_path = ?,
+                       rollback_metadata_json = ?,
+                       rolled_back_at = ?
+                   WHERE id = ?""",
+                (
+                    rollback_metadata_path,
+                    rollback_metadata_json,
+                    now,
+                    promotion_id,
+                ),
+            )
+            await db.commit()
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "SELECT * FROM promotions WHERE id = ?",
+                (promotion_id,),
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            result = dict(row)
+            self._decode_promotion_metadata(result)
+            return result
+
+    @staticmethod
+    def _decode_promotion_metadata(row: Dict[str, Any]) -> None:
+        raw_metadata = row.get("promotion_metadata_json")
+        if raw_metadata:
+            try:
+                row["promotion_metadata"] = json.loads(raw_metadata)
+            except (json.JSONDecodeError, TypeError):
+                row["promotion_metadata"] = None
+        raw_rollback_metadata = row.get("rollback_metadata_json")
+        if raw_rollback_metadata:
+            try:
+                row["rollback_metadata"] = json.loads(raw_rollback_metadata)
+            except (json.JSONDecodeError, TypeError):
+                row["rollback_metadata"] = None
 
     # ------------------------------------------------------------------
     # Pipelines (ML-63)

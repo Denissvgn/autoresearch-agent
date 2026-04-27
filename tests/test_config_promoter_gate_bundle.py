@@ -132,6 +132,59 @@ promotion_blockers:
     )
 
 
+def _write_gate_bundle_with_m7_controls(root: Path) -> None:
+    path = root / DEFAULT_GATE_BUNDLE_RELATIVE_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        """
+version: 1
+gate_bundle_id: development_direction_prediction_v1
+scope: development
+promotion_policy:
+  auc_only_promotion_allowed: false
+  live_production_promotion_allowed: false
+gate_tiers:
+  direction_quality:
+    checks:
+      min_direction_auc: 0.55
+      max_signal_rate: 0.35
+  calibration:
+    checks:
+      max_ece_calibrated: 0.05
+      max_threshold_cv: 0.20
+  economic_replay:
+    checks:
+      worsening_vs_baseline_blocks_promotion: true
+  inference_parity:
+    required: true
+    checks:
+      feature_name_alignment_required: true
+      feature_count_alignment_required: true
+      model_roster_parity_required: true
+      adapter_loading_required: true
+      latency_budget_required_for_tsfm: true
+      fallback_required_for_tsfm: true
+  rollback_readiness:
+    required: true
+    checks:
+      previous_development_version_addressable: true
+      rollback_by_instrument_timeframe_supported: true
+      rollback_target_recorded: true
+  smoke_validation:
+    required: true
+    checks:
+      paper_or_smoke_validation_required: true
+      composite_reload_required: true
+      prior_version_left_intact_on_failure: true
+promotion_blockers:
+  - missing_rollback_target
+  - failed_smoke_validation
+  - tsfm_adapter_load_failure_without_tabular_fallback
+""",
+        encoding="utf-8",
+    )
+
+
 def _passing_metrics() -> dict:
     return {
         "all_gates_passed": True,
@@ -505,3 +558,174 @@ async def test_preview_accepts_finalist_with_honest_rl_oos(
     gate_eval = preview["gate_bundle_evaluation"]
     assert gate_eval["passed"] is True
     assert not gate_eval["blockers"]
+
+
+@pytest.mark.asyncio
+async def test_preview_derives_addressable_rollback_and_smoke_readiness(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle_with_m7_controls(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(
+        config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
+    )
+    target = tmp_path / "configs" / "instrument_configs" / "DOGE_USDT_15m.yaml"
+    target.parent.mkdir(parents=True)
+    target.write_text("agent_strategy: OLD\n", encoding="utf-8")
+    metrics = _passing_metrics()
+    metrics.pop("rollback_target")
+    store = FakePromotionStore(_best_iteration(metrics))
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    gate_eval = preview["gate_bundle_evaluation"]
+    metadata = preview["development_promotion_metadata"]
+    assert gate_eval["passed"] is True
+    assert metadata["rollback_readiness"]["previous_config_present"] is True
+    assert metadata["rollback_readiness"][
+        "rollback_by_instrument_timeframe_supported"
+    ] is True
+    assert metadata["rollback_target"].endswith(
+        "DOGE_USDT_15m.yaml.development-rollback.research_1.iter-3.yaml"
+    )
+    assert metadata["smoke_validation"]["passed"] is True
+    assert metadata["smoke_validation"]["composite_reload_supported"] is True
+
+
+@pytest.mark.asyncio
+async def test_confirm_writes_rollback_snapshot_and_rollback_restores_previous_config(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle_with_m7_controls(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(
+        config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
+    )
+    async def _skip_composite_update(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(
+        ConfigPromoter, "_update_composite_versions", _skip_composite_update
+    )
+    target = tmp_path / "configs" / "instrument_configs" / "DOGE_USDT_15m.yaml"
+    target.parent.mkdir(parents=True)
+    target.write_text("agent_strategy: OLD\n", encoding="utf-8")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = ResultsStore(str(tmp_path / "autoresearch.sqlite"))
+    await store.initialize()
+    await store.create_session(
+        session_id="research_1",
+        instrument="DOGE_USDT",
+        timeframe="15m",
+        model_type="direction",
+        tag="dpu071",
+        quick_mode=False,
+        max_iterations=3,
+        max_budget_usd=1.0,
+        focus_hint=None,
+        workspace_path=str(workspace),
+    )
+    metrics = _passing_metrics()
+    metrics.pop("rollback_target")
+    await store.add_iteration(
+        research_id="research_1",
+        iteration=3,
+        primary_metric=0.61,
+        metric_name="auc",
+        all_gates_passed=True,
+        decision="keep",
+        description="passing candidate",
+        config_snapshot="agent_strategy: BALA\n",
+        metrics_json=json.dumps(metrics),
+        training_time_s=1.0,
+    )
+
+    result = await ConfigPromoter(store).confirm("research_1")
+    metadata = result["promotion_metadata"]
+    rollback_snapshot = Path(
+        metadata["rollback_readiness"]["previous_config_snapshot_path"]
+    )
+    assert target.read_text(encoding="utf-8") == "agent_strategy: BALA\n"
+    assert rollback_snapshot.exists()
+    assert rollback_snapshot.read_text(encoding="utf-8") == "agent_strategy: OLD\n"
+
+    rollback = await ConfigPromoter(store).rollback(
+        model_type="direction",
+        instrument="DOGE_USDT",
+        timeframe="15m",
+        reason="test rollback",
+    )
+    promotions = await store.list_promotions()
+
+    assert rollback["rolled_back"] is True
+    assert target.read_text(encoding="utf-8") == "agent_strategy: OLD\n"
+    assert Path(rollback["rollback_metadata_path"]).exists()
+    assert promotions[0]["rollback_metadata"]["reason"] == "test rollback"
+
+
+@pytest.mark.asyncio
+async def test_preview_blocks_tsfm_candidate_without_fallback_check(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle_with_m7_controls(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(
+        config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
+    )
+    metrics = _passing_metrics()
+    metrics["model_family"] = "tsfm"
+    metrics["inference_parity"].update(
+        {
+            "adapter_loading_passed": True,
+            "latency_budget_passed": True,
+        }
+    )
+    store = FakePromotionStore(_best_iteration(metrics))
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    assert preview["promotion_allowed"] is False
+    assert "tsfm_adapter_load_failure_without_tabular_fallback" in preview[
+        "gate_bundle_evaluation"
+    ]["blockers"]
+    assert preview["development_promotion_metadata"]["tsfm_fallback_validation"][
+        "required"
+    ] is True
+    assert preview["development_promotion_metadata"]["tsfm_fallback_validation"][
+        "passed"
+    ] is False
+
+
+@pytest.mark.asyncio
+async def test_preview_records_tsfm_fallback_check_when_present(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle_with_m7_controls(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(
+        config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
+    )
+    metrics = _passing_metrics()
+    metrics["model_family"] = "tsfm"
+    metrics["inference_parity"].update(
+        {
+            "latency_budget_passed": True,
+            "fallback_check_passed": True,
+        }
+    )
+    store = FakePromotionStore(_best_iteration(metrics))
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    assert preview["gate_bundle_evaluation"]["passed"] is True
+    assert preview["development_promotion_metadata"]["tsfm_fallback_validation"][
+        "required"
+    ] is True
+    assert preview["development_promotion_metadata"]["tsfm_fallback_validation"][
+        "passed"
+    ] is True
