@@ -236,6 +236,16 @@ The compose stack persists autoresearch state across restarts:
 and persistence paths currently used by the server. The same URL set is copied
 into each session manifest for reproducibility.
 
+### Direction Upgrade Runbooks
+
+- `docs/ml/autoresearch_direction_runbook.md` covers operator workflow,
+  phase-state inspection, HPO rules, promotion readiness, rollback triggers,
+  and verification commands.
+- `docs/ml/development_promotion_rollback_guide.md` covers development
+  promotion preview/confirm requirements and rollback procedure.
+- `docs/ml/direction_prediction_model_card.md` defines the model-card fields
+  expected for direction candidates and promoted development configs.
+
 ### Supported LLM Backends
 
 Any API compatible with the Anthropic Messages format:
