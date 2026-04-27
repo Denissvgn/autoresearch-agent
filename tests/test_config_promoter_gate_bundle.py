@@ -185,6 +185,76 @@ promotion_blockers:
     )
 
 
+def _write_gate_bundle_with_m7_remaining(root: Path) -> None:
+    path = root / DEFAULT_GATE_BUNDLE_RELATIVE_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        """
+version: 1
+gate_bundle_id: development_direction_prediction_v1
+scope: development
+promotion_policy:
+  auc_only_promotion_allowed: false
+  live_production_promotion_allowed: false
+gate_tiers:
+  direction_quality:
+    checks:
+      min_direction_auc: 0.55
+      max_signal_rate: 0.35
+  calibration:
+    checks:
+      max_ece_calibrated: 0.05
+      max_threshold_cv: 0.20
+  economic_replay:
+    checks:
+      worsening_vs_baseline_blocks_promotion: true
+  inference_parity:
+    required: true
+    checks:
+      feature_name_alignment_required: true
+      feature_count_alignment_required: true
+      model_roster_parity_required: true
+  rollback_readiness:
+    required: true
+    checks:
+      previous_development_version_addressable: true
+      rollback_by_instrument_timeframe_supported: true
+      rollback_target_recorded: true
+  smoke_validation:
+    required: true
+    checks:
+      paper_or_smoke_validation_required: true
+      composite_reload_required: true
+      prior_version_left_intact_on_failure: true
+  signal_health_monitoring:
+    required: true
+    checks:
+      probability_summary_required: true
+      entropy_required: true
+      signal_rate_required: true
+      drift_metrics_required: true
+      operational_metrics_required: true
+  inference_reload:
+    required: true
+    checks:
+      feature_alignment_required: true
+      adapter_loading_required: true
+      roster_parity_required: true
+      observation_dimension_parity_required: true
+      fallback_behavior_required: true
+      latency_budget_required: true
+      composite_reload_required: true
+      rollback_ready_required: true
+      prior_version_preserved_on_reload_failure: true
+promotion_blockers:
+  - missing_signal_health_metrics
+  - inference_reload_validation_missing
+  - inference_reload_failed
+""",
+        encoding="utf-8",
+    )
+
+
 def _passing_metrics() -> dict:
     return {
         "all_gates_passed": True,
@@ -255,6 +325,43 @@ def _passing_rl_oos() -> dict:
         },
         "artifact_uri": "mlflow://runs/rl-finalist",
     }
+
+
+def _passing_m7_remaining_metrics() -> dict:
+    metrics = _passing_metrics()
+    metrics.pop("rollback_target", None)
+    metrics["development_signal_health"] = {
+        "direction_proba": [0.22, 0.41, 0.63, 0.78, 0.56],
+        "base_model_probabilities": [
+            [0.20, 0.26, 0.23],
+            [0.40, 0.44, 0.39],
+            [0.60, 0.66, 0.62],
+            [0.76, 0.81, 0.77],
+            [0.53, 0.59, 0.56],
+        ],
+        "training_distribution": {
+            "probability_mean": 0.50,
+            "probability_std": 0.18,
+            "signal_rate": 0.40,
+            "entropy_mean": 0.65,
+            "probability_histogram": [10, 20, 30, 25, 15],
+        },
+        "probability_histogram": [9, 21, 31, 24, 15],
+        "latency_ms_p95": 42.0,
+        "adapter_failure_count": 0,
+        "feature_schema_mismatch_count": 0,
+        "rl_hold_rate": 0.32,
+    }
+    metrics["inference_parity"].update(
+        {
+            "adapter_loading_passed": True,
+            "latency_budget_passed": True,
+            "composite_reload_passed": True,
+            "fallback_check_passed": True,
+            "observation_dimension_parity_passed": True,
+        }
+    )
+    return metrics
 
 
 def _best_iteration(metrics: dict) -> dict:
@@ -729,3 +836,112 @@ async def test_preview_records_tsfm_fallback_check_when_present(
     assert preview["development_promotion_metadata"]["tsfm_fallback_validation"][
         "passed"
     ] is True
+
+
+@pytest.mark.asyncio
+async def test_preview_emits_development_signal_health_metrics(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle_with_m7_remaining(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(
+        config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
+    )
+    target = tmp_path / "configs" / "instrument_configs" / "DOGE_USDT_15m.yaml"
+    target.parent.mkdir(parents=True)
+    target.write_text("agent_strategy: OLD\n", encoding="utf-8")
+    store = FakePromotionStore(_best_iteration(_passing_m7_remaining_metrics()))
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    signal_health = preview["development_promotion_metadata"]["signal_health"]
+    assert preview["gate_bundle_evaluation"]["passed"] is True
+    assert signal_health["schema_version"] == "development_direction_signal_health.v1"
+    assert signal_health["observable"] is True
+    assert signal_health["metrics"]["sample_count"] == 5
+    assert signal_health["metrics"]["probability_mean"] == pytest.approx(0.52)
+    assert signal_health["operational"]["rl_hold_rate"] == 0.32
+    assert signal_health["drift"]["psi"] is not None
+
+
+@pytest.mark.asyncio
+async def test_preview_blocks_missing_development_signal_health_metrics(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle_with_m7_remaining(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(
+        config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
+    )
+    target = tmp_path / "configs" / "instrument_configs" / "DOGE_USDT_15m.yaml"
+    target.parent.mkdir(parents=True)
+    target.write_text("agent_strategy: OLD\n", encoding="utf-8")
+    metrics = _passing_m7_remaining_metrics()
+    metrics.pop("development_signal_health")
+    store = FakePromotionStore(_best_iteration(metrics))
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    assert preview["promotion_allowed"] is False
+    assert "missing_signal_health_metrics" in preview["gate_bundle_evaluation"][
+        "blockers"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_preview_records_inference_reload_validation(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle_with_m7_remaining(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(
+        config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
+    )
+    target = tmp_path / "configs" / "instrument_configs" / "DOGE_USDT_15m.yaml"
+    target.parent.mkdir(parents=True)
+    target.write_text("agent_strategy: OLD\n", encoding="utf-8")
+    store = FakePromotionStore(_best_iteration(_passing_m7_remaining_metrics()))
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    reload_validation = preview["development_promotion_metadata"][
+        "inference_reload_validation"
+    ]
+    assert reload_validation["schema_version"] == (
+        "development_inference_reload_validation.v1"
+    )
+    assert reload_validation["passed"] is True
+    assert reload_validation["checks"]["feature_name_alignment_passed"] is True
+    assert reload_validation["checks"]["composite_reload_passed"] is True
+    assert reload_validation["checks"]["rollback_ready"] is True
+
+
+@pytest.mark.asyncio
+async def test_confirm_blocks_reload_failure_before_replacing_prior_config(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle_with_m7_remaining(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(
+        config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
+    )
+    target = tmp_path / "configs" / "instrument_configs" / "DOGE_USDT_15m.yaml"
+    target.parent.mkdir(parents=True)
+    target.write_text("agent_strategy: OLD\n", encoding="utf-8")
+    metrics = _passing_m7_remaining_metrics()
+    metrics["inference_parity"]["composite_reload_passed"] = False
+    metrics["composite_metadata"]["reload_supported"] = False
+    metrics["smoke_validation"] = {
+        "passed": True,
+        "composite_reload_supported": False,
+    }
+    store = FakePromotionStore(_best_iteration(metrics))
+
+    with pytest.raises(ValueError, match="development gate bundle failed"):
+        await ConfigPromoter(store).confirm("research_1")
+
+    assert target.read_text(encoding="utf-8") == "agent_strategy: OLD\n"

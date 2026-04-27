@@ -273,6 +273,16 @@ def evaluate_development_gate_bundle(
         payload=payload,
         add_check=add_check,
     )
+    _evaluate_signal_health_gates(
+        bundle=bundle,
+        payload=payload,
+        add_check=add_check,
+    )
+    _evaluate_inference_reload_gates(
+        bundle=bundle,
+        payload=payload,
+        add_check=add_check,
+    )
     _evaluate_rollback_readiness_gates(
         bundle=bundle,
         payload=payload,
@@ -520,6 +530,180 @@ def _evaluate_rollback_readiness_gates(
             target_recorded,
             "missing_rollback_target",
             rollback,
+        )
+
+
+def _evaluate_signal_health_gates(
+    *,
+    bundle: dict[str, Any],
+    payload: dict[str, Any],
+    add_check: Any,
+) -> None:
+    """Evaluate development direction-signal health monitoring evidence."""
+
+    tier = bundle.get("gate_tiers", {}).get("signal_health_monitoring", {})
+    tier_checks = tier.get("checks", {}) if isinstance(tier, dict) else {}
+    if not tier_checks:
+        return
+
+    signal_health = _first_dict(
+        payload.get("development_signal_health"),
+        payload.get("signal_health"),
+        payload.get("direction_signal_health"),
+    )
+    metrics = _dict_at(signal_health, "metrics")
+    operational = _dict_at(signal_health, "operational")
+    drift = _dict_at(signal_health, "drift")
+
+    add_check(
+        "signal_health_payload_required",
+        bool(signal_health),
+        "missing_signal_health_metrics",
+        signal_health,
+    )
+    if not signal_health:
+        return
+
+    if tier_checks.get("probability_summary_required"):
+        add_check(
+            "signal_health_probability_summary",
+            _first_number(metrics.get("probability_mean")) is not None
+            and _first_number(metrics.get("probability_std")) is not None,
+            "missing_signal_health_metrics",
+            metrics,
+        )
+    if tier_checks.get("entropy_required"):
+        add_check(
+            "signal_health_entropy",
+            _first_number(metrics.get("entropy_mean")) is not None,
+            "missing_signal_health_metrics",
+            metrics,
+        )
+    if tier_checks.get("signal_rate_required"):
+        add_check(
+            "signal_health_signal_rate",
+            _first_number(metrics.get("signal_rate")) is not None,
+            "missing_signal_health_metrics",
+            metrics,
+        )
+    if tier_checks.get("drift_metrics_required"):
+        add_check(
+            "signal_health_drift_metrics",
+            _first_number(drift.get("psi")) is not None
+            or _first_number(drift.get("kl_divergence")) is not None
+            or bool(_dict_at(drift, "deltas")),
+            "missing_signal_health_metrics",
+            drift,
+        )
+    if tier_checks.get("operational_metrics_required"):
+        add_check(
+            "signal_health_operational_metrics",
+            "feature_schema_mismatch_count" in operational
+            and "adapter_failure_count" in operational
+            and "rl_hold_rate" in operational,
+            "missing_signal_health_metrics",
+            operational,
+        )
+    if tier_checks.get("alerts_block_promotion"):
+        alerts = signal_health.get("alerts")
+        add_check(
+            "signal_health_no_alerts",
+            not alerts,
+            "signal_health_alerts_present",
+            alerts,
+        )
+
+
+def _evaluate_inference_reload_gates(
+    *,
+    bundle: dict[str, Any],
+    payload: dict[str, Any],
+    add_check: Any,
+) -> None:
+    """Evaluate DPU-073 inference reload/parity validation evidence."""
+
+    tier = bundle.get("gate_tiers", {}).get("inference_reload", {})
+    tier_checks = tier.get("checks", {}) if isinstance(tier, dict) else {}
+    if not tier_checks:
+        return
+
+    validation = _first_dict(
+        payload.get("inference_reload_validation"),
+        payload.get("reload_validation"),
+    )
+    checks = _dict_at(validation, "checks")
+    add_check(
+        "inference_reload_validation_required",
+        bool(validation),
+        "inference_reload_validation_missing",
+        validation,
+    )
+    if not validation:
+        return
+
+    if tier_checks.get("feature_alignment_required"):
+        add_check(
+            "inference_reload_feature_alignment",
+            checks.get("feature_name_alignment_passed") is True
+            and checks.get("feature_count_alignment_passed") is True,
+            "inference_feature_schema_mismatch",
+            checks,
+        )
+    if tier_checks.get("adapter_loading_required"):
+        add_check(
+            "inference_reload_adapter_loading",
+            checks.get("adapter_loading_passed") is True,
+            "tsfm_adapter_load_failure_without_tabular_fallback",
+            checks,
+        )
+    if tier_checks.get("roster_parity_required"):
+        add_check(
+            "inference_reload_roster_parity",
+            checks.get("model_roster_parity_passed") is True,
+            "model_roster_mismatch",
+            checks,
+        )
+    if tier_checks.get("observation_dimension_parity_required"):
+        add_check(
+            "inference_reload_observation_dimension_parity",
+            checks.get("observation_dimension_parity_passed") is True,
+            "inference_feature_schema_mismatch",
+            checks,
+        )
+    if tier_checks.get("fallback_behavior_required"):
+        add_check(
+            "inference_reload_fallback_behavior",
+            checks.get("fallback_behavior_passed") is True,
+            "tsfm_adapter_load_failure_without_tabular_fallback",
+            checks,
+        )
+    if tier_checks.get("latency_budget_required"):
+        add_check(
+            "inference_reload_latency_budget",
+            checks.get("latency_budget_passed") is True,
+            "tsfm_latency_budget_failure",
+            checks,
+        )
+    if tier_checks.get("composite_reload_required"):
+        add_check(
+            "inference_reload_composite_reload",
+            checks.get("composite_reload_passed") is True,
+            "inference_reload_failed",
+            checks,
+        )
+    if tier_checks.get("rollback_ready_required"):
+        add_check(
+            "inference_reload_rollback_ready",
+            checks.get("rollback_ready") is True,
+            "missing_rollback_target",
+            checks,
+        )
+    if tier_checks.get("prior_version_preserved_on_reload_failure"):
+        add_check(
+            "inference_reload_prior_version_preserved_on_failure",
+            checks.get("prior_version_preserved_on_reload_failure") is True,
+            "inference_reload_failed",
+            checks,
         )
 
 

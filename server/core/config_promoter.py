@@ -20,6 +20,10 @@ from server.core.development_gate_bundle import (
     evaluate_development_gate_bundle,
     load_gate_bundle,
 )
+from server.core.development_inference_validation import (
+    build_development_inference_validation,
+)
+from server.core.development_signal_health import build_development_signal_health
 from server.core.results_store import ResultsStore
 
 logger = logging.getLogger(__name__)
@@ -89,10 +93,18 @@ class ConfigPromoter:
             metrics_payload=metrics_payload,
             rollback_readiness=rollback_readiness,
         )
+        signal_health = build_development_signal_health(metrics_payload)
+        inference_reload_validation = build_development_inference_validation(
+            metrics_payload=metrics_payload,
+            rollback_readiness=rollback_readiness,
+            smoke_validation=smoke_validation,
+        )
         best_for_gate = self._best_iteration_with_preflight(
             best,
             rollback_readiness=rollback_readiness,
             smoke_validation=smoke_validation,
+            signal_health=signal_health,
+            inference_reload_validation=inference_reload_validation,
         )
         gate_bundle_evaluation = self._evaluate_gate_bundle(
             model_type, best_for_gate,
@@ -125,6 +137,8 @@ class ConfigPromoter:
             promotion_allowed=promotion_allowed,
             rollback_readiness=rollback_readiness,
             smoke_validation=smoke_validation,
+            signal_health=signal_health,
+            inference_reload_validation=inference_reload_validation,
         )
 
         return {
@@ -169,6 +183,22 @@ class ConfigPromoter:
             raise ValueError(
                 "Cannot promote: live production promotion is forbidden by "
                 "the development gate policy"
+            )
+        reload_validation = metadata.get("inference_reload_validation") or {}
+        reload_gate_required = any(
+            str(check.get("name", "")).startswith("inference_reload")
+            for check in gate_eval.get("checks", [])
+            if isinstance(check, dict)
+        )
+        if (
+            reload_gate_required
+            and reload_validation
+            and reload_validation.get("passed") is not True
+        ):
+            failed = ", ".join(reload_validation.get("failed_checks") or ["unknown"])
+            raise ValueError(
+                "Cannot promote: inference reload validation failed "
+                f"({failed})"
             )
 
         target_path = preview["target_path"]
@@ -433,6 +463,8 @@ class ConfigPromoter:
         promotion_allowed: bool,
         rollback_readiness: Dict[str, Any],
         smoke_validation: Dict[str, Any],
+        signal_health: Dict[str, Any],
+        inference_reload_validation: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Create the auditable development promotion decision artifact."""
         rollback_target = (
@@ -499,6 +531,12 @@ class ConfigPromoter:
                 "smoke_validation": self._check_statuses(
                     gate_bundle_evaluation, "smoke"
                 ),
+                "signal_health": self._check_statuses(
+                    gate_bundle_evaluation, "signal_health"
+                ),
+                "inference_reload": self._check_statuses(
+                    gate_bundle_evaluation, "inference_reload"
+                ),
             },
             "registry_metadata": self._registry_metadata(
                 best_iteration, metrics_payload
@@ -509,6 +547,8 @@ class ConfigPromoter:
             ),
             "rollback_readiness": dict(rollback_readiness),
             "smoke_validation": dict(smoke_validation),
+            "signal_health": dict(signal_health),
+            "inference_reload_validation": dict(inference_reload_validation),
             "tsfm_fallback_validation": self._tsfm_fallback_validation(
                 metrics_payload
             ),
@@ -782,10 +822,15 @@ class ConfigPromoter:
         *,
         rollback_readiness: Dict[str, Any],
         smoke_validation: Dict[str, Any],
+        signal_health: Dict[str, Any],
+        inference_reload_validation: Dict[str, Any],
     ) -> Dict[str, Any]:
         payload = self._best_iteration_payload(best_iteration)
         payload["rollback_readiness"] = rollback_readiness
         payload["smoke_validation"] = smoke_validation
+        payload["signal_health"] = signal_health
+        payload["development_signal_health"] = signal_health
+        payload["inference_reload_validation"] = inference_reload_validation
         if rollback_readiness.get("rollback_target"):
             payload["rollback_target"] = rollback_readiness["rollback_target"]
         enriched = dict(best_iteration)
