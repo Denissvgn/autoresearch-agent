@@ -25,6 +25,10 @@ from server.core.experiment_parser import (
     parse_iteration_marker,
     parse_prepare_output,
 )
+from server.core.iteration_snapshot import (
+    build_iteration_attempt_snapshot,
+    write_iteration_attempt_snapshot,
+)
 from server.core.log_writer import AgentLogWriter
 from server.core.results_store import ResultsStore
 from server.ws.events import broadcaster
@@ -1121,7 +1125,14 @@ class AgentOrchestrator:
                         _pending_snapshot: Optional[str] = None
                         if (
                             block.name == "bash"
-                            and "prepare.py" in str(block.input.get("command", ""))
+                            and any(
+                                token in str(block.input.get("command", ""))
+                                for token in (
+                                    "prepare.py",
+                                    "run_phase1c_",
+                                    "run_phase1b_",
+                                )
+                            )
                         ):
                             try:
                                 _pending_snapshot = Path(
@@ -1154,6 +1165,7 @@ class AgentOrchestrator:
                             "tool_use_id": block.id,
                             "content": tool_result,
                         })
+                        _cmd_str = str(block.input.get("command", ""))
 
                         # Universal detection: scan bash output for
                         # prepare.py --- delimited metrics blocks.
@@ -1185,6 +1197,9 @@ class AgentOrchestrator:
                                 await self._record_iteration(
                                     research_id, iteration_count,
                                     hpo_marker, total_cost,
+                                    workspace=workspace,
+                                    turn=turn,
+                                    command=_cmd_str,
                                 )
                                 turn_recorded_iteration = True
                                 logger.info(
@@ -1230,6 +1245,9 @@ class AgentOrchestrator:
                                 await self._record_iteration(
                                     research_id, iteration_count,
                                     marker_from_tool, total_cost,
+                                    workspace=workspace,
+                                    turn=turn,
+                                    command=_cmd_str,
                                 )
                                 turn_recorded_iteration = True
                                 logger.info(
@@ -1243,9 +1261,9 @@ class AgentOrchestrator:
                                 )
                             elif (
                                 metrics.status in (
-                                    "crash", "timeout", "failed", "error"
+                                    "crash", "timeout", "failed", "error",
+                                    "pruned",
                                 )
-                                and metrics.primary_metric is not None
                             ):
                                 # Record failed attempts as first-class discard
                                 # iterations so the full audit trail is in DB
@@ -1263,6 +1281,9 @@ class AgentOrchestrator:
                                 await self._record_iteration(
                                     research_id, iteration_count,
                                     crash_marker, total_cost,
+                                    workspace=workspace,
+                                    turn=turn,
+                                    command=_cmd_str,
                                 )
                                 turn_recorded_iteration = True
                                 logger.info(
@@ -1278,7 +1299,6 @@ class AgentOrchestrator:
                         # the agent runs a training script directly (e.g.
                         # run_phase1c_direction.py) to handle cases where
                         # prepare.py was bypassed.
-                        _cmd_str = str(block.input.get("command", ""))
                         if (
                             block.name == "bash"
                             and not turn_recorded_iteration
@@ -1312,6 +1332,9 @@ class AgentOrchestrator:
                                     await self._record_iteration(
                                         research_id, iteration_count,
                                         marker_from_file, total_cost,
+                                        workspace=workspace,
+                                        turn=turn,
+                                        command=_cmd_str,
                                     )
                                     turn_recorded_iteration = True
                                     logger.info(
@@ -1323,6 +1346,75 @@ class AgentOrchestrator:
                                         metrics.primary_metric,
                                         metrics.all_gates_passed,
                                     )
+                                elif metrics.status in (
+                                    "crash", "timeout", "failed", "error",
+                                    "pruned",
+                                ):
+                                    iteration_count += 1
+                                    crash_marker = metrics.to_dict()
+                                    crash_marker["decision"] = "discard"
+                                    crash_marker["config_snapshot"] = _pending_snapshot
+                                    crash_marker["description"] = (
+                                        f"Failed ({metrics.status}) — "
+                                        f"auto-detected from marker file "
+                                        f"(turn {turn})"
+                                    )
+                                    await self._record_iteration(
+                                        research_id, iteration_count,
+                                        crash_marker, total_cost,
+                                        workspace=workspace,
+                                        turn=turn,
+                                        command=_cmd_str,
+                                    )
+                                    turn_recorded_iteration = True
+                                    logger.info(
+                                        "Research %s turn %d: recorded failed "
+                                        "attempt %d (%s) from marker file",
+                                        research_id, turn, iteration_count,
+                                        metrics.status,
+                                    )
+
+                        if (
+                            block.name == "bash"
+                            and not turn_recorded_iteration
+                            and (
+                                "prepare.py" in _cmd_str
+                                or "run_phase1c_" in _cmd_str
+                                or "run_phase1b_" in _cmd_str
+                            )
+                        ):
+                            failed_status = self._infer_failed_attempt_status(
+                                tool_result
+                            )
+                            if failed_status:
+                                iteration_count += 1
+                                failed_marker = {
+                                    "status": failed_status,
+                                    "primary_metric": None,
+                                    "metric_name": None,
+                                    "all_gates_passed": False,
+                                    "decision": "discard",
+                                    "description": (
+                                        f"Failed ({failed_status}) — "
+                                        f"server-detected training command "
+                                        f"failure (turn {turn})"
+                                    ),
+                                    "config_snapshot": _pending_snapshot,
+                                }
+                                await self._record_iteration(
+                                    research_id, iteration_count,
+                                    failed_marker, total_cost,
+                                    workspace=workspace,
+                                    turn=turn,
+                                    command=_cmd_str,
+                                )
+                                turn_recorded_iteration = True
+                                logger.info(
+                                    "Research %s turn %d: recorded failed "
+                                    "attempt %d (%s) from command status",
+                                    research_id, turn, iteration_count,
+                                    failed_status,
+                                )
 
                 # Secondary: check for explicit ITERATION_RESULT: markers
                 # in agent text. If the model emits one, it may carry richer
@@ -1348,6 +1440,8 @@ class AgentOrchestrator:
                             await self._record_iteration(
                                 research_id, iteration_count, marker,
                                 total_cost,
+                                workspace=workspace,
+                                turn=turn,
                             )
 
                 # Check if we've hit max iterations
@@ -1568,14 +1662,50 @@ class AgentOrchestrator:
         iteration: int,
         marker: Dict[str, Any],
         cumulative_cost: float,
+        *,
+        workspace: Optional[str] = None,
+        turn: Optional[int] = None,
+        command: Optional[str] = None,
     ) -> None:
         """Record an iteration and broadcast the event."""
+        marker = dict(marker)
         primary_metric = marker.get("primary_metric")
         all_gates = marker.get("all_gates_passed", False)
         decision = marker.get("decision", "unknown")
         description = marker.get("description", "")
         metric_name = marker.get("metric_name", "")
         training_time = marker.get("training_time_s")
+
+        attempt_snapshot = None
+        attempt_snapshot_path = None
+        attempt_snapshot_hash = None
+        if workspace and command:
+            attempt_snapshot = build_iteration_attempt_snapshot(
+                research_id=research_id,
+                iteration=iteration,
+                turn=turn if turn is not None else -1,
+                command=command,
+                config_snapshot=marker.get("config_snapshot"),
+                workspace=workspace,
+                marker=marker,
+            )
+            attempt_snapshot_hash = attempt_snapshot.get("snapshot_hash")
+            try:
+                attempt_snapshot_path = write_iteration_attempt_snapshot(
+                    workspace=workspace,
+                    snapshot=attempt_snapshot,
+                )
+            except OSError as exc:
+                logger.warning(
+                    "Research %s iteration %d: could not write attempt "
+                    "snapshot: %s",
+                    research_id,
+                    iteration,
+                    exc,
+                )
+            marker["attempt_snapshot"] = attempt_snapshot
+            marker["attempt_snapshot_path"] = attempt_snapshot_path
+            marker["attempt_snapshot_hash"] = attempt_snapshot_hash
 
         await self._store.add_iteration(
             research_id=research_id,
@@ -1589,6 +1719,13 @@ class AgentOrchestrator:
             metrics_json=json.dumps(marker),
             training_time_s=training_time,
             mlflow_run_id=marker.get("mlflow_run_id"),
+            attempt_snapshot_json=(
+                json.dumps(attempt_snapshot, sort_keys=True)
+                if attempt_snapshot is not None
+                else None
+            ),
+            attempt_snapshot_path=attempt_snapshot_path,
+            attempt_snapshot_hash=attempt_snapshot_hash,
         )
 
         # ML-59: If this is an HPO study result, also persist to hpo_studies
@@ -1616,15 +1753,32 @@ class AgentOrchestrator:
             "training_time_s": training_time,
             "cumulative_api_cost_usd": round(cumulative_cost, 4),
             "search_phase": marker.get("search_phase"),
+            "attempt_snapshot_hash": attempt_snapshot_hash,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         await broadcaster.broadcast(event)
+        metric_display = (
+            f"{primary_metric:.4f}"
+            if isinstance(primary_metric, (float, int))
+            else "None"
+        )
         logger.info(
-            "Research %s iteration %d: metric=%.4f gates=%s decision=%s — %s",
+            "Research %s iteration %d: metric=%s gates=%s decision=%s — %s",
             research_id,
             iteration,
-            primary_metric or 0.0,
+            metric_display,
             all_gates,
             decision,
             description,
         )
+
+    @staticmethod
+    def _infer_failed_attempt_status(tool_result: str) -> Optional[str]:
+        lowered = tool_result.lower()
+        if "command timed out" in lowered:
+            return "timeout"
+        if "trialpruned" in lowered or "trial pruned" in lowered:
+            return "pruned"
+        if "[exit code:" in lowered:
+            return "failed"
+        return None

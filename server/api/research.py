@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import glob
 import os
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import yaml
 from fastapi import APIRouter, HTTPException
@@ -80,6 +80,13 @@ class StartResearchRequest(BaseModel):
         default=None,
         description="Per-phase iteration budget for pipeline mode: {direction: N, volatility: N, rl: N}",
     )
+    manifest: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Optional research-session manifest overrides. Immutable identity "
+            "fields must still match the server-generated session."
+        ),
+    )
 
 
 # ------------------------------------------------------------------
@@ -125,6 +132,7 @@ async def start_research(req: StartResearchRequest):
             enable_hpo=req.enable_hpo,
             hpo_trials=req.hpo_trials,
             hpo_timesteps=req.hpo_timesteps,
+            manifest=req.manifest,
         )
         return session
     except RuntimeError as e:
@@ -360,4 +368,20 @@ async def system_status():
         "default_quick_mode": settings.default_quick_mode,
         "max_iterations": settings.max_iterations,
         "max_budget_usd": settings.max_budget_usd,
+        "service_urls": {
+            "data_ingest": settings.data_ingest_url,
+            "ensemble_trainer": settings.ensemble_trainer_url,
+            "feature_service": settings.feature_service_url,
+            "rl_trainer": settings.rl_trainer_url,
+            "mlflow_tracking": settings.mlflow_tracking_uri,
+            "mlflow_service": settings.mlflow_service_url,
+            "mlflow_external": settings.mlflow_external_url,
+            "admin_service": settings.admin_service_url,
+            "promotion_api": settings.promotion_service_url,
+        },
+        "persistence": {
+            "db_path": settings.db_path,
+            "runs_dir": settings.runs_dir,
+            "host_configs_path": settings.host_configs_path,
+        },
     }

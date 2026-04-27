@@ -10,11 +10,12 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from server.config import settings
 from server.core.orchestrator import AgentOrchestrator, ResearchConfig
 from server.core.pipeline_controller import PipelineConfig, PipelineController
+from server.core.research_manifest import build_research_manifest, manifest_pretty_json
 from server.core.results_store import ResultsStore
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ class SessionManager:
         enable_hpo: Optional[bool] = None,
         hpo_trials: Optional[int] = None,
         hpo_timesteps: Optional[int] = None,
+        manifest: Optional[Dict[str, Any]] = None,
     ) -> Dict:
         """Start a new research session. Returns the created session dict."""
         if self.active_count >= settings.max_concurrent_sessions:
@@ -109,6 +111,15 @@ class SessionManager:
             hpo_timesteps=hpo_timesteps or 50000,
         )
 
+        manifest_json, manifest_hash = self._build_manifest_payload(
+            config, overrides=manifest,
+        )
+
+        # Archive any stale workspace from a previous session before writing
+        # the new manifest so DB session boundaries match artifact boundaries.
+        await self._archive_stale_workspace(workspace_path)
+        manifest_path = await self._write_manifest(config, manifest_json)
+
         # Persist session to DB
         session_dict = await self._store.create_session(
             session_id=research_id,
@@ -121,13 +132,10 @@ class SessionManager:
             max_budget_usd=config.max_budget_usd,
             focus_hint=focus_hint,
             workspace_path=workspace_path,
+            manifest_json=manifest_json,
+            manifest_path=manifest_path,
+            manifest_hash=manifest_hash,
         )
-
-        # Archive any stale workspace from a previous session before spawning
-        # so that DB session boundaries match artifact boundaries.  Prevents
-        # old best_train.yaml, results.json, and training.log from bleeding
-        # into a fresh research run.
-        await self._archive_stale_workspace(workspace_path)
 
         # Spawn background task
         task = asyncio.create_task(
@@ -215,6 +223,50 @@ class SessionManager:
         await asyncio.to_thread(shutil.rmtree, str(ws), ignore_errors=True)
         logger.warning("Removed stale workspace %s (could not archive)", ws)
 
+    def _build_manifest_payload(
+        self,
+        config: ResearchConfig,
+        *,
+        overrides: Optional[Dict[str, Any]] = None,
+    ) -> tuple[str, str]:
+        manifest = build_research_manifest(
+            research_id=config.id,
+            instrument=config.instrument,
+            timeframe=config.timeframe,
+            model_type=config.model_type,
+            tag=config.tag,
+            quick_mode=config.quick_mode,
+            max_iterations=config.max_iterations,
+            max_budget_usd=config.max_budget_usd,
+            timeout_s=config.timeout_s,
+            focus_hint=config.focus_hint,
+            trading_mode=config.trading_mode,
+            agent_strategy=config.agent_strategy,
+            initial_balance=config.initial_balance,
+            enable_hpo=config.enable_hpo,
+            hpo_trials=config.hpo_trials,
+            hpo_timesteps=config.hpo_timesteps,
+            overrides=overrides,
+        )
+        return manifest_pretty_json(manifest), manifest.manifest_hash or ""
+
+    async def _write_manifest(
+        self,
+        config: ResearchConfig,
+        manifest_json: str,
+    ) -> str:
+        filename = (
+            "research_manifest.json"
+            if not config.resumed_from
+            else f"research_manifest_{config.id}.json"
+        )
+        path = Path(config.workspace_path) / filename
+        await asyncio.to_thread(path.parent.mkdir, parents=True, exist_ok=True)
+        await asyncio.to_thread(
+            path.write_text, manifest_json, encoding="utf-8",
+        )
+        return str(path)
+
     async def continue_session(
         self,
         parent_id: str,
@@ -288,6 +340,12 @@ class SessionManager:
             resumed_from=parent_id,
         )
 
+        manifest_overrides = {"runtime": {"resumed_from": parent_id}}
+        manifest_json, manifest_hash = self._build_manifest_payload(
+            config, overrides=manifest_overrides,
+        )
+        manifest_path = await self._write_manifest(config, manifest_json)
+
         # Persist session to DB with resumed_from link
         session_dict = await self._store.create_session(
             session_id=research_id,
@@ -300,6 +358,9 @@ class SessionManager:
             max_budget_usd=config.max_budget_usd,
             focus_hint=config.focus_hint,
             workspace_path=workspace_path,
+            manifest_json=manifest_json,
+            manifest_path=manifest_path,
+            manifest_hash=manifest_hash,
         )
         # Set resumed_from (not in create_session signature)
         await self._store.update_session(research_id, resumed_from=parent_id)
@@ -485,6 +546,14 @@ class SessionManager:
             pipeline_id=pipeline_id,
         )
 
+        manifest_overrides = {"runtime": {"pipeline_id": pipeline_id}}
+        manifest_json, manifest_hash = self._build_manifest_payload(
+            config, overrides=manifest_overrides,
+        )
+
+        await self._archive_stale_workspace(workspace_path)
+        manifest_path = await self._write_manifest(config, manifest_json)
+
         session_dict = await self._store.create_session(
             session_id=research_id,
             instrument=instrument,
@@ -496,14 +565,15 @@ class SessionManager:
             max_budget_usd=max_budget_usd,
             focus_hint=focus_hint,
             workspace_path=workspace_path,
+            manifest_json=manifest_json,
+            manifest_path=manifest_path,
+            manifest_hash=manifest_hash,
         )
         # Link to pipeline
         if pipeline_id:
             await self._store.update_session(
                 research_id, pipeline_id=pipeline_id,
             )
-
-        await self._archive_stale_workspace(workspace_path)
 
         # Spawn and track — the pipeline controller will wait for completion
         task = asyncio.create_task(

@@ -26,6 +26,9 @@ CREATE TABLE IF NOT EXISTS research_sessions (
     max_budget_usd REAL DEFAULT 10.0,
     focus_hint TEXT,
     workspace_path TEXT NOT NULL,
+    manifest_json TEXT,
+    manifest_path TEXT,
+    manifest_hash TEXT,
     started_at TEXT NOT NULL,
     completed_at TEXT,
     total_api_cost_usd REAL DEFAULT 0.0,
@@ -45,6 +48,9 @@ CREATE TABLE IF NOT EXISTS iterations (
     description TEXT,
     config_snapshot TEXT,
     metrics_json TEXT,
+    attempt_snapshot_json TEXT,
+    attempt_snapshot_path TEXT,
+    attempt_snapshot_hash TEXT,
     training_time_s REAL,
     api_cost_usd REAL DEFAULT 0.0,
     created_at TEXT NOT NULL,
@@ -171,6 +177,44 @@ class ResultsStore:
                 )
             except Exception:
                 pass
+            # DPU-081: immutable research-session manifest
+            try:
+                await db.execute(
+                    "ALTER TABLE research_sessions ADD COLUMN manifest_json TEXT"
+                )
+            except Exception:
+                pass
+            try:
+                await db.execute(
+                    "ALTER TABLE research_sessions ADD COLUMN manifest_path TEXT"
+                )
+            except Exception:
+                pass
+            try:
+                await db.execute(
+                    "ALTER TABLE research_sessions ADD COLUMN manifest_hash TEXT"
+                )
+            except Exception:
+                pass
+            # DPU-082: server-owned per-attempt snapshots
+            try:
+                await db.execute(
+                    "ALTER TABLE iterations ADD COLUMN attempt_snapshot_json TEXT"
+                )
+            except Exception:
+                pass
+            try:
+                await db.execute(
+                    "ALTER TABLE iterations ADD COLUMN attempt_snapshot_path TEXT"
+                )
+            except Exception:
+                pass
+            try:
+                await db.execute(
+                    "ALTER TABLE iterations ADD COLUMN attempt_snapshot_hash TEXT"
+                )
+            except Exception:
+                pass
             # DPU-070: versioned development-promotion decision metadata
             try:
                 await db.execute(
@@ -230,6 +274,9 @@ class ResultsStore:
         max_budget_usd: float,
         focus_hint: Optional[str],
         workspace_path: str,
+        manifest_json: Optional[str] = None,
+        manifest_path: Optional[str] = None,
+        manifest_hash: Optional[str] = None,
     ) -> Dict[str, Any]:
         skill_name = _MODEL_TO_SKILL[model_type]
         now = datetime.now(timezone.utc).isoformat()
@@ -238,12 +285,14 @@ class ResultsStore:
                 """INSERT INTO research_sessions
                    (id, instrument, timeframe, model_type, tag, skill_name,
                     status, quick_mode, max_iterations, max_budget_usd,
-                    focus_hint, workspace_path, started_at)
-                   VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?, ?, ?)""",
+                    focus_hint, workspace_path, manifest_json, manifest_path,
+                    manifest_hash, started_at)
+                   VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     session_id, instrument, timeframe, model_type, tag,
                     skill_name, int(quick_mode), max_iterations,
-                    max_budget_usd, focus_hint, workspace_path, now,
+                    max_budget_usd, focus_hint, workspace_path,
+                    manifest_json, manifest_path, manifest_hash, now,
                 ),
             )
             await db.commit()
@@ -332,21 +381,27 @@ class ResultsStore:
         training_time_s: Optional[float],
         api_cost_usd: float = 0.0,
         mlflow_run_id: Optional[str] = None,
+        attempt_snapshot_json: Optional[str] = None,
+        attempt_snapshot_path: Optional[str] = None,
+        attempt_snapshot_hash: Optional[str] = None,
     ) -> Dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
         async with aiosqlite.connect(self._db_path) as db:
             await db.execute(
                 """INSERT INTO iterations
                    (research_id, iteration, primary_metric, metric_name,
-                    all_gates_passed, decision, description, config_snapshot,
-                    metrics_json, training_time_s, api_cost_usd, created_at,
-                    mlflow_run_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   all_gates_passed, decision, description, config_snapshot,
+                    metrics_json, attempt_snapshot_json, attempt_snapshot_path,
+                    attempt_snapshot_hash, training_time_s, api_cost_usd,
+                    created_at, mlflow_run_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     research_id, iteration, primary_metric, metric_name,
                     int(all_gates_passed) if all_gates_passed is not None else None,
                     decision, description, config_snapshot, metrics_json,
-                    training_time_s, api_cost_usd, now, mlflow_run_id,
+                    attempt_snapshot_json, attempt_snapshot_path,
+                    attempt_snapshot_hash, training_time_s, api_cost_usd,
+                    now, mlflow_run_id,
                 ),
             )
             await db.commit()
@@ -372,6 +427,8 @@ class ResultsStore:
             "all_gates_passed": all_gates_passed,
             "decision": decision,
             "description": description,
+            "attempt_snapshot_path": attempt_snapshot_path,
+            "attempt_snapshot_hash": attempt_snapshot_hash,
             "created_at": now,
         }
 
@@ -410,6 +467,14 @@ class ResultsStore:
             fields["config_snapshot"] = marker["config_snapshot"]
         if "training_time_s" in marker:
             fields["training_time_s"] = marker["training_time_s"]
+        if "attempt_snapshot" in marker:
+            fields["attempt_snapshot_json"] = json.dumps(
+                marker["attempt_snapshot"], sort_keys=True,
+            )
+        if "attempt_snapshot_path" in marker:
+            fields["attempt_snapshot_path"] = marker["attempt_snapshot_path"]
+        if "attempt_snapshot_hash" in marker:
+            fields["attempt_snapshot_hash"] = marker["attempt_snapshot_hash"]
         if marker:
             fields["metrics_json"] = json.dumps(marker)
 

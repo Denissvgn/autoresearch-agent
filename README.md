@@ -12,11 +12,19 @@ UI (React) → FastAPI backend → LLM agent loop (Anthropic SDK)
                               read_file / write_file → edit configs
                                   ↓
                             Iteration auto-detected from stdout
+                            + server-owned attempt snapshots
                                   ↓
                             Results → SQLite + WebSocket → UI
 ```
 
 The agent gets 5 sandboxed tools (`bash`, `read_file`, `write_file`, `glob`, `grep`) and a directive prompt with exact commands. It runs `setup.py` to create a workspace, reads the tuning strategy from the model-specific SKILL.md, then loops: edit `train.yaml` → run `prepare.py` → check metrics → keep or revert. The orchestrator auto-detects completed iterations by parsing `prepare.py` stdout — no reliance on the LLM to report results.
+
+Each session now starts from an immutable `research_session_manifest.v1` written
+to the run workspace and persisted in SQLite. Each training attempt records an
+`autoresearch_iteration_attempt.v1` snapshot with the command/API request,
+config hash, environment metadata, and artifact/provenance hashes when present;
+failed, timed-out, and pruned attempts remain visible even when no metric is
+produced.
 
 ## Quick Start
 
@@ -41,8 +49,8 @@ Required variables:
 
 ```bash
 # From project root:
-docker compose -f compose/autoresearch.yml build
-docker compose -f compose/autoresearch.yml up -d
+docker compose -f compose/base.yml -f compose/infra.yml -f compose/ml.yml -f compose/autoresearch.yml build autoresearch-agent
+docker compose -f compose/base.yml -f compose/infra.yml -f compose/ml.yml -f compose/autoresearch.yml up -d autoresearch-agent
 ```
 
 The service starts on **port 8030**. The ML platform services must already be running on the same Docker network (`traid-network`).
@@ -198,7 +206,23 @@ The agent calls these services over Docker DNS during training:
 | Ensemble Trainer | `ensemble-trainer:8000` | Walk-forward model training |
 | RL Trainer | `rl-trainer:8000` | PPO agent training |
 | MLflow | `mlflow:5000` | Experiment tracking |
+| MLflow Service | `mlflow-service:8000` | Promotion/composite API |
+| Admin Service | `admin-service:8000` | Admin API discovery/status |
 | MinIO | `minio:9000` | Model artifact storage |
+
+### Runtime State
+
+The compose stack persists autoresearch state across restarts:
+
+| Path | Volume/Mount | Purpose |
+|------|--------------|---------|
+| `/app/workspace/runs` | `autoresearch_runs` | Run workspaces, manifests, attempt snapshots, logs |
+| `/app/workspace/db` | `autoresearch_db` | SQLite research/iteration/promotion database |
+| `/host/configs` | `../configs` bind mount | Development config promotion target |
+
+`GET /api/status` exposes the Docker DNS service URLs, browser MLflow URL,
+and persistence paths currently used by the server. The same URL set is copied
+into each session manifest for reproducibility.
 
 ### Supported LLM Backends
 

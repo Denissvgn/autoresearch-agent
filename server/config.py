@@ -93,6 +93,14 @@ class Settings(BaseSettings):
     ensemble_trainer_url: str = Field(default="http://ensemble-trainer:8000")
     rl_trainer_url: str = Field(default="http://rl-trainer:8000")
     feature_service_url: str = Field(default="http://feature-service:8000")
+    admin_service_url: str = Field(default="http://admin-service:8000")
+    promotion_service_url: str = Field(
+        default="http://mlflow-service:8000",
+        description=(
+            "Service owning promotion/composite APIs. Defaults to mlflow-service "
+            "because autoresearch development promotion updates composites there."
+        ),
+    )
 
     # --- CORS ---
     cors_origins_raw: str = Field(default="*")

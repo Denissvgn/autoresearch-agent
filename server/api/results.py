@@ -84,6 +84,39 @@ def _enrich_iteration(row: Dict[str, Any], model_type: str) -> Dict[str, Any]:
             pass
     enriched["metrics"] = metrics
 
+    raw_snapshot = row.get("attempt_snapshot_json")
+    attempt_snapshot: Dict[str, Any] = {}
+    if raw_snapshot:
+        try:
+            parsed = (
+                json.loads(raw_snapshot)
+                if isinstance(raw_snapshot, str)
+                else raw_snapshot
+            )
+            attempt_snapshot = parsed if isinstance(parsed, dict) else {}
+        except (json.JSONDecodeError, TypeError):
+            attempt_snapshot = {}
+    if not attempt_snapshot and isinstance(metrics.get("attempt_snapshot"), dict):
+        attempt_snapshot = metrics["attempt_snapshot"]
+    enriched["attempt_snapshot"] = attempt_snapshot or None
+    enriched["attempt_snapshot_path"] = (
+        row.get("attempt_snapshot_path")
+        or metrics.get("attempt_snapshot_path")
+    )
+    enriched["attempt_snapshot_hash"] = (
+        row.get("attempt_snapshot_hash")
+        or metrics.get("attempt_snapshot_hash")
+        or attempt_snapshot.get("snapshot_hash")
+    )
+    enriched["config_snapshot_sha256"] = attempt_snapshot.get(
+        "config_snapshot_sha256"
+    )
+    enriched["artifact_hash"] = (
+        attempt_snapshot.get("artifact_hash")
+        or metrics.get("artifact_hash")
+        or metrics.get("model_artifact_hash")
+    )
+
     # Resolve mlflow_run_id: column first, then metrics_json
     run_id = row.get("mlflow_run_id") or metrics.get("mlflow_run_id") or ""
     enriched["mlflow_run_id"] = run_id

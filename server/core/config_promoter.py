@@ -64,6 +64,7 @@ class ConfigPromoter:
                 f"updated orchestrator to generate per-iteration snapshots."
             )
         best_yaml = config_snapshot
+        config_snapshot_sha256 = self._sha256_text(best_yaml)
 
         # Determine target path on host (ML-67: extract strategy+market from config)
         _strategy, _market = self._extract_strategy_market(best_yaml)
@@ -78,6 +79,12 @@ class ConfigPromoter:
             previous_yaml = Path(target_path).read_text(encoding="utf-8")
 
         metrics_payload = self._best_iteration_payload(best)
+        attempt_snapshot = self._attempt_snapshot_payload(best, metrics_payload)
+        artifact_hash = (
+            attempt_snapshot.get("artifact_hash")
+            or metrics_payload.get("artifact_hash")
+            or metrics_payload.get("model_artifact_hash")
+        )
         rollback_readiness = self._build_rollback_readiness(
             research_id=research_id,
             iteration=best["iteration"],
@@ -117,6 +124,14 @@ class ConfigPromoter:
             "source": "autoresearch.iterations",
             "research_id": research_id,
             "iteration": best["iteration"],
+            "iteration_row_id": best.get("id"),
+            "config_snapshot_sha256": config_snapshot_sha256,
+            "attempt_snapshot_hash": (
+                best.get("attempt_snapshot_hash")
+                or attempt_snapshot.get("snapshot_hash")
+            ),
+            "attempt_snapshot_path": best.get("attempt_snapshot_path"),
+            "artifact_hash": artifact_hash,
             "status": "eligible" if promotion_allowed else "blocked",
             "blockers": gate_bundle_evaluation.get("blockers", []),
             "inspectable": True,
@@ -149,11 +164,15 @@ class ConfigPromoter:
             "timeframe": timeframe,
             "target_path": target_path,
             "new_config": best_yaml,
+            "config_snapshot_sha256": config_snapshot_sha256,
             "current_config": previous_yaml,
             "best_metric": best["primary_metric"],
             "gates_passed": bool(best["all_gates_passed"]),
             "gate_bundle_evaluation": gate_bundle_evaluation,
             "candidate_pool_record": candidate_pool_record,
+            "best_candidate_ownership": development_promotion_metadata[
+                "best_candidate_ownership"
+            ],
             "development_promotion_metadata": development_promotion_metadata,
             "promotion_allowed": promotion_allowed,
         }
@@ -472,6 +491,34 @@ class ConfigPromoter:
             or metrics_payload.get("rollback_target")
             or metrics_payload.get("previous_development_version")
         )
+        attempt_snapshot = self._attempt_snapshot_payload(
+            best_iteration, metrics_payload
+        )
+        config_snapshot = best_iteration.get("config_snapshot") or ""
+        config_snapshot_sha256 = (
+            self._sha256_text(config_snapshot) if config_snapshot else None
+        )
+        best_candidate_ownership = {
+            "source": "autoresearch.iterations",
+            "research_id": research_id,
+            "iteration": iteration,
+            "iteration_row_id": best_iteration.get("id"),
+            "config_snapshot_sha256": config_snapshot_sha256,
+            "attempt_snapshot_hash": (
+                best_iteration.get("attempt_snapshot_hash")
+                or attempt_snapshot.get("snapshot_hash")
+            ),
+            "attempt_snapshot_path": best_iteration.get("attempt_snapshot_path"),
+            "artifact_hash": (
+                attempt_snapshot.get("artifact_hash")
+                or metrics_payload.get("artifact_hash")
+                or metrics_payload.get("model_artifact_hash")
+            ),
+            "mlflow_run_id": (
+                best_iteration.get("mlflow_run_id")
+                or metrics_payload.get("mlflow_run_id")
+            ),
+        }
         return {
             "schema_version": DEVELOPMENT_PROMOTION_METADATA_VERSION,
             "scope": DEVELOPMENT_PROMOTION_SCOPE,
@@ -499,6 +546,7 @@ class ConfigPromoter:
                 "checks": gate_bundle_evaluation.get("checks", []),
                 "waivers": gate_bundle_evaluation.get("waivers", []),
             },
+            "best_candidate_ownership": best_candidate_ownership,
             "candidate_pool_record": dict(candidate_pool_record),
             "decision_record": {
                 "model_quality": self._check_statuses(
@@ -579,6 +627,24 @@ class ConfigPromoter:
                 return {}
             return parsed if isinstance(parsed, dict) else {}
         return raw if isinstance(raw, dict) else {}
+
+    @staticmethod
+    def _attempt_snapshot_payload(
+        best_iteration: Dict[str, Any],
+        metrics_payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        raw = best_iteration.get("attempt_snapshot_json")
+        if isinstance(raw, str) and raw.strip():
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                parsed = {}
+            if isinstance(parsed, dict):
+                return parsed
+        if isinstance(raw, dict):
+            return raw
+        embedded = metrics_payload.get("attempt_snapshot")
+        return embedded if isinstance(embedded, dict) else {}
 
     @staticmethod
     def _live_production_requested(payload: Dict[str, Any]) -> bool:

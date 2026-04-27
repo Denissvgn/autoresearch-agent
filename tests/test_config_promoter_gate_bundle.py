@@ -390,15 +390,17 @@ async def test_preview_includes_blocking_gate_bundle_result(tmp_path, monkeypatc
     assert gate_eval["passed"] is False
     assert "weak_calibration" in gate_eval["blockers"]
     assert "missing_reliability_diagram" in gate_eval["blockers"]
-    assert preview["candidate_pool_record"] == {
-        "source": "autoresearch.iterations",
-        "research_id": "research_1",
-        "iteration": 3,
-        "status": "blocked",
-        "blockers": gate_eval["blockers"],
-        "inspectable": True,
-        "promotion_record_created": False,
-    }
+    pool = preview["candidate_pool_record"]
+    assert pool["source"] == "autoresearch.iterations"
+    assert pool["research_id"] == "research_1"
+    assert pool["iteration"] == 3
+    assert pool["status"] == "blocked"
+    assert pool["blockers"] == gate_eval["blockers"]
+    assert pool["inspectable"] is True
+    assert pool["promotion_record_created"] is False
+    assert pool["config_snapshot_sha256"] == ConfigPromoter._sha256_text(
+        "agent_strategy: BALA\n"
+    )
 
 
 @pytest.mark.asyncio
@@ -596,6 +598,14 @@ async def test_confirm_persists_development_metadata_with_results_store(
         focus_hint=None,
         workspace_path=str(workspace),
     )
+    attempt_snapshot = {
+        "schema_version": "autoresearch_iteration_attempt.v1",
+        "snapshot_hash": "attempt-sha-3",
+        "artifact_hash": "artifact-sha-3",
+        "config_snapshot_sha256": ConfigPromoter._sha256_text(
+            "agent_strategy: BALA\n"
+        ),
+    }
     await store.add_iteration(
         research_id="research_1",
         iteration=3,
@@ -607,6 +617,11 @@ async def test_confirm_persists_development_metadata_with_results_store(
         config_snapshot="agent_strategy: BALA\n",
         metrics_json=json.dumps(_passing_metrics()),
         training_time_s=1.0,
+        attempt_snapshot_json=json.dumps(attempt_snapshot),
+        attempt_snapshot_path=str(
+            workspace / "server_snapshots" / "iteration_0003_attempt.json"
+        ),
+        attempt_snapshot_hash="attempt-sha-3",
     )
 
     result = await ConfigPromoter(store).confirm("research_1")
@@ -619,6 +634,14 @@ async def test_confirm_persists_development_metadata_with_results_store(
         "development_promotion_metadata.v1"
     )
     assert promotions[0]["promotion_metadata"]["gate_bundle"]["passed"] is True
+    ownership = promotions[0]["promotion_metadata"]["best_candidate_ownership"]
+    assert ownership["source"] == "autoresearch.iterations"
+    assert ownership["iteration_row_id"] == 1
+    assert ownership["config_snapshot_sha256"] == ConfigPromoter._sha256_text(
+        "agent_strategy: BALA\n"
+    )
+    assert ownership["attempt_snapshot_hash"] == "attempt-sha-3"
+    assert ownership["artifact_hash"] == "artifact-sha-3"
 
 
 @pytest.mark.asyncio
