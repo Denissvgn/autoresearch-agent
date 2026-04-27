@@ -29,6 +29,9 @@ CREATE TABLE IF NOT EXISTS research_sessions (
     manifest_json TEXT,
     manifest_path TEXT,
     manifest_hash TEXT,
+    current_phase TEXT,
+    next_action TEXT,
+    phase_state_json TEXT,
     started_at TEXT NOT NULL,
     completed_at TEXT,
     total_api_cost_usd REAL DEFAULT 0.0,
@@ -51,6 +54,7 @@ CREATE TABLE IF NOT EXISTS iterations (
     attempt_snapshot_json TEXT,
     attempt_snapshot_path TEXT,
     attempt_snapshot_hash TEXT,
+    consistency_report_json TEXT,
     training_time_s REAL,
     api_cost_usd REAL DEFAULT 0.0,
     created_at TEXT NOT NULL,
@@ -80,11 +84,17 @@ CREATE TABLE IF NOT EXISTS hpo_studies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     research_id TEXT NOT NULL REFERENCES research_sessions(id),
     iteration INTEGER NOT NULL,
+    study_id TEXT,
     n_trials INTEGER NOT NULL DEFAULT 0,
+    max_trials INTEGER,
     completed_trials INTEGER NOT NULL DEFAULT 0,
     best_composite REAL,
     training_time_s REAL,
     top_trials_json TEXT,
+    search_space_json TEXT,
+    budget_json TEXT,
+    timeout_s INTEGER,
+    quick_mode INTEGER DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'running',
     created_at TEXT NOT NULL
 );
@@ -196,6 +206,18 @@ class ResultsStore:
                 )
             except Exception:
                 pass
+            # DPU-084/DPU-087: operator-facing session phase state
+            for column in (
+                "current_phase TEXT",
+                "next_action TEXT",
+                "phase_state_json TEXT",
+            ):
+                try:
+                    await db.execute(
+                        f"ALTER TABLE research_sessions ADD COLUMN {column}"
+                    )
+                except Exception:
+                    pass
             # DPU-082: server-owned per-attempt snapshots
             try:
                 await db.execute(
@@ -215,6 +237,27 @@ class ResultsStore:
                 )
             except Exception:
                 pass
+            try:
+                await db.execute(
+                    "ALTER TABLE iterations ADD COLUMN consistency_report_json TEXT"
+                )
+            except Exception:
+                pass
+            # DPU-085: structured HPO plan/result metadata
+            for column in (
+                "study_id TEXT",
+                "max_trials INTEGER",
+                "search_space_json TEXT",
+                "budget_json TEXT",
+                "timeout_s INTEGER",
+                "quick_mode INTEGER DEFAULT 0",
+            ):
+                try:
+                    await db.execute(
+                        f"ALTER TABLE hpo_studies ADD COLUMN {column}"
+                    )
+                except Exception:
+                    pass
             # DPU-070: versioned development-promotion decision metadata
             try:
                 await db.execute(
@@ -384,6 +427,7 @@ class ResultsStore:
         attempt_snapshot_json: Optional[str] = None,
         attempt_snapshot_path: Optional[str] = None,
         attempt_snapshot_hash: Optional[str] = None,
+        consistency_report_json: Optional[str] = None,
     ) -> Dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
         async with aiosqlite.connect(self._db_path) as db:
@@ -392,16 +436,16 @@ class ResultsStore:
                    (research_id, iteration, primary_metric, metric_name,
                    all_gates_passed, decision, description, config_snapshot,
                     metrics_json, attempt_snapshot_json, attempt_snapshot_path,
-                    attempt_snapshot_hash, training_time_s, api_cost_usd,
-                    created_at, mlflow_run_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    attempt_snapshot_hash, consistency_report_json,
+                    training_time_s, api_cost_usd, created_at, mlflow_run_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     research_id, iteration, primary_metric, metric_name,
                     int(all_gates_passed) if all_gates_passed is not None else None,
                     decision, description, config_snapshot, metrics_json,
                     attempt_snapshot_json, attempt_snapshot_path,
-                    attempt_snapshot_hash, training_time_s, api_cost_usd,
-                    now, mlflow_run_id,
+                    attempt_snapshot_hash, consistency_report_json,
+                    training_time_s, api_cost_usd, now, mlflow_run_id,
                 ),
             )
             await db.commit()
@@ -429,6 +473,7 @@ class ResultsStore:
             "description": description,
             "attempt_snapshot_path": attempt_snapshot_path,
             "attempt_snapshot_hash": attempt_snapshot_hash,
+            "consistency_report_json": consistency_report_json,
             "created_at": now,
         }
 
@@ -475,6 +520,12 @@ class ResultsStore:
             fields["attempt_snapshot_path"] = marker["attempt_snapshot_path"]
         if "attempt_snapshot_hash" in marker:
             fields["attempt_snapshot_hash"] = marker["attempt_snapshot_hash"]
+        if "consistency_report" in marker:
+            fields["consistency_report_json"] = json.dumps(
+                marker["consistency_report"], sort_keys=True,
+            )
+        if "consistency_report_json" in marker:
+            fields["consistency_report_json"] = marker["consistency_report_json"]
         if marker:
             fields["metrics_json"] = json.dumps(marker)
 
@@ -533,19 +584,27 @@ class ResultsStore:
         training_time_s: Optional[float],
         top_trials_json: Optional[str],
         status: str = "completed",
+        study_id: Optional[str] = None,
+        max_trials: Optional[int] = None,
+        search_space_json: Optional[str] = None,
+        budget_json: Optional[str] = None,
+        timeout_s: Optional[int] = None,
+        quick_mode: bool = False,
     ) -> Dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
         async with aiosqlite.connect(self._db_path) as db:
             cursor = await db.execute(
                 """INSERT INTO hpo_studies
-                   (research_id, iteration, n_trials, completed_trials,
-                    best_composite, training_time_s, top_trials_json,
-                    status, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   (research_id, iteration, n_trials, study_id, max_trials,
+                    completed_trials, best_composite, training_time_s,
+                    top_trials_json, search_space_json, budget_json, timeout_s,
+                    quick_mode, status, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    research_id, iteration, n_trials, completed_trials,
-                    best_composite, training_time_s, top_trials_json,
-                    status, now,
+                    research_id, iteration, n_trials, study_id, max_trials,
+                    completed_trials, best_composite, training_time_s,
+                    top_trials_json, search_space_json, budget_json, timeout_s,
+                    int(quick_mode), status, now,
                 ),
             )
             await db.commit()
@@ -554,11 +613,42 @@ class ResultsStore:
                 "research_id": research_id,
                 "iteration": iteration,
                 "n_trials": n_trials,
+                "study_id": study_id,
+                "max_trials": max_trials,
                 "completed_trials": completed_trials,
                 "best_composite": best_composite,
                 "status": status,
                 "created_at": now,
             }
+
+    async def record_hpo_study_plan(
+        self,
+        *,
+        research_id: str,
+        study_id: str,
+        max_trials: int,
+        search_space_json: str,
+        budget_json: str,
+        timeout_s: int,
+        quick_mode: bool,
+    ) -> Dict[str, Any]:
+        """Persist a planned structured HPO study before training starts."""
+        return await self.add_hpo_study(
+            research_id=research_id,
+            iteration=0,
+            n_trials=max_trials,
+            completed_trials=0,
+            best_composite=None,
+            training_time_s=None,
+            top_trials_json=None,
+            status="planned" if max_trials else "disabled",
+            study_id=study_id,
+            max_trials=max_trials,
+            search_space_json=search_space_json,
+            budget_json=budget_json,
+            timeout_s=timeout_s,
+            quick_mode=quick_mode,
+        )
 
     async def get_hpo_studies(
         self, research_id: str,

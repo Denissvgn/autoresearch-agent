@@ -17,6 +17,7 @@ from server.core.orchestrator import AgentOrchestrator, ResearchConfig
 from server.core.pipeline_controller import PipelineConfig, PipelineController
 from server.core.research_manifest import build_research_manifest, manifest_pretty_json
 from server.core.results_store import ResultsStore
+from server.core.structured_hpo import build_structured_hpo_plan, hpo_plan_json
 
 logger = logging.getLogger(__name__)
 
@@ -111,8 +112,9 @@ class SessionManager:
             hpo_timesteps=hpo_timesteps or 50000,
         )
 
+        hpo_plan = self._build_hpo_plan(config)
         manifest_json, manifest_hash = self._build_manifest_payload(
-            config, overrides=manifest,
+            config, overrides=self._merge_manifest_overrides(manifest, hpo_plan),
         )
 
         # Archive any stale workspace from a previous session before writing
@@ -136,6 +138,7 @@ class SessionManager:
             manifest_path=manifest_path,
             manifest_hash=manifest_hash,
         )
+        await self._record_hpo_plan(config, hpo_plan)
 
         # Spawn background task
         task = asyncio.create_task(
@@ -250,6 +253,47 @@ class SessionManager:
         )
         return manifest_pretty_json(manifest), manifest.manifest_hash or ""
 
+    def _build_hpo_plan(self, config: ResearchConfig) -> Dict[str, Any]:
+        return build_structured_hpo_plan(
+            research_id=config.id,
+            model_type=config.model_type,
+            quick_mode=config.quick_mode,
+            max_iterations=config.max_iterations,
+            max_budget_usd=config.max_budget_usd,
+            timeout_s=config.timeout_s,
+            enable_hpo=config.enable_hpo,
+            hpo_trials=config.hpo_trials,
+            hpo_timesteps=config.hpo_timesteps,
+        )
+
+    @staticmethod
+    def _merge_manifest_overrides(
+        overrides: Optional[Dict[str, Any]],
+        hpo_plan: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        merged = dict(overrides or {})
+        hpo = dict(merged.get("hpo") or {})
+        hpo.update(hpo_plan)
+        merged["hpo"] = hpo
+        return merged
+
+    async def _record_hpo_plan(
+        self,
+        config: ResearchConfig,
+        hpo_plan: Dict[str, Any],
+    ) -> None:
+        if not hpo_plan.get("enabled"):
+            return
+        await self._store.record_hpo_study_plan(
+            research_id=config.id,
+            study_id=hpo_plan["study_id"],
+            max_trials=int(hpo_plan.get("max_trials") or 0),
+            search_space_json=hpo_plan_json(hpo_plan.get("search_space") or {}),
+            budget_json=hpo_plan_json(hpo_plan.get("budget") or {}),
+            timeout_s=int(hpo_plan.get("timeout_s") or 0),
+            quick_mode=bool(hpo_plan.get("quick_mode")),
+        )
+
     async def _write_manifest(
         self,
         config: ResearchConfig,
@@ -340,9 +384,13 @@ class SessionManager:
             resumed_from=parent_id,
         )
 
+        hpo_plan = self._build_hpo_plan(config)
         manifest_overrides = {"runtime": {"resumed_from": parent_id}}
         manifest_json, manifest_hash = self._build_manifest_payload(
-            config, overrides=manifest_overrides,
+            config,
+            overrides=self._merge_manifest_overrides(
+                manifest_overrides, hpo_plan,
+            ),
         )
         manifest_path = await self._write_manifest(config, manifest_json)
 
@@ -364,6 +412,7 @@ class SessionManager:
         )
         # Set resumed_from (not in create_session signature)
         await self._store.update_session(research_id, resumed_from=parent_id)
+        await self._record_hpo_plan(config, hpo_plan)
 
         # ML-62: Do NOT archive the workspace — it IS the continuation state.
         # The workspace contains train.yaml, best_train.yaml, results from
@@ -546,9 +595,13 @@ class SessionManager:
             pipeline_id=pipeline_id,
         )
 
+        hpo_plan = self._build_hpo_plan(config)
         manifest_overrides = {"runtime": {"pipeline_id": pipeline_id}}
         manifest_json, manifest_hash = self._build_manifest_payload(
-            config, overrides=manifest_overrides,
+            config,
+            overrides=self._merge_manifest_overrides(
+                manifest_overrides, hpo_plan,
+            ),
         )
 
         await self._archive_stale_workspace(workspace_path)
@@ -574,6 +627,7 @@ class SessionManager:
             await self._store.update_session(
                 research_id, pipeline_id=pipeline_id,
             )
+        await self._record_hpo_plan(config, hpo_plan)
 
         # Spawn and track — the pipeline controller will wait for completion
         task = asyncio.create_task(

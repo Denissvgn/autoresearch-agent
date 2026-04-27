@@ -485,6 +485,27 @@ async def test_confirm_requires_development_gate_bundle_pass(tmp_path, monkeypat
 
 
 @pytest.mark.asyncio
+async def test_confirm_requires_cross_service_consistency(tmp_path, monkeypatch):
+    _write_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(
+        config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
+    )
+    metrics = _passing_metrics()
+    metrics.pop("artifact_uri")
+    metrics.pop("mlflow_run_id")
+    store = FakePromotionStore(_best_iteration(metrics))
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    assert preview["gate_bundle_evaluation"]["passed"] is True
+    assert preview["promotion_allowed"] is False
+    assert "missing_artifact_reference" in preview["consistency_report"]["blockers"]
+    with pytest.raises(ValueError, match="cross-service consistency failed"):
+        await ConfigPromoter(store).confirm("research_1")
+
+
+@pytest.mark.asyncio
 async def test_confirm_records_promotion_when_bundle_passes(tmp_path, monkeypatch):
     _write_gate_bundle(tmp_path)
     monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
@@ -517,6 +538,10 @@ async def test_confirm_records_promotion_when_bundle_passes(tmp_path, monkeypatc
     assert metadata["promotion_record_created"] is True
     assert metadata["gate_bundle"]["gate_bundle_id"] == "development_direction_prediction_v1"
     assert metadata["gate_bundle"]["passed"] is True
+    assert metadata["cross_service_consistency"]["schema_version"] == (
+        "cross_service_consistency_report.v1"
+    )
+    assert metadata["cross_service_consistency"]["passed"] is True
     assert metadata["registry_metadata"]["model_registry_name"] == "direction-model"
     assert metadata["composite_metadata"]["reload_supported"] is True
     assert store.promotions[0]["promotion_metadata"]["metadata_path"] == str(metadata_path)

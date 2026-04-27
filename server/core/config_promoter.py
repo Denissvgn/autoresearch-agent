@@ -16,6 +16,7 @@ import httpx
 import yaml
 
 from server.config import settings
+from server.core.consistency_validator import build_consistency_report
 from server.core.development_gate_bundle import (
     evaluate_development_gate_bundle,
     load_gate_bundle,
@@ -106,6 +107,24 @@ class ConfigPromoter:
             rollback_readiness=rollback_readiness,
             smoke_validation=smoke_validation,
         )
+        consistency_report = build_consistency_report(
+            research_id=research_id,
+            iteration=best["iteration"],
+            model_type=model_type,
+            config_snapshot=best_yaml,
+            metrics_payload={
+                **metrics_payload,
+                "all_gates_passed": bool(best.get("all_gates_passed")),
+            },
+            attempt_snapshot=attempt_snapshot,
+            preflight={
+                "rollback_readiness": rollback_readiness,
+                "smoke_validation": smoke_validation,
+                "signal_health": signal_health,
+                "inference_reload_validation": inference_reload_validation,
+                "rollback_target": rollback_readiness.get("rollback_target"),
+            },
+        )
         best_for_gate = self._best_iteration_with_preflight(
             best,
             rollback_readiness=rollback_readiness,
@@ -116,9 +135,10 @@ class ConfigPromoter:
         gate_bundle_evaluation = self._evaluate_gate_bundle(
             model_type, best_for_gate,
         )
-        promotion_allowed = bool(best["all_gates_passed"]) and gate_bundle_evaluation.get(
-            "passed",
-            False,
+        promotion_allowed = (
+            bool(best["all_gates_passed"])
+            and gate_bundle_evaluation.get("passed", False)
+            and consistency_report.get("passed", False)
         )
         candidate_pool_record = {
             "source": "autoresearch.iterations",
@@ -132,6 +152,8 @@ class ConfigPromoter:
             ),
             "attempt_snapshot_path": best.get("attempt_snapshot_path"),
             "artifact_hash": artifact_hash,
+            "consistency_passed": consistency_report.get("passed"),
+            "consistency_blockers": consistency_report.get("blockers", []),
             "status": "eligible" if promotion_allowed else "blocked",
             "blockers": gate_bundle_evaluation.get("blockers", []),
             "inspectable": True,
@@ -154,6 +176,7 @@ class ConfigPromoter:
             smoke_validation=smoke_validation,
             signal_health=signal_health,
             inference_reload_validation=inference_reload_validation,
+            consistency_report=consistency_report,
         )
 
         return {
@@ -173,6 +196,7 @@ class ConfigPromoter:
             "best_candidate_ownership": development_promotion_metadata[
                 "best_candidate_ownership"
             ],
+            "consistency_report": consistency_report,
             "development_promotion_metadata": development_promotion_metadata,
             "promotion_allowed": promotion_allowed,
         }
@@ -190,6 +214,15 @@ class ConfigPromoter:
             blockers = ", ".join(gate_eval.get("blockers") or ["unknown"])
             raise ValueError(
                 "Cannot promote: development gate bundle failed "
+                f"({blockers})"
+            )
+        consistency_report = preview.get("consistency_report") or {}
+        if not consistency_report.get("passed", False):
+            blockers = ", ".join(
+                consistency_report.get("blockers") or ["unknown"]
+            )
+            raise ValueError(
+                "Cannot promote: cross-service consistency failed "
                 f"({blockers})"
             )
         metadata = dict(preview.get("development_promotion_metadata") or {})
@@ -484,6 +517,7 @@ class ConfigPromoter:
         smoke_validation: Dict[str, Any],
         signal_health: Dict[str, Any],
         inference_reload_validation: Dict[str, Any],
+        consistency_report: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Create the auditable development promotion decision artifact."""
         rollback_target = (
@@ -548,6 +582,7 @@ class ConfigPromoter:
             },
             "best_candidate_ownership": best_candidate_ownership,
             "candidate_pool_record": dict(candidate_pool_record),
+            "cross_service_consistency": dict(consistency_report),
             "decision_record": {
                 "model_quality": self._check_statuses(
                     gate_bundle_evaluation,

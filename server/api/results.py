@@ -10,7 +10,12 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, Response
 
+from server.core.consistency_validator import (
+    build_consistency_report,
+    parse_consistency_report,
+)
 from server.core.log_writer import AgentLogWriter, _format_entry
+from server.core.research_state import build_research_state
 
 router = APIRouter(prefix="/api", tags=["results"])
 
@@ -116,6 +121,19 @@ def _enrich_iteration(row: Dict[str, Any], model_type: str) -> Dict[str, Any]:
         or metrics.get("artifact_hash")
         or metrics.get("model_artifact_hash")
     )
+    consistency_report = parse_consistency_report(
+        row.get("consistency_report_json")
+    )
+    if consistency_report is None:
+        consistency_report = build_consistency_report(
+            research_id=row.get("research_id", ""),
+            iteration=row.get("iteration", 0),
+            model_type=model_type,
+            config_snapshot=row.get("config_snapshot"),
+            metrics_payload=metrics,
+            attempt_snapshot=attempt_snapshot,
+        )
+    enriched["consistency_report"] = consistency_report
 
     # Resolve mlflow_run_id: column first, then metrics_json
     run_id = row.get("mlflow_run_id") or metrics.get("mlflow_run_id") or ""
@@ -345,17 +363,39 @@ async def get_hpo_studies(research_id: str):
     if not session:
         raise HTTPException(status_code=404, detail="Phase session not found yet")
     studies = await _store.get_hpo_studies(session["id"])
-    # Parse top_trials_json for each study
+    # Parse structured JSON payloads for each study.
     for study in studies:
-        raw = study.get("top_trials_json")
-        if raw:
+        for source, target, fallback in (
+            ("top_trials_json", "top_trials", []),
+            ("search_space_json", "search_space", {}),
+            ("budget_json", "budget", {}),
+        ):
+            raw = study.get(source)
+            if not raw:
+                study[target] = fallback
+                continue
             try:
-                study["top_trials"] = json.loads(raw) if isinstance(raw, str) else raw
+                study[target] = json.loads(raw) if isinstance(raw, str) else raw
             except (json.JSONDecodeError, TypeError):
-                study["top_trials"] = []
-        else:
-            study["top_trials"] = []
+                study[target] = fallback
     return {"research_id": research_id, "hpo_studies": studies}
+
+
+@router.get("/research/{research_id}/state")
+async def get_research_state(research_id: str):
+    """Operator-facing session state, reconstructable from DB rows only."""
+    _, session, _ = await _resolve_result_context(research_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Phase session not found yet")
+    iterations = await _store.get_iterations(session["id"])
+    hpo_studies = await _store.get_hpo_studies(session["id"])
+    promotions = await _store.list_promotions()
+    return build_research_state(
+        session=session,
+        iterations=iterations,
+        hpo_studies=hpo_studies,
+        promotions=promotions,
+    )
 
 
 # ------------------------------------------------------------------

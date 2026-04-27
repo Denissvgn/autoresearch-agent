@@ -26,6 +26,11 @@ config hash, environment metadata, and artifact/provenance hashes when present;
 failed, timed-out, and pruned attempts remain visible even when no metric is
 produced.
 
+M8 also makes the server the operational source of truth for autonomous
+direction research: sessions persist `autoresearch_phase_state.v1`, structured
+HPO plans, cross-service consistency reports, and reconstructable
+`autoresearch_state.v1` summaries for API/UI clients.
+
 ## Quick Start
 
 ### 1. Configure environment
@@ -94,8 +99,9 @@ Click **"Start Research"**. You'll be redirected to the session detail page.
 The detail page shows real-time progress:
 
 - **Stats row** — current iteration number, best metric value, best iteration number, cumulative API cost, mode (quick/standard)
+- **State** tab — current phase, next action, phase table, top candidates, failed/pruned configs, HPO study IDs, budget usage, rollback target, and smoke status
 - **Metrics Chart** tab — line chart of the primary metric across iterations. Green dots = all quality gates passed; red dots = gates failed
-- **Iterations** tab — table with columns: iteration number, metric name, value, gates (✓/✗), decision (keep/discard), training time
+- **Iterations** tab — table with columns: iteration number, metric name, value, gates (✓/✗), decision (keep/discard), training time, attempt snapshots, artifact hashes, and consistency reports
 - **Agent Log** tab — raw LLM conversation transcript (tool calls and responses)
 
 **Controls while running:**
@@ -135,6 +141,10 @@ services/autoresearch-agent/
 │   │   ├── orchestrator.py     # LLM agent tool-use loop
 │   │   ├── session_manager.py  # asyncio task lifecycle
 │   │   ├── results_store.py    # SQLite persistence (aiosqlite)
+│   │   ├── research_phase_plan.py # Direction phase state derivation
+│   │   ├── structured_hpo.py   # Bounded HPO plan metadata
+│   │   ├── consistency_validator.py # Cross-service candidate gate reports
+│   │   ├── research_state.py   # API/UI session-state summaries
 │   │   ├── experiment_parser.py# Parse prepare.py output + ITERATION_RESULT markers
 │   │   └── config_promoter.py  # Write winning configs to production path
 │   ├── api/
@@ -167,6 +177,8 @@ services/autoresearch-agent/
 | `POST` | `/api/research/{id}/resume` | Resume a paused session |
 | `DELETE` | `/api/research/{id}` | Delete a session (not while running) |
 | `GET` | `/api/research/{id}/iterations` | Get all iterations |
+| `GET` | `/api/research/{id}/hpo-studies` | Get structured HPO plans/results |
+| `GET` | `/api/research/{id}/state` | Get reconstructable operational session state |
 | `GET` | `/api/research/{id}/best` | Get best iteration |
 | `GET` | `/api/research/{id}/agent-log` | Get agent conversation log |
 | `POST` | `/api/research/{id}/promote/preview` | Preview config promotion |

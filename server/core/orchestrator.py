@@ -19,6 +19,10 @@ import anthropic
 import httpx
 
 from server.config import settings
+from server.core.consistency_validator import (
+    build_consistency_report,
+    consistency_report_json,
+)
 from server.core.experiment_parser import (
     is_hpo_study_output,
     parse_hpo_study_output,
@@ -30,6 +34,7 @@ from server.core.iteration_snapshot import (
     write_iteration_attempt_snapshot,
 )
 from server.core.log_writer import AgentLogWriter
+from server.core.research_phase_plan import build_phase_state, phase_state_json
 from server.core.results_store import ResultsStore
 from server.ws.events import broadcaster
 
@@ -640,6 +645,18 @@ class AgentOrchestrator:
                 quick_flag, focus, instrument_underscore,
             )
 
+        hpo_block = ""
+        if config.enable_hpo and config.model_type in ("direction", "volatility"):
+            hpo_block = (
+                "\n\nStructured HPO is enabled for this session. Keep the sweep "
+                f"bounded to at most {min(config.hpo_trials, config.max_iterations)} "
+                "training attempts and only vary manifest-approved knobs: "
+                "prediction_horizon, deadzone/ATR threshold, roster, calibration, "
+                "operating threshold, and adaptive_features. Mark HPO-screening "
+                "attempts with search_phase=hpo_screening in any explicit "
+                "ITERATION_RESULT payload."
+            )
+
         # RL needs an enrichment step before the first training run
         if config.model_type == "rl":
             enrich_step = (
@@ -696,6 +713,7 @@ class AgentOrchestrator:
             f"{fixed_settings_notice}"
             f"{focus}"
             f"{resume_block}"
+            f"{hpo_block}"
         )
 
     async def _build_resume_prompt(self, config: ResearchConfig) -> str:
@@ -1049,6 +1067,7 @@ class AgentOrchestrator:
             f"Research session started: {config.instrument} {config.timeframe} "
             f"{config.model_type} tag={config.tag} max_iter={config.max_iterations}",
         )
+        await self._refresh_phase_state(research_id)
 
         try:
             _timed_out = False  # ML-62: track timeout vs normal completion
@@ -1427,9 +1446,13 @@ class AgentOrchestrator:
                     if marker:
                         if turn_recorded_iteration:
                             # Overwrite last iteration with richer marker
+                            await self._attach_consistency_report(
+                                research_id, iteration_count, marker,
+                            )
                             await self._store.update_iteration(
                                 research_id, iteration_count, marker,
                             )
+                            await self._refresh_phase_state(research_id)
                             logger.info(
                                 "Research %s turn %d: overwrote iteration "
                                 "%d with explicit ITERATION_RESULT marker",
@@ -1707,6 +1730,18 @@ class AgentOrchestrator:
             marker["attempt_snapshot_path"] = attempt_snapshot_path
             marker["attempt_snapshot_hash"] = attempt_snapshot_hash
 
+        session = await self._store.get_session(research_id)
+        model_type = (session or {}).get("model_type") or marker.get("model_type") or ""
+        consistency_report = build_consistency_report(
+            research_id=research_id,
+            iteration=iteration,
+            model_type=model_type,
+            config_snapshot=marker.get("config_snapshot"),
+            metrics_payload=marker,
+            attempt_snapshot=attempt_snapshot,
+        )
+        marker["consistency_report"] = consistency_report
+
         await self._store.add_iteration(
             research_id=research_id,
             iteration=iteration,
@@ -1726,6 +1761,7 @@ class AgentOrchestrator:
             ),
             attempt_snapshot_path=attempt_snapshot_path,
             attempt_snapshot_hash=attempt_snapshot_hash,
+            consistency_report_json=consistency_report_json(consistency_report),
         )
 
         # ML-59: If this is an HPO study result, also persist to hpo_studies
@@ -1739,7 +1775,18 @@ class AgentOrchestrator:
                 best_composite=marker.get("best_composite"),
                 training_time_s=training_time,
                 top_trials_json=json.dumps(top_trials) if top_trials else None,
+                study_id=marker.get("study_id"),
+                max_trials=marker.get("n_trials"),
+                search_space_json=json.dumps(marker.get("search_space"), sort_keys=True)
+                if marker.get("search_space")
+                else None,
+                budget_json=json.dumps(marker.get("budget"), sort_keys=True)
+                if marker.get("budget")
+                else None,
+                timeout_s=marker.get("timeout_s"),
             )
+
+        await self._refresh_phase_state(research_id)
 
         event = {
             "event": "iteration_complete",
@@ -1770,6 +1817,54 @@ class AgentOrchestrator:
             all_gates,
             decision,
             description,
+        )
+
+    async def _attach_consistency_report(
+        self,
+        research_id: str,
+        iteration: int,
+        marker: Dict[str, Any],
+    ) -> None:
+        """Attach/update consistency report before overwriting an iteration."""
+        session = await self._store.get_session(research_id)
+        existing = await self._store.get_iteration(research_id, iteration)
+        attempt_snapshot = None
+        if existing and existing.get("attempt_snapshot_json"):
+            try:
+                attempt_snapshot = json.loads(existing["attempt_snapshot_json"])
+            except (json.JSONDecodeError, TypeError):
+                attempt_snapshot = None
+        marker["consistency_report"] = build_consistency_report(
+            research_id=research_id,
+            iteration=iteration,
+            model_type=(session or {}).get("model_type") or marker.get("model_type") or "",
+            config_snapshot=marker.get("config_snapshot")
+            or (existing or {}).get("config_snapshot"),
+            metrics_payload=marker,
+            attempt_snapshot=attempt_snapshot,
+        )
+
+    async def _refresh_phase_state(self, research_id: str) -> None:
+        session = await self._store.get_session(research_id)
+        if not session:
+            return
+        iterations = await self._store.get_iterations(research_id)
+        hpo_studies = await self._store.get_hpo_studies(research_id)
+        promotions = await self._store.list_promotions()
+        state = build_phase_state(
+            session=session,
+            iterations=iterations,
+            hpo_studies=hpo_studies,
+            promotions=[
+                row for row in promotions
+                if row.get("research_id") == research_id
+            ],
+        )
+        await self._store.update_session(
+            research_id,
+            current_phase=state.get("current_phase"),
+            next_action=state.get("next_action"),
+            phase_state_json=phase_state_json(state),
         )
 
     @staticmethod
