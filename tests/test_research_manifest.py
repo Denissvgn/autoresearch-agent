@@ -47,6 +47,9 @@ def test_build_research_manifest_has_required_runtime_sections():
     assert payload["service_urls"]["feature_service"].startswith("http://")
     assert payload["service_urls"]["admin_service"].startswith("http://")
     assert payload["service_urls"]["mlflow_external"].startswith("http://")
+    assert payload["preflight"]["schema_version"] == "autoresearch_service_preflight.v1"
+    assert payload["preflight"]["status"] == "not_run"
+    assert "mlflow_tracking" in payload["preflight"]["services"]
     assert payload["runtime"]["runs_dir"].endswith("/runs/autotuner")
     assert payload["runtime"]["db_path"].endswith("/db/experiments.db")
 
@@ -54,4 +57,3 @@ def test_build_research_manifest_has_required_runtime_sections():
 def test_manifest_identity_overrides_must_match_request():
     with pytest.raises(ValueError, match="instrument must match"):
         _build_manifest(instrument="BTC_USDT")
-

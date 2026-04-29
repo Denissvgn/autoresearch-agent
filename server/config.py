@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List
+from typing import List, Optional
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -112,6 +112,51 @@ class Settings(BaseSettings):
             "because autoresearch development promotion updates composites there."
         ),
     )
+    s3_endpoint_url: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("S3_ENDPOINT_URL", "MINIO_ENDPOINT_URL"),
+        description="S3-compatible artifact endpoint used by MLflow artifacts.",
+    )
+    mlflow_s3_endpoint_url: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("MLFLOW_S3_ENDPOINT_URL"),
+        description="MLflow S3 artifact endpoint override.",
+    )
+
+    # --- Dependency Preflight ---
+    preflight_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_PREFLIGHT_ENABLED",
+            "PREFLIGHT_ENABLED",
+        ),
+        description="Run service dependency checks before starting research sessions.",
+    )
+    allow_unready_services: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_ALLOW_UNREADY_SERVICES",
+            "ALLOW_UNREADY_SERVICES",
+        ),
+        description="Dedicated override allowing sessions to start when preflight fails.",
+    )
+    preflight_timeout_s: float = Field(
+        default=3.0,
+        gt=0,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_PREFLIGHT_TIMEOUT_S",
+            "PREFLIGHT_TIMEOUT_S",
+        ),
+        description="Per-service preflight timeout in seconds.",
+    )
+    artifact_logging_required: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_ARTIFACT_LOGGING_REQUIRED",
+            "ARTIFACT_LOGGING_REQUIRED",
+        ),
+        description="Require the S3/MinIO endpoint during session preflight.",
+    )
 
     # --- CORS ---
     cors_origins_raw: str = Field(
@@ -152,6 +197,10 @@ class Settings(BaseSettings):
     @property
     def venv_python(self) -> str:
         return f"{self.workspace_root}/.venv/bin/python"
+
+    @property
+    def artifact_store_endpoint_url(self) -> Optional[str]:
+        return self.mlflow_s3_endpoint_url or self.s3_endpoint_url
 
 
 settings = Settings()

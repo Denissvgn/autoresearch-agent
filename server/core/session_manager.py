@@ -17,6 +17,10 @@ from server.core.orchestrator import AgentOrchestrator, ResearchConfig
 from server.core.pipeline_controller import PipelineConfig, PipelineController
 from server.core.research_manifest import build_research_manifest, manifest_pretty_json
 from server.core.results_store import ResultsStore
+from server.core.service_preflight import (
+    require_preflight_ready,
+    run_service_preflight,
+)
 from server.core.structured_hpo import build_structured_hpo_plan, hpo_plan_json
 
 logger = logging.getLogger(__name__)
@@ -112,9 +116,12 @@ class SessionManager:
             hpo_timesteps=hpo_timesteps or 50000,
         )
 
+        preflight = await self._run_preflight(config.model_type)
         hpo_plan = self._build_hpo_plan(config)
+        manifest_overrides = self._merge_manifest_overrides(manifest, hpo_plan)
+        manifest_overrides["preflight"] = preflight
         manifest_json, manifest_hash = self._build_manifest_payload(
-            config, overrides=self._merge_manifest_overrides(manifest, hpo_plan),
+            config, overrides=manifest_overrides,
         )
 
         # Archive any stale workspace from a previous session before writing
@@ -167,6 +174,19 @@ class SessionManager:
             await self._orchestrator.run(config)
         finally:
             self._active.pop(research_id, None)
+
+    async def _run_preflight(self, model_type: str) -> Dict[str, Any]:
+        """Run dependency checks and raise before any LLM task is spawned."""
+        preflight = await run_service_preflight(model_type=model_type)
+        require_preflight_ready(preflight)
+        if preflight.get("status") == "degraded":
+            logger.warning(
+                "Service preflight degraded but override is enabled: %s",
+                preflight.get("required_failures"),
+            )
+        else:
+            logger.info("Service preflight %s for %s", preflight.get("status"), model_type)
+        return preflight
 
     async def _archive_stale_workspace(self, workspace_path: str) -> None:
         """Move an existing model workspace to a timestamped archive directory.
@@ -384,8 +404,12 @@ class SessionManager:
             resumed_from=parent_id,
         )
 
+        preflight = await self._run_preflight(config.model_type)
         hpo_plan = self._build_hpo_plan(config)
-        manifest_overrides = {"runtime": {"resumed_from": parent_id}}
+        manifest_overrides = {
+            "runtime": {"resumed_from": parent_id},
+            "preflight": preflight,
+        }
         manifest_json, manifest_hash = self._build_manifest_payload(
             config,
             overrides=self._merge_manifest_overrides(
@@ -499,6 +523,8 @@ class SessionManager:
             hpo_timesteps=hpo_timesteps or 50000,
         )
 
+        await self._run_preflight("pipeline")
+
         # Persist pipeline to DB
         pipeline_dict = await self._store.create_pipeline(
             pipeline_id=pipeline_id,
@@ -595,8 +621,12 @@ class SessionManager:
             pipeline_id=pipeline_id,
         )
 
+        preflight = await self._run_preflight(config.model_type)
         hpo_plan = self._build_hpo_plan(config)
-        manifest_overrides = {"runtime": {"pipeline_id": pipeline_id}}
+        manifest_overrides = {
+            "runtime": {"pipeline_id": pipeline_id},
+            "preflight": preflight,
+        }
         manifest_json, manifest_hash = self._build_manifest_payload(
             config,
             overrides=self._merge_manifest_overrides(
@@ -712,6 +742,8 @@ class SessionManager:
             hpo_trials=pipe.get("hpo_trials") or 20,
             hpo_timesteps=pipe.get("hpo_timesteps") or 50000,
         )
+
+        await self._run_preflight("pipeline")
 
         await self._store.update_pipeline(
             pipeline_id, status="running", error_message=None,

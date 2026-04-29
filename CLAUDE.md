@@ -15,7 +15,7 @@ You are running **unattended**. There is NO human monitoring this session. You M
 
 ## CRITICAL: Act, Don't Explore
 
-You have a LIMITED number of tool calls. **Do not waste them** on `ls`, `find`, `cat`, `docker ps`, or service health checks. The services are pre-verified and working. Jump straight to running experiments.
+You have a LIMITED number of tool calls. **Do not waste them** on `ls`, `find`, `cat`, or `docker ps`. Dependency readiness is handled by the server before your session starts. Jump straight to running experiments.
 
 ## Quick Reference
 
@@ -24,7 +24,7 @@ You have a LIMITED number of tool calls. **Do not waste them** on `ls`, `find`, 
 - **Setup**: Fresh session: `/app/workspace/.venv/bin/python scripts/autotuner/setup.py --instrument {INSTRUMENT} --timeframe {TIMEFRAME} --force`; resume session: reuse the existing workspace and do not reset it.
 - **Train**: `/app/workspace/.venv/bin/python scripts/autotuner/{MODEL_TYPE}/prepare.py --config {WORKSPACE}/train.yaml`
 - **Promote**: `/app/workspace/.venv/bin/python scripts/autotuner/promote.py --config {WORKSPACE}/best_train.yaml`
-- ML services reachable (pre-verified): mlflow:5000, data-ingest:8000, ensemble-trainer:8000, rl-trainer:8000, feature-service:8000, minio:9000
+- ML dependency readiness is recorded in the server-owned research manifest.
 
 ## Exact Experiment Loop
 
@@ -67,7 +67,6 @@ cp {WORKSPACE}/train.yaml {WORKSPACE}/best_train.yaml
 
 - NEVER write outside `/app/workspace/`
 - Do NOT run `docker`, `git`, `make`, or `apt` — they are not installed
-- Do NOT check service health — services are verified before you start
 - Spend at most 2-3 tool calls on setup/reading, then START TRAINING
 - **NEVER pipe prepare.py output** through `| tail`, `| head`, `| grep`, or `timeout`. The full stdout is critical for iteration detection. Just run prepare.py directly — the tool has a 30-minute timeout built in.
 - Do NOT set `timeout_s` below 1800 for prepare.py commands. Training takes 5-20 minutes.

@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from server.config import settings
+from server.core.service_preflight import build_not_run_preflight, sanitize_service_url
 
 
 class ResearchSessionManifest(BaseModel):
@@ -41,6 +42,7 @@ class ResearchSessionManifest(BaseModel):
     mlflow_experiment: str
     promotion_policy: Dict[str, Any]
     service_urls: Dict[str, str]
+    preflight: Dict[str, Any]
     runtime: Dict[str, Any]
     hpo: Dict[str, Any] = Field(default_factory=dict)
     focus_hint: Optional[str] = None
@@ -67,6 +69,7 @@ class ResearchSessionManifest(BaseModel):
             "budget",
             "promotion_policy",
             "service_urls",
+            "preflight",
             "runtime",
         )
         missing = [name for name in required if not getattr(self, name)]
@@ -172,16 +175,17 @@ def build_research_manifest(
             "auc_only_promotion_allowed": False,
         },
         "service_urls": {
-            "ensemble_trainer": settings.ensemble_trainer_url,
-            "rl_trainer": settings.rl_trainer_url,
-            "feature_service": settings.feature_service_url,
-            "data_ingest": settings.data_ingest_url,
-            "mlflow_tracking": settings.mlflow_tracking_uri,
-            "mlflow_service": settings.mlflow_service_url,
-            "mlflow_external": settings.mlflow_external_url,
-            "admin_service": settings.admin_service_url,
-            "promotion_api": settings.promotion_service_url,
+            "ensemble_trainer": sanitize_service_url(settings.ensemble_trainer_url),
+            "rl_trainer": sanitize_service_url(settings.rl_trainer_url),
+            "feature_service": sanitize_service_url(settings.feature_service_url),
+            "data_ingest": sanitize_service_url(settings.data_ingest_url),
+            "mlflow_tracking": sanitize_service_url(settings.mlflow_tracking_uri),
+            "mlflow_service": sanitize_service_url(settings.mlflow_service_url),
+            "mlflow_external": sanitize_service_url(settings.mlflow_external_url),
+            "admin_service": sanitize_service_url(settings.admin_service_url),
+            "promotion_api": sanitize_service_url(settings.promotion_service_url),
         },
+        "preflight": build_not_run_preflight(),
         "runtime": {
             "environment": settings.environment,
             "workspace_root": settings.workspace_root,
