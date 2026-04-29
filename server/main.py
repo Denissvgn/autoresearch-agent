@@ -46,6 +46,7 @@ async def lifespan(app: FastAPI):
     # Initialize SQLite store
     _store = ResultsStore(settings.db_path)
     await _store.initialize()
+    app.state.audit_store = _store
 
     # Mark any sessions left in 'running' state from a previous process as
     # stopped. Their asyncio tasks no longer exist after restart, so they

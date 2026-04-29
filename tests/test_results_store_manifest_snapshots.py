@@ -128,3 +128,23 @@ async def test_results_store_persists_manifest_and_attempt_snapshot(tmp_path: Pa
     assert studies[0]["study_id"] == "hpo_res_m8_direction"
     assert studies[0]["max_trials"] == 3
     assert studies[0]["quick_mode"] == 1
+
+
+@pytest.mark.asyncio
+async def test_results_store_records_audit_events(tmp_path: Path):
+    store = ResultsStore(str(tmp_path / "autoresearch.sqlite"))
+    await store.initialize()
+
+    event = await store.record_audit_event(
+        actor_id="token_sha256:abc123",
+        action="research.start",
+        research_id="res_audit",
+        request_metadata={"method": "POST", "path": "/api/research/start"},
+        outcome="success",
+    )
+
+    events = await store.list_audit_events(action="research.start", research_id="res_audit")
+    assert len(events) == 1
+    assert events[0]["event_id"] == event["event_id"]
+    assert events[0]["actor_id"] == "token_sha256:abc123"
+    assert events[0]["request_metadata"]["path"] == "/api/research/start"

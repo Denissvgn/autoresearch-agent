@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
+import logging
 import secrets
 from dataclasses import dataclass
 
-from fastapi import Depends, HTTPException, WebSocket, status
+from fastapi import Depends, HTTPException, Request, WebSocket, status
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from server.config import settings
+
+logger = logging.getLogger(__name__)
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 _WS_TOKEN_SUBPROTOCOL_PREFIX = "autoresearch.token."
@@ -22,6 +26,7 @@ class AuthenticatedActor:
     """Authenticated caller context reserved for future JWT/RBAC expansion."""
 
     subject: str
+    actor_id: str
     mechanism: str
     websocket_subprotocol: str | None = None
 
@@ -49,6 +54,15 @@ def _auth_not_configured() -> HTTPException:
     )
 
 
+def token_fingerprint(token: str | None) -> str | None:
+    """Return a non-reversible token fingerprint safe for audit storage."""
+
+    if not token:
+        return None
+    digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    return f"token_sha256:{digest[:16]}"
+
+
 def _authenticate_token(
     token: str | None,
     *,
@@ -62,19 +76,96 @@ def _authenticate_token(
         raise _auth_required()
     return AuthenticatedActor(
         subject="api-token",
+        actor_id=token_fingerprint(token) or "unknown",
         mechanism=mechanism,
         websocket_subprotocol=websocket_subprotocol,
     )
 
 
 async def require_api_auth(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
 ) -> AuthenticatedActor:
     """Require ``Authorization: Bearer <token>`` for HTTP API routes."""
 
     if credentials is None or credentials.scheme.lower() != "bearer":
-        raise _auth_required()
-    return _authenticate_token(credentials.credentials, mechanism="bearer")
+        exc = _auth_required()
+        await _record_auth_rejection(
+            request,
+            token=None,
+            mechanism="missing",
+            exc=exc,
+        )
+        raise exc
+    try:
+        actor = _authenticate_token(credentials.credentials, mechanism="bearer")
+    except HTTPException as exc:
+        await _record_auth_rejection(
+            request,
+            token=credentials.credentials,
+            mechanism="bearer",
+            exc=exc,
+        )
+        raise
+    request.state.auth_actor = actor
+    return actor
+
+
+def _audit_store_from_connection(connection: Request | WebSocket):
+    app = getattr(connection, "app", None)
+    if app is None:
+        app = connection.scope.get("app")
+    state = getattr(app, "state", None) if app else None
+    return getattr(state, "audit_store", None)
+
+
+def _connection_metadata(
+    connection: Request | WebSocket,
+    *,
+    mechanism: str,
+    status_code: int,
+) -> dict[str, object]:
+    metadata: dict[str, object] = {
+        "path": connection.url.path,
+        "auth_mechanism": mechanism,
+        "status_code": status_code,
+    }
+    method = connection.scope.get("method")
+    if method:
+        metadata["method"] = method
+    client = connection.client
+    if client:
+        metadata["client_host"] = client.host
+    user_agent = connection.headers.get("user-agent")
+    if user_agent:
+        metadata["user_agent"] = user_agent
+    return metadata
+
+
+async def _record_auth_rejection(
+    connection: Request | WebSocket,
+    *,
+    token: str | None,
+    mechanism: str,
+    exc: HTTPException,
+) -> None:
+    store = _audit_store_from_connection(connection)
+    if store is None:
+        return
+    try:
+        await store.record_audit_event(
+            actor_id=token_fingerprint(token) or "anonymous",
+            action="auth.reject",
+            request_metadata=_connection_metadata(
+                connection,
+                mechanism=mechanism,
+                status_code=exc.status_code,
+            ),
+            outcome="failure",
+            error_message=str(exc.detail),
+        )
+    except Exception:
+        logger.warning("Failed to record authentication rejection audit event", exc_info=True)
 
 
 def _parse_authorization_header(value: str | None) -> str | None:
@@ -111,15 +202,21 @@ def _parse_websocket_subprotocol_token(value: str | None) -> tuple[str | None, s
 async def require_websocket_auth(websocket: WebSocket) -> AuthenticatedActor | None:
     """Authenticate a WebSocket before accepting the connection."""
 
+    attempted_token: str | None = None
+    attempted_mechanism = "missing"
     try:
         header_token = _parse_authorization_header(websocket.headers.get("authorization"))
         if header_token:
+            attempted_token = header_token
+            attempted_mechanism = "bearer"
             return _authenticate_token(header_token, mechanism="bearer")
 
         protocol_token, selected_protocol = _parse_websocket_subprotocol_token(
             websocket.headers.get("sec-websocket-protocol")
         )
         if protocol_token:
+            attempted_token = protocol_token
+            attempted_mechanism = "websocket-subprotocol"
             return _authenticate_token(
                 protocol_token,
                 mechanism="websocket-subprotocol",
@@ -128,6 +225,12 @@ async def require_websocket_auth(websocket: WebSocket) -> AuthenticatedActor | N
 
         raise _auth_required()
     except HTTPException as exc:
+        await _record_auth_rejection(
+            websocket,
+            token=attempted_token,
+            mechanism=attempted_mechanism,
+            exc=exc,
+        )
         headers = dict(exc.headers or {})
         response = JSONResponse(
             {"detail": exc.detail},

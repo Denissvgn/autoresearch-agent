@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -127,6 +128,27 @@ CREATE TABLE IF NOT EXISTS pipelines (
     completed_at TEXT,
     error_message TEXT
 );
+
+CREATE TABLE IF NOT EXISTS audit_events (
+    event_id TEXT PRIMARY KEY,
+    timestamp TEXT NOT NULL,
+    actor_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    research_id TEXT,
+    pipeline_id TEXT,
+    request_metadata_json TEXT NOT NULL DEFAULT '{}',
+    outcome TEXT NOT NULL,
+    error_message TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_events_timestamp
+    ON audit_events(timestamp);
+CREATE INDEX IF NOT EXISTS idx_audit_events_action
+    ON audit_events(action);
+CREATE INDEX IF NOT EXISTS idx_audit_events_research_id
+    ON audit_events(research_id);
+CREATE INDEX IF NOT EXISTS idx_audit_events_pipeline_id
+    ON audit_events(pipeline_id);
 """
 
 _MODEL_TO_SKILL = {
@@ -299,6 +321,92 @@ class ResultsStore:
                 pass
             await db.commit()
         logger.info("Results store initialized at %s", self._db_path)
+
+    # ------------------------------------------------------------------
+    # Audit events (ARP-002)
+    # ------------------------------------------------------------------
+
+    async def record_audit_event(
+        self,
+        *,
+        actor_id: str,
+        action: str,
+        outcome: str,
+        research_id: Optional[str] = None,
+        pipeline_id: Optional[str] = None,
+        request_metadata: Optional[Dict[str, Any]] = None,
+        error_message: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        event_id = f"aud_{uuid.uuid4().hex[:16]}"
+        timestamp = datetime.now(timezone.utc).isoformat()
+        metadata = request_metadata or {}
+        metadata_json = json.dumps(metadata, sort_keys=True)
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute(
+                """INSERT INTO audit_events
+                   (event_id, timestamp, actor_id, action, research_id,
+                    pipeline_id, request_metadata_json, outcome, error_message)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    event_id,
+                    timestamp,
+                    actor_id,
+                    action,
+                    research_id,
+                    pipeline_id,
+                    metadata_json,
+                    outcome,
+                    error_message,
+                ),
+            )
+            await db.commit()
+        return {
+            "event_id": event_id,
+            "timestamp": timestamp,
+            "actor_id": actor_id,
+            "action": action,
+            "research_id": research_id,
+            "pipeline_id": pipeline_id,
+            "request_metadata": metadata,
+            "outcome": outcome,
+            "error_message": error_message,
+        }
+
+    async def list_audit_events(
+        self,
+        *,
+        limit: int = 100,
+        action: Optional[str] = None,
+        research_id: Optional[str] = None,
+        pipeline_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        clauses = []
+        params: list[Any] = []
+        if action:
+            clauses.append("action = ?")
+            params.append(action)
+        if research_id:
+            clauses.append("research_id = ?")
+            params.append(research_id)
+        if pipeline_id:
+            clauses.append("pipeline_id = ?")
+            params.append(pipeline_id)
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        params.append(max(1, min(limit, 500)))
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                f"SELECT * FROM audit_events{where} ORDER BY timestamp DESC LIMIT ?",
+                params,
+            )
+            rows = [dict(r) for r in await cursor.fetchall()]
+        for row in rows:
+            raw_metadata = row.pop("request_metadata_json", None)
+            try:
+                row["request_metadata"] = json.loads(raw_metadata or "{}")
+            except (json.JSONDecodeError, TypeError):
+                row["request_metadata"] = {}
+        return rows
 
     # ------------------------------------------------------------------
     # Sessions

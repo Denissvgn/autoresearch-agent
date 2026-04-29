@@ -21,6 +21,7 @@ API_TOKEN = "test-autoresearch-token"
 
 def create_test_app() -> FastAPI:
     app = FastAPI()
+    app.state.audit_store = getattr(research, "_store", None)
     app.include_router(research.router)
     app.include_router(results.router)
     app.include_router(promotion.router)
@@ -77,6 +78,9 @@ class FakeSessionManager:
 
 
 class FakeStore:
+    def __init__(self) -> None:
+        self.audit_events: list[dict] = []
+
     async def list_sessions(self, **kwargs):
         return []
 
@@ -113,12 +117,42 @@ class FakeStore:
     async def delete_session(self, research_id: str):
         return research_id == "res_auth"
 
+    async def record_audit_event(self, **kwargs):
+        event = {
+            "event_id": f"aud_fake_{len(self.audit_events) + 1}",
+            "timestamp": "2026-04-29T00:00:00+00:00",
+            **kwargs,
+        }
+        self.audit_events.append(event)
+        return event
+
+    async def list_audit_events(
+        self,
+        *,
+        limit: int = 100,
+        action: str | None = None,
+        research_id: str | None = None,
+        pipeline_id: str | None = None,
+    ):
+        events = self.audit_events
+        if action:
+            events = [event for event in events if event.get("action") == action]
+        if research_id:
+            events = [event for event in events if event.get("research_id") == research_id]
+        if pipeline_id:
+            events = [event for event in events if event.get("pipeline_id") == pipeline_id]
+        return list(reversed(events))[:limit]
+
 
 class FakePromoter:
     async def preview(self, research_id: str):
+        if research_id == "missing":
+            raise ValueError("No promotable iteration found")
         return {"research_id": research_id, "preview": True}
 
     async def confirm(self, research_id: str):
+        if research_id == "missing":
+            raise ValueError("No promotable iteration found")
         return {"research_id": research_id, "confirmed": True}
 
     async def rollback(
@@ -129,6 +163,8 @@ class FakePromoter:
         timeframe: str,
         reason: str | None = None,
     ):
+        if instrument == "MISSING":
+            raise ValueError("No development promotion found")
         return {
             "model_type": model_type,
             "instrument": instrument,
@@ -145,6 +181,7 @@ def configure_api_auth(monkeypatch):
     research.init(FakeSessionManager(), store)
     results.init(store)
     promotion.init(FakePromoter(), store)
+    return store
 
 
 @pytest.fixture
@@ -219,6 +256,104 @@ def test_authenticated_api_calls_preserve_existing_behavior(client: TestClient):
     )
     assert rollback.status_code == 200
     assert rollback.json()["rolled_back"] is True
+
+
+def test_state_changing_research_requests_write_audit_events(
+    client: TestClient,
+    configure_api_auth: FakeStore,
+):
+    start = client.post(
+        "/api/research/start",
+        json=start_payload(),
+        headers=auth_headers(),
+    )
+    assert start.status_code == 201
+    assert len(configure_api_auth.audit_events) == 1
+    event = configure_api_auth.audit_events[-1]
+    assert event["action"] == "research.start"
+    assert event["outcome"] == "success"
+    assert event["research_id"] == "res_auth"
+    assert event["actor_id"].startswith("token_sha256:")
+    assert API_TOKEN not in str(event)
+
+    missing = client.post("/api/research/missing/stop", headers=auth_headers())
+    assert missing.status_code == 404
+    assert len(configure_api_auth.audit_events) == 2
+    event = configure_api_auth.audit_events[-1]
+    assert event["action"] == "research.stop"
+    assert event["outcome"] == "failure"
+    assert event["research_id"] == "missing"
+    assert "not found" in event["error_message"].lower()
+
+
+def test_recent_audit_events_endpoint_returns_filtered_events(
+    client: TestClient,
+    configure_api_auth: FakeStore,
+):
+    client.post(
+        "/api/research/start",
+        json=start_payload(),
+        headers=auth_headers(),
+    )
+    client.post("/api/research/missing/stop", headers=auth_headers())
+
+    response = client.get(
+        "/api/audit-events",
+        params={"action": "research.stop", "research_id": "missing"},
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 200
+    events = response.json()
+    assert len(events) == 1
+    assert events[0]["action"] == "research.stop"
+    assert events[0]["outcome"] == "failure"
+    assert events[0]["research_id"] == "missing"
+    assert len(configure_api_auth.audit_events) == 2
+
+
+def test_promotion_and_rollback_failures_write_audit_events(
+    client: TestClient,
+    configure_api_auth: FakeStore,
+):
+    confirm = client.post(
+        "/api/research/missing/promote/confirm",
+        headers=auth_headers(),
+    )
+    assert confirm.status_code == 400
+
+    rollback = client.post(
+        "/api/promotions/direction/MISSING/15m/rollback",
+        json={"reason": "audit failure"},
+        headers=auth_headers(),
+    )
+    assert rollback.status_code == 400
+
+    events = configure_api_auth.audit_events
+    assert [(event["action"], event["outcome"]) for event in events] == [
+        ("promotion.confirm", "failure"),
+        ("promotion.rollback", "failure"),
+    ]
+    assert all(API_TOKEN not in str(event) for event in events)
+
+
+def test_rejected_api_auth_records_audit_fingerprint_not_token(
+    client: TestClient,
+    configure_api_auth: FakeStore,
+):
+    response = client.post(
+        "/api/research/start",
+        json=start_payload(),
+        headers={"Authorization": "Bearer wrong-token"},
+    )
+    assert response.status_code == 401
+
+    assert len(configure_api_auth.audit_events) == 1
+    event = configure_api_auth.audit_events[0]
+    assert event["action"] == "auth.reject"
+    assert event["outcome"] == "failure"
+    assert event["actor_id"].startswith("token_sha256:")
+    assert "wrong-token" not in str(event)
 
 
 def test_websocket_requires_authentication(client: TestClient):

@@ -7,9 +7,10 @@ import os
 from typing import Any, Dict, Optional
 
 import yaml
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from server.api.audit import record_api_audit_event
 from server.api.auth import require_api_auth
 from server.config import settings
 
@@ -24,6 +25,58 @@ def init(session_manager, store):
     global _session_manager, _store
     _session_manager = session_manager
     _store = store
+
+
+def _start_metadata(req: "StartResearchRequest") -> dict[str, Any]:
+    return {
+        "instrument": req.instrument,
+        "timeframe": req.timeframe,
+        "model_type": req.model_type,
+        "tag": req.tag,
+        "quick_mode": req.quick_mode,
+        "max_iterations": req.max_iterations,
+        "max_budget_usd": req.max_budget_usd,
+        "timeout_minutes": req.timeout_minutes,
+        "trading_mode": req.trading_mode,
+        "agent_strategy": req.agent_strategy,
+        "initial_balance": req.initial_balance,
+        "enable_hpo": req.enable_hpo,
+        "hpo_trials": req.hpo_trials,
+        "hpo_timesteps": req.hpo_timesteps,
+        "phase_budgets": req.phase_budgets,
+        "manifest_supplied": req.manifest is not None,
+    }
+
+
+def _continue_metadata(req: "ContinueResearchRequest") -> dict[str, Any]:
+    return {
+        "max_iterations": req.max_iterations,
+        "max_budget_usd": req.max_budget_usd,
+        "timeout_minutes": req.timeout_minutes,
+        "focus_hint_supplied": req.focus_hint is not None,
+    }
+
+
+async def _audit(
+    request: Request,
+    *,
+    action: str,
+    outcome: str,
+    research_id: str | None = None,
+    pipeline_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    error_message: str | None = None,
+):
+    return await record_api_audit_event(
+        request,
+        _store,
+        action=action,
+        outcome=outcome,
+        research_id=research_id,
+        pipeline_id=pipeline_id,
+        metadata=metadata,
+        error_message=error_message,
+    )
 
 
 # ------------------------------------------------------------------
@@ -96,11 +149,12 @@ class StartResearchRequest(BaseModel):
 
 
 @router.post("/research/start", status_code=201)
-async def start_research(req: StartResearchRequest):
+async def start_research(request: Request, req: StartResearchRequest):
+    metadata = _start_metadata(req)
     try:
         # ML-63: Route pipeline requests to the pipeline controller
         if req.model_type == "pipeline":
-            return await _session_manager.start_pipeline(
+            pipeline = await _session_manager.start_pipeline(
                 instrument=req.instrument,
                 timeframe=req.timeframe,
                 tag=req.tag,
@@ -117,6 +171,14 @@ async def start_research(req: StartResearchRequest):
                 hpo_trials=req.hpo_trials,
                 hpo_timesteps=req.hpo_timesteps,
             )
+            await _audit(
+                request,
+                action="pipeline.start",
+                outcome="success",
+                pipeline_id=pipeline.get("id"),
+                metadata=metadata,
+            )
+            return pipeline
         session = await _session_manager.start_session(
             instrument=req.instrument,
             timeframe=req.timeframe,
@@ -135,8 +197,22 @@ async def start_research(req: StartResearchRequest):
             hpo_timesteps=req.hpo_timesteps,
             manifest=req.manifest,
         )
+        await _audit(
+            request,
+            action="research.start",
+            outcome="success",
+            research_id=session.get("id"),
+            metadata=metadata,
+        )
         return session
     except RuntimeError as e:
+        await _audit(
+            request,
+            action="pipeline.start" if req.model_type == "pipeline" else "research.start",
+            outcome="failure",
+            metadata=metadata,
+            error_message=str(e),
+        )
         raise HTTPException(status_code=409, detail=str(e))
 
 
@@ -148,6 +224,21 @@ async def list_research(
 ):
     return await _store.list_sessions(
         status=status, model_type=model_type, instrument=instrument,
+    )
+
+
+@router.get("/audit-events")
+async def list_audit_events(
+    limit: int = 100,
+    action: Optional[str] = None,
+    research_id: Optional[str] = None,
+    pipeline_id: Optional[str] = None,
+):
+    return await _store.list_audit_events(
+        limit=limit,
+        action=action,
+        research_id=research_id,
+        pipeline_id=pipeline_id,
     )
 
 
@@ -181,37 +272,92 @@ async def get_research(research_id: str):
 
 
 @router.post("/research/{research_id}/stop")
-async def stop_research(research_id: str):
+async def stop_research(request: Request, research_id: str):
     # ML-63: Handle pipeline stop
     if research_id.startswith("pipe_"):
         ok = await _session_manager.stop_pipeline(research_id)
         if ok:
+            await _audit(
+                request,
+                action="pipeline.stop",
+                outcome="success",
+                pipeline_id=research_id,
+            )
             return {"status": "stop_requested", "pipeline_id": research_id}
-    ok = await _session_manager.stop_session(research_id)
-    if not ok:
+        await _audit(
+            request,
+            action="pipeline.stop",
+            outcome="failure",
+            pipeline_id=research_id,
+            error_message="Session not found or not running",
+        )
         raise HTTPException(
             status_code=404, detail="Session not found or not running",
         )
+    ok = await _session_manager.stop_session(research_id)
+    if not ok:
+        await _audit(
+            request,
+            action="research.stop",
+            outcome="failure",
+            research_id=research_id,
+            error_message="Session not found or not running",
+        )
+        raise HTTPException(
+            status_code=404, detail="Session not found or not running",
+        )
+    await _audit(
+        request,
+        action="research.stop",
+        outcome="success",
+        research_id=research_id,
+    )
     return {"status": "stop_requested", "research_id": research_id}
 
 
 @router.post("/research/{research_id}/pause")
-async def pause_research(research_id: str):
+async def pause_research(request: Request, research_id: str):
     ok = await _session_manager.pause_session(research_id)
     if not ok:
+        await _audit(
+            request,
+            action="research.pause",
+            outcome="failure",
+            research_id=research_id,
+            error_message="Session not found or not running",
+        )
         raise HTTPException(
             status_code=404, detail="Session not found or not running",
         )
+    await _audit(
+        request,
+        action="research.pause",
+        outcome="success",
+        research_id=research_id,
+    )
     return {"status": "paused", "research_id": research_id}
 
 
 @router.post("/research/{research_id}/resume")
-async def resume_research(research_id: str):
+async def resume_research(request: Request, research_id: str):
     ok = await _session_manager.resume_session(research_id)
     if not ok:
+        await _audit(
+            request,
+            action="research.resume",
+            outcome="failure",
+            research_id=research_id,
+            error_message="Session not found or not running",
+        )
         raise HTTPException(
             status_code=404, detail="Session not found or not running",
         )
+    await _audit(
+        request,
+        action="research.resume",
+        outcome="success",
+        research_id=research_id,
+    )
     return {"status": "running", "research_id": research_id}
 
 
@@ -230,7 +376,11 @@ class ContinueResearchRequest(BaseModel):
 
 
 @router.post("/research/{research_id}/continue", status_code=201)
-async def continue_research(research_id: str, req: ContinueResearchRequest = None):
+async def continue_research(
+    request: Request,
+    research_id: str,
+    req: ContinueResearchRequest = None,
+):
     """ML-62: Continue a timed-out or completed session as a new chained session.
 
     Creates a new session that inherits all settings from the parent and
@@ -239,16 +389,25 @@ async def continue_research(research_id: str, req: ContinueResearchRequest = Non
     """
     if req is None:
         req = ContinueResearchRequest()
+    metadata = _continue_metadata(req)
     try:
         # ML-63: Handle pipeline continue
         if research_id.startswith("pipe_"):
-            return await _session_manager.continue_pipeline(
+            pipeline = await _session_manager.continue_pipeline(
                 research_id,
                 max_iterations=req.max_iterations,
                 max_budget_usd=req.max_budget_usd,
                 timeout_minutes=req.timeout_minutes,
                 focus_hint=req.focus_hint,
             )
+            await _audit(
+                request,
+                action="pipeline.continue",
+                outcome="success",
+                pipeline_id=research_id,
+                metadata={**metadata, "continued_pipeline_id": pipeline.get("id")},
+            )
+            return pipeline
         session = await _session_manager.continue_session(
             research_id,
             max_iterations=req.max_iterations,
@@ -256,21 +415,61 @@ async def continue_research(research_id: str, req: ContinueResearchRequest = Non
             timeout_minutes=req.timeout_minutes,
             focus_hint=req.focus_hint,
         )
+        await _audit(
+            request,
+            action="research.continue",
+            outcome="success",
+            research_id=research_id,
+            metadata={**metadata, "continued_research_id": session.get("id")},
+        )
         return session
     except RuntimeError as e:
+        await _audit(
+            request,
+            action=(
+                "pipeline.continue"
+                if research_id.startswith("pipe_")
+                else "research.continue"
+            ),
+            outcome="failure",
+            research_id=None if research_id.startswith("pipe_") else research_id,
+            pipeline_id=research_id if research_id.startswith("pipe_") else None,
+            metadata=metadata,
+            error_message=str(e),
+        )
         raise HTTPException(status_code=409, detail=str(e))
 
 
 @router.delete("/research/{research_id}")
-async def delete_research(research_id: str):
+async def delete_research(request: Request, research_id: str):
     if _session_manager.is_running(research_id):
+        await _audit(
+            request,
+            action="research.delete",
+            outcome="failure",
+            research_id=research_id,
+            error_message="Cannot delete a running session — stop it first",
+        )
         raise HTTPException(
             status_code=409,
             detail="Cannot delete a running session — stop it first",
         )
     ok = await _store.delete_session(research_id)
     if not ok:
+        await _audit(
+            request,
+            action="research.delete",
+            outcome="failure",
+            research_id=research_id,
+            error_message="Session not found",
+        )
         raise HTTPException(status_code=404, detail="Session not found")
+    await _audit(
+        request,
+        action="research.delete",
+        outcome="success",
+        research_id=research_id,
+    )
     return {"status": "deleted", "research_id": research_id}
 
 
