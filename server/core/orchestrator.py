@@ -23,6 +23,7 @@ from server.core.consistency_validator import (
     build_consistency_report,
     consistency_report_json,
 )
+from server.core.command_runner import GovernedCommandRunner, redact_sensitive_text
 from server.core.experiment_parser import (
     is_hpo_study_output,
     parse_hpo_study_output,
@@ -72,6 +73,12 @@ class ResearchConfig:
     pipeline_id: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class ToolExecutionResult:
+    content: str
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+
 # ---------------------------------------------------------------------------
 # Tool definitions for the Claude agent
 # ---------------------------------------------------------------------------
@@ -80,9 +87,11 @@ AGENT_TOOLS: List[Dict[str, Any]] = [
     {
         "name": "bash",
         "description": (
-            "Execute a shell command in the workspace. "
-            "The working directory is the workspace root. "
-            "Use /app/workspace/.venv/bin/python for Python scripts. "
+            "Execute one governed command in the workspace. "
+            "The working directory is the workspace root and shell syntax "
+            "such as pipes, redirection, command substitution, and command "
+            "chaining is rejected. Use .venv/bin/python for approved "
+            "autotuner Python scripts. "
             "Default timeout is 7200s (2 hours). Set timeout_s for "
             "shorter commands. Minimum enforced: 900s."
         ),
@@ -197,68 +206,53 @@ def _execute_tool(
     name: str,
     input_data: Dict[str, Any],
     workspace: str,
-) -> str:
+    session_workspace: str | None = None,
+) -> ToolExecutionResult:
     """Execute a tool call and return the text result."""
     try:
         if name == "bash":
-            return _tool_bash(input_data, workspace)
+            return _tool_bash(input_data, workspace, session_workspace)
         elif name == "read_file":
-            return _tool_read_file(input_data, workspace)
+            return ToolExecutionResult(_tool_read_file(input_data, workspace))
         elif name == "write_file":
-            return _tool_write_file(input_data, workspace)
+            return ToolExecutionResult(_tool_write_file(input_data, workspace))
         elif name == "glob":
-            return _tool_glob(input_data, workspace)
+            return ToolExecutionResult(_tool_glob(input_data, workspace))
         elif name == "grep":
-            return _tool_grep(input_data, workspace)
+            return ToolExecutionResult(_tool_grep(input_data, workspace))
         else:
-            return f"Unknown tool: {name}"
+            return ToolExecutionResult(f"Unknown tool: {name}")
     except Exception as exc:
-        return f"Tool error ({name}): {exc}"
+        return ToolExecutionResult(f"Tool error ({name}): {exc}")
 
 
-def _tool_bash(input_data: Dict[str, Any], workspace: str) -> str:
+def _tool_bash(
+    input_data: Dict[str, Any],
+    workspace: str,
+    session_workspace: str | None = None,
+) -> ToolExecutionResult:
     command = input_data["command"]
     timeout = input_data.get("timeout_s", 7200)
     # Enforce minimum timeout — agents routinely ignore tool-description hints
     if timeout < 900:
         timeout = 900
-    try:
-        # Start in a new process group so we can kill the entire tree on timeout
-        result = subprocess.run(
-            ["bash", "-c", command],
-            cwd=workspace,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            start_new_session=True,
-        )
-        output = ""
-        if result.stdout:
-            output += result.stdout
-        if result.stderr:
-            output += ("\n--- stderr ---\n" + result.stderr) if output else result.stderr
-        if result.returncode != 0:
-            output += f"\n[exit code: {result.returncode}]"
-        # Truncate very long output
-        if len(output) > 60_000:
-            output = output[:30_000] + "\n...(truncated)...\n" + output[-30_000:]
-        return output or "(no output)"
-    except subprocess.TimeoutExpired as exc:
-        # start_new_session=True ensures subprocess.run kills the entire
-        # process group (bash + prepare.py + any children) on timeout,
-        # so orphaned GPU-polling processes no longer block future runs.
-        # Preserve any output captured before the timeout
-        partial = ""
-        if exc.stdout:
-            text = exc.stdout if isinstance(exc.stdout, str) else exc.stdout.decode("utf-8", errors="replace")
-            partial += text
-        if exc.stderr:
-            text = exc.stderr if isinstance(exc.stderr, str) else exc.stderr.decode("utf-8", errors="replace")
-            partial += ("\n--- stderr ---\n" + text) if partial else text
-        if partial and len(partial) > 60_000:
-            partial = partial[:30_000] + "\n...(truncated)...\n" + partial[-30_000:]
-        timeout_msg = f"\n[Command timed out after {timeout}s]"
-        return (partial + timeout_msg) if partial else f"Command timed out after {timeout}s"
+    runner = GovernedCommandRunner(
+        workspace_root=workspace,
+        session_workspace=session_workspace,
+    )
+    result = runner.run(command, timeout_s=timeout)
+    decision = result.decision
+    return ToolExecutionResult(
+        result.output,
+        meta={
+            "policy_allowed": decision.allowed,
+            "policy_reason": decision.reason,
+            "policy_operation": decision.operation,
+            "normalized_command": decision.normalized_command,
+            "returncode": result.returncode,
+            "timed_out": result.timed_out,
+        },
+    )
 
 
 def _tool_read_file(input_data: Dict[str, Any], workspace: str) -> str:
@@ -662,7 +656,7 @@ class AgentOrchestrator:
             enrich_step = (
                 f"2. Enrich RL dataset (REQUIRED before any training):\n"
                 f"```bash\n"
-                f"cd /app/workspace && .venv/bin/python "
+                f".venv/bin/python "
                 f"scripts/autotuner/enrich_rl_dataset.py "
                 f"--instrument {instrument_underscore} "
                 f"--timeframe {config.timeframe}\n"
@@ -673,9 +667,9 @@ class AgentOrchestrator:
                 f"   - `{workspace}/train.yaml`\n\n"
                 f"4. Baseline run:\n"
                 f"```bash\n"
-                f"cd /app/workspace && .venv/bin/python "
+                f".venv/bin/python "
                 f"scripts/autotuner/{config.model_type}/prepare.py "
-                f"--config {workspace}/train.yaml{quick_flag} 2>&1\n"
+                f"--config {workspace}/train.yaml{quick_flag}\n"
                 f"```\n\n"
                 f"5. After baseline, iterate: edit train.yaml → run prepare.py → "
                 f"check metrics → keep or revert."
@@ -687,9 +681,9 @@ class AgentOrchestrator:
                 f"   - `{workspace}/train.yaml`\n\n"
                 f"3. Baseline run:\n"
                 f"```bash\n"
-                f"cd /app/workspace && .venv/bin/python "
+                f".venv/bin/python "
                 f"scripts/autotuner/{config.model_type}/prepare.py "
-                f"--config {workspace}/train.yaml{quick_flag} 2>&1\n"
+                f"--config {workspace}/train.yaml{quick_flag}\n"
                 f"```\n\n"
                 f"4. After baseline, iterate: edit train.yaml → run prepare.py → "
                 f"check metrics → keep or revert."
@@ -702,7 +696,7 @@ class AgentOrchestrator:
             f"Execute these commands IN ORDER — do not explore first:\n\n"
             f"1. Setup:\n"
             f"```bash\n"
-            f"cd /app/workspace && .venv/bin/python scripts/autotuner/setup.py "
+            f".venv/bin/python scripts/autotuner/setup.py "
             f"--instrument {instrument_underscore} "
             f"--timeframe {config.timeframe} "
             f"--models {config.model_type}{setup_extra_args}\n"
@@ -809,9 +803,9 @@ class AgentOrchestrator:
             f"   - `{workspace}/results.json` (last run results, if exists)\n\n"
             f"2. Continue iterating from where the parent left off:\n"
             f"```bash\n"
-            f"cd /app/workspace && .venv/bin/python "
+            f".venv/bin/python "
             f"scripts/autotuner/{config.model_type}/prepare.py "
-            f"--config {workspace}/train.yaml{quick_flag} 2>&1\n"
+            f"--config {workspace}/train.yaml{quick_flag}\n"
             f"```\n\n"
             f"3. After each run, analyze results and iterate: "
             f"edit train.yaml → run prepare.py → check metrics → keep or revert.\n\n"
@@ -847,14 +841,14 @@ class AgentOrchestrator:
             f"## Phase 1: Setup + HPO Screening\n\n"
             f"1. Setup workspace:\n"
             f"```bash\n"
-            f"cd /app/workspace && .venv/bin/python scripts/autotuner/setup.py "
+            f".venv/bin/python scripts/autotuner/setup.py "
             f"--instrument {instrument_underscore} "
             f"--timeframe {config.timeframe} "
             f"--models rl{setup_extra_args}\n"
             f"```\n\n"
             f"2. Enrich RL dataset (REQUIRED):\n"
             f"```bash\n"
-            f"cd /app/workspace && .venv/bin/python "
+            f".venv/bin/python "
             f"scripts/autotuner/enrich_rl_dataset.py "
             f"--instrument {instrument_underscore} "
             f"--timeframe {config.timeframe}\n"
@@ -863,11 +857,11 @@ class AgentOrchestrator:
             f"3. Run Optuna HPO study ({hpo_trials} trials, Bayesian sampling "
             f"with early stopping):\n"
             f"```bash\n"
-            f"cd /app/workspace && .venv/bin/python "
+            f".venv/bin/python "
             f"scripts/autotuner/rl/prepare.py "
             f"--config {workspace}/train.yaml "
             f"--hpo --hpo-trials {hpo_trials} "
-            f"--hpo-timesteps {hpo_timesteps}{quick_flag} 2>&1\n"
+            f"--hpo-timesteps {hpo_timesteps}{quick_flag}\n"
             f"```\n"
             f"This will take ~60-120 minutes. The output contains the top-3 "
             f"parameter configs ranked by composite_rl_score.\n\n"
@@ -881,9 +875,9 @@ class AgentOrchestrator:
             f"`{workspace}/train.yaml`\n"
             f"   b. Run full walk-forward validation:\n"
             f"```bash\n"
-            f"cd /app/workspace && .venv/bin/python "
+            f".venv/bin/python "
             f"scripts/autotuner/rl/prepare.py "
-            f"--config {workspace}/train.yaml{quick_flag} 2>&1\n"
+            f"--config {workspace}/train.yaml{quick_flag}\n"
             f"```\n"
             f"   c. If `all_gates_passed` and composite is best so far, copy to "
             f"`best_train.yaml`\n\n"
@@ -894,14 +888,17 @@ class AgentOrchestrator:
             f"   - Adjust based on fold-level metrics and trade counts\n"
             f"   - Use the Phase 1-6 diagnostic table in README.md\n\n"
             f"## Phase 3: Robustness Validation\n\n"
-            f"7. Run best config with different seeds to confirm stability:\n"
+            f"7. Run best config with different seeds to confirm stability "
+            f"(one bash call per command):\n"
             f"```bash\n"
-            f"cd /app/workspace && .venv/bin/python "
+            f".venv/bin/python "
             f"scripts/autotuner/rl/prepare.py "
-            f"--config {workspace}/best_train.yaml --seed 43{quick_flag} 2>&1\n"
-            f"cd /app/workspace && .venv/bin/python "
+            f"--config {workspace}/best_train.yaml --seed 43{quick_flag}\n"
+            f"```\n"
+            f"```bash\n"
+            f".venv/bin/python "
             f"scripts/autotuner/rl/prepare.py "
-            f"--config {workspace}/best_train.yaml --seed 44{quick_flag} 2>&1\n"
+            f"--config {workspace}/best_train.yaml --seed 44{quick_flag}\n"
             f"```\n"
             f"If composite_rl_score is consistent across seeds (not wildly "
             f"different), the config is robust.\n\n"
@@ -1026,6 +1023,38 @@ class AgentOrchestrator:
                 research_id[:8], exc,
             )
 
+    async def _record_command_policy_rejection(
+        self,
+        *,
+        config: ResearchConfig,
+        turn: int,
+        command: str,
+        tool_meta: Dict[str, Any],
+    ) -> None:
+        reason = str(tool_meta.get("policy_reason") or "Command rejected by policy")
+        try:
+            await self._store.record_audit_event(
+                actor_id="autoresearch-agent",
+                action="command.reject",
+                research_id=config.id,
+                pipeline_id=config.pipeline_id,
+                request_metadata={
+                    "turn": turn,
+                    "tool": "bash",
+                    "command": redact_sensitive_text(command),
+                    "operation": tool_meta.get("policy_operation"),
+                },
+                outcome="failure",
+                error_message=reason,
+            )
+        except Exception:
+            logger.warning(
+                "Research %s turn %d: failed to record command rejection audit event",
+                config.id,
+                turn,
+                exc_info=True,
+            )
+
     async def run(self, config: ResearchConfig) -> None:
         """Run the autonomous research loop for a single session."""
         research_id = config.id
@@ -1128,14 +1157,22 @@ class AgentOrchestrator:
                             )
                             await agent_log.append("text", block.text, turn=turn)
                     elif block.type == "tool_use":
+                        logged_input = block.input
+                        if block.name == "bash" and isinstance(block.input, dict):
+                            logged_input = {
+                                **block.input,
+                                "command": redact_sensitive_text(
+                                    str(block.input.get("command", ""))
+                                ),
+                            }
                         logger.info(
                             "Research %s turn %d: tool=%s input=%s",
                             research_id, turn, block.name,
-                            str(block.input)[:200],
+                            str(logged_input)[:200],
                         )
                         await agent_log.append(
                             "tool_call", block.name, turn=turn,
-                            meta={"tool_id": block.id, "input": block.input},
+                            meta={"tool_id": block.id, "input": logged_input},
                         )
 
                         # Pre-snapshot: capture train.yaml BEFORE running
@@ -1164,27 +1201,46 @@ class AgentOrchestrator:
                                     research_id,
                                 )
 
-                        tool_result = await asyncio.to_thread(
+                        tool_execution = await asyncio.to_thread(
                             _execute_tool,
                             block.name,
                             block.input,
                             settings.workspace_root,
+                            workspace,
                         )
+                        tool_result = tool_execution.content
+                        tool_meta = tool_execution.meta
                         logger.info(
                             "Research %s turn %d: tool=%s result=%s",
                             research_id, turn, block.name,
                             tool_result[:200],
                         )
+                        if (
+                            block.name == "bash"
+                            and tool_meta.get("policy_allowed") is False
+                        ):
+                            await self._record_command_policy_rejection(
+                                config=config,
+                                turn=turn,
+                                command=str(block.input.get("command", "")),
+                                tool_meta=tool_meta,
+                            )
                         await agent_log.append(
                             "tool_result", tool_result[:5000], turn=turn,
-                            meta={"tool_id": block.id, "tool_name": block.name},
+                            meta={
+                                "tool_id": block.id,
+                                "tool_name": block.name,
+                                **tool_meta,
+                            },
                         )
                         tool_results.append({
                             "type": "tool_result",
                             "tool_use_id": block.id,
                             "content": tool_result,
                         })
-                        _cmd_str = str(block.input.get("command", ""))
+                        _cmd_str = redact_sensitive_text(
+                            str(block.input.get("command", ""))
+                        )
 
                         # Universal detection: scan bash output for
                         # prepare.py --- delimited metrics blocks.
