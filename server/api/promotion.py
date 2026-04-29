@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/api", tags=["promotion"])
+from server.api.auth import require_api_auth
+
+router = APIRouter(prefix="/api", tags=["promotion"], dependencies=[Depends(require_api_auth)])
 
 _promoter = None
 _store = None

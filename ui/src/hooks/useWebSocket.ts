@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { getAutoresearchWebSocketProtocols } from '../api/client';
 
 export interface WSEvent {
   type: string;
@@ -22,7 +23,8 @@ export function useWebSocket() {
       if (disposed) return;
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const url = `${proto}//${window.location.host}/ws/events`;
-      const ws = new WebSocket(url);
+      const protocols = getAutoresearchWebSocketProtocols();
+      const ws = protocols ? new WebSocket(url, protocols) : new WebSocket(url);
       wsRef.current = ws;
 
       ws.onopen = () => setConnected(true);

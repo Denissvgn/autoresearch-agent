@@ -7,12 +7,13 @@ import os
 from typing import Any, Dict, Optional
 
 import yaml
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from server.api.auth import require_api_auth
 from server.config import settings
 
-router = APIRouter(prefix="/api", tags=["research"])
+router = APIRouter(prefix="/api", tags=["research"], dependencies=[Depends(require_api_auth)])
 
 # These will be injected by main.py
 _session_manager = None

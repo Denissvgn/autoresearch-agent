@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from server.api.auth import require_websocket_auth
 from server.config import settings
 from server.core.config_promoter import ConfigPromoter
 from server.core.results_store import ResultsStore
@@ -131,7 +132,11 @@ async def health():
 
 @app.websocket("/ws/events")
 async def websocket_events(websocket: WebSocket):
-    await broadcaster.connect(websocket)
+    actor = await require_websocket_auth(websocket)
+    if actor is None:
+        return
+
+    await broadcaster.connect(websocket, subprotocol=actor.websocket_subprotocol)
     try:
         # Server-side ping loop keeps the TCP connection alive during long
         # training runs when no application-level events are being sent.

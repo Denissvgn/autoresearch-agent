@@ -5,10 +5,17 @@ from __future__ import annotations
 import logging
 from typing import List
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_CORS_ORIGINS = (
+    "http://localhost:8030,"
+    "http://127.0.0.1:8030,"
+    "http://localhost:5173,"
+    "http://127.0.0.1:5173"
+)
 
 
 class Settings(BaseSettings):
@@ -27,6 +34,10 @@ class Settings(BaseSettings):
     port: int = Field(default=8000)
     environment: str = Field(default="development")
     log_level: str = Field(default="INFO")
+    autoresearch_api_token: str | None = Field(
+        default=None,
+        description="Bearer token required for autoresearch API and WebSocket access.",
+    )
 
     # --- Anthropic ---
     anthropic_base_url: str = Field(
@@ -103,7 +114,14 @@ class Settings(BaseSettings):
     )
 
     # --- CORS ---
-    cors_origins_raw: str = Field(default="*")
+    cors_origins_raw: str = Field(
+        default=DEFAULT_CORS_ORIGINS,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_CORS_ORIGINS",
+            "CORS_ORIGINS_RAW",
+            "CORS_ORIGINS",
+        ),
+    )
 
     @property
     def cors_origins(self) -> List[str]:

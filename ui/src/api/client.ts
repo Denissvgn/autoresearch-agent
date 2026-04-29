@@ -1,4 +1,5 @@
 const BASE = '/api';
+const API_TOKEN_STORAGE_KEY = 'autoresearch.apiToken';
 
 export interface ResearchSession {
   id: string;
@@ -200,10 +201,59 @@ export interface ModelInfo {
   skill: string;
 }
 
+export function getAutoresearchApiToken(): string | null {
+  const envToken = import.meta.env.VITE_AUTORESEARCH_API_TOKEN as string | undefined;
+  if (envToken?.trim()) return envToken.trim();
+  try {
+    const storedToken = localStorage.getItem(API_TOKEN_STORAGE_KEY);
+    return storedToken?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export function hasBuildTimeAutoresearchApiToken(): boolean {
+  const envToken = import.meta.env.VITE_AUTORESEARCH_API_TOKEN as string | undefined;
+  return Boolean(envToken?.trim());
+}
+
+export function setAutoresearchApiToken(token: string): void {
+  localStorage.setItem(API_TOKEN_STORAGE_KEY, token.trim());
+}
+
+export function clearAutoresearchApiToken(): void {
+  localStorage.removeItem(API_TOKEN_STORAGE_KEY);
+}
+
+function base64UrlEncode(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+export function getAutoresearchWebSocketProtocols(): string[] | undefined {
+  const token = getAutoresearchApiToken();
+  if (!token) return undefined;
+  return [`autoresearch.token.${base64UrlEncode(token)}`];
+}
+
+function withAuthHeaders(headers?: HeadersInit, includeJson = false): Headers {
+  const merged = new Headers(headers);
+  if (includeJson && !merged.has('Content-Type')) {
+    merged.set('Content-Type', 'application/json');
+  }
+  const token = getAutoresearchApiToken();
+  if (token) {
+    merged.set('Authorization', `Bearer ${token}`);
+  }
+  return merged;
+}
+
 async function request<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...opts,
+    headers: withAuthHeaders(opts?.headers, true),
   });
   if (!res.ok) {
     const body = await res.text();
@@ -214,7 +264,7 @@ async function request<T>(path: string, opts?: RequestInit): Promise<T> {
 
 /** Trigger a browser file download from an API endpoint. */
 async function triggerDownload(url: string): Promise<void> {
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: withAuthHeaders() });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`${res.status}: ${body}`);

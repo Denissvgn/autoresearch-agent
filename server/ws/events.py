@@ -17,8 +17,8 @@ class EventBroadcaster:
     def __init__(self) -> None:
         self._clients: Set[WebSocket] = set()
 
-    async def connect(self, websocket: WebSocket) -> None:
-        await websocket.accept()
+    async def connect(self, websocket: WebSocket, *, subprotocol: str | None = None) -> None:
+        await websocket.accept(subprotocol=subprotocol)
         self._clients.add(websocket)
         logger.info(
             "WebSocket client connected (total: %d)", len(self._clients),
