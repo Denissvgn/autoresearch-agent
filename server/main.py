@@ -7,14 +7,19 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from server.api.auth import require_websocket_auth
+from server.api.auth import require_api_auth, require_websocket_auth
 from server.config import settings
 from server.core.config_promoter import ConfigPromoter
+from server.core.observability import (
+    PROMETHEUS_CONTENT_TYPE,
+    empty_observability_snapshot,
+    format_prometheus,
+)
 from server.core.results_store import ResultsStore
 from server.core.session_manager import SessionManager
 from server.ws.events import broadcaster
@@ -110,6 +115,34 @@ async def health():
         "status": "ok",
         "service": settings.service_name,
         "active_sessions": _session_manager.active_count if _session_manager else 0,
+    }
+
+
+async def _collect_observability_snapshot():
+    active_sessions = _session_manager.active_count if _session_manager else 0
+    if _store is None:
+        return empty_observability_snapshot(active_sessions=active_sessions)
+    return await _store.collect_observability_metrics(
+        active_sessions=active_sessions,
+    )
+
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics():
+    snapshot = await _collect_observability_snapshot()
+    return Response(
+        content=format_prometheus(snapshot),
+        media_type=PROMETHEUS_CONTENT_TYPE,
+    )
+
+
+@app.get("/api/observability/alerts", dependencies=[Depends(require_api_auth)])
+async def observability_alerts():
+    snapshot = await _collect_observability_snapshot()
+    return {
+        "schema_version": snapshot["schema_version"],
+        "collected_at": snapshot["collected_at"],
+        "alert_suggestions": snapshot["alert_suggestions"],
     }
 
 

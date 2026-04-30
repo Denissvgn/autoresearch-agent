@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter, defaultdict
 import hashlib
 import json
 import logging
@@ -11,6 +12,12 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import aiosqlite
+
+from server.core.observability import (
+    OBSERVABILITY_SCHEMA_VERSION,
+    alert_suggestions,
+    log_research_event,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -214,6 +221,107 @@ _MODEL_TO_SKILL = {
     "volatility": "volatility-autotuner",
     "rl": "rl-autotuner",
 }
+
+
+def _json_object(raw: Any) -> Dict[str, Any]:
+    if isinstance(raw, dict):
+        return raw
+    if not isinstance(raw, str) or not raw.strip():
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _json_list(raw: Any) -> List[Any]:
+    if isinstance(raw, list):
+        return raw
+    if not isinstance(raw, str) or not raw.strip():
+        return []
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _truthy_status(payload: Dict[str, Any]) -> bool:
+    if not payload:
+        return False
+    for key in ("passed", "pass", "valid", "complete", "all_gates_passed"):
+        value = payload.get(key)
+        if value is True:
+            return True
+        if isinstance(value, str) and value.lower() in {"passed", "true", "yes"}:
+            return True
+    status = payload.get("status")
+    return isinstance(status, str) and status.lower() in {"passed", "success", "completed"}
+
+
+def _attempt_outcome(row: Dict[str, Any], metrics: Dict[str, Any]) -> str:
+    status = str(metrics.get("status") or "").lower()
+    if status in {"rejected_duplicate"} or row.get("duplicate_reason"):
+        return "rejected_duplicate"
+    if status in {"pruned"}:
+        return "pruned"
+    if status in {"failed", "error", "timeout", "timed_out", "crash"}:
+        return "failed"
+    if row.get("decision") == "discard":
+        return "failed"
+    if status in {"completed", "success"}:
+        return "completed"
+    if row.get("decision") in {"keep", "improve", "hpo_screening"}:
+        return "completed"
+    if row.get("primary_metric") is not None:
+        return "completed" if row.get("all_gates_passed") else "failed"
+    return "unknown"
+
+
+def _replay_status(metrics: Dict[str, Any]) -> str:
+    replay = (
+        metrics.get("rl_economic_replay")
+        if isinstance(metrics.get("rl_economic_replay"), dict)
+        else metrics.get("economic_replay")
+        if isinstance(metrics.get("economic_replay"), dict)
+        else metrics.get("replay")
+        if isinstance(metrics.get("replay"), dict)
+        else {}
+    )
+    if not replay:
+        return "missing"
+    gates = replay.get("gates") if isinstance(replay.get("gates"), dict) else {}
+    if _truthy_status(gates) or _truthy_status(replay):
+        return "passed"
+    return "failed"
+
+
+def _reason_slug(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return "unknown"
+    if text.startswith("Cannot promote"):
+        text = text.split("(", 1)[-1].rstrip(")")
+    text = text.split(",", 1)[0].strip()
+    text = text.replace(" ", "_").replace("-", "_").lower()
+    return "".join(ch for ch in text if ch.isalnum() or ch == "_") or "unknown"
+
+
+def _counter_rows(counter: Counter[tuple[Any, ...]], keys: tuple[str, ...]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for labels, count in sorted(counter.items()):
+        row = {key: labels[index] for index, key in enumerate(keys)}
+        row["count"] = count
+        rows.append(row)
+    return rows
+
+
+def _value_rows(values: Dict[str, float], key: str) -> List[Dict[str, Any]]:
+    return [
+        {key: label, "value": value}
+        for label, value in sorted(values.items())
+    ]
 
 
 class ResultsStore:
@@ -474,6 +582,19 @@ class ResultsStore:
                 ),
             )
             await db.commit()
+        log_research_event(
+            logger,
+            "audit.recorded",
+            research_id=research_id,
+            pipeline_id=pipeline_id,
+            phase=metadata.get("phase"),
+            trial_id=metadata.get("trial_id"),
+            promotion_id=metadata.get("promotion_id"),
+            audit_event_id=event_id,
+            actor_id=actor_id,
+            action=action,
+            outcome=outcome,
+        )
         return {
             "event_id": event_id,
             "timestamp": timestamp,
@@ -561,6 +682,15 @@ class ResultsStore:
                 ),
             )
             await db.commit()
+        log_research_event(
+            logger,
+            "research_session.created",
+            research_id=session_id,
+            model_type=model_type,
+            instrument=instrument,
+            timeframe=timeframe,
+            status="running",
+        )
         return await self.get_session(session_id)
 
     async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
@@ -640,6 +770,15 @@ class ResultsStore:
                 ),
             )
             await db.commit()
+            log_research_event(
+                logger,
+                "runtime_command.started",
+                research_id=research_id,
+                turn=turn,
+                tool_name=tool_name,
+                policy_operation=policy_operation,
+                runtime_command_id=cursor.lastrowid,
+            )
             return {
                 "id": cursor.lastrowid,
                 "research_id": research_id,
@@ -695,6 +834,20 @@ class ResultsStore:
             )
             await db.commit()
         rows = await self.list_runtime_commands(command_id=command_id)
+        row = rows[0] if rows else {}
+        metadata_payload = row.get("metadata") or metadata or {}
+        log_research_event(
+            logger,
+            "runtime_command.finished",
+            research_id=row.get("research_id") or metadata_payload.get("research_id"),
+            phase=metadata_payload.get("phase"),
+            trial_id=metadata_payload.get("trial_id"),
+            runtime_command_id=command_id,
+            status=status,
+            returncode=returncode,
+            timed_out=timed_out,
+            policy_operation=metadata_payload.get("policy_operation"),
+        )
         return rows[0] if rows else None
 
     async def list_runtime_commands(
@@ -734,6 +887,190 @@ class ResultsStore:
                     row["metadata"] = {}
             return rows
 
+    async def collect_observability_metrics(
+        self,
+        *,
+        active_sessions: int = 0,
+    ) -> Dict[str, Any]:
+        """Collect production research metrics from persisted state."""
+
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+
+            async def fetch_all(sql: str) -> List[Dict[str, Any]]:
+                cursor = await db.execute(sql)
+                return [dict(row) for row in await cursor.fetchall()]
+
+            sessions = await fetch_all("SELECT * FROM research_sessions")
+            pipelines = await fetch_all("SELECT * FROM pipelines")
+            planned_trials = await fetch_all("SELECT * FROM planned_trials")
+            iterations = await fetch_all(
+                """SELECT i.*, s.model_type AS session_model_type
+                   FROM iterations i
+                   LEFT JOIN research_sessions s ON s.id = i.research_id"""
+            )
+            promotions = await fetch_all("SELECT * FROM promotions")
+            runtime_commands = await fetch_all("SELECT * FROM runtime_commands")
+            audit_events = await fetch_all("SELECT * FROM audit_events")
+
+        session_counts: Counter[tuple[Any, ...]] = Counter()
+        session_model_counts: Counter[tuple[Any, ...]] = Counter()
+        api_cost_total = 0.0
+        api_cost_by_model: defaultdict[str, float] = defaultdict(float)
+        for session in sessions:
+            model_type = session.get("model_type") or "unknown"
+            status = session.get("status") or "unknown"
+            session_counts[(status, model_type)] += 1
+            session_model_counts[(model_type,)] += 1
+            cost = float(session.get("total_api_cost_usd") or 0.0)
+            api_cost_total += cost
+            api_cost_by_model[str(model_type)] += cost
+
+        pipeline_counts: Counter[tuple[Any, ...]] = Counter()
+        blocked_promotions: Counter[tuple[Any, ...]] = Counter()
+        for pipeline in pipelines:
+            status = pipeline.get("status") or "unknown"
+            phase = pipeline.get("current_phase") or "none"
+            pipeline_counts[(status, phase)] += 1
+            if status == "promotion_blocked":
+                blockers = _json_list(pipeline.get("promotion_blockers_json"))
+                for blocker in blockers or ["unknown"]:
+                    blocked_promotions[("development", _reason_slug(blocker))] += 1
+
+        planned_counts: Counter[tuple[Any, ...]] = Counter()
+        for trial in planned_trials:
+            status = trial.get("status") or "unknown"
+            phase = trial.get("search_phase") or "unknown"
+            planned_counts[(status, phase)] += 1
+
+        attempt_counts: Counter[tuple[Any, ...]] = Counter()
+        training_duration: defaultdict[tuple[Any, ...], Dict[str, float]] = defaultdict(
+            lambda: {"sum": 0.0, "count": 0.0}
+        )
+        rl_replay_counts: Counter[tuple[Any, ...]] = Counter()
+        for iteration in iterations:
+            metrics = _json_object(iteration.get("metrics_json"))
+            model_type = iteration.get("session_model_type") or "unknown"
+            outcome = _attempt_outcome(iteration, metrics)
+            attempt_counts[(outcome, model_type)] += 1
+            duration = iteration.get("training_time_s")
+            if duration is not None:
+                key = (model_type, outcome)
+                training_duration[key]["sum"] += float(duration)
+                training_duration[key]["count"] += 1
+            if model_type == "rl":
+                rl_replay_counts[(_replay_status(metrics), model_type)] += 1
+
+        promotion_scope_counts: Counter[tuple[Any, ...]] = Counter()
+        for promotion in promotions:
+            promotion_scope_counts[(promotion.get("scope") or "development",)] += 1
+
+        runtime_counts: Counter[tuple[Any, ...]] = Counter()
+        for command in runtime_commands:
+            runtime_counts[(command.get("status") or "unknown",)] += 1
+
+        command_rejections: Counter[tuple[Any, ...]] = Counter()
+        for event in audit_events:
+            action = event.get("action")
+            metadata = _json_object(event.get("request_metadata_json"))
+            if action in {"command.reject", "structured_hpo.manual_review"}:
+                operation = (
+                    metadata.get("operation")
+                    or metadata.get("policy_operation")
+                    or action
+                )
+                command_rejections[(operation or "unknown",)] += 1
+            if (
+                isinstance(action, str)
+                and action.startswith("promotion.")
+                and event.get("outcome") == "failure"
+            ):
+                scope = metadata.get("scope") or "unknown"
+                reason = _reason_slug(event.get("error_message"))
+                blocked_promotions[(scope, reason)] += 1
+
+        if not command_rejections:
+            for command in runtime_commands:
+                if command.get("status") != "rejected":
+                    continue
+                metadata = _json_object(command.get("metadata_json"))
+                operation = (
+                    command.get("policy_operation")
+                    or metadata.get("policy_operation")
+                    or "unknown"
+                )
+                command_rejections[(operation,)] += 1
+
+        return {
+            "schema_version": OBSERVABILITY_SCHEMA_VERSION,
+            "collected_at": datetime.now(timezone.utc).isoformat(),
+            "active_sessions": active_sessions,
+            "sessions": {
+                "by_status": _counter_rows(
+                    session_counts,
+                    ("status", "model_type"),
+                ),
+                "by_model_type": _counter_rows(
+                    session_model_counts,
+                    ("model_type",),
+                ),
+            },
+            "pipelines": {
+                "by_status": _counter_rows(
+                    pipeline_counts,
+                    ("status", "phase"),
+                ),
+            },
+            "planned_trials": {
+                "by_status": _counter_rows(
+                    planned_counts,
+                    ("status", "search_phase"),
+                ),
+            },
+            "attempts": {
+                "by_outcome": _counter_rows(
+                    attempt_counts,
+                    ("outcome", "model_type"),
+                ),
+                "training_duration_seconds": [
+                    {
+                        "model_type": labels[0],
+                        "outcome": labels[1],
+                        "sum": values["sum"],
+                        "count": int(values["count"]),
+                    }
+                    for labels, values in sorted(training_duration.items())
+                ],
+            },
+            "api_cost": {
+                "total_usd": api_cost_total,
+                "by_model_type": _value_rows(api_cost_by_model, "model_type"),
+            },
+            "promotions": {
+                "by_scope": _counter_rows(promotion_scope_counts, ("scope",)),
+                "blocked_by_reason": _counter_rows(
+                    blocked_promotions,
+                    ("scope", "reason"),
+                ),
+            },
+            "rl_replay": {
+                "by_status": _counter_rows(
+                    rl_replay_counts,
+                    ("status", "model_type"),
+                ),
+            },
+            "runtime_commands": {
+                "by_status": _counter_rows(runtime_counts, ("status",)),
+            },
+            "command_policy": {
+                "rejections_by_operation": _counter_rows(
+                    command_rejections,
+                    ("operation",),
+                ),
+            },
+            "alert_suggestions": alert_suggestions(),
+        }
+
     async def interrupt_runtime_commands(
         self,
         *,
@@ -767,6 +1104,15 @@ class ResultsStore:
                 values,
             )
             await db.commit()
+        if any(key in fields for key in ("status", "current_phase", "next_action")):
+            log_research_event(
+                logger,
+                "research_session.updated",
+                research_id=session_id,
+                phase=fields.get("current_phase"),
+                status=fields.get("status"),
+                next_action=fields.get("next_action"),
+            )
         return await self.get_session(session_id)
 
     async def delete_session(self, session_id: str) -> bool:
@@ -859,6 +1205,32 @@ class ResultsStore:
                         best_metric=primary_metric,
                     )
 
+        metrics_payload = _json_object(metrics_json)
+        trial_identity = _json_object(trial_identity_json)
+        log_research_event(
+            logger,
+            "iteration.recorded",
+            research_id=research_id,
+            phase=metrics_payload.get("search_phase"),
+            trial_id=(
+                metrics_payload.get("trial_id")
+                or metrics_payload.get("planned_trial_id")
+                or trial_identity.get("trial_id")
+            ),
+            iteration=iteration,
+            outcome=_attempt_outcome(
+                {
+                    "decision": decision,
+                    "primary_metric": primary_metric,
+                    "all_gates_passed": all_gates_passed,
+                    "duplicate_reason": duplicate_reason,
+                },
+                metrics_payload,
+            ),
+            decision=decision,
+            metric_name=metric_name,
+            primary_metric=primary_metric,
+        )
         return {
             "research_id": research_id,
             "iteration": iteration,
@@ -1174,6 +1546,20 @@ class ResultsStore:
                     ),
                 )
             await db.commit()
+        phases = sorted(
+            {
+                str(trial.get("search_phase") or "hpo_screening")
+                for trial in trials
+            }
+        )
+        log_research_event(
+            logger,
+            "planned_trials.recorded",
+            research_id=research_id,
+            phase=",".join(phases) if phases else None,
+            study_id=study_id,
+            planned_trial_count=len(trials),
+        )
         return await self.get_planned_trials(research_id)
 
     async def record_planned_trial_manual_review(
@@ -1223,6 +1609,15 @@ class ResultsStore:
                 ),
             )
             await db.commit()
+        log_research_event(
+            logger,
+            "planned_trial.manual_review",
+            research_id=research_id,
+            phase=search_phase,
+            trial_id=trial_id,
+            study_id=study_id,
+            status="manual_review",
+        )
         row = await self.get_planned_trial(research_id, trial_id)
         return row or {
             "research_id": research_id,
@@ -1337,7 +1732,16 @@ class ResultsStore:
                 values,
             )
             await db.commit()
-        return await self.get_planned_trial(research_id, trial_id)
+        row = await self.get_planned_trial(research_id, trial_id)
+        log_research_event(
+            logger,
+            "planned_trial.updated",
+            research_id=research_id,
+            phase=(row or {}).get("search_phase"),
+            trial_id=trial_id,
+            status=status,
+        )
+        return row
 
     @staticmethod
     def _decode_planned_trial(row: Dict[str, Any]) -> None:
@@ -1393,8 +1797,20 @@ class ResultsStore:
                 ),
             )
             await db.commit()
+            promotion_id = cursor.lastrowid
+            log_research_event(
+                logger,
+                "promotion.recorded",
+                research_id=research_id,
+                promotion_id=promotion_id,
+                iteration=iteration,
+                scope=scope,
+                model_type=model_type,
+                instrument=instrument,
+                timeframe=timeframe,
+            )
             return {
-                "id": cursor.lastrowid,
+                "id": promotion_id,
                 "research_id": research_id,
                 "iteration": iteration,
                 "target_path": target_path,
@@ -1564,6 +1980,14 @@ class ResultsStore:
                 ),
             )
             await db.commit()
+        log_research_event(
+            logger,
+            "pipeline.created",
+            pipeline_id=pipeline_id,
+            instrument=instrument,
+            timeframe=timeframe,
+            status="running",
+        )
         return await self.get_pipeline(pipeline_id)
 
     async def get_pipeline(self, pipeline_id: str) -> Optional[Dict[str, Any]]:
@@ -1617,6 +2041,23 @@ class ResultsStore:
                 values,
             )
             await db.commit()
+        if any(
+            key in fields
+            for key in (
+                "status",
+                "current_phase",
+                "promotion_blockers_json",
+                "promotion_preview_json",
+            )
+        ):
+            log_research_event(
+                logger,
+                "pipeline.updated",
+                pipeline_id=pipeline_id,
+                phase=fields.get("current_phase"),
+                status=fields.get("status"),
+                blocked=fields.get("promotion_blockers_json") is not None,
+            )
         return await self.get_pipeline(pipeline_id)
 
     @staticmethod

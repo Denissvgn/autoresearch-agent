@@ -6,6 +6,7 @@ import json
 from typing import Any, Dict, Iterable, List, Optional
 
 from server.core.consistency_validator import parse_consistency_report
+from server.core.observability import alert_suggestions
 from server.core.research_phase_plan import build_phase_state
 
 
@@ -481,6 +482,17 @@ def _production_operations_summary(
         "oos_provenance": rl_oos,
         "inference_parity": inference,
         "rollback": rollback,
+        "observability": {
+            "metrics_endpoint": "/metrics",
+            "alert_suggestions": alert_suggestions(),
+            "trace_fields": [
+                "research_id",
+                "pipeline_id",
+                "phase",
+                "trial_id",
+                "promotion_id",
+            ],
+        },
         "audit_events": _compact_audit_events(audit_events),
     }
 
