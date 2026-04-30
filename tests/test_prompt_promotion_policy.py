@@ -191,3 +191,36 @@ async def test_structured_hpo_guard_rejects_off_plan_prepare_and_yaml_writes():
     assert planned is None
     assert rejection.meta["policy_allowed"] is False
     assert store.manual_reviews[-1]["expected_command"].startswith("write_file:")
+
+
+@pytest.mark.asyncio
+async def test_duplicate_training_guard_rejects_same_identity():
+    class Store:
+        async def find_duplicate_trial_identity(self, **kwargs):
+            return {
+                "research_id": "res_direction",
+                "iteration": 1,
+                "trial_identity_hash": kwargs["trial_identity_hash"],
+            }
+
+    orchestrator = object.__new__(AgentOrchestrator)
+    orchestrator._store = Store()
+    config = _config("direction", enable_hpo=True)
+
+    rejection, marker = await orchestrator._guard_duplicate_training_attempt(
+        config=config,
+        turn=4,
+        command=(
+            ".venv/bin/python scripts/autotuner/direction/prepare.py "
+            "--config runs/autotuner/DOGE_USDT_15m/direction/"
+            "planned_trials/trial_001/train.yaml --quick"
+        ),
+        config_snapshot="walkforward_n_folds: 3\n",
+        planned_trial={"trial_id": "trial_001"},
+    )
+
+    assert rejection.meta["policy_allowed"] is False
+    assert rejection.meta["policy_operation"] == "duplicate_attempt.reject"
+    assert marker["status"] == "rejected_duplicate"
+    assert marker["duplicate_of_iteration"] == 1
+    assert marker["trial_identity_hash"] == rejection.meta["trial_identity_hash"]

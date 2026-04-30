@@ -32,6 +32,9 @@ from server.core.experiment_parser import (
 )
 from server.core.iteration_snapshot import (
     build_iteration_attempt_snapshot,
+    build_trial_identity,
+    canonical_config_hash,
+    trial_identity_hash,
     write_iteration_attempt_snapshot,
 )
 from server.core.log_writer import AgentLogWriter
@@ -1173,10 +1176,32 @@ class AgentOrchestrator:
             )
             return
         for trial in written:
+            trial_config_snapshot = None
+            materialized_path = trial.get("materialized_config_path")
+            if materialized_path:
+                try:
+                    trial_config_snapshot = Path(materialized_path).read_text(
+                        encoding="utf-8",
+                    )
+                except OSError:
+                    trial_config_snapshot = None
+            identity = build_trial_identity(
+                instrument=config.instrument,
+                timeframe=config.timeframe,
+                model_type=config.model_type,
+                command=trial.get("expected_command"),
+                config_snapshot=trial_config_snapshot,
+                quick_mode=config.quick_mode,
+            )
             await self._store.update_planned_trial_status(
                 research_id=config.id,
                 trial_id=trial["trial_id"],
                 status="materialized",
+                train_config_path=trial.get("train_config_path")
+                or trial.get("materialized_config_path"),
+                canonical_config_hash=identity.get("canonical_config_hash"),
+                trial_identity_hash=trial_identity_hash(identity),
+                trial_identity=identity,
             )
         await agent_log.append(
             "system",
@@ -1360,6 +1385,83 @@ class AgentOrchestrator:
             mlflow_run_id=marker.get("mlflow_run_id"),
         )
 
+    async def _guard_duplicate_training_attempt(
+        self,
+        *,
+        config: ResearchConfig,
+        turn: int,
+        command: str,
+        config_snapshot: Optional[str],
+        planned_trial: Optional[Dict[str, Any]],
+    ) -> tuple[Optional[ToolExecutionResult], Optional[Dict[str, Any]]]:
+        """Reject an already-attempted config/seed/mode/split identity."""
+
+        identity = build_trial_identity(
+            instrument=config.instrument,
+            timeframe=config.timeframe,
+            model_type=config.model_type,
+            command=command,
+            config_snapshot=config_snapshot,
+            quick_mode=config.quick_mode,
+            marker=planned_trial or {},
+        )
+        identity_hash = trial_identity_hash(identity)
+        if not identity_hash:
+            return None, None
+
+        duplicate = await self._store.find_duplicate_trial_identity(
+            research_id=config.id,
+            trial_identity_hash=identity_hash,
+            instrument=config.instrument,
+            timeframe=config.timeframe,
+            model_type=config.model_type,
+            include_cross_session=(
+                settings.autoresearch_cross_session_duplicate_check
+            ),
+        )
+        if not duplicate:
+            return None, None
+
+        duplicate_research_id = duplicate.get("research_id")
+        duplicate_iteration = duplicate.get("iteration")
+        duplicate_reason = (
+            "Duplicate training attempt rejected: the same canonical config, "
+            f"seed={identity.get('seed')}, mode={identity.get('validation_mode')}, "
+            f"data_split_id={identity.get('data_split_id')}, model="
+            f"{config.model_type}, instrument={config.instrument}, timeframe="
+            f"{config.timeframe} already exists in session "
+            f"{duplicate_research_id} iteration {duplicate_iteration}."
+        )
+        marker = {
+            "status": "rejected_duplicate",
+            "primary_metric": None,
+            "metric_name": None,
+            "all_gates_passed": False,
+            "decision": "discard",
+            "description": f"{duplicate_reason} (turn {turn})",
+            "config_snapshot": config_snapshot,
+            "canonical_config_hash": identity.get("canonical_config_hash"),
+            "trial_identity": identity,
+            "trial_identity_hash": identity_hash,
+            "duplicate_of_research_id": duplicate_research_id,
+            "duplicate_of_iteration": duplicate_iteration,
+            "duplicate_reason": duplicate_reason,
+        }
+        return ToolExecutionResult(
+            duplicate_reason,
+            meta={
+                "policy_allowed": False,
+                "policy_reason": duplicate_reason,
+                "policy_operation": "duplicate_attempt.reject",
+                "normalized_command": _normalize_command_for_plan(command),
+                "returncode": None,
+                "timed_out": False,
+                "trial_identity_hash": identity_hash,
+                "duplicate_of_research_id": duplicate_research_id,
+                "duplicate_of_iteration": duplicate_iteration,
+            },
+        ), marker
+
     async def run(self, config: ResearchConfig) -> None:
         """Run the autonomous research loop for a single session."""
         research_id = config.id
@@ -1495,6 +1597,11 @@ class AgentOrchestrator:
                             )
                         if planned_trial_for_tool:
                             last_planned_trial_for_turn = planned_trial_for_tool
+                        raw_command_for_tool = (
+                            str(block.input.get("command", ""))
+                            if isinstance(block.input, dict)
+                            else ""
+                        )
 
                         # Pre-snapshot: capture train.yaml BEFORE running
                         # prepare.py so we have an immutable config record
@@ -1505,7 +1612,7 @@ class AgentOrchestrator:
                             and isinstance(block.input, dict)
                             and block.name == "bash"
                             and any(
-                                token in str(block.input.get("command", ""))
+                                token in raw_command_for_tool
                                 for token in (
                                     "prepare.py",
                                     "run_phase1c_",
@@ -1513,9 +1620,8 @@ class AgentOrchestrator:
                                 )
                             )
                         ):
-                            command_for_snapshot = str(block.input.get("command", ""))
                             snapshot_path = _config_snapshot_path_from_command(
-                                command_for_snapshot,
+                                raw_command_for_tool,
                                 settings.workspace_root,
                                 workspace,
                             ) or os.path.join(workspace, "train.yaml")
@@ -1531,8 +1637,60 @@ class AgentOrchestrator:
                                     snapshot_path,
                                 )
 
+                        duplicate_rejection: Optional[ToolExecutionResult] = None
+                        duplicate_marker: Optional[Dict[str, Any]] = None
+                        if (
+                            structured_rejection is None
+                            and isinstance(block.input, dict)
+                            and block.name == "bash"
+                            and any(
+                                token in raw_command_for_tool
+                                for token in (
+                                    "prepare.py",
+                                    "run_phase1c_",
+                                    "run_phase1b_",
+                                )
+                            )
+                        ):
+                            (
+                                duplicate_rejection,
+                                duplicate_marker,
+                            ) = await self._guard_duplicate_training_attempt(
+                                config=config,
+                                turn=turn,
+                                command=raw_command_for_tool,
+                                config_snapshot=_pending_snapshot,
+                                planned_trial=planned_trial_for_tool,
+                            )
+
                         if structured_rejection is not None:
                             tool_execution = structured_rejection
+                        elif duplicate_rejection is not None:
+                            iteration_count += 1
+                            duplicate_marker = duplicate_marker or {}
+                            self._attach_planned_trial_metadata(
+                                duplicate_marker,
+                                planned_trial_for_tool,
+                            )
+                            await self._record_iteration(
+                                research_id, iteration_count,
+                                duplicate_marker, total_cost,
+                                workspace=workspace,
+                                turn=turn,
+                                command=redact_sensitive_text(raw_command_for_tool),
+                            )
+                            if planned_trial_for_tool:
+                                await self._store.update_planned_trial_status(
+                                    research_id=config.id,
+                                    trial_id=planned_trial_for_tool["trial_id"],
+                                    status="duplicate_rejected",
+                                    result_path=planned_trial_for_tool.get("result_path"),
+                                    manual_review_reason=(
+                                        duplicate_marker.get("duplicate_reason")
+                                    ),
+                                )
+                            turn_recorded_iteration = True
+                            tool_execution = duplicate_rejection
                         else:
                             if planned_trial_for_tool:
                                 await self._store.update_planned_trial_status(
@@ -1553,11 +1711,6 @@ class AgentOrchestrator:
                             "Research %s turn %d: tool=%s result=%s",
                             research_id, turn, block.name,
                             tool_result[:200],
-                        )
-                        raw_command_for_tool = (
-                            str(block.input.get("command", ""))
-                            if isinstance(block.input, dict)
-                            else ""
                         )
                         if (
                             block.name == "bash"
@@ -2187,6 +2340,35 @@ class AgentOrchestrator:
         metric_name = marker.get("metric_name", "")
         training_time = marker.get("training_time_s")
 
+        session = await self._store.get_session(research_id)
+        if session:
+            identity = marker.get("trial_identity")
+            if not identity:
+                identity = build_trial_identity(
+                    instrument=str(session.get("instrument") or ""),
+                    timeframe=str(session.get("timeframe") or ""),
+                    model_type=str(session.get("model_type") or marker.get("model_type") or ""),
+                    command=command,
+                    config_snapshot=marker.get("config_snapshot"),
+                    quick_mode=bool(session.get("quick_mode")),
+                    marker=marker,
+                )
+                marker["trial_identity"] = identity
+            marker["canonical_config_hash"] = (
+                marker.get("canonical_config_hash")
+                or identity.get("canonical_config_hash")
+                or canonical_config_hash(marker.get("config_snapshot"))
+            )
+            marker["trial_identity_hash"] = (
+                marker.get("trial_identity_hash")
+                or trial_identity_hash(identity)
+            )
+        else:
+            marker["canonical_config_hash"] = (
+                marker.get("canonical_config_hash")
+                or canonical_config_hash(marker.get("config_snapshot"))
+            )
+
         attempt_snapshot = None
         attempt_snapshot_path = None
         attempt_snapshot_hash = None
@@ -2218,7 +2400,6 @@ class AgentOrchestrator:
             marker["attempt_snapshot_path"] = attempt_snapshot_path
             marker["attempt_snapshot_hash"] = attempt_snapshot_hash
 
-        session = await self._store.get_session(research_id)
         model_type = (session or {}).get("model_type") or marker.get("model_type") or ""
         consistency_report = build_consistency_report(
             research_id=research_id,
@@ -2242,6 +2423,16 @@ class AgentOrchestrator:
             metrics_json=json.dumps(marker),
             training_time_s=training_time,
             mlflow_run_id=marker.get("mlflow_run_id"),
+            canonical_config_hash=marker.get("canonical_config_hash"),
+            trial_identity_hash=marker.get("trial_identity_hash"),
+            trial_identity_json=(
+                json.dumps(marker.get("trial_identity"), sort_keys=True)
+                if marker.get("trial_identity") is not None
+                else marker.get("trial_identity_json")
+            ),
+            duplicate_of_research_id=marker.get("duplicate_of_research_id"),
+            duplicate_of_iteration=marker.get("duplicate_of_iteration"),
+            duplicate_reason=marker.get("duplicate_reason"),
             attempt_snapshot_json=(
                 json.dumps(attempt_snapshot, sort_keys=True)
                 if attempt_snapshot is not None

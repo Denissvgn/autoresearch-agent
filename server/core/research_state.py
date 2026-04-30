@@ -23,6 +23,10 @@ def build_research_state(
     study_rows = [_decode_hpo_study(row) for row in hpo_studies]
     planned_trial_rows = [_decode_planned_trial(row) for row in planned_trials]
     promotion_rows = list(promotions)
+    executed_iteration_rows = [
+        row for row in iteration_rows
+        if not _is_duplicate_rejection(row)
+    ]
     phase_state = _session_phase_state(session) or build_phase_state(
         session=session,
         iterations=iteration_rows,
@@ -43,11 +47,12 @@ def build_research_state(
         "phase_state": phase_state,
         "top_candidates": top_candidates,
         "failed_pruned_configs": failed,
+        "duplicate_rejections": _duplicate_rejections(iteration_rows),
         "gate_failure_reasons": _gate_failure_reasons(iteration_rows),
         "budget_usage": {
             "api_cost_usd": session.get("total_api_cost_usd") or 0.0,
             "max_budget_usd": session.get("max_budget_usd"),
-            "iterations_used": len(iteration_rows),
+            "iterations_used": len(executed_iteration_rows),
             "max_iterations": session.get("max_iterations"),
         },
         "hpo_studies": study_rows,
@@ -87,6 +92,8 @@ def _top_candidates(iterations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 def _failed_or_pruned(iterations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     rows = []
     for row in iterations:
+        if _is_duplicate_rejection(row):
+            continue
         metrics = _parse_json(row.get("metrics_json")) or {}
         status = metrics.get("status")
         if row.get("decision") == "discard" or status in {"failed", "error", "timeout", "pruned", "crash"}:
@@ -109,10 +116,41 @@ def _candidate_summary(row: Dict[str, Any]) -> Dict[str, Any]:
         "mlflow_run_id": row.get("mlflow_run_id") or metrics.get("mlflow_run_id"),
         "artifact_hash": snapshot.get("artifact_hash") or metrics.get("artifact_hash"),
         "attempt_snapshot_hash": row.get("attempt_snapshot_hash"),
+        "canonical_config_hash": (
+            row.get("canonical_config_hash")
+            or metrics.get("canonical_config_hash")
+            or snapshot.get("canonical_config_hash")
+        ),
+        "trial_identity_hash": (
+            row.get("trial_identity_hash")
+            or metrics.get("trial_identity_hash")
+            or snapshot.get("trial_identity_hash")
+        ),
+        "trial_identity": _trial_identity(row, metrics, snapshot),
+        "duplicate_reason": (
+            row.get("duplicate_reason") or metrics.get("duplicate_reason")
+        ),
+        "duplicate_of": _duplicate_of(row, metrics),
         "consistency_passed": report.get("passed") if report else None,
         "gate_failure_reasons": (report.get("blockers") if report else []),
         "search_phase": row.get("search_phase") or metrics.get("search_phase"),
     }
+
+
+def _duplicate_rejections(iterations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    rows = []
+    for row in iterations:
+        if _is_duplicate_rejection(row):
+            rows.append(_candidate_summary(row))
+    return rows
+
+
+def _is_duplicate_rejection(row: Dict[str, Any]) -> bool:
+    metrics = _parse_json(row.get("metrics_json")) or {}
+    return bool(
+        row.get("duplicate_reason")
+        or metrics.get("status") == "rejected_duplicate"
+    )
 
 
 def _gate_failure_reasons(iterations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -200,6 +238,9 @@ def _decode_planned_trial(row: Dict[str, Any]) -> Dict[str, Any]:
     raw = decoded.get("config_patch_json")
     if raw and "config_patch" not in decoded:
         decoded["config_patch"] = _parse_json(raw) or {}
+    raw_identity = decoded.get("trial_identity_json")
+    if raw_identity and "trial_identity" not in decoded:
+        decoded["trial_identity"] = _parse_json(raw_identity)
     return decoded
 
 
@@ -237,3 +278,34 @@ def _parse_json(raw: Any) -> Any:
         except json.JSONDecodeError:
             return None
     return raw
+
+
+def _trial_identity(
+    row: Dict[str, Any],
+    metrics: Dict[str, Any],
+    snapshot: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    raw = row.get("trial_identity_json")
+    parsed = _parse_json(raw)
+    if isinstance(parsed, dict):
+        return parsed
+    identity = metrics.get("trial_identity")
+    if isinstance(identity, dict):
+        return identity
+    identity = snapshot.get("trial_identity")
+    return identity if isinstance(identity, dict) else None
+
+
+def _duplicate_of(
+    row: Dict[str, Any],
+    metrics: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    research_id = row.get("duplicate_of_research_id") or metrics.get(
+        "duplicate_of_research_id"
+    )
+    iteration = row.get("duplicate_of_iteration") or metrics.get(
+        "duplicate_of_iteration"
+    )
+    if research_id is None and iteration is None:
+        return None
+    return {"research_id": research_id, "iteration": iteration}

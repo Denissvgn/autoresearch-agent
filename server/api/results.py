@@ -134,9 +134,41 @@ def _enrich_iteration(row: Dict[str, Any], model_type: str) -> Dict[str, Any]:
         or metrics.get("attempt_snapshot_hash")
         or attempt_snapshot.get("snapshot_hash")
     )
-    enriched["config_snapshot_sha256"] = attempt_snapshot.get(
-        "config_snapshot_sha256"
+    enriched["config_snapshot_sha256"] = (
+        attempt_snapshot.get("config_snapshot_sha256")
     )
+    enriched["canonical_config_hash"] = (
+        row.get("canonical_config_hash")
+        or metrics.get("canonical_config_hash")
+        or attempt_snapshot.get("canonical_config_hash")
+    )
+    raw_identity = row.get("trial_identity_json") or metrics.get("trial_identity")
+    if isinstance(raw_identity, str):
+        try:
+            trial_identity = json.loads(raw_identity)
+        except (json.JSONDecodeError, TypeError):
+            trial_identity = None
+    else:
+        trial_identity = raw_identity if isinstance(raw_identity, dict) else None
+    enriched["trial_identity"] = (
+        trial_identity or attempt_snapshot.get("trial_identity")
+    )
+    enriched["trial_identity_hash"] = (
+        row.get("trial_identity_hash")
+        or metrics.get("trial_identity_hash")
+        or attempt_snapshot.get("trial_identity_hash")
+    )
+    enriched["duplicate_reason"] = (
+        row.get("duplicate_reason") or metrics.get("duplicate_reason")
+    )
+    enriched["duplicate_of"] = {
+        "research_id": row.get("duplicate_of_research_id")
+        or metrics.get("duplicate_of_research_id"),
+        "iteration": row.get("duplicate_of_iteration")
+        or metrics.get("duplicate_of_iteration"),
+    }
+    if not any(enriched["duplicate_of"].values()):
+        enriched["duplicate_of"] = None
     enriched["artifact_hash"] = (
         attempt_snapshot.get("artifact_hash")
         or metrics.get("artifact_hash")

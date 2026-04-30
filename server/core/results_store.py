@@ -52,6 +52,12 @@ CREATE TABLE IF NOT EXISTS iterations (
     decision TEXT,
     description TEXT,
     config_snapshot TEXT,
+    canonical_config_hash TEXT,
+    trial_identity_hash TEXT,
+    trial_identity_json TEXT,
+    duplicate_of_research_id TEXT,
+    duplicate_of_iteration INTEGER,
+    duplicate_reason TEXT,
     metrics_json TEXT,
     attempt_snapshot_json TEXT,
     attempt_snapshot_path TEXT,
@@ -110,6 +116,9 @@ CREATE TABLE IF NOT EXISTS planned_trials (
     search_phase TEXT NOT NULL,
     config_patch_json TEXT NOT NULL,
     config_hash TEXT NOT NULL,
+    canonical_config_hash TEXT,
+    trial_identity_hash TEXT,
+    trial_identity_json TEXT,
     expected_command TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'planned',
     result_path TEXT,
@@ -293,6 +302,42 @@ class ResultsStore:
                 )
             except Exception:
                 pass
+            # ARP-009: duplicate-safe config/seed trial identities
+            for column in (
+                "canonical_config_hash TEXT",
+                "trial_identity_hash TEXT",
+                "trial_identity_json TEXT",
+                "duplicate_of_research_id TEXT",
+                "duplicate_of_iteration INTEGER",
+                "duplicate_reason TEXT",
+            ):
+                try:
+                    await db.execute(
+                        f"ALTER TABLE iterations ADD COLUMN {column}"
+                    )
+                except Exception:
+                    pass
+            for column in (
+                "canonical_config_hash TEXT",
+                "trial_identity_hash TEXT",
+                "trial_identity_json TEXT",
+            ):
+                try:
+                    await db.execute(
+                        f"ALTER TABLE planned_trials ADD COLUMN {column}"
+                    )
+                except Exception:
+                    pass
+            for statement in (
+                "CREATE INDEX IF NOT EXISTS idx_iterations_trial_identity_hash "
+                "ON iterations(trial_identity_hash)",
+                "CREATE INDEX IF NOT EXISTS idx_planned_trials_trial_identity_hash "
+                "ON planned_trials(trial_identity_hash)",
+            ):
+                try:
+                    await db.execute(statement)
+                except Exception:
+                    pass
             # DPU-085: structured HPO plan/result metadata
             for column in (
                 "study_id TEXT",
@@ -575,6 +620,12 @@ class ResultsStore:
         training_time_s: Optional[float],
         api_cost_usd: float = 0.0,
         mlflow_run_id: Optional[str] = None,
+        canonical_config_hash: Optional[str] = None,
+        trial_identity_hash: Optional[str] = None,
+        trial_identity_json: Optional[str] = None,
+        duplicate_of_research_id: Optional[str] = None,
+        duplicate_of_iteration: Optional[int] = None,
+        duplicate_reason: Optional[str] = None,
         attempt_snapshot_json: Optional[str] = None,
         attempt_snapshot_path: Optional[str] = None,
         attempt_snapshot_hash: Optional[str] = None,
@@ -586,14 +637,20 @@ class ResultsStore:
                 """INSERT INTO iterations
                    (research_id, iteration, primary_metric, metric_name,
                    all_gates_passed, decision, description, config_snapshot,
-                    metrics_json, attempt_snapshot_json, attempt_snapshot_path,
+                    canonical_config_hash, trial_identity_hash,
+                    trial_identity_json, duplicate_of_research_id,
+                    duplicate_of_iteration, duplicate_reason, metrics_json,
+                    attempt_snapshot_json, attempt_snapshot_path,
                     attempt_snapshot_hash, consistency_report_json,
                     training_time_s, api_cost_usd, created_at, mlflow_run_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     research_id, iteration, primary_metric, metric_name,
                     int(all_gates_passed) if all_gates_passed is not None else None,
-                    decision, description, config_snapshot, metrics_json,
+                    decision, description, config_snapshot,
+                    canonical_config_hash, trial_identity_hash,
+                    trial_identity_json, duplicate_of_research_id,
+                    duplicate_of_iteration, duplicate_reason, metrics_json,
                     attempt_snapshot_json, attempt_snapshot_path,
                     attempt_snapshot_hash, consistency_report_json,
                     training_time_s, api_cost_usd, now, mlflow_run_id,
@@ -622,6 +679,12 @@ class ResultsStore:
             "all_gates_passed": all_gates_passed,
             "decision": decision,
             "description": description,
+            "canonical_config_hash": canonical_config_hash,
+            "trial_identity_hash": trial_identity_hash,
+            "trial_identity_json": trial_identity_json,
+            "duplicate_of_research_id": duplicate_of_research_id,
+            "duplicate_of_iteration": duplicate_of_iteration,
+            "duplicate_reason": duplicate_reason,
             "attempt_snapshot_path": attempt_snapshot_path,
             "attempt_snapshot_hash": attempt_snapshot_hash,
             "consistency_report_json": consistency_report_json,
@@ -661,6 +724,22 @@ class ResultsStore:
             fields["description"] = marker["description"]
         if "config_snapshot" in marker:
             fields["config_snapshot"] = marker["config_snapshot"]
+        if "canonical_config_hash" in marker:
+            fields["canonical_config_hash"] = marker["canonical_config_hash"]
+        if "trial_identity_hash" in marker:
+            fields["trial_identity_hash"] = marker["trial_identity_hash"]
+        if "trial_identity" in marker:
+            fields["trial_identity_json"] = json.dumps(
+                marker["trial_identity"], sort_keys=True,
+            )
+        if "trial_identity_json" in marker:
+            fields["trial_identity_json"] = marker["trial_identity_json"]
+        if "duplicate_of_research_id" in marker:
+            fields["duplicate_of_research_id"] = marker["duplicate_of_research_id"]
+        if "duplicate_of_iteration" in marker:
+            fields["duplicate_of_iteration"] = marker["duplicate_of_iteration"]
+        if "duplicate_reason" in marker:
+            fields["duplicate_reason"] = marker["duplicate_reason"]
         if "training_time_s" in marker:
             fields["training_time_s"] = marker["training_time_s"]
         if "attempt_snapshot" in marker:
@@ -701,6 +780,47 @@ class ResultsStore:
             cursor = await db.execute(
                 "SELECT * FROM iterations WHERE research_id = ? AND iteration = ?",
                 (research_id, iteration),
+            )
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def find_duplicate_trial_identity(
+        self,
+        *,
+        research_id: str,
+        trial_identity_hash: str,
+        instrument: str,
+        timeframe: str,
+        model_type: str,
+        include_cross_session: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        """Return an existing attempt with the same trial identity hash."""
+
+        if not trial_identity_hash:
+            return None
+        params: list[Any] = [trial_identity_hash]
+        if include_cross_session:
+            scope_sql = (
+                "(i.research_id = ? OR "
+                "(s.instrument = ? AND s.timeframe = ? AND s.model_type = ?))"
+            )
+            params.extend([research_id, instrument, timeframe, model_type])
+        else:
+            scope_sql = "i.research_id = ?"
+            params.append(research_id)
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                f"""SELECT i.*, s.instrument, s.timeframe, s.model_type
+                    FROM iterations i
+                    JOIN research_sessions s ON s.id = i.research_id
+                    WHERE i.trial_identity_hash = ?
+                      AND {scope_sql}
+                    ORDER BY
+                      CASE WHEN i.duplicate_reason IS NULL THEN 0 ELSE 1 END,
+                      i.created_at
+                    LIMIT 1""",
+                params,
             )
             row = await cursor.fetchone()
             return dict(row) if row else None
@@ -834,10 +954,12 @@ class ResultsStore:
                     """INSERT OR REPLACE INTO planned_trials
                        (research_id, study_id, trial_id, trial_index,
                         search_phase, config_patch_json, config_hash,
-                        expected_command, status, result_path, mlflow_run_id,
+                        canonical_config_hash, trial_identity_hash,
+                        trial_identity_json, expected_command, status,
+                        result_path, mlflow_run_id,
                         train_config_path, manual_review_reason, created_at,
                         updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         research_id,
                         trial.get("study_id") or study_id,
@@ -846,6 +968,13 @@ class ResultsStore:
                         trial.get("search_phase") or "hpo_screening",
                         json.dumps(config_patch, sort_keys=True),
                         trial["config_hash"],
+                        trial.get("canonical_config_hash"),
+                        trial.get("trial_identity_hash"),
+                        (
+                            json.dumps(trial.get("trial_identity"), sort_keys=True)
+                            if trial.get("trial_identity") is not None
+                            else trial.get("trial_identity_json")
+                        ),
                         trial["expected_command"],
                         trial.get("status") or "planned",
                         trial.get("result_path"),
@@ -879,10 +1008,11 @@ class ResultsStore:
             await db.execute(
                 """INSERT INTO planned_trials
                    (research_id, study_id, trial_id, trial_index, search_phase,
-                    config_patch_json, config_hash, expected_command, status,
-                    result_path, mlflow_run_id, train_config_path,
+                    config_patch_json, config_hash, canonical_config_hash,
+                    trial_identity_hash, trial_identity_json, expected_command,
+                    status, result_path, mlflow_run_id, train_config_path,
                     manual_review_reason, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     research_id,
                     study_id,
@@ -891,6 +1021,9 @@ class ResultsStore:
                     search_phase,
                     json.dumps(payload, sort_keys=True),
                     config_hash,
+                    None,
+                    None,
+                    None,
                     expected_command,
                     "manual_review",
                     None,
@@ -979,6 +1112,11 @@ class ResultsStore:
         result_path: Optional[str] = None,
         mlflow_run_id: Optional[str] = None,
         manual_review_reason: Optional[str] = None,
+        train_config_path: Optional[str] = None,
+        canonical_config_hash: Optional[str] = None,
+        trial_identity_hash: Optional[str] = None,
+        trial_identity: Optional[Dict[str, Any]] = None,
+        trial_identity_json: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         now = datetime.now(timezone.utc).isoformat()
         fields: Dict[str, Any] = {"status": status, "updated_at": now}
@@ -988,6 +1126,19 @@ class ResultsStore:
             fields["mlflow_run_id"] = mlflow_run_id
         if manual_review_reason is not None:
             fields["manual_review_reason"] = manual_review_reason
+        if train_config_path is not None:
+            fields["train_config_path"] = train_config_path
+        if canonical_config_hash is not None:
+            fields["canonical_config_hash"] = canonical_config_hash
+        if trial_identity_hash is not None:
+            fields["trial_identity_hash"] = trial_identity_hash
+        if trial_identity is not None:
+            fields["trial_identity_json"] = json.dumps(
+                trial_identity,
+                sort_keys=True,
+            )
+        elif trial_identity_json is not None:
+            fields["trial_identity_json"] = trial_identity_json
         set_clause = ", ".join(f"{key} = ?" for key in fields)
         values = list(fields.values()) + [research_id, trial_id]
         async with aiosqlite.connect(self._db_path) as db:
@@ -1008,6 +1159,12 @@ class ResultsStore:
                 row["config_patch"] = json.loads(raw_patch)
             except (json.JSONDecodeError, TypeError):
                 row["config_patch"] = {}
+        raw_identity = row.get("trial_identity_json")
+        if raw_identity and "trial_identity" not in row:
+            try:
+                row["trial_identity"] = json.loads(raw_identity)
+            except (json.JSONDecodeError, TypeError):
+                row["trial_identity"] = None
 
     # ------------------------------------------------------------------
     # Promotions

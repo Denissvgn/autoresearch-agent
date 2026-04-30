@@ -318,6 +318,28 @@ def test_research_state_summarizes_candidates_failures_and_budget():
             "all_gates_passed": 0,
             "metrics_json": json.dumps({"status": "timeout"}),
         },
+        {
+            "id": 3,
+            "research_id": "res_state",
+            "iteration": 3,
+            "primary_metric": None,
+            "metric_name": None,
+            "decision": "discard",
+            "all_gates_passed": 0,
+            "canonical_config_hash": "config-sha",
+            "trial_identity_hash": "identity-sha",
+            "trial_identity_json": json.dumps(
+                {
+                    "seed": 42,
+                    "validation_mode": "quick",
+                    "data_split_id": "split-a",
+                }
+            ),
+            "duplicate_of_research_id": "res_state",
+            "duplicate_of_iteration": 1,
+            "duplicate_reason": "same config already ran",
+            "metrics_json": json.dumps({"status": "rejected_duplicate"}),
+        },
     ]
 
     state = build_research_state(
@@ -330,6 +352,9 @@ def test_research_state_summarizes_candidates_failures_and_budget():
     assert state["budget_usage"]["iterations_used"] == 2
     assert state["top_candidates"][0]["artifact_hash"] == "artifact-sha"
     assert state["failed_pruned_configs"][0]["status"] == "timeout"
+    assert len(state["failed_pruned_configs"]) == 1
+    assert state["duplicate_rejections"][0]["trial_identity_hash"] == "identity-sha"
+    assert state["duplicate_rejections"][0]["duplicate_of"]["iteration"] == 1
     assert state["artifact_hashes"][0]["artifact_hash"] == "artifact-sha"
 
 

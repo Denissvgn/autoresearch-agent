@@ -92,6 +92,17 @@ class Settings(BaseSettings):
         default=80,
         description="Number of messages before old tool results are compacted.",
     )
+    autoresearch_cross_session_duplicate_check: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_CROSS_SESSION_DUPLICATE_CHECK",
+            "AUTORESEARCH_ENABLE_CROSS_SESSION_DUPLICATE_CHECK",
+        ),
+        description=(
+            "Reject duplicate config/seed/mode/split attempts across prior "
+            "sessions for the same instrument, timeframe, and model type."
+        ),
+    )
 
     # --- ML Service URLs (Docker DNS) ---
     mlflow_tracking_uri: str = Field(default="http://mlflow:5000")
