@@ -74,6 +74,10 @@ def test_command_policy_allows_known_training_operations(tmp_path: Path):
         ".venv/bin/python -m pip install pandas",
         "git status",
         "docker ps",
+        (
+            ".venv/bin/python scripts/autotuner/promote.py "
+            "--config runs/autotuner/DOGE_USDT_15m/direction/best_train.yaml"
+        ),
         ".venv/bin/python scripts/autotuner/direction/prepare.py --config /etc/passwd",
         ".venv/bin/python scripts/autotuner/direction/prepare.py --config train.yaml 2>&1",
         ".venv/bin/python scripts/autotuner/setup.py --instrument $(cat /run/secrets/token)",

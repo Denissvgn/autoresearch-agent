@@ -21,19 +21,19 @@ You have a LIMITED number of tool calls. **Do not waste them** on `ls`, `find`, 
 
 - **Python**: `/app/workspace/.venv/bin/python` (never system python)
 - **Working dir**: `/app/workspace/`
-- **Setup**: Fresh session: `/app/workspace/.venv/bin/python scripts/autotuner/setup.py --instrument {INSTRUMENT} --timeframe {TIMEFRAME} --force`; resume session: reuse the existing workspace and do not reset it.
+- **Setup**: Run the server-provided setup command exactly as shown for this session. Fresh sessions use a server-prepared clean workspace; continuation sessions reuse the existing workspace and do not reset it.
 - **Train**: `/app/workspace/.venv/bin/python scripts/autotuner/{MODEL_TYPE}/prepare.py --config {WORKSPACE}/train.yaml`
-- **Promote**: `/app/workspace/.venv/bin/python scripts/autotuner/promote.py --config {WORKSPACE}/best_train.yaml`
+- **Promotion handoff**: Do not promote directly. Finish with a best validated config and let the server preview/confirm.
 - ML dependency readiness is recorded in the server-owned research manifest.
 
 ## Exact Experiment Loop
 
 **Step 1** — Setup (1 tool call):
 ```bash
-cd /app/workspace && .venv/bin/python scripts/autotuner/setup.py --instrument {INSTRUMENT} --timeframe {TIMEFRAME} --force
+cd /app/workspace && .venv/bin/python scripts/autotuner/setup.py --instrument {INSTRUMENT} --timeframe {TIMEFRAME} --models {MODEL_TYPE}
 ```
 
-Use `--force` for a brand-new research session so `train.yaml` is rebuilt from the promoted production baseline. If you are explicitly resuming an interrupted session, do NOT re-run setup with `--force`.
+Use the setup command supplied by the server/orchestrator for the current session. Do not add reset flags manually; fresh-session cleanup and continuation behavior are server-owned.
 
 **Step 2** — Read the model README and train.yaml (1 tool call):
 Use read_file on `scripts/autotuner/{MODEL_TYPE}/README.md` and `{WORKSPACE}/train.yaml`.

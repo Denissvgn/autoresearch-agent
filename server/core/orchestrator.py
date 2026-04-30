@@ -180,6 +180,16 @@ AGENT_TOOLS: List[Dict[str, Any]] = [
     },
 ]
 
+SERVER_OWNED_SETUP_INSTRUCTION = (
+    "Run the setup command exactly as shown. The server has already prepared "
+    "fresh-session cleanup or continuation behavior, so do not add reset flags."
+)
+
+PROMOTION_HANDOFF_INSTRUCTION = (
+    "Promotion handoff: Do not promote directly. Finish with a best validated "
+    "config and let the server preview/confirm."
+)
+
 # ---------------------------------------------------------------------------
 # Path safety
 # ---------------------------------------------------------------------------
@@ -694,7 +704,7 @@ class AgentOrchestrator:
             f"{config.timeframe} (tag: {config.tag}). "
             f"Max {config.max_iterations} iterations.\n\n"
             f"Execute these commands IN ORDER — do not explore first:\n\n"
-            f"1. Setup:\n"
+            f"1. Setup: {SERVER_OWNED_SETUP_INSTRUCTION}\n"
             f"```bash\n"
             f".venv/bin/python scripts/autotuner/setup.py "
             f"--instrument {instrument_underscore} "
@@ -702,6 +712,7 @@ class AgentOrchestrator:
             f"--models {config.model_type}{setup_extra_args}\n"
             f"```\n\n"
             f"{enrich_step}\n\n"
+            f"{PROMOTION_HANDOFF_INSTRUCTION}\n\n"
             f"Run autonomously. Start with the setup and training steps above "
             f"without exploring the filesystem first."
             f"{fixed_settings_notice}"
@@ -809,6 +820,7 @@ class AgentOrchestrator:
             f"```\n\n"
             f"3. After each run, analyze results and iterate: "
             f"edit train.yaml → run prepare.py → check metrics → keep or revert.\n\n"
+            f"{PROMOTION_HANDOFF_INSTRUCTION}\n\n"
             f"Build on the parent session's findings. Do NOT repeat experiments "
             f"that already failed. Run autonomously."
             f"{fixed_settings_notice}"
@@ -839,7 +851,7 @@ class AgentOrchestrator:
             f"Max {config.max_iterations} refinement iterations.\n\n"
             f"Execute these phases IN ORDER:\n\n"
             f"## Phase 1: Setup + HPO Screening\n\n"
-            f"1. Setup workspace:\n"
+            f"1. Setup workspace: {SERVER_OWNED_SETUP_INSTRUCTION}\n"
             f"```bash\n"
             f".venv/bin/python scripts/autotuner/setup.py "
             f"--instrument {instrument_underscore} "
@@ -902,6 +914,7 @@ class AgentOrchestrator:
             f"```\n"
             f"If composite_rl_score is consistent across seeds (not wildly "
             f"different), the config is robust.\n\n"
+            f"{PROMOTION_HANDOFF_INSTRUCTION}\n\n"
             f"Run autonomously."
             f"{fixed_settings_notice}"
             f"{focus}"
