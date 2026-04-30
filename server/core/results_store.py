@@ -1253,6 +1253,33 @@ class ResultsStore:
             self._decode_promotion_metadata(result)
             return result
 
+    async def get_latest_promotion(
+        self,
+        *,
+        model_type: str,
+        instrument: str,
+        timeframe: str,
+        scope: str,
+    ) -> Optional[Dict[str, Any]]:
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """SELECT * FROM promotions
+                   WHERE model_type = ?
+                     AND instrument = ?
+                     AND timeframe = ?
+                     AND scope = ?
+                   ORDER BY promoted_at DESC
+                   LIMIT 1""",
+                (model_type, instrument, timeframe, scope),
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            result = dict(row)
+            self._decode_promotion_metadata(result)
+            return result
+
     async def record_promotion_rollback(
         self,
         *,

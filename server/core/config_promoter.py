@@ -20,6 +20,7 @@ from server.core.consistency_validator import build_consistency_report
 from server.core.development_gate_bundle import (
     evaluate_development_gate_bundle,
     load_gate_bundle,
+    load_production_gate_bundle,
 )
 from server.core.development_inference_validation import (
     build_development_inference_validation,
@@ -30,7 +31,17 @@ from server.core.results_store import ResultsStore
 logger = logging.getLogger(__name__)
 
 DEVELOPMENT_PROMOTION_METADATA_VERSION = "development_promotion_metadata.v1"
+SCOPED_PROMOTION_METADATA_VERSION = "scoped_promotion_decision.v1"
 DEVELOPMENT_PROMOTION_SCOPE = "development"
+PAPER_PROMOTION_SCOPE = "paper"
+CANARY_PROMOTION_SCOPE = "canary"
+PRODUCTION_PROMOTION_SCOPE = "production"
+PROMOTION_SCOPES = (
+    DEVELOPMENT_PROMOTION_SCOPE,
+    PAPER_PROMOTION_SCOPE,
+    CANARY_PROMOTION_SCOPE,
+    PRODUCTION_PROMOTION_SCOPE,
+)
 
 
 class ConfigPromoter:
@@ -39,8 +50,15 @@ class ConfigPromoter:
     def __init__(self, store: ResultsStore) -> None:
         self._store = store
 
-    async def preview(self, research_id: str) -> Dict[str, Any]:
+    async def preview(
+        self,
+        research_id: str,
+        *,
+        scope: str = DEVELOPMENT_PROMOTION_SCOPE,
+        approval: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """Dry-run promotion: returns the diff/preview without writing."""
+        promotion_scope = self._normalize_promotion_scope(scope)
         session = await self._store.get_session(research_id)
         if not session:
             raise ValueError(f"Session {research_id} not found")
@@ -187,12 +205,14 @@ class ConfigPromoter:
             consistency_report=consistency_report,
         )
 
-        return {
+        preview = {
             "research_id": research_id,
             "iteration": best["iteration"],
             "model_type": model_type,
             "instrument": instrument,
             "timeframe": timeframe,
+            "scope": DEVELOPMENT_PROMOTION_SCOPE,
+            "promotion_scope": DEVELOPMENT_PROMOTION_SCOPE,
             "target_path": target_path,
             "new_config": best_yaml,
             "config_snapshot_sha256": config_snapshot_sha256,
@@ -208,9 +228,52 @@ class ConfigPromoter:
             "development_promotion_metadata": development_promotion_metadata,
             "promotion_allowed": promotion_allowed,
         }
+        if promotion_scope == DEVELOPMENT_PROMOTION_SCOPE:
+            return preview
 
-    async def confirm(self, research_id: str) -> Dict[str, Any]:
+        scoped_metadata = await self._build_scoped_promotion_metadata(
+            preview=preview,
+            session=session,
+            metrics_payload=metrics_payload,
+            scope=promotion_scope,
+            approval=approval,
+        )
+        scoped_allowed = bool(scoped_metadata.get("promotion_allowed"))
+        scoped_preview = dict(preview)
+        scoped_preview.update(
+            {
+                "scope": promotion_scope,
+                "promotion_scope": promotion_scope,
+                "scope_promotion_allowed": scoped_allowed,
+                "promotion_allowed": scoped_allowed,
+                "scoped_promotion_metadata": scoped_metadata,
+                "promotion_metadata": scoped_metadata,
+                "scope_gate_evaluation": {
+                    "scope": promotion_scope,
+                    "passed": scoped_allowed,
+                    "blockers": scoped_metadata.get("blockers", []),
+                    "checks": scoped_metadata.get("checks", []),
+                },
+            }
+        )
+        return scoped_preview
+
+    async def confirm(
+        self,
+        research_id: str,
+        *,
+        scope: str = DEVELOPMENT_PROMOTION_SCOPE,
+        approval: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """Execute the promotion: write best config to host bind mount."""
+        promotion_scope = self._normalize_promotion_scope(scope)
+        if promotion_scope != DEVELOPMENT_PROMOTION_SCOPE:
+            return await self._confirm_scoped_promotion(
+                research_id,
+                scope=promotion_scope,
+                approval=approval,
+            )
+
         preview = await self.preview(research_id)
 
         if not preview["gates_passed"]:
@@ -414,6 +477,282 @@ class ConfigPromoter:
             )
 
         return promotion
+
+    async def _confirm_scoped_promotion(
+        self,
+        research_id: str,
+        *,
+        scope: str,
+        approval: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Record a paper/canary/production stage decision without rewriting dev config."""
+        preview = await self.preview(
+            research_id,
+            scope=scope,
+            approval=approval,
+        )
+        if not preview["gates_passed"]:
+            raise ValueError(
+                "Cannot promote: best iteration did not pass all gates"
+            )
+        gate_eval = preview.get("gate_bundle_evaluation") or {}
+        if not gate_eval.get("passed", False):
+            blockers = ", ".join(gate_eval.get("blockers") or ["unknown"])
+            raise ValueError(
+                "Cannot promote: development gate bundle failed "
+                f"({blockers})"
+            )
+        consistency_report = preview.get("consistency_report") or {}
+        if not consistency_report.get("passed", False):
+            blockers = ", ".join(
+                consistency_report.get("blockers") or ["unknown"]
+            )
+            raise ValueError(
+                "Cannot promote: cross-service consistency failed "
+                f"({blockers})"
+            )
+
+        metadata = dict(preview.get("scoped_promotion_metadata") or {})
+        if not metadata.get("promotion_allowed"):
+            blockers = ", ".join(metadata.get("blockers") or ["unknown"])
+            raise ValueError(
+                f"Cannot promote to {scope}: scoped promotion policy failed "
+                f"({blockers})"
+            )
+
+        metadata_path = self._metadata_sidecar_path(
+            preview["target_path"],
+            preview["iteration"],
+            scope=scope,
+        )
+        metadata = self._finalize_scoped_promotion_metadata(
+            metadata=metadata,
+            metadata_path=metadata_path,
+            promotion_record_created=True,
+        )
+        await self._write_text_file(
+            metadata_path,
+            json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+        )
+
+        return await self._store.record_promotion(
+            research_id=research_id,
+            iteration=preview["iteration"],
+            model_type=preview["model_type"],
+            instrument=preview["instrument"],
+            timeframe=preview["timeframe"],
+            target_path=preview["target_path"],
+            config_yaml=preview["new_config"],
+            previous_yaml=preview["current_config"],
+            scope=scope,
+            metadata_path=metadata_path,
+            promotion_metadata=metadata,
+        )
+
+    async def _build_scoped_promotion_metadata(
+        self,
+        *,
+        preview: Dict[str, Any],
+        session: Dict[str, Any],
+        metrics_payload: Dict[str, Any],
+        scope: str,
+        approval: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Create an auditable decision artifact for non-development scopes."""
+        model_type = preview["model_type"]
+        instrument = preview["instrument"]
+        timeframe = preview["timeframe"]
+        required_prior_scopes = self._required_prior_scopes(scope)
+        prior_promotions: dict[str, Optional[Dict[str, Any]]] = {}
+        for prior_scope in required_prior_scopes:
+            prior_promotions[prior_scope] = await self._latest_promotion_record(
+                model_type=model_type,
+                instrument=instrument,
+                timeframe=timeframe,
+                scope=prior_scope,
+            )
+
+        approval_record = self._approval_record(approval, scope=scope)
+        production_bundle = self._production_gate_bundle_summary(scope)
+        development_metadata = dict(
+            preview.get("development_promotion_metadata") or {}
+        )
+        rollback_target = (
+            development_metadata.get("rollback_target")
+            or development_metadata.get("rollback_readiness", {}).get(
+                "rollback_target"
+            )
+        )
+        evidence = self._promotion_scope_evidence(
+            metrics_payload=metrics_payload,
+            development_metadata=development_metadata,
+            production_bundle=production_bundle,
+        )
+
+        checks: list[dict[str, Any]] = []
+        blockers: list[str] = []
+
+        def add_check(
+            name: str,
+            passed: bool,
+            reason: str,
+            details: Any = None,
+        ) -> None:
+            checks.append(
+                {
+                    "name": name,
+                    "status": "passed" if passed else "failed",
+                    "reason": None if passed else reason,
+                    "details": details,
+                }
+            )
+            if not passed and reason not in blockers:
+                blockers.append(reason)
+
+        add_check(
+            "development_candidate_allowed",
+            bool(preview.get("development_promotion_metadata", {}).get("promotion_allowed")),
+            "development_promotion_not_allowed",
+            {
+                "development_gate_bundle_passed": (
+                    preview.get("gate_bundle_evaluation") or {}
+                ).get("passed"),
+                "consistency_passed": (
+                    preview.get("consistency_report") or {}
+                ).get("passed"),
+            },
+        )
+        for prior_scope, promotion in prior_promotions.items():
+            add_check(
+                f"{prior_scope}_promotion_record",
+                promotion is not None,
+                f"missing_{prior_scope}_promotion",
+                self._compact_promotion_record(promotion),
+            )
+        add_check(
+            "scope_approval",
+            bool(approval_record.get("satisfied")),
+            f"missing_{scope}_approval",
+            approval_record,
+        )
+        add_check(
+            "rollback_target_addressable",
+            bool(rollback_target),
+            "missing_rollback_target",
+            {"rollback_target": rollback_target},
+        )
+
+        if scope in {CANARY_PROMOTION_SCOPE, PRODUCTION_PROMOTION_SCOPE}:
+            add_check(
+                "paper_validation_passed",
+                bool(evidence["paper_validation"].get("passed")),
+                "missing_paper_validation",
+                evidence["paper_validation"],
+            )
+        if scope == PRODUCTION_PROMOTION_SCOPE:
+            add_check(
+                "production_gate_bundle_loaded",
+                bool(production_bundle.get("loaded")),
+                "missing_production_gate_bundle",
+                production_bundle,
+            )
+            add_check(
+                "model_card_present",
+                bool(evidence["model_card"].get("passed")),
+                "missing_model_card",
+                evidence["model_card"],
+            )
+            add_check(
+                "supervised_feature_readiness",
+                bool(evidence["feature_readiness"].get("passed")),
+                "missing_feature_readiness",
+                evidence["feature_readiness"],
+            )
+            add_check(
+                "inference_parity_reload_passed",
+                bool(evidence["inference_parity_reload"].get("passed")),
+                "inference_reload_failed",
+                evidence["inference_parity_reload"],
+            )
+            add_check(
+                "canary_duration_passed",
+                bool(evidence["canary_validation"].get("passed")),
+                "missing_canary_duration",
+                evidence["canary_validation"],
+            )
+            add_check(
+                "live_risk_limits_configured",
+                bool(evidence["live_risk_limits"].get("passed")),
+                "missing_live_risk_limits",
+                evidence["live_risk_limits"],
+            )
+            add_check(
+                "monitoring_alerts_configured",
+                bool(evidence["monitoring_alerts"].get("passed")),
+                "missing_monitoring_alerts",
+                evidence["monitoring_alerts"],
+            )
+            if model_type == "rl":
+                add_check(
+                    "rl_oos_provenance_passed",
+                    bool(evidence["rl_oos"].get("passed")),
+                    "missing_rl_oos_provenance",
+                    evidence["rl_oos"],
+                )
+                add_check(
+                    "rl_economic_replay_passed",
+                    bool(evidence["rl_economic_replay"].get("passed")),
+                    "missing_rl_economic_replay",
+                    evidence["rl_economic_replay"],
+                )
+
+        promotion_allowed = not blockers
+        prior_compact = {
+            prior_scope: self._compact_promotion_record(promotion)
+            for prior_scope, promotion in prior_promotions.items()
+            if promotion is not None
+        }
+        decision_chain = self._decision_chain(
+            development_metadata=development_metadata,
+            prior_promotions=prior_promotions,
+            current_scope=scope,
+            current_allowed=promotion_allowed,
+            current_blockers=blockers,
+        )
+        return {
+            "schema_version": SCOPED_PROMOTION_METADATA_VERSION,
+            "scope": scope,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "research_id": preview["research_id"],
+            "iteration": preview["iteration"],
+            "model_type": model_type,
+            "instrument": instrument,
+            "timeframe": timeframe,
+            "target_path": preview["target_path"],
+            "workspace_path": session.get("workspace_path"),
+            "promotion_allowed": promotion_allowed,
+            "blockers": blockers,
+            "checks": checks,
+            "required_prior_scopes": required_prior_scopes,
+            "prior_promotions": prior_compact,
+            "decision_chain": decision_chain,
+            "approval": approval_record,
+            "production_gate_bundle": production_bundle,
+            "development_gate_bundle": development_metadata.get("gate_bundle"),
+            "best_candidate_ownership": development_metadata.get(
+                "best_candidate_ownership"
+            ),
+            "cross_service_consistency": preview.get("consistency_report"),
+            "rollback_target": rollback_target,
+            "rollback_targets": self._rollback_targets(
+                prior_promotions=prior_promotions,
+                current_scope=scope,
+                current_target=rollback_target,
+            ),
+            "evidence": evidence,
+            "config_write_performed": False,
+            "promotion_record_created": False,
+        }
 
     async def rollback(
         self,
@@ -660,6 +999,548 @@ class ConfigPromoter:
         finalized["candidate_pool_record"] = candidate_pool
         return finalized
 
+    def _finalize_scoped_promotion_metadata(
+        self,
+        *,
+        metadata: Dict[str, Any],
+        metadata_path: str,
+        promotion_record_created: bool,
+    ) -> Dict[str, Any]:
+        finalized = dict(metadata)
+        finalized["metadata_path"] = metadata_path
+        finalized["promotion_record_created"] = promotion_record_created
+        return finalized
+
+    @staticmethod
+    def _normalize_promotion_scope(scope: str | None) -> str:
+        normalized = (scope or DEVELOPMENT_PROMOTION_SCOPE).strip().lower()
+        if normalized in {"dev"}:
+            normalized = DEVELOPMENT_PROMOTION_SCOPE
+        if normalized in {"prod", "live"}:
+            normalized = PRODUCTION_PROMOTION_SCOPE
+        if normalized not in PROMOTION_SCOPES:
+            allowed = ", ".join(PROMOTION_SCOPES)
+            raise ValueError(f"Unknown promotion scope {scope!r}; expected one of {allowed}")
+        return normalized
+
+    @staticmethod
+    def _required_prior_scopes(scope: str) -> list[str]:
+        if scope == PAPER_PROMOTION_SCOPE:
+            return [DEVELOPMENT_PROMOTION_SCOPE]
+        if scope == CANARY_PROMOTION_SCOPE:
+            return [DEVELOPMENT_PROMOTION_SCOPE, PAPER_PROMOTION_SCOPE]
+        if scope == PRODUCTION_PROMOTION_SCOPE:
+            return [
+                DEVELOPMENT_PROMOTION_SCOPE,
+                PAPER_PROMOTION_SCOPE,
+                CANARY_PROMOTION_SCOPE,
+            ]
+        return []
+
+    async def _latest_promotion_record(
+        self,
+        *,
+        model_type: str,
+        instrument: str,
+        timeframe: str,
+        scope: str,
+    ) -> Optional[Dict[str, Any]]:
+        get_latest = getattr(self._store, "get_latest_promotion", None)
+        if get_latest is not None:
+            return await get_latest(
+                model_type=model_type,
+                instrument=instrument,
+                timeframe=timeframe,
+                scope=scope,
+            )
+        if scope == DEVELOPMENT_PROMOTION_SCOPE:
+            get_latest_dev = getattr(
+                self._store, "get_latest_development_promotion", None
+            )
+            if get_latest_dev is not None:
+                return await get_latest_dev(
+                    model_type=model_type,
+                    instrument=instrument,
+                    timeframe=timeframe,
+                )
+        list_promotions = getattr(self._store, "list_promotions", None)
+        if list_promotions is None:
+            return None
+        rows = await list_promotions()
+        for row in rows:
+            if (
+                row.get("model_type") == model_type
+                and row.get("instrument") == instrument
+                and row.get("timeframe") == timeframe
+                and row.get("scope") == scope
+            ):
+                return row
+        return None
+
+    @staticmethod
+    def _compact_promotion_record(
+        promotion: Optional[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        if promotion is None:
+            return None
+        metadata = promotion.get("promotion_metadata") or {}
+        return {
+            "id": promotion.get("id"),
+            "scope": promotion.get("scope"),
+            "research_id": promotion.get("research_id"),
+            "iteration": promotion.get("iteration"),
+            "promoted_at": promotion.get("promoted_at"),
+            "target_path": promotion.get("target_path"),
+            "metadata_path": promotion.get("metadata_path"),
+            "rollback_target": (
+                metadata.get("rollback_target")
+                or metadata.get("rollback_readiness", {}).get("rollback_target")
+            ),
+            "promotion_allowed": metadata.get("promotion_allowed"),
+        }
+
+    def _decision_chain(
+        self,
+        *,
+        development_metadata: Dict[str, Any],
+        prior_promotions: Dict[str, Optional[Dict[str, Any]]],
+        current_scope: str,
+        current_allowed: bool,
+        current_blockers: list[str],
+    ) -> list[Dict[str, Any]]:
+        chain: list[Dict[str, Any]] = []
+        development_record = prior_promotions.get(DEVELOPMENT_PROMOTION_SCOPE)
+        if development_record is not None:
+            compact = self._compact_promotion_record(development_record)
+            if compact:
+                chain.append(compact)
+        elif development_metadata:
+            chain.append(
+                {
+                    "scope": DEVELOPMENT_PROMOTION_SCOPE,
+                    "research_id": development_metadata.get("research_id"),
+                    "iteration": development_metadata.get("iteration"),
+                    "target_path": development_metadata.get("target_path"),
+                    "rollback_target": development_metadata.get("rollback_target"),
+                    "promotion_allowed": development_metadata.get(
+                        "promotion_allowed"
+                    ),
+                    "gate_bundle": development_metadata.get("gate_bundle"),
+                }
+            )
+        for prior_scope in (PAPER_PROMOTION_SCOPE, CANARY_PROMOTION_SCOPE):
+            compact = self._compact_promotion_record(
+                prior_promotions.get(prior_scope)
+            )
+            if compact:
+                chain.append(compact)
+        chain.append(
+            {
+                "scope": current_scope,
+                "promotion_allowed": current_allowed,
+                "blockers": list(current_blockers),
+                "decision_artifact_schema": SCOPED_PROMOTION_METADATA_VERSION,
+            }
+        )
+        return chain
+
+    def _rollback_targets(
+        self,
+        *,
+        prior_promotions: Dict[str, Optional[Dict[str, Any]]],
+        current_scope: str,
+        current_target: Optional[str],
+    ) -> Dict[str, Optional[str]]:
+        targets: dict[str, Optional[str]] = {}
+        for scope, promotion in prior_promotions.items():
+            compact = self._compact_promotion_record(promotion)
+            targets[scope] = compact.get("rollback_target") if compact else None
+        targets[current_scope] = current_target
+        return targets
+
+    @staticmethod
+    def _approval_record(
+        approval: Optional[Dict[str, Any]],
+        *,
+        scope: str,
+    ) -> Dict[str, Any]:
+        raw: Dict[str, Any]
+        if approval is None:
+            raw = {}
+        elif hasattr(approval, "model_dump"):
+            raw = approval.model_dump(exclude_none=True)
+        elif hasattr(approval, "dict"):
+            raw = approval.dict(exclude_none=True)
+        elif isinstance(approval, dict):
+            raw = dict(approval)
+        else:
+            raw = {}
+        approver = str(raw.get("approver") or raw.get("approved_by") or "").strip()
+        reason = str(raw.get("reason") or raw.get("comment") or "").strip()
+        signature = str(raw.get("signature") or raw.get("signed_approval") or "").strip()
+        method = str(raw.get("method") or raw.get("approval_type") or "").strip().lower()
+        if not method:
+            method = "signed" if signature else "manual" if approver else None
+        approved_flag = raw.get("approved") is True or raw.get("approval") is True
+        signed_ok = bool(approver and signature)
+        manual_ok = bool(approver and (reason or approved_flag))
+        satisfied = bool(signed_ok or manual_ok)
+        return {
+            "required": scope != DEVELOPMENT_PROMOTION_SCOPE,
+            "provided": bool(raw),
+            "satisfied": satisfied,
+            "method": method,
+            "approver": approver or None,
+            "reason": reason or None,
+            "approved": approved_flag or satisfied,
+            "signature_present": bool(signature),
+            "signature_sha256": (
+                ConfigPromoter._sha256_text(signature) if signature else None
+            ),
+        }
+
+    @staticmethod
+    def _production_gate_bundle_summary(scope: str) -> Dict[str, Any]:
+        if scope != PRODUCTION_PROMOTION_SCOPE:
+            return {"loaded": None, "applicable": False}
+        try:
+            bundle = load_production_gate_bundle(settings.workspace_root)
+        except Exception as exc:
+            return {
+                "loaded": False,
+                "applicable": True,
+                "gate_bundle_id": None,
+                "version": None,
+                "scope": PRODUCTION_PROMOTION_SCOPE,
+                "error": str(exc),
+            }
+        policy = bundle.get("promotion_policy", {})
+        return {
+            "loaded": True,
+            "applicable": True,
+            "gate_bundle_id": bundle.get("gate_bundle_id"),
+            "version": bundle.get("version"),
+            "scope": bundle.get("scope") or PRODUCTION_PROMOTION_SCOPE,
+            "promotion_policy": policy,
+            "gate_tiers": bundle.get("gate_tiers", {}),
+            "promotion_blockers": bundle.get("promotion_blockers", []),
+        }
+
+    def _promotion_scope_evidence(
+        self,
+        *,
+        metrics_payload: Dict[str, Any],
+        development_metadata: Dict[str, Any],
+        production_bundle: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        evidence = self._promotion_evidence_container(metrics_payload)
+        paper = self._paper_validation_evidence(metrics_payload, evidence)
+        canary = self._canary_validation_evidence(
+            metrics_payload,
+            evidence,
+            production_bundle=production_bundle,
+        )
+        return {
+            "model_card": self._model_card_evidence(metrics_payload, evidence),
+            "feature_readiness": self._feature_readiness_evidence(
+                metrics_payload, evidence
+            ),
+            "paper_validation": paper,
+            "canary_validation": canary,
+            "inference_parity_reload": self._inference_scope_evidence(
+                development_metadata
+            ),
+            "live_risk_limits": self._live_risk_limits_evidence(
+                metrics_payload, evidence
+            ),
+            "monitoring_alerts": self._monitoring_alerts_evidence(
+                metrics_payload, evidence
+            ),
+            "rl_oos": self._rl_oos_scope_evidence(
+                metrics_payload, development_metadata
+            ),
+            "rl_economic_replay": self._rl_economic_replay_scope_evidence(
+                metrics_payload
+            ),
+        }
+
+    @staticmethod
+    def _promotion_evidence_container(metrics_payload: Dict[str, Any]) -> Dict[str, Any]:
+        for key in ("promotion_evidence", "deployment_evidence", "production_evidence"):
+            value = metrics_payload.get(key)
+            if isinstance(value, dict):
+                return value
+        return {}
+
+    @staticmethod
+    def _first_mapping(*values: Any) -> Dict[str, Any]:
+        for value in values:
+            if isinstance(value, dict):
+                return value
+        return {}
+
+    @staticmethod
+    def _truthy_status(container: Dict[str, Any]) -> bool:
+        if any(
+            container.get(key) is True
+            for key in (
+                "passed",
+                "pass",
+                "valid",
+                "validated",
+                "approved",
+                "complete",
+                "configured",
+                "duration_passed",
+                "min_duration_passed",
+            )
+        ):
+            return True
+        status = container.get("status")
+        return isinstance(status, str) and status.strip().lower() in {
+            "pass",
+            "passed",
+            "success",
+            "succeeded",
+            "approved",
+            "complete",
+            "configured",
+        }
+
+    @staticmethod
+    def _model_card_evidence(
+        metrics_payload: Dict[str, Any],
+        evidence: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        value = (
+            metrics_payload.get("model_card")
+            or evidence.get("model_card")
+            or metrics_payload.get("model_card_path")
+            or metrics_payload.get("model_card_uri")
+            or evidence.get("model_card_path")
+            or evidence.get("model_card_uri")
+        )
+        if isinstance(value, str):
+            return {"passed": bool(value.strip()), "reference": value.strip() or None}
+        card = value if isinstance(value, dict) else {}
+        present = bool(
+            card.get("path")
+            or card.get("uri")
+            or card.get("model_card_id")
+            or card.get("content_hash")
+            or card.get("complete") is True
+            or card.get("approved") is True
+        )
+        blocked = any(card.get(key) is False for key in ("complete", "approved", "reviewed"))
+        return {"passed": present and not blocked, "details": card}
+
+    @staticmethod
+    def _feature_readiness_evidence(
+        metrics_payload: Dict[str, Any],
+        evidence: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        readiness = ConfigPromoter._first_mapping(
+            metrics_payload.get("supervised_feature_readiness"),
+            metrics_payload.get("feature_readiness"),
+            metrics_payload.get("feature_readiness_report"),
+            evidence.get("supervised_feature_readiness"),
+            evidence.get("feature_readiness"),
+        )
+        direction = ConfigPromoter._first_mapping(
+            readiness.get("direction"),
+            readiness.get("direction_model"),
+            metrics_payload.get("direction_feature_readiness"),
+        )
+        volatility = ConfigPromoter._first_mapping(
+            readiness.get("volatility"),
+            readiness.get("volatility_model"),
+            metrics_payload.get("volatility_feature_readiness"),
+        )
+        passed = bool(
+            metrics_payload.get("feature_readiness_passed") is True
+            or readiness.get("passed") is True
+            or (
+                ConfigPromoter._truthy_status(direction)
+                and ConfigPromoter._truthy_status(volatility)
+            )
+        )
+        return {
+            "passed": passed,
+            "details": readiness,
+            "direction": direction,
+            "volatility": volatility,
+        }
+
+    @staticmethod
+    def _paper_validation_evidence(
+        metrics_payload: Dict[str, Any],
+        evidence: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        paper = ConfigPromoter._first_mapping(
+            metrics_payload.get("paper_validation"),
+            metrics_payload.get("paper_trading_validation"),
+            metrics_payload.get("paper_validation_report"),
+            evidence.get("paper_validation"),
+            evidence.get("paper_trading_validation"),
+        )
+        return {"passed": ConfigPromoter._truthy_status(paper), "details": paper}
+
+    @staticmethod
+    def _canary_validation_evidence(
+        metrics_payload: Dict[str, Any],
+        evidence: Dict[str, Any],
+        *,
+        production_bundle: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        canary = ConfigPromoter._first_mapping(
+            metrics_payload.get("canary_validation"),
+            metrics_payload.get("canary_duration"),
+            metrics_payload.get("canary_report"),
+            evidence.get("canary_validation"),
+            evidence.get("canary_duration"),
+        )
+        tiers = production_bundle.get("gate_tiers") or {}
+        canary_tier = tiers.get("canary_validation") or {}
+        checks = canary_tier.get("checks") if isinstance(canary_tier, dict) else {}
+        required_hours = ConfigPromoter._numeric_value(
+            canary.get("required_duration_hours"),
+            canary.get("min_duration_hours"),
+            (checks or {}).get("min_duration_hours") if isinstance(checks, dict) else None,
+        )
+        observed_hours = ConfigPromoter._numeric_value(
+            canary.get("duration_hours"),
+            canary.get("observed_duration_hours"),
+            canary.get("hours"),
+        )
+        duration_passed = bool(
+            ConfigPromoter._truthy_status(canary)
+            or (
+                observed_hours is not None
+                and required_hours is not None
+                and observed_hours >= required_hours
+            )
+        )
+        return {
+            "passed": duration_passed,
+            "duration_hours": observed_hours,
+            "required_duration_hours": required_hours,
+            "details": canary,
+        }
+
+    @staticmethod
+    def _inference_scope_evidence(
+        development_metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        reload_validation = development_metadata.get("inference_reload_validation") or {}
+        gate_bundle = development_metadata.get("gate_bundle") or {}
+        return {
+            "passed": (
+                reload_validation.get("passed") is True
+                and gate_bundle.get("passed") is True
+            ),
+            "reload_validation": reload_validation,
+            "gate_bundle_passed": gate_bundle.get("passed"),
+        }
+
+    @staticmethod
+    def _live_risk_limits_evidence(
+        metrics_payload: Dict[str, Any],
+        evidence: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        limits = ConfigPromoter._first_mapping(
+            metrics_payload.get("live_risk_limits"),
+            metrics_payload.get("risk_limits"),
+            metrics_payload.get("production_risk_limits"),
+            evidence.get("live_risk_limits"),
+            evidence.get("risk_limits"),
+        )
+        return {"passed": ConfigPromoter._truthy_status(limits), "details": limits}
+
+    @staticmethod
+    def _monitoring_alerts_evidence(
+        metrics_payload: Dict[str, Any],
+        evidence: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        alerts = ConfigPromoter._first_mapping(
+            metrics_payload.get("monitoring_alerts"),
+            metrics_payload.get("alerts"),
+            metrics_payload.get("production_monitoring"),
+            evidence.get("monitoring_alerts"),
+            evidence.get("alerts"),
+        )
+        blocking = bool(
+            alerts.get("alerts_block_promotion")
+            or alerts.get("blocking_alerts_present")
+        )
+        return {
+            "passed": ConfigPromoter._truthy_status(alerts) and not blocking,
+            "blocking_alerts_present": blocking,
+            "details": alerts,
+        }
+
+    @staticmethod
+    def _rl_oos_scope_evidence(
+        metrics_payload: Dict[str, Any],
+        development_metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        rl_oos = metrics_payload.get("rl_oos") if isinstance(metrics_payload.get("rl_oos"), dict) else {}
+        blockers = set((development_metadata.get("gate_bundle") or {}).get("blockers") or [])
+        rl_blockers = {
+            "missing_oof_provenance",
+            "missing_volatility_oof_provenance",
+            "missing_direction_feature_provenance",
+            "missing_volatility_feature_provenance",
+            "incomplete_direction_feature_provenance",
+            "incomplete_volatility_feature_provenance",
+            "missing_rl_feature_bundle_hash",
+            "proxy_or_neutral_direction_proba_fallback",
+            "proxy_or_neutral_volatility_feature_fallback",
+            "stale_or_leaked_feature_provenance",
+            "missing_nested_validation",
+            "missing_multi_seed_rl_validation",
+            "missing_rl_oos_metrics",
+        }
+        return {
+            "passed": bool(rl_oos) and not bool(blockers & rl_blockers),
+            "details": rl_oos,
+            "development_blockers": sorted(blockers & rl_blockers),
+        }
+
+    @staticmethod
+    def _rl_economic_replay_scope_evidence(
+        metrics_payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        replay = ConfigPromoter._first_mapping(
+            metrics_payload.get("rl_economic_replay"),
+            metrics_payload.get("economic_replay"),
+        )
+        gates = replay.get("gates") if isinstance(replay.get("gates"), dict) else {}
+        passed = bool(
+            replay
+            and gates.get("all_gates_passed") is True
+            and (
+                replay.get("rl_profit_score") is not None
+                or metrics_payload.get("rl_profit_score") is not None
+            )
+            and (
+                replay.get("artifact_hash")
+                or metrics_payload.get("rl_economic_replay_artifact_hash")
+            )
+        )
+        return {"passed": passed, "details": replay}
+
+    @staticmethod
+    def _numeric_value(*values: Any) -> Optional[float]:
+        for value in values:
+            if isinstance(value, (int, float)):
+                return float(value)
+            if isinstance(value, str):
+                try:
+                    return float(value)
+                except ValueError:
+                    continue
+        return None
+
     @staticmethod
     def _best_iteration_payload(best_iteration: Dict[str, Any]) -> Dict[str, Any]:
         raw = best_iteration.get("metrics_json")
@@ -757,11 +1638,16 @@ class ConfigPromoter:
         return composite if isinstance(composite, dict) else {}
 
     @staticmethod
-    def _metadata_sidecar_path(target_path: str, iteration: int) -> str:
+    def _metadata_sidecar_path(
+        target_path: str,
+        iteration: int,
+        *,
+        scope: str = DEVELOPMENT_PROMOTION_SCOPE,
+    ) -> str:
         path = Path(target_path)
         return str(
             path.with_name(
-                f"{path.name}.development-promotion.iter-{iteration}.json"
+                f"{path.name}.{scope}-promotion.iter-{iteration}.json"
             )
         )
 

@@ -44,16 +44,48 @@ class PromotionRollbackRequest(BaseModel):
     reason: str | None = None
 
 
+class PromotionApproval(BaseModel):
+    approver: str | None = None
+    reason: str | None = None
+    method: str | None = None
+    signature: str | None = None
+    approved: bool | None = None
+
+
+class PromotionScopeRequest(BaseModel):
+    scope: str = "development"
+    approval: PromotionApproval | None = None
+
+
+def _approval_payload(approval: PromotionApproval | None) -> dict | None:
+    if approval is None:
+        return None
+    if hasattr(approval, "model_dump"):
+        return approval.model_dump(exclude_none=True)
+    return approval.dict(exclude_none=True)
+
+
 @router.post("/research/{research_id}/promote/preview")
-async def promote_preview(request: Request, research_id: str):
+async def promote_preview(
+    request: Request,
+    research_id: str,
+    payload: PromotionScopeRequest | None = None,
+):
     """Dry-run: returns what would change if the best config were promoted."""
+    payload = payload or PromotionScopeRequest()
+    approval = _approval_payload(payload.approval)
     try:
-        result = await _promoter.preview(research_id)
+        result = await _promoter.preview(
+            research_id,
+            scope=payload.scope,
+            approval=approval,
+        )
         await _audit(
             request,
             action="promotion.preview",
             outcome="success",
             research_id=research_id,
+            metadata={"scope": payload.scope},
         )
         return result
     except ValueError as e:
@@ -62,6 +94,7 @@ async def promote_preview(request: Request, research_id: str):
             action="promotion.preview",
             outcome="failure",
             research_id=research_id,
+            metadata={"scope": payload.scope},
             error_message=str(e),
         )
         raise HTTPException(status_code=404, detail=str(e))
@@ -71,21 +104,33 @@ async def promote_preview(request: Request, research_id: str):
             action="promotion.preview",
             outcome="failure",
             research_id=research_id,
+            metadata={"scope": payload.scope},
             error_message=str(e),
         )
         raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.post("/research/{research_id}/promote/confirm")
-async def promote_confirm(request: Request, research_id: str):
+async def promote_confirm(
+    request: Request,
+    research_id: str,
+    payload: PromotionScopeRequest | None = None,
+):
     """Write the best config to the host bind mount."""
+    payload = payload or PromotionScopeRequest()
+    approval = _approval_payload(payload.approval)
     try:
-        result = await _promoter.confirm(research_id)
+        result = await _promoter.confirm(
+            research_id,
+            scope=payload.scope,
+            approval=approval,
+        )
         await _audit(
             request,
             action="promotion.confirm",
             outcome="success",
             research_id=research_id,
+            metadata={"scope": payload.scope},
         )
         return result
     except ValueError as e:
@@ -94,6 +139,7 @@ async def promote_confirm(request: Request, research_id: str):
             action="promotion.confirm",
             outcome="failure",
             research_id=research_id,
+            metadata={"scope": payload.scope},
             error_message=str(e),
         )
         raise HTTPException(status_code=400, detail=str(e))
@@ -103,6 +149,7 @@ async def promote_confirm(request: Request, research_id: str):
             action="promotion.confirm",
             outcome="failure",
             research_id=research_id,
+            metadata={"scope": payload.scope},
             error_message=str(e),
         )
         raise HTTPException(status_code=404, detail=str(e))
@@ -112,6 +159,7 @@ async def promote_confirm(request: Request, research_id: str):
             action="promotion.confirm",
             outcome="failure",
             research_id=research_id,
+            metadata={"scope": payload.scope},
             error_message=str(e),
         )
         raise HTTPException(status_code=500, detail=str(e))

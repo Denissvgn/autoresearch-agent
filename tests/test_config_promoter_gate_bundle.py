@@ -11,15 +11,23 @@ os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "test-token")
 
 from server.core import config_promoter
 from server.core.config_promoter import ConfigPromoter
-from server.core.development_gate_bundle import DEFAULT_GATE_BUNDLE_RELATIVE_PATH
+from server.core.development_gate_bundle import (
+    DEFAULT_GATE_BUNDLE_RELATIVE_PATH,
+    PRODUCTION_GATE_BUNDLE_RELATIVE_PATH,
+)
 from server.core.results_store import ResultsStore
 
 
 class FakePromotionStore:
-    def __init__(self, best: dict, model_type: str = "direction") -> None:
+    def __init__(
+        self,
+        best: dict,
+        model_type: str = "direction",
+        promotions: list[dict] | None = None,
+    ) -> None:
         self.best = best
         self.model_type = model_type
-        self.promotions: list[dict] = []
+        self.promotions: list[dict] = list(promotions or [])
 
     async def get_session(self, research_id: str):
         return {
@@ -34,8 +42,48 @@ class FakePromotionStore:
         return self.best
 
     async def record_promotion(self, **kwargs):
-        self.promotions.append(kwargs)
-        return {"id": 1, **kwargs}
+        record = {
+            "id": len(self.promotions) + 1,
+            "promoted_at": f"2026-04-30T00:00:{len(self.promotions) + 1:02d}+00:00",
+            **kwargs,
+        }
+        self.promotions.append(record)
+        return record
+
+    async def list_promotions(self):
+        return list(reversed(self.promotions))
+
+    async def get_latest_promotion(
+        self,
+        *,
+        model_type: str,
+        instrument: str,
+        timeframe: str,
+        scope: str,
+    ):
+        for promotion in reversed(self.promotions):
+            if (
+                promotion.get("model_type") == model_type
+                and promotion.get("instrument") == instrument
+                and promotion.get("timeframe") == timeframe
+                and promotion.get("scope") == scope
+            ):
+                return promotion
+        return None
+
+    async def get_latest_development_promotion(
+        self,
+        *,
+        model_type: str,
+        instrument: str,
+        timeframe: str,
+    ):
+        return await self.get_latest_promotion(
+            model_type=model_type,
+            instrument=instrument,
+            timeframe=timeframe,
+            scope="development",
+        )
 
 
 def _write_gate_bundle(root: Path) -> None:
@@ -84,6 +132,39 @@ promotion_blockers:
   - inference_feature_schema_mismatch
   - model_roster_mismatch
   - live_production_promotion_forbidden
+""",
+        encoding="utf-8",
+    )
+
+
+def _write_production_gate_bundle(root: Path) -> None:
+    path = root / PRODUCTION_GATE_BUNDLE_RELATIVE_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        """
+version: 1
+gate_bundle_id: production_trading_model_promotion_v1
+scope: production
+promotion_policy:
+  manual_or_signed_approval_required:
+    paper: true
+    canary: true
+    production: true
+  direct_development_to_production_allowed: false
+  full_decision_chain_required: true
+gate_tiers:
+  canary_validation:
+    checks:
+      min_duration_hours: 24
+promotion_blockers:
+  - missing_paper_promotion
+  - missing_canary_promotion
+  - missing_production_approval
+  - missing_model_card
+  - missing_feature_readiness
+  - missing_canary_duration
+  - missing_live_risk_limits
+  - missing_monitoring_alerts
 """,
         encoding="utf-8",
     )
@@ -479,6 +560,71 @@ def _passing_rl_metrics() -> dict:
     return metrics
 
 
+def _production_scope_metrics() -> dict:
+    metrics = _passing_m7_remaining_metrics()
+    metrics["rollback_target"] = "direction_model:12"
+    metrics["model_card"] = {
+        "path": "/tmp/autoresearch-session/model_card.md",
+        "approved": True,
+    }
+    metrics["supervised_feature_readiness"] = {
+        "direction": {"passed": True},
+        "volatility": {"passed": True},
+    }
+    metrics["paper_validation"] = {
+        "passed": True,
+        "account": "paper",
+        "trade_count": 42,
+    }
+    metrics["canary_validation"] = {
+        "duration_hours": 24,
+        "required_duration_hours": 24,
+        "passed": True,
+    }
+    metrics["live_risk_limits"] = {
+        "configured": True,
+        "max_position_notional": 100.0,
+    }
+    metrics["monitoring_alerts"] = {
+        "configured": True,
+        "alerts_block_promotion": False,
+    }
+    return metrics
+
+
+def _approval() -> dict:
+    return {
+        "approver": "ops-reviewer",
+        "reason": "stage gate approved",
+        "approved": True,
+    }
+
+
+def _promotion_row(scope: str, promotion_id: int = 1) -> dict:
+    return {
+        "id": promotion_id,
+        "research_id": "research_1",
+        "iteration": 3,
+        "model_type": "direction",
+        "instrument": "DOGE_USDT",
+        "timeframe": "15m",
+        "target_path": "/tmp/autoresearch-session/config.yaml",
+        "config_yaml": "agent_strategy: BALA\n",
+        "previous_yaml": "agent_strategy: OLD\n",
+        "scope": scope,
+        "metadata_path": f"/tmp/autoresearch-session/{scope}.json",
+        "promotion_metadata": {
+            "schema_version": "scoped_promotion_decision.v1"
+            if scope != "development"
+            else "development_promotion_metadata.v1",
+            "scope": scope,
+            "promotion_allowed": True,
+            "rollback_target": f"{scope}-rollback-target",
+        },
+        "promoted_at": f"2026-04-30T00:00:{promotion_id:02d}+00:00",
+    }
+
+
 def _best_iteration(metrics: dict) -> dict:
     return {
         "iteration": 3,
@@ -802,6 +948,88 @@ async def test_confirm_persists_development_metadata_with_results_store(
     )
     assert ownership["attempt_snapshot_hash"] == "attempt-sha-3"
     assert ownership["artifact_hash"] == "artifact-sha-3"
+
+
+@pytest.mark.asyncio
+async def test_production_scope_blocks_without_paper_and_canary(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle_with_m7_remaining(tmp_path)
+    _write_production_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(
+        config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
+    )
+    store = FakePromotionStore(
+        _best_iteration(_production_scope_metrics()),
+        promotions=[_promotion_row("development", 1)],
+    )
+
+    preview = await ConfigPromoter(store).preview(
+        "research_1",
+        scope="production",
+        approval=_approval(),
+    )
+
+    metadata = preview["scoped_promotion_metadata"]
+    assert preview["promotion_allowed"] is False
+    assert metadata["scope"] == "production"
+    assert "missing_paper_promotion" in metadata["blockers"]
+    assert "missing_canary_promotion" in metadata["blockers"]
+    with pytest.raises(ValueError, match="scoped promotion policy failed"):
+        await ConfigPromoter(store).confirm(
+            "research_1",
+            scope="production",
+            approval=_approval(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_production_scope_records_full_decision_chain(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle_with_m7_remaining(tmp_path)
+    _write_production_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(
+        config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
+    )
+    store = FakePromotionStore(
+        _best_iteration(_production_scope_metrics()),
+        promotions=[
+            _promotion_row("development", 1),
+            _promotion_row("paper", 2),
+            _promotion_row("canary", 3),
+        ],
+    )
+
+    result = await ConfigPromoter(store).confirm(
+        "research_1",
+        scope="production",
+        approval=_approval(),
+    )
+
+    assert result["scope"] == "production"
+    metadata_path = Path(result["metadata_path"])
+    assert metadata_path.exists()
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert metadata["schema_version"] == "scoped_promotion_decision.v1"
+    assert metadata["scope"] == "production"
+    assert metadata["promotion_allowed"] is True
+    assert metadata["approval"]["satisfied"] is True
+    assert metadata["production_gate_bundle"]["gate_bundle_id"] == (
+        "production_trading_model_promotion_v1"
+    )
+    assert [entry["scope"] for entry in metadata["decision_chain"]] == [
+        "development",
+        "paper",
+        "canary",
+        "production",
+    ]
+    assert metadata["rollback_targets"]["production"] == "direction_model:12"
+    assert store.promotions[-1]["promotion_metadata"]["scope"] == "production"
 
 
 @pytest.mark.asyncio

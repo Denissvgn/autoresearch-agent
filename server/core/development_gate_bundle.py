@@ -12,11 +12,24 @@ import yaml
 DEFAULT_GATE_BUNDLE_RELATIVE_PATH = (
     "reports/direction-tuning/promotion/development_gate_bundle_v1.yaml"
 )
+PRODUCTION_GATE_BUNDLE_RELATIVE_PATH = (
+    "reports/direction-tuning/promotion/production_gate_bundle_v1.yaml"
+)
 
 
 def load_gate_bundle(workspace_root: str | Path) -> dict[str, Any]:
     """Load the versioned development gate bundle from the workspace."""
     path = Path(workspace_root) / DEFAULT_GATE_BUNDLE_RELATIVE_PATH
+    return _load_bundle(path)
+
+
+def load_production_gate_bundle(workspace_root: str | Path) -> dict[str, Any]:
+    """Load the versioned production-scope promotion gate bundle."""
+    path = Path(workspace_root) / PRODUCTION_GATE_BUNDLE_RELATIVE_PATH
+    return _load_bundle(path)
+
+
+def _load_bundle(path: Path) -> dict[str, Any]:
     with path.open(encoding="utf-8") as handle:
         data = yaml.safe_load(handle) or {}
     if not isinstance(data, dict):

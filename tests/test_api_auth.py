@@ -148,15 +148,15 @@ class FakeStore:
 
 
 class FakePromoter:
-    async def preview(self, research_id: str):
+    async def preview(self, research_id: str, **kwargs):
         if research_id == "missing":
             raise ValueError("No promotable iteration found")
-        return {"research_id": research_id, "preview": True}
+        return {"research_id": research_id, "preview": True, **kwargs}
 
-    async def confirm(self, research_id: str):
+    async def confirm(self, research_id: str, **kwargs):
         if research_id == "missing":
             raise ValueError("No promotable iteration found")
-        return {"research_id": research_id, "confirmed": True}
+        return {"research_id": research_id, "confirmed": True, **kwargs}
 
     async def rollback(
         self,
