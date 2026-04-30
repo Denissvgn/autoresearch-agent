@@ -16,15 +16,16 @@ from server.core.results_store import ResultsStore
 
 
 class FakePromotionStore:
-    def __init__(self, best: dict) -> None:
+    def __init__(self, best: dict, model_type: str = "direction") -> None:
         self.best = best
+        self.model_type = model_type
         self.promotions: list[dict] = []
 
     async def get_session(self, research_id: str):
         return {
             "id": research_id,
             "workspace_path": "/tmp/autoresearch-session",
-            "model_type": "direction",
+            "model_type": self.model_type,
             "instrument": "DOGE_USDT",
             "timeframe": "15m",
         }
@@ -112,7 +113,12 @@ gate_tiers:
     required_for_finalists: true
     checks:
       oof_direction_proba_required: true
+      oof_volatility_proba_required: true
+      feature_provenance_required: true
+      feature_bundle_hash_required: true
       proxy_or_neutral_fallback_blocks_promotion: true
+      volatility_fallback_blocks_promotion: true
+      stale_or_leaked_blocks_promotion: true
       nested_validation_required: true
       multi_seed_required: true
       metrics_required:
@@ -126,7 +132,18 @@ gate_tiers:
         - folds_passed
 promotion_blockers:
   - missing_oof_provenance
+  - missing_volatility_oof_provenance
+  - missing_direction_feature_provenance
+  - missing_volatility_feature_provenance
+  - incomplete_direction_feature_provenance
+  - incomplete_volatility_feature_provenance
+  - missing_rl_feature_bundle_hash
   - proxy_or_neutral_direction_proba_fallback
+  - proxy_or_neutral_volatility_feature_fallback
+  - stale_or_leaked_feature_provenance
+  - missing_nested_validation
+  - missing_multi_seed_rl_validation
+  - missing_rl_oos_metrics
 """,
         encoding="utf-8",
     )
@@ -307,10 +324,28 @@ def _passing_metrics() -> dict:
 def _passing_rl_oos() -> dict:
     return {
         "direction_probability_provenance": {
+            "source_model_registry_name": "direction-model",
+            "source_model_registry_version": "12",
+            "mlflow_run_id": "run-direction-12",
+            "feature_schema_hash": "dir-schema-sha",
+            "prediction_timestamp_coverage": 1.0,
+            "status": "oof",
             "honest_coverage": 1.0,
             "unsafe_count": 0,
             "unsafe_values": [],
         },
+        "volatility_probability_provenance": {
+            "source_model_registry_name": "volatility-model",
+            "source_model_registry_version": "7",
+            "mlflow_run_id": "run-volatility-7",
+            "feature_schema_hash": "vol-schema-sha",
+            "prediction_timestamp_coverage": 1.0,
+            "status": "oof",
+            "honest_coverage": 1.0,
+            "unsafe_count": 0,
+            "unsafe_values": [],
+        },
+        "feature_bundle_hash": "rl-feature-bundle-sha",
         "nested_validation_used": True,
         "n_seed_trials": 3,
         "aggregate": {
@@ -359,6 +394,22 @@ def _passing_m7_remaining_metrics() -> dict:
             "composite_reload_passed": True,
             "fallback_check_passed": True,
             "observation_dimension_parity_passed": True,
+        }
+    )
+    return metrics
+
+
+def _passing_rl_metrics() -> dict:
+    metrics = _passing_metrics()
+    metrics.update(
+        {
+            "finalist": True,
+            "obs_spec_hash": "obs-spec-sha",
+            "rl_oos": _passing_rl_oos(),
+            "model_registry_name": "rl-model",
+            "model_version": "5",
+            "mlflow_run_id": "run-rl-5",
+            "artifact_uri": "mlflow://runs/run-rl-5/model",
         }
     )
     return metrics
@@ -713,6 +764,101 @@ async def test_preview_accepts_finalist_with_honest_rl_oos(
     gate_eval = preview["gate_bundle_evaluation"]
     assert gate_eval["passed"] is True
     assert not gate_eval["blockers"]
+
+
+@pytest.mark.asyncio
+async def test_preview_accepts_rl_candidate_with_honest_oos_provenance(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle_with_rl(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+    store = FakePromotionStore(
+        _best_iteration(_passing_rl_metrics()),
+        model_type="rl",
+    )
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    gate_eval = preview["gate_bundle_evaluation"]
+    assert gate_eval["applicable"] is True
+    assert gate_eval["model_type"] == "rl"
+    assert gate_eval["passed"] is True
+    assert preview["promotion_allowed"] is True
+    assert preview["consistency_report"]["passed"] is True
+
+
+@pytest.mark.asyncio
+async def test_preview_blocks_rl_candidate_missing_volatility_provenance(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle_with_rl(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+    metrics = _passing_rl_metrics()
+    metrics["rl_oos"].pop("volatility_probability_provenance")
+    store = FakePromotionStore(_best_iteration(metrics), model_type="rl")
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    gate_eval = preview["gate_bundle_evaluation"]
+    assert preview["promotion_allowed"] is False
+    assert "missing_volatility_feature_provenance" in gate_eval["blockers"]
+    assert "missing_volatility_oof_provenance" in gate_eval["blockers"]
+    assert "missing_volatility_feature_provenance" in preview[
+        "consistency_report"
+    ]["blockers"]
+
+
+@pytest.mark.asyncio
+async def test_preview_blocks_rl_candidate_with_volatility_fallback(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle_with_rl(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+    metrics = _passing_rl_metrics()
+    metrics["rl_oos"]["volatility_probability_provenance"].update(
+        {
+            "honest_coverage": 0.25,
+            "unsafe_count": 12,
+            "unsafe_values": ["neutral_fallback"],
+            "stale": True,
+        }
+    )
+    store = FakePromotionStore(_best_iteration(metrics), model_type="rl")
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    blockers = preview["gate_bundle_evaluation"]["blockers"]
+    assert preview["promotion_allowed"] is False
+    assert "missing_volatility_oof_provenance" in blockers
+    assert "proxy_or_neutral_volatility_feature_fallback" in blockers
+    assert "stale_or_leaked_feature_provenance" in blockers
+
+
+@pytest.mark.asyncio
+async def test_preview_blocks_rl_candidate_without_nested_or_multi_seed_oos(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle_with_rl(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+    metrics = _passing_rl_metrics()
+    metrics["rl_oos"]["nested_validation_used"] = False
+    metrics["rl_oos"]["n_seed_trials"] = 1
+    store = FakePromotionStore(_best_iteration(metrics), model_type="rl")
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    blockers = preview["gate_bundle_evaluation"]["blockers"]
+    assert preview["promotion_allowed"] is False
+    assert "missing_nested_validation" in blockers
+    assert "missing_multi_seed_rl_validation" in blockers
 
 
 @pytest.mark.asyncio

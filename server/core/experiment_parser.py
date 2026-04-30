@@ -140,6 +140,14 @@ def parse_prepare_output(stdout: str) -> IterationMetrics:
             metrics.extra[key] = [
                 s.strip() for s in value.split(";") if s.strip()
             ]
+        elif key.endswith("_json"):
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                metrics.extra[key] = value
+            else:
+                metrics.extra[key] = parsed
+                metrics.extra[key[: -len("_json")]] = parsed
         else:
             # Store any extra metrics
             try:

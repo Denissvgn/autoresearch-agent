@@ -35,6 +35,13 @@ def evaluate_development_gate_bundle(
     The evaluation is intentionally conservative: missing required evidence is
     a blocker unless the iteration explicitly carries a matching waiver.
     """
+    if model_type == "rl":
+        return _evaluate_rl_development_gate_bundle(
+            bundle=bundle,
+            model_type=model_type,
+            best_iteration=best_iteration,
+        )
+
     if model_type != "direction":
         return {
             "gate_bundle_id": bundle.get("gate_bundle_id"),
@@ -330,6 +337,76 @@ def _waivers(payload: dict[str, Any]) -> set[str]:
     if isinstance(raw, Iterable):
         return {str(item) for item in raw}
     return set()
+
+
+def _evaluate_rl_development_gate_bundle(
+    *,
+    bundle: dict[str, Any],
+    model_type: str,
+    best_iteration: dict[str, Any],
+) -> dict[str, Any]:
+    """Evaluate server-owned RL promotion gates for development promotion."""
+
+    payload = dict(_iteration_payload(best_iteration))
+    payload.setdefault("finalist", True)
+    payload.setdefault("requires_rl_oos", True)
+    waivers = _waivers(payload)
+    checks: list[dict[str, Any]] = []
+    blockers: list[str] = []
+
+    def add_check(name: str, passed: bool, reason: str, details: Any = None) -> None:
+        waived = reason in waivers or name in waivers
+        status = "passed" if passed else "waived" if waived else "failed"
+        checks.append(
+            {
+                "name": name,
+                "status": status,
+                "reason": reason if not passed else None,
+                "details": details,
+            }
+        )
+        if not passed and not waived:
+            _append_blocker(blockers, reason)
+
+    policy = bundle.get("promotion_policy", {})
+    add_check(
+        "live_production_promotion_disabled",
+        policy.get("live_production_promotion_allowed") is False,
+        "live_production_promotion_policy_missing_or_allowed",
+        {
+            "live_production_promotion_allowed": policy.get(
+                "live_production_promotion_allowed"
+            )
+        },
+    )
+    add_check(
+        "development_scope_required",
+        not _live_production_promotion_requested(payload),
+        "live_production_promotion_forbidden",
+        {"requested_scope": _requested_promotion_scope(payload)},
+    )
+
+    _evaluate_rl_oos_gates(
+        bundle=bundle,
+        payload=payload,
+        checks=checks,
+        blockers=blockers,
+        waivers=waivers,
+        add_check=add_check,
+        require_feature_provenance=True,
+    )
+
+    return {
+        "gate_bundle_id": bundle.get("gate_bundle_id"),
+        "version": bundle.get("version"),
+        "scope": bundle.get("scope") or "development",
+        "model_type": model_type,
+        "applicable": True,
+        "passed": not blockers,
+        "checks": checks,
+        "blockers": blockers,
+        "waivers": sorted(waivers),
+    }
 
 
 def _dict_at(root: Any, *path: str) -> dict[str, Any]:
@@ -1020,6 +1097,7 @@ def _evaluate_rl_oos_gates(
     blockers: list[str],
     waivers: set[str],
     add_check: Any,
+    require_feature_provenance: bool = False,
 ) -> None:
     """Evaluate DPU-063 RL OOS gate evidence when a candidate is a finalist."""
 
@@ -1052,14 +1130,38 @@ def _evaluate_rl_oos_gates(
         return
 
     tier_checks = rl_tier.get("checks", {})
-    direction_provenance = _first_dict(
-        rl_oos.get("direction_probability_provenance"),
-        payload.get("direction_probability_provenance"),
-    )
+    direction_provenance = _rl_channel_provenance(payload, rl_oos, "direction")
+    volatility_provenance = _rl_channel_provenance(payload, rl_oos, "volatility")
+
+    if require_feature_provenance or tier_checks.get("feature_provenance_required"):
+        _evaluate_rl_feature_provenance_gate(
+            channel="direction",
+            provenance=direction_provenance,
+            checks=checks,
+            blockers=blockers,
+            waivers=waivers,
+        )
+        _evaluate_rl_feature_provenance_gate(
+            channel="volatility",
+            provenance=volatility_provenance,
+            checks=checks,
+            blockers=blockers,
+            waivers=waivers,
+        )
+        add_check(
+            "rl_feature_bundle_hash_recorded",
+            bool(_rl_feature_bundle_hash(payload, rl_oos)),
+            "missing_rl_feature_bundle_hash",
+            {
+                "feature_bundle_hash": _rl_feature_bundle_hash(payload, rl_oos),
+            },
+        )
+
     if tier_checks.get("oof_direction_proba_required"):
         honest_coverage = _first_number(
             direction_provenance.get("honest_coverage"),
             direction_provenance.get("oof_available_coverage"),
+            direction_provenance.get("oof_coverage"),
         )
         _numeric_gate(
             checks=checks,
@@ -1072,15 +1174,54 @@ def _evaluate_rl_oos_gates(
             reason="missing_oof_provenance",
         )
 
+    if tier_checks.get("oof_volatility_proba_required") or require_feature_provenance:
+        honest_coverage = _first_number(
+            volatility_provenance.get("honest_coverage"),
+            volatility_provenance.get("oof_available_coverage"),
+            volatility_provenance.get("oof_coverage"),
+        )
+        _numeric_gate(
+            checks=checks,
+            blockers=blockers,
+            waivers=waivers,
+            name="rl_oof_volatility_proba_required",
+            value=honest_coverage,
+            threshold=0.95,
+            comparator=">=",
+            reason="missing_volatility_oof_provenance",
+        )
+
     if tier_checks.get("proxy_or_neutral_fallback_blocks_promotion"):
-        unsafe_count = int(_first_number(direction_provenance.get("unsafe_count")) or 0)
-        unsafe_values = direction_provenance.get("unsafe_values") or []
+        direction_unsafe = _rl_unsafe_feature_details(direction_provenance)
         add_check(
             "rl_no_proxy_or_neutral_direction_fallback",
-            unsafe_count == 0 and not unsafe_values,
+            not direction_unsafe["unsafe"],
             "proxy_or_neutral_direction_proba_fallback",
-            direction_provenance,
+            direction_unsafe,
         )
+        if require_feature_provenance or tier_checks.get(
+            "volatility_fallback_blocks_promotion"
+        ):
+            volatility_unsafe = _rl_unsafe_feature_details(volatility_provenance)
+            add_check(
+                "rl_no_proxy_or_neutral_volatility_fallback",
+                not volatility_unsafe["unsafe"],
+                "proxy_or_neutral_volatility_feature_fallback",
+                volatility_unsafe,
+            )
+
+    if require_feature_provenance or tier_checks.get("stale_or_leaked_blocks_promotion"):
+        for channel, provenance in (
+            ("direction", direction_provenance),
+            ("volatility", volatility_provenance),
+        ):
+            stale_or_leaked = _rl_stale_or_leaked_details(provenance)
+            add_check(
+                f"rl_no_{channel}_stale_or_leaked_feature",
+                not stale_or_leaked["unsafe"],
+                "stale_or_leaked_feature_provenance",
+                stale_or_leaked,
+            )
 
     if tier_checks.get("nested_validation_required"):
         add_check(
@@ -1119,8 +1260,290 @@ def _evaluate_rl_oos_gates(
         )
 
 
+def _evaluate_rl_feature_provenance_gate(
+    *,
+    channel: str,
+    provenance: dict[str, Any],
+    checks: list[dict[str, Any]],
+    blockers: list[str],
+    waivers: set[str],
+) -> None:
+    missing_reason = f"missing_{channel}_feature_provenance"
+    complete_reason = f"incomplete_{channel}_feature_provenance"
+    _boolean_gate(
+        checks=checks,
+        blockers=blockers,
+        waivers=waivers,
+        name=f"rl_{channel}_feature_provenance_required",
+        passed=bool(provenance),
+        reason=missing_reason,
+        details=provenance,
+    )
+    if not provenance:
+        return
+
+    missing = _rl_required_provenance_fields_missing(provenance)
+    _boolean_gate(
+        checks=checks,
+        blockers=blockers,
+        waivers=waivers,
+        name=f"rl_{channel}_feature_provenance_complete",
+        passed=not missing,
+        reason=complete_reason,
+        details={"missing": missing, "provenance": provenance},
+    )
+
+
+def _rl_channel_provenance(
+    payload: dict[str, Any],
+    rl_oos: dict[str, Any],
+    channel: str,
+) -> dict[str, Any]:
+    feature_provenance = _first_dict(
+        rl_oos.get("feature_provenance"),
+        rl_oos.get("feature_provenance_by_channel"),
+        payload.get("feature_provenance"),
+        payload.get("feature_provenance_by_channel"),
+    )
+    probability_provenance = _first_dict(
+        rl_oos.get("probability_provenance"),
+        payload.get("probability_provenance"),
+    )
+    return _first_dict(
+        rl_oos.get(f"{channel}_probability_provenance"),
+        rl_oos.get(f"{channel}_feature_provenance"),
+        payload.get(f"{channel}_probability_provenance"),
+        payload.get(f"{channel}_feature_provenance"),
+        feature_provenance.get(channel),
+        probability_provenance.get(channel),
+    )
+
+
+def _rl_feature_bundle_hash(
+    payload: dict[str, Any],
+    rl_oos: dict[str, Any],
+) -> str | None:
+    candidates = (
+        rl_oos.get("feature_bundle_hash"),
+        rl_oos.get("rl_feature_bundle_hash"),
+        rl_oos.get("dataset_hash"),
+        rl_oos.get("enriched_dataset_hash"),
+        payload.get("feature_bundle_hash"),
+        payload.get("rl_feature_bundle_hash"),
+        payload.get("dataset_hash"),
+        payload.get("enriched_dataset_hash"),
+        _dict_at(rl_oos, "feature_bundle").get("hash"),
+        _dict_at(rl_oos, "rl_dataset").get("feature_bundle_hash"),
+        _dict_at(payload, "feature_bundle").get("hash"),
+        _dict_at(payload, "rl_dataset").get("feature_bundle_hash"),
+    )
+    for value in candidates:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _rl_required_provenance_fields_missing(
+    provenance: dict[str, Any],
+) -> list[str]:
+    required_aliases = {
+        "source_model_registry_name": (
+            "source_model_registry_name",
+            "model_registry_name",
+            "registered_model_name",
+            "registry_name",
+            "source_model_name",
+        ),
+        "source_model_registry_version": (
+            "source_model_registry_version",
+            "model_registry_version",
+            "registered_model_version",
+            "registry_version",
+            "model_version",
+            "source_model_version",
+        ),
+        "mlflow_run_id": ("source_mlflow_run_id", "mlflow_run_id", "run_id"),
+        "feature_schema_hash": (
+            "feature_schema_hash",
+            "source_feature_schema_hash",
+            "schema_hash",
+        ),
+        "prediction_timestamp_coverage": (
+            "prediction_timestamp_coverage",
+            "timestamp_coverage",
+            "prediction_coverage",
+            "coverage",
+        ),
+    }
+    missing: list[str] = []
+    for field, aliases in required_aliases.items():
+        if not any(_present_value(provenance.get(alias)) for alias in aliases):
+            missing.append(field)
+    return missing
+
+
+def _present_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (dict, list, tuple, set)):
+        return bool(value)
+    return True
+
+
+def _rl_unsafe_feature_details(provenance: dict[str, Any]) -> dict[str, Any]:
+    unsafe_count = int(_first_number(provenance.get("unsafe_count")) or 0)
+    unsafe_values = _string_list(provenance.get("unsafe_values"))
+    status_values = _provenance_status_values(provenance)
+    flagged_keys = [
+        key
+        for key in (
+            "fallback_used",
+            "neutral_fallback_used",
+            "proxy_used",
+            "synthetic_fallback_used",
+            "model_proxy_used",
+        )
+        if _truthy(provenance.get(key))
+    ]
+    unsafe_tokens = {
+        "fallback",
+        "legacy_inferred",
+        "neutral",
+        "neutral_fallback",
+        "proxy",
+        "sdk_proxy",
+        "synthetic",
+        "unknown",
+    }
+    unsafe_statuses = [
+        value
+        for value in status_values + unsafe_values
+        if any(token in value for token in unsafe_tokens)
+        and "quasi_oof" not in value
+        and "oof" not in value
+    ]
+    unsafe = bool(unsafe_count > 0 or unsafe_values or flagged_keys or unsafe_statuses)
+    return {
+        "unsafe": unsafe,
+        "unsafe_count": unsafe_count,
+        "unsafe_values": unsafe_values,
+        "status_values": status_values,
+        "unsafe_statuses": unsafe_statuses,
+        "flagged_keys": flagged_keys,
+        "provenance": provenance,
+    }
+
+
+def _rl_stale_or_leaked_details(provenance: dict[str, Any]) -> dict[str, Any]:
+    status_values = _provenance_status_values(provenance) + _string_list(
+        provenance.get("unsafe_values")
+    )
+    flagged_keys = [
+        key
+        for key in (
+            "stale",
+            "is_stale",
+            "stale_features",
+            "leaked",
+            "is_leaked",
+            "leaked_features",
+            "leakage_detected",
+            "lookahead_leakage",
+        )
+        if _truthy(provenance.get(key))
+    ]
+    unsafe_statuses = [
+        value
+        for value in status_values
+        if any(token in value for token in ("stale", "leak", "lookahead", "future"))
+    ]
+    unsafe = bool(flagged_keys or unsafe_statuses)
+    return {
+        "unsafe": unsafe,
+        "status_values": status_values,
+        "unsafe_statuses": unsafe_statuses,
+        "flagged_keys": flagged_keys,
+        "provenance": provenance,
+    }
+
+
+def _provenance_status_values(provenance: dict[str, Any]) -> list[str]:
+    values: list[str] = []
+    for key in (
+        "status",
+        "quality",
+        "provenance",
+        "provenance_status",
+        "oof_status",
+        "feature_status",
+        "prediction_status",
+        "source",
+    ):
+        values.extend(_string_list(provenance.get(key)))
+    return values
+
+
+def _string_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        raw = [value]
+    elif isinstance(value, dict):
+        raw = [key for key, count in value.items() if count]
+    elif isinstance(value, Iterable):
+        raw = list(value)
+    else:
+        raw = [value]
+    return [str(item).strip().lower() for item in raw if str(item).strip()]
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "used"}
+    return bool(value)
+
+
+def _boolean_gate(
+    *,
+    checks: list[dict[str, Any]],
+    blockers: list[str],
+    waivers: set[str],
+    name: str,
+    passed: bool,
+    reason: str,
+    details: Any = None,
+) -> None:
+    waived = reason in waivers or name in waivers
+    status = "passed" if passed else "waived" if waived else "failed"
+    checks.append(
+        {
+            "name": name,
+            "status": status,
+            "reason": reason if not passed else None,
+            "details": details,
+        }
+    )
+    if not passed and not waived:
+        _append_blocker(blockers, reason)
+
+
 def _rl_nested_validation_present(rl_oos: dict[str, Any]) -> bool:
     if rl_oos.get("nested_validation_used") is True:
+        return True
+    if rl_oos.get("blocked_time_validation_used") is True:
+        return True
+    validation_mode = str(
+        rl_oos.get("validation_mode")
+        or rl_oos.get("oos_validation_mode")
+        or ""
+    ).strip().lower()
+    if validation_mode in {"blocked_time", "blocked-time", "nested", "walk_forward"}:
         return True
     if _first_number(rl_oos.get("wf_nested_eval_ratio")):
         return True

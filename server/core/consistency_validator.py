@@ -135,6 +135,73 @@ def build_consistency_report(
             "passed" if isinstance(rl_oos, dict) else ("failed" if promotable else "warning"),
             blocker="missing_rl_oos_gates" if promotable else None,
         )
+        if isinstance(rl_oos, dict):
+            direction_provenance = _rl_channel_provenance(metrics, rl_oos, "direction")
+            volatility_provenance = _rl_channel_provenance(metrics, rl_oos, "volatility")
+            add(
+                "rl_direction_feature_provenance_present",
+                "passed"
+                if direction_provenance
+                else ("failed" if promotable else "warning"),
+                blocker="missing_direction_feature_provenance"
+                if promotable
+                else None,
+            )
+            add(
+                "rl_volatility_feature_provenance_present",
+                "passed"
+                if volatility_provenance
+                else ("failed" if promotable else "warning"),
+                blocker="missing_volatility_feature_provenance"
+                if promotable
+                else None,
+            )
+            add(
+                "rl_feature_bundle_hash_recorded",
+                "passed"
+                if _rl_feature_bundle_hash(metrics, rl_oos)
+                else ("failed" if promotable else "warning"),
+                blocker="missing_rl_feature_bundle_hash" if promotable else None,
+            )
+            add(
+                "rl_nested_or_blocked_validation_present",
+                "passed"
+                if _rl_nested_validation_present(rl_oos)
+                else ("failed" if promotable else "warning"),
+                blocker="missing_nested_validation" if promotable else None,
+            )
+            add(
+                "rl_multi_seed_validation_present",
+                "passed"
+                if _rl_multi_seed_present(rl_oos)
+                else ("failed" if promotable else "warning"),
+                blocker="missing_multi_seed_rl_validation" if promotable else None,
+            )
+            add(
+                "rl_oos_metrics_present",
+                "passed"
+                if _rl_required_metrics_present(rl_oos)
+                else ("failed" if promotable else "warning"),
+                blocker="missing_rl_oos_metrics" if promotable else None,
+            )
+            add(
+                "rl_no_direction_feature_fallback",
+                "passed"
+                if not _rl_unsafe_feature_provenance(direction_provenance)
+                else ("failed" if promotable else "warning"),
+                blocker="proxy_or_neutral_direction_proba_fallback"
+                if promotable
+                else None,
+            )
+            add(
+                "rl_no_volatility_feature_fallback",
+                "passed"
+                if not _rl_unsafe_feature_provenance(volatility_provenance)
+                else ("failed" if promotable else "warning"),
+                blocker="proxy_or_neutral_volatility_feature_fallback"
+                if promotable
+                else None,
+            )
 
     rollback = preflight.get("rollback_readiness") or metrics.get("rollback_readiness")
     rollback_target = (
@@ -249,3 +316,233 @@ def _dedupe(values: Iterable[str]) -> list[str]:
         result.append(value)
     return result
 
+
+def _dict_at(root: Any, *path: str) -> Dict[str, Any]:
+    value = root
+    for key in path:
+        if not isinstance(value, dict):
+            return {}
+        value = value.get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def _first_dict(*values: Any) -> Dict[str, Any]:
+    for value in values:
+        if isinstance(value, dict):
+            return value
+    return {}
+
+
+def _first_number(*values: Any) -> Optional[float]:
+    for value in values:
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            try:
+                return float(value)
+            except ValueError:
+                continue
+    return None
+
+
+def _rl_channel_provenance(
+    metrics: Dict[str, Any],
+    rl_oos: Dict[str, Any],
+    channel: str,
+) -> Dict[str, Any]:
+    feature_provenance = _first_dict(
+        rl_oos.get("feature_provenance"),
+        rl_oos.get("feature_provenance_by_channel"),
+        metrics.get("feature_provenance"),
+        metrics.get("feature_provenance_by_channel"),
+    )
+    probability_provenance = _first_dict(
+        rl_oos.get("probability_provenance"),
+        metrics.get("probability_provenance"),
+    )
+    return _first_dict(
+        rl_oos.get(f"{channel}_probability_provenance"),
+        rl_oos.get(f"{channel}_feature_provenance"),
+        metrics.get(f"{channel}_probability_provenance"),
+        metrics.get(f"{channel}_feature_provenance"),
+        feature_provenance.get(channel),
+        probability_provenance.get(channel),
+    )
+
+
+def _rl_feature_bundle_hash(
+    metrics: Dict[str, Any],
+    rl_oos: Dict[str, Any],
+) -> Optional[str]:
+    candidates = (
+        rl_oos.get("feature_bundle_hash"),
+        rl_oos.get("rl_feature_bundle_hash"),
+        rl_oos.get("dataset_hash"),
+        rl_oos.get("enriched_dataset_hash"),
+        metrics.get("feature_bundle_hash"),
+        metrics.get("rl_feature_bundle_hash"),
+        metrics.get("dataset_hash"),
+        metrics.get("enriched_dataset_hash"),
+        _dict_at(rl_oos, "feature_bundle").get("hash"),
+        _dict_at(rl_oos, "rl_dataset").get("feature_bundle_hash"),
+    )
+    for value in candidates:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _rl_nested_validation_present(rl_oos: Dict[str, Any]) -> bool:
+    if rl_oos.get("nested_validation_used") is True:
+        return True
+    if rl_oos.get("blocked_time_validation_used") is True:
+        return True
+    validation_mode = str(
+        rl_oos.get("validation_mode")
+        or rl_oos.get("oos_validation_mode")
+        or ""
+    ).strip().lower()
+    if validation_mode in {"blocked_time", "blocked-time", "nested", "walk_forward"}:
+        return True
+    folds = rl_oos.get("folds")
+    if isinstance(folds, list) and folds:
+        return all(bool(_dict_at(fold, "validation")) for fold in folds if isinstance(fold, dict))
+    return bool(_dict_at(rl_oos, "validation"))
+
+
+def _rl_multi_seed_present(rl_oos: Dict[str, Any]) -> bool:
+    n_seed_trials = _first_number(rl_oos.get("n_seed_trials"))
+    if n_seed_trials is not None and n_seed_trials >= 2:
+        return True
+    folds = rl_oos.get("folds")
+    if isinstance(folds, list) and folds:
+        for fold in folds:
+            if not isinstance(fold, dict):
+                continue
+            fold_trials = _first_number(
+                fold.get("n_seed_trials"),
+                _dict_at(fold, "validation").get("n_seed_trials"),
+                _dict_at(fold, "oos").get("n_seed_trials"),
+            )
+            if fold_trials is not None and fold_trials >= 2:
+                return True
+    return rl_oos.get("multi_seed") is True
+
+
+def _rl_required_metrics_present(rl_oos: Dict[str, Any]) -> bool:
+    required = (
+        "oos_sharpe",
+        "return",
+        "drawdown",
+        "trade_count",
+        "mean_absolute_position",
+        "flip_count",
+        "folds_passed",
+    )
+    metrics = _first_dict(
+        rl_oos.get("metrics"),
+        rl_oos.get("aggregate"),
+        rl_oos.get("oos"),
+        rl_oos,
+    )
+    return all(_rl_metric_value(metrics, name) is not None for name in required)
+
+
+def _rl_metric_value(metrics: Dict[str, Any], name: str) -> Optional[float]:
+    aliases = {
+        "return": ("return", "oos_return", "mean_return", "mean_oos_return"),
+        "drawdown": (
+            "drawdown",
+            "oos_drawdown",
+            "max_drawdown",
+            "mean_oos_drawdown",
+        ),
+        "trade_count": (
+            "trade_count",
+            "trades",
+            "oos_trades",
+            "mean_trades",
+            "mean_oos_trades",
+        ),
+        "mean_absolute_position": (
+            "mean_absolute_position",
+            "mean_abs_position",
+            "mean_abs_pos",
+            "oos_mean_position",
+        ),
+        "flip_count": ("flip_count", "flips", "oos_flips", "mean_flip_count"),
+        "folds_passed": ("folds_passed",),
+        "oos_sharpe": ("oos_sharpe", "mean_oos_sharpe", "sharpe"),
+    }
+    candidates = aliases.get(name, (name, f"mean_{name}", f"mean_oos_{name}"))
+    return _first_number(*(metrics.get(candidate) for candidate in candidates))
+
+
+def _rl_unsafe_feature_provenance(provenance: Dict[str, Any]) -> bool:
+    if not provenance:
+        return False
+    unsafe_count = _first_number(provenance.get("unsafe_count")) or 0
+    unsafe_values = _string_list(provenance.get("unsafe_values"))
+    status_values = []
+    for key in (
+        "status",
+        "quality",
+        "provenance",
+        "provenance_status",
+        "oof_status",
+        "source",
+    ):
+        status_values.extend(_string_list(provenance.get(key)))
+    if any(
+        _truthy(provenance.get(key))
+        for key in (
+            "fallback_used",
+            "neutral_fallback_used",
+            "proxy_used",
+            "synthetic_fallback_used",
+            "stale",
+            "leaked",
+        )
+    ):
+        return True
+    unsafe_tokens = {
+        "fallback",
+        "legacy_inferred",
+        "leak",
+        "neutral",
+        "proxy",
+        "sdk_proxy",
+        "stale",
+        "synthetic",
+        "unknown",
+    }
+    return unsafe_count > 0 or any(
+        any(token in value for token in unsafe_tokens)
+        and "quasi_oof" not in value
+        and value != "oof"
+        for value in status_values + unsafe_values
+    )
+
+
+def _string_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        raw = [value]
+    elif isinstance(value, dict):
+        raw = [key for key, count in value.items() if count]
+    elif isinstance(value, Iterable):
+        raw = list(value)
+    else:
+        raw = [value]
+    return [str(item).strip().lower() for item in raw if str(item).strip()]
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "used"}
+    return bool(value)
