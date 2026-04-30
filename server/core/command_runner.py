@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import os
+import signal
 import subprocess
 from dataclasses import dataclass
 
@@ -55,34 +57,37 @@ class GovernedCommandRunner:
                 decision=decision,
             )
 
+        proc = subprocess.Popen(
+            decision.argv,
+            cwd=self._workspace_root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
         try:
-            result = subprocess.run(
-                decision.argv,
-                cwd=self._workspace_root,
-                capture_output=True,
-                text=True,
-                timeout=timeout_s,
-                start_new_session=True,
-            )
-        except subprocess.TimeoutExpired as exc:
-            partial = _combine_output(exc.stdout, exc.stderr)
+            stdout, stderr = proc.communicate(timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            stdout, stderr = _terminate_process_group(proc)
+            partial = _combine_output(stdout, stderr)
             if partial:
                 partial = _truncate_output(redact_sensitive_text(partial))
             timeout_msg = f"\n[Command timed out after {timeout_s}s]"
             return CommandRunResult(
                 output=(partial + timeout_msg) if partial else f"Command timed out after {timeout_s}s",
                 decision=decision,
+                returncode=proc.returncode,
                 timed_out=True,
             )
 
-        output = _combine_output(result.stdout, result.stderr)
+        output = _combine_output(stdout, stderr)
         output = _truncate_output(redact_sensitive_text(output))
-        if result.returncode != 0:
-            output += f"\n[exit code: {result.returncode}]"
+        if proc.returncode != 0:
+            output += f"\n[exit code: {proc.returncode}]"
         return CommandRunResult(
             output=output or "(no output)",
             decision=decision,
-            returncode=result.returncode,
+            returncode=proc.returncode,
         )
 
 
@@ -113,3 +118,20 @@ def _truncate_output(output: str) -> str:
     if len(output) <= _MAX_OUTPUT_LEN:
         return output
     return output[:30_000] + "\n...(truncated)...\n" + output[-30_000:]
+
+
+def _terminate_process_group(proc: subprocess.Popen[str]) -> tuple[str | None, str | None]:
+    """Terminate a timed-out process and every child in its process group."""
+
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        return proc.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        return proc.communicate()

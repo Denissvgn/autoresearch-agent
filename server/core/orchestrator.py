@@ -1663,6 +1663,23 @@ class AgentOrchestrator:
                                 planned_trial=planned_trial_for_tool,
                             )
 
+                        runtime_command_id: Optional[int] = None
+                        if (
+                            structured_rejection is None
+                            and duplicate_rejection is None
+                            and isinstance(block.input, dict)
+                            and block.name == "bash"
+                        ):
+                            runtime_command = await self._store.record_runtime_command(
+                                research_id=research_id,
+                                turn=turn,
+                                tool_name=block.name,
+                                command=redact_sensitive_text(raw_command_for_tool),
+                                timeout_s=self._effective_tool_timeout(block.input),
+                                metadata={"tool_id": block.id},
+                            )
+                            runtime_command_id = runtime_command["id"]
+
                         if structured_rejection is not None:
                             tool_execution = structured_rejection
                         elif duplicate_rejection is not None:
@@ -1707,6 +1724,17 @@ class AgentOrchestrator:
                             )
                         tool_result = tool_execution.content
                         tool_meta = tool_execution.meta
+                        if runtime_command_id is not None:
+                            tool_meta = dict(tool_meta)
+                            tool_meta["runtime_command_id"] = runtime_command_id
+                            await self._store.finish_runtime_command(
+                                runtime_command_id,
+                                status=self._runtime_command_status(tool_meta),
+                                returncode=tool_meta.get("returncode"),
+                                timed_out=bool(tool_meta.get("timed_out")),
+                                output_preview=tool_result[:5000],
+                                metadata=tool_meta,
+                            )
                         logger.info(
                             "Research %s turn %d: tool=%s result=%s",
                             research_id, turn, block.name,
@@ -1768,6 +1796,9 @@ class AgentOrchestrator:
                                 # Record as a special HPO study iteration
                                 iteration_count += 1
                                 hpo_marker = hpo_result.to_dict()
+                                self._attach_runtime_command_metadata(
+                                    hpo_marker, tool_meta,
+                                )
                                 hpo_marker["decision"] = "hpo_screening"
                                 hpo_marker["config_snapshot"] = _pending_snapshot
                                 hpo_marker["primary_metric"] = hpo_result.best_composite
@@ -1821,6 +1852,9 @@ class AgentOrchestrator:
                             ):
                                 iteration_count += 1
                                 marker_from_tool = metrics.to_dict()
+                                self._attach_runtime_command_metadata(
+                                    marker_from_tool, tool_meta,
+                                )
                                 # Determine keep/discard by comparing against
                                 # current session best — not just gates.
                                 decision = await self._infer_decision(
@@ -1875,6 +1909,9 @@ class AgentOrchestrator:
                                 # config region without a recorded trace.
                                 iteration_count += 1
                                 crash_marker = metrics.to_dict()
+                                self._attach_runtime_command_metadata(
+                                    crash_marker, tool_meta,
+                                )
                                 crash_marker["decision"] = "discard"
                                 crash_marker["config_snapshot"] = _pending_snapshot
                                 crash_marker["description"] = (
@@ -1931,6 +1968,9 @@ class AgentOrchestrator:
                                 ):
                                     iteration_count += 1
                                     marker_from_file = metrics.to_dict()
+                                    self._attach_runtime_command_metadata(
+                                        marker_from_file, tool_meta,
+                                    )
                                     decision = await self._infer_decision(
                                         research_id,
                                         metrics.primary_metric,
@@ -1976,6 +2016,9 @@ class AgentOrchestrator:
                                 ):
                                     iteration_count += 1
                                     crash_marker = metrics.to_dict()
+                                    self._attach_runtime_command_metadata(
+                                        crash_marker, tool_meta,
+                                    )
                                     crash_marker["decision"] = "discard"
                                     crash_marker["config_snapshot"] = _pending_snapshot
                                     crash_marker["description"] = (
@@ -2035,6 +2078,9 @@ class AgentOrchestrator:
                                     ),
                                     "config_snapshot": _pending_snapshot,
                                 }
+                                self._attach_runtime_command_metadata(
+                                    failed_marker, tool_meta,
+                                )
                                 self._attach_planned_trial_metadata(
                                     failed_marker,
                                     planned_trial_for_tool,
@@ -2556,3 +2602,40 @@ class AgentOrchestrator:
         if "[exit code:" in lowered:
             return "failed"
         return None
+
+    @staticmethod
+    def _effective_tool_timeout(input_data: Dict[str, Any]) -> int:
+        timeout = input_data.get("timeout_s", 7200)
+        try:
+            timeout = int(timeout)
+        except (TypeError, ValueError):
+            timeout = 7200
+        return max(timeout, 900)
+
+    @staticmethod
+    def _runtime_command_status(tool_meta: Dict[str, Any]) -> str:
+        if tool_meta.get("policy_allowed") is False:
+            return "rejected"
+        if tool_meta.get("timed_out") is True:
+            return "timed_out"
+        returncode = tool_meta.get("returncode")
+        if isinstance(returncode, int) and returncode != 0:
+            return "failed"
+        return "completed"
+
+    @staticmethod
+    def _attach_runtime_command_metadata(
+        marker: Dict[str, Any],
+        tool_meta: Dict[str, Any],
+    ) -> None:
+        runtime_command_id = tool_meta.get("runtime_command_id")
+        if runtime_command_id is None:
+            return
+        marker["runtime_command"] = {
+            "id": runtime_command_id,
+            "status": AgentOrchestrator._runtime_command_status(tool_meta),
+            "returncode": tool_meta.get("returncode"),
+            "timed_out": bool(tool_meta.get("timed_out")),
+            "policy_operation": tool_meta.get("policy_operation"),
+            "normalized_command": tool_meta.get("normalized_command"),
+        }

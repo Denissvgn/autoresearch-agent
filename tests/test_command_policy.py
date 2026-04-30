@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import sys
+import time
 import types
 from pathlib import Path
 
@@ -127,6 +129,61 @@ def test_governed_runner_executes_without_shell_and_redacts_output(tmp_path: Pat
     assert "API_KEY=<redacted>" in result.output
     assert "super-secret" not in result.output
     assert "ready" in result.output
+
+
+def test_governed_runner_timeout_cleans_process_group(tmp_path: Path):
+    workspace, session = _workspace(tmp_path)
+    python_path = Path(workspace) / ".venv" / "bin" / "python"
+    python_path.parent.mkdir(parents=True)
+    python_path.symlink_to(sys.executable)
+    child_pid_path = Path(workspace) / "child.pid"
+    script = Path(workspace) / "scripts" / "autotuner" / "enrich_rl_dataset.py"
+    script.parent.mkdir(parents=True)
+    script.write_text(
+        "\n".join(
+            [
+                "import pathlib, subprocess, sys, time",
+                (
+                    "child = subprocess.Popen([sys.executable, '-c', "
+                    "'import time; time.sleep(60)'])"
+                ),
+                f"pathlib.Path({str(child_pid_path)!r}).write_text(str(child.pid))",
+                "time.sleep(60)",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    runner = GovernedCommandRunner(
+        workspace_root=workspace,
+        session_workspace=session,
+    )
+    result = runner.run(
+        ".venv/bin/python scripts/autotuner/enrich_rl_dataset.py "
+        "--instrument DOGE_USDT --timeframe 15m",
+        timeout_s=1,
+    )
+
+    assert result.timed_out is True
+    child_pid = int(child_pid_path.read_text(encoding="utf-8"))
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and _process_exists(child_pid):
+        time.sleep(0.05)
+    assert not _process_exists(child_pid)
+
+
+def _process_exists(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    proc_stat = Path(f"/proc/{pid}/stat")
+    if proc_stat.exists():
+        try:
+            return proc_stat.read_text(encoding="utf-8").split()[2] != "Z"
+        except OSError:
+            return True
+    return True
 
 
 def test_execute_tool_returns_policy_rejection_metadata(tmp_path: Path):

@@ -70,6 +70,9 @@ class FakeSessionManager:
     async def continue_session(self, research_id: str, **kwargs):
         return {"id": "res_auth_continued", "resumed_from": research_id, **kwargs}
 
+    async def resume_interrupted_session(self, research_id: str, **kwargs):
+        return {"id": "res_auth_runtime_resumed", "resumed_from": research_id, **kwargs}
+
     async def continue_pipeline(self, pipeline_id: str, **kwargs):
         return {"id": "pipe_auth_continued", "resumed_from": pipeline_id, **kwargs}
 
@@ -215,6 +218,11 @@ def test_health_is_public_but_api_routes_require_bearer_token(client: TestClient
         ("post", "/api/research/res_auth/promote/confirm", {}),
         (
             "post",
+            "/api/research/res_auth/runtime-resume",
+            {"json": {"reason": "auth test"}},
+        ),
+        (
+            "post",
             "/api/promotions/direction/DOGE_USDT/15m/rollback",
             {"json": {"reason": "auth test"}},
         ),
@@ -251,6 +259,14 @@ def test_authenticated_api_calls_preserve_existing_behavior(client: TestClient):
     confirm = client.post("/api/research/res_auth/promote/confirm", headers=auth_headers())
     assert confirm.status_code == 200
     assert confirm.json()["confirmed"] is True
+
+    runtime_resume = client.post(
+        "/api/research/res_auth/runtime-resume",
+        json={"reason": "operator reviewed recovery state"},
+        headers=auth_headers(),
+    )
+    assert runtime_resume.status_code == 201
+    assert runtime_resume.json()["id"] == "res_auth_runtime_resumed"
 
     rollback = client.post(
         "/api/promotions/direction/DOGE_USDT/15m/rollback",

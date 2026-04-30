@@ -174,6 +174,25 @@ CREATE TABLE IF NOT EXISTS audit_events (
     error_message TEXT
 );
 
+CREATE TABLE IF NOT EXISTS runtime_commands (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    research_id TEXT NOT NULL REFERENCES research_sessions(id),
+    turn INTEGER,
+    tool_name TEXT NOT NULL,
+    command TEXT,
+    normalized_command TEXT,
+    policy_operation TEXT,
+    timeout_s INTEGER,
+    status TEXT NOT NULL DEFAULT 'running',
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    returncode INTEGER,
+    timed_out INTEGER DEFAULT 0,
+    output_preview TEXT,
+    error_message TEXT,
+    metadata_json TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_audit_events_timestamp
     ON audit_events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_audit_events_action
@@ -186,6 +205,8 @@ CREATE INDEX IF NOT EXISTS idx_planned_trials_research_id
     ON planned_trials(research_id);
 CREATE INDEX IF NOT EXISTS idx_planned_trials_expected_command
     ON planned_trials(research_id, expected_command);
+CREATE INDEX IF NOT EXISTS idx_runtime_commands_research_status
+    ON runtime_commands(research_id, status);
 """
 
 _MODEL_TO_SKILL = {
@@ -404,6 +425,14 @@ class ResultsStore:
                     )
                 except Exception:
                     pass
+            try:
+                await db.execute(
+                    "CREATE INDEX IF NOT EXISTS "
+                    "idx_runtime_commands_research_status "
+                    "ON runtime_commands(research_id, status)"
+                )
+            except Exception:
+                pass
             await db.commit()
         logger.info("Results store initialized at %s", self._db_path)
 
@@ -569,6 +598,162 @@ class ResultsStore:
             )
             return [dict(r) for r in await cursor.fetchall()]
 
+    # ------------------------------------------------------------------
+    # Runtime commands (ARP-013)
+    # ------------------------------------------------------------------
+
+    async def record_runtime_command(
+        self,
+        *,
+        research_id: str,
+        turn: Optional[int],
+        tool_name: str,
+        command: Optional[str] = None,
+        normalized_command: Optional[str] = None,
+        policy_operation: Optional[str] = None,
+        timeout_s: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        metadata_json = (
+            json.dumps(metadata, sort_keys=True)
+            if metadata is not None
+            else None
+        )
+        async with aiosqlite.connect(self._db_path) as db:
+            cursor = await db.execute(
+                """INSERT INTO runtime_commands
+                   (research_id, turn, tool_name, command, normalized_command,
+                    policy_operation, timeout_s, status, started_at,
+                    metadata_json)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?, ?)""",
+                (
+                    research_id,
+                    turn,
+                    tool_name,
+                    command,
+                    normalized_command,
+                    policy_operation,
+                    timeout_s,
+                    now,
+                    metadata_json,
+                ),
+            )
+            await db.commit()
+            return {
+                "id": cursor.lastrowid,
+                "research_id": research_id,
+                "turn": turn,
+                "tool_name": tool_name,
+                "command": command,
+                "normalized_command": normalized_command,
+                "policy_operation": policy_operation,
+                "timeout_s": timeout_s,
+                "status": "running",
+                "started_at": now,
+                "metadata": metadata,
+            }
+
+    async def finish_runtime_command(
+        self,
+        command_id: int,
+        *,
+        status: str,
+        returncode: Optional[int] = None,
+        timed_out: bool = False,
+        output_preview: Optional[str] = None,
+        error_message: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        now = datetime.now(timezone.utc).isoformat()
+        metadata_json = (
+            json.dumps(metadata, sort_keys=True)
+            if metadata is not None
+            else None
+        )
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute(
+                """UPDATE runtime_commands
+                   SET status = ?,
+                       completed_at = ?,
+                       returncode = ?,
+                       timed_out = ?,
+                       output_preview = ?,
+                       error_message = ?,
+                       metadata_json = COALESCE(?, metadata_json)
+                   WHERE id = ?""",
+                (
+                    status,
+                    now,
+                    returncode,
+                    int(timed_out),
+                    output_preview,
+                    error_message,
+                    metadata_json,
+                    command_id,
+                ),
+            )
+            await db.commit()
+        rows = await self.list_runtime_commands(command_id=command_id)
+        return rows[0] if rows else None
+
+    async def list_runtime_commands(
+        self,
+        *,
+        research_id: Optional[str] = None,
+        status: Optional[str] = None,
+        command_id: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        clauses = []
+        params: list[Any] = []
+        if research_id:
+            clauses.append("research_id = ?")
+            params.append(research_id)
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if command_id is not None:
+            clauses.append("id = ?")
+            params.append(command_id)
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                f"SELECT * FROM runtime_commands{where} ORDER BY started_at DESC, id DESC",
+                params,
+            )
+            rows = [dict(r) for r in await cursor.fetchall()]
+            for row in rows:
+                raw = row.pop("metadata_json", None)
+                if raw:
+                    try:
+                        row["metadata"] = json.loads(raw)
+                    except (json.JSONDecodeError, TypeError):
+                        row["metadata"] = {}
+                else:
+                    row["metadata"] = {}
+            return rows
+
+    async def interrupt_runtime_commands(
+        self,
+        *,
+        research_id: str,
+        reason: str,
+    ) -> int:
+        now = datetime.now(timezone.utc).isoformat()
+        async with aiosqlite.connect(self._db_path) as db:
+            cursor = await db.execute(
+                """UPDATE runtime_commands
+                   SET status = 'interrupted',
+                       completed_at = ?,
+                       error_message = ?
+                   WHERE research_id = ?
+                     AND status = 'running'""",
+                (now, reason, research_id),
+            )
+            await db.commit()
+            return cursor.rowcount
+
     async def update_session(
         self, session_id: str, **fields: Any,
     ) -> Optional[Dict[str, Any]]:
@@ -586,6 +771,9 @@ class ResultsStore:
 
     async def delete_session(self, session_id: str) -> bool:
         async with aiosqlite.connect(self._db_path) as db:
+            await db.execute(
+                "DELETE FROM runtime_commands WHERE research_id = ?", (session_id,),
+            )
             await db.execute(
                 "DELETE FROM iterations WHERE research_id = ?", (session_id,),
             )

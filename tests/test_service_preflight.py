@@ -2,10 +2,30 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
+import types
 from pathlib import Path
 
 import httpx
 import pytest
+
+try:
+    import anthropic  # noqa: F401
+except ModuleNotFoundError:
+    class _FakeAsyncAnthropic:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+    class _FakeAPIStatusError(Exception):
+        status_code = 500
+
+    sys.modules["anthropic"] = types.SimpleNamespace(
+        AsyncAnthropic=_FakeAsyncAnthropic,
+        APITimeoutError=TimeoutError,
+        APIConnectionError=ConnectionError,
+        InternalServerError=RuntimeError,
+        APIStatusError=_FakeAPIStatusError,
+    )
 
 from server.config import settings
 from server.core.results_store import ResultsStore

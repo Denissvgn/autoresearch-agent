@@ -51,6 +51,79 @@ class SessionManager:
     def is_running(self, research_id: str) -> bool:
         return research_id in self._active
 
+    async def recover_orphaned_sessions(self) -> Dict[str, int]:
+        """Classify sessions left active by a previous service process."""
+        sessions = await self._store.list_sessions()
+        summary = {
+            "resumable": 0,
+            "interrupted": 0,
+            "stopped": 0,
+            "failed": 0,
+            "unchanged": 0,
+        }
+        for session in sessions:
+            classification = await self._classify_orphaned_session(session)
+            status = classification["status"]
+            summary[status if status in summary else "unchanged"] += 1
+            if not classification.get("orphaned"):
+                continue
+            await self._store.interrupt_runtime_commands(
+                research_id=session["id"],
+                reason=classification["reason"],
+            )
+            await self._store.update_session(
+                session["id"],
+                status=status,
+                error_message=classification["reason"],
+            )
+            logger.warning(
+                "Recovered orphaned session %s as %s: %s",
+                session["id"],
+                status,
+                classification["reason"],
+            )
+        return summary
+
+    async def _classify_orphaned_session(
+        self,
+        session: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        status = str(session.get("status") or "")
+        if status in {"stopped", "cancelled"}:
+            return {"status": "stopped", "orphaned": False, "reason": None}
+        if status in {"failed", "timed_out"}:
+            return {"status": "failed", "orphaned": False, "reason": None}
+        if status not in {"running", "paused"}:
+            return {"status": "unchanged", "orphaned": False, "reason": None}
+
+        runtime_commands = await self._store.list_runtime_commands(
+            research_id=session["id"],
+            status="running",
+        )
+        workspace_path = session.get("workspace_path")
+        workspace_exists = bool(workspace_path and Path(workspace_path).exists())
+        manifest_path = session.get("manifest_path")
+        manifest_exists = bool(manifest_path and Path(manifest_path).exists())
+        recoverable = workspace_exists or manifest_exists
+        new_status = "resumable" if recoverable else "interrupted"
+        running_detail = (
+            f"; interrupted {len(runtime_commands)} running command(s)"
+            if runtime_commands
+            else ""
+        )
+        reason = (
+            "Session interrupted by service restart while status was "
+            f"{status}{running_detail}. Operator action is required to resume."
+        )
+        if not recoverable:
+            reason += " Workspace/manifest evidence was not found."
+        return {
+            "status": new_status,
+            "orphaned": True,
+            "reason": reason,
+            "running_commands": runtime_commands,
+        }
+
     async def start_session(
         self,
         *,
@@ -358,9 +431,16 @@ class SessionManager:
         parent = await self._store.get_session(parent_id)
         if not parent:
             raise RuntimeError(f"Parent session {parent_id} not found")
-        if parent["status"] not in ("timed_out", "completed", "failed"):
+        if parent["status"] not in (
+            "timed_out",
+            "completed",
+            "failed",
+            "resumable",
+            "interrupted",
+        ):
             raise RuntimeError(
-                f"Can only continue sessions with status timed_out/completed/failed, "
+                "Can only continue sessions with status "
+                "timed_out/completed/failed/resumable/interrupted, "
                 f"got: {parent['status']}"
             )
 
@@ -468,6 +548,46 @@ class SessionManager:
         )
         # Re-fetch to include resumed_from in the response
         return await self._store.get_session(research_id)
+
+    async def resume_interrupted_session(
+        self,
+        parent_id: str,
+        *,
+        reason: str,
+        allow_interrupted: bool = False,
+        max_iterations: Optional[int] = None,
+        max_budget_usd: Optional[float] = None,
+        timeout_minutes: Optional[int] = None,
+        focus_hint: Optional[str] = None,
+    ) -> Dict:
+        """Explicit operator-controlled continuation for restart recovery."""
+        parent = await self._store.get_session(parent_id)
+        if not parent:
+            raise RuntimeError(f"Parent session {parent_id} not found")
+        allowed_statuses = {"resumable"}
+        if allow_interrupted:
+            allowed_statuses.add("interrupted")
+        if parent["status"] not in allowed_statuses:
+            expected = "/".join(sorted(allowed_statuses))
+            raise RuntimeError(
+                f"Runtime resume requires parent status {expected}, "
+                f"got: {parent['status']}"
+            )
+        session = await self.continue_session(
+            parent_id,
+            max_iterations=max_iterations,
+            max_budget_usd=max_budget_usd,
+            timeout_minutes=timeout_minutes,
+            focus_hint=focus_hint or f"Runtime resume: {reason}",
+        )
+        await self._store.update_session(
+            parent_id,
+            error_message=(
+                f"{parent.get('error_message') or ''}\n"
+                f"Runtime resume requested: {reason}"
+            ).strip(),
+        )
+        return session
 
     # ------------------------------------------------------------------
     # Pipeline sessions (ML-63)

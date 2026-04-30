@@ -83,6 +83,7 @@ def build_iteration_attempt_snapshot(
             "model_artifact_hash",
         ),
         "mlflow_run_id": marker.get("mlflow_run_id"),
+        "runtime_command": marker.get("runtime_command"),
         "environment": _environment_metadata(),
     }
     snapshot["snapshot_hash"] = _snapshot_hash(snapshot)

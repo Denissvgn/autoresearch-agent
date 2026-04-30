@@ -57,6 +57,17 @@ def _continue_metadata(req: "ContinueResearchRequest") -> dict[str, Any]:
     }
 
 
+def _runtime_resume_metadata(req: "RuntimeResumeRequest") -> dict[str, Any]:
+    return {
+        "reason_supplied": bool(req.reason),
+        "allow_interrupted": req.allow_interrupted,
+        "max_iterations": req.max_iterations,
+        "max_budget_usd": req.max_budget_usd,
+        "timeout_minutes": req.timeout_minutes,
+        "focus_hint_supplied": req.focus_hint is not None,
+    }
+
+
 async def _audit(
     request: Request,
     *,
@@ -375,6 +386,21 @@ class ContinueResearchRequest(BaseModel):
     )
 
 
+class RuntimeResumeRequest(ContinueResearchRequest):
+    """Explicit operator action for resuming a restart-recovered session."""
+
+    reason: str = Field(
+        ...,
+        min_length=3,
+        max_length=1000,
+        description="Operator reason for resuming the interrupted session.",
+    )
+    allow_interrupted: bool = Field(
+        default=False,
+        description="Allow resume from interrupted state when evidence is incomplete.",
+    )
+
+
 @router.post("/research/{research_id}/continue", status_code=201)
 async def continue_research(
     request: Request,
@@ -434,6 +460,44 @@ async def continue_research(
             outcome="failure",
             research_id=None if research_id.startswith("pipe_") else research_id,
             pipeline_id=research_id if research_id.startswith("pipe_") else None,
+            metadata=metadata,
+            error_message=str(e),
+        )
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@router.post("/research/{research_id}/runtime-resume", status_code=201)
+async def runtime_resume_research(
+    request: Request,
+    research_id: str,
+    req: RuntimeResumeRequest,
+):
+    """Resume a restart-recovered session only after explicit operator action."""
+    metadata = _runtime_resume_metadata(req)
+    try:
+        session = await _session_manager.resume_interrupted_session(
+            research_id,
+            reason=req.reason,
+            allow_interrupted=req.allow_interrupted,
+            max_iterations=req.max_iterations,
+            max_budget_usd=req.max_budget_usd,
+            timeout_minutes=req.timeout_minutes,
+            focus_hint=req.focus_hint,
+        )
+        await _audit(
+            request,
+            action="research.runtime_resume",
+            outcome="success",
+            research_id=research_id,
+            metadata={**metadata, "continued_research_id": session.get("id")},
+        )
+        return session
+    except RuntimeError as e:
+        await _audit(
+            request,
+            action="research.runtime_resume",
+            outcome="failure",
+            research_id=research_id,
             metadata=metadata,
             error_message=str(e),
         )
