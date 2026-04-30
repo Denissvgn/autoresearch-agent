@@ -16,6 +16,7 @@ class FakeStore:
         self.hpo_studies: dict[str, list[dict]] = {}
         self.planned_trials: dict[str, list[dict]] = {}
         self.promotions: list[dict] = []
+        self.audit_events: list[dict] = []
 
     async def get_pipeline(self, pipeline_id: str):
         return self.pipelines.get(pipeline_id)
@@ -47,6 +48,23 @@ class FakeStore:
 
     async def list_promotions(self):
         return self.promotions
+
+    async def list_audit_events(
+        self,
+        *,
+        limit: int = 100,
+        action: str | None = None,
+        research_id: str | None = None,
+        pipeline_id: str | None = None,
+    ):
+        rows = self.audit_events
+        if action:
+            rows = [row for row in rows if row.get("action") == action]
+        if research_id:
+            rows = [row for row in rows if row.get("research_id") == research_id]
+        if pipeline_id:
+            rows = [row for row in rows if row.get("pipeline_id") == pipeline_id]
+        return rows[:limit]
 
 
 def _write_jsonl(path: Path, entries: list[dict]) -> None:
@@ -359,3 +377,120 @@ async def test_research_state_endpoint_reconstructs_session_without_workspace():
     assert state["failed_pruned_configs"][0]["status"] == "pruned"
     assert state["rollback_target"] == "direction_model:0"
     assert state["paper_status"]["status"] == "not_required"
+
+
+@pytest.mark.asyncio
+async def test_research_state_exposes_production_operations_summary():
+    store = FakeStore()
+    results.init(store)
+    store.sessions["res_ops"] = {
+        "id": "res_ops",
+        "instrument": "DOGE_USDT",
+        "timeframe": "15m",
+        "model_type": "rl",
+        "status": "completed",
+        "workspace_path": "/tmp/res_ops",
+        "max_budget_usd": 2.0,
+        "total_api_cost_usd": 0.25,
+        "max_iterations": 3,
+    }
+    metrics = {
+        "mlflow_run_id": "run-rl-ops",
+        "artifact_hash": "policy-sha",
+        "supervised_feature_readiness": {
+            "direction": {"passed": True, "auc": 0.66},
+            "volatility": {"passed": True, "auc": 0.63},
+        },
+        "inference_reload_validation": {"passed": True},
+        "rollback_target": "rl_policy:1",
+        "rl_economic_replay": {
+            "schema_version": "rl_economic_replay.v1",
+            "rl_profit_score": 0.235,
+            "metrics": {
+                "post_cost_return": 0.14,
+                "max_drawdown": 0.03,
+                "sharpe": 1.24,
+            },
+            "artifact_path": "/tmp/replay.json",
+            "artifact_hash": "replay-sha",
+        },
+        "rl_oos": {
+            "feature_bundle_hash": "feature-bundle-sha",
+            "nested_validation_used": True,
+            "multi_seed": True,
+            "n_seed_trials": 3,
+            "direction_feature_provenance": {
+                "status": "passed",
+                "honest_coverage": 1.0,
+                "hash": "direction-prov-sha",
+            },
+            "volatility_feature_provenance": {
+                "status": "passed",
+                "honest_coverage": 1.0,
+                "hash": "volatility-prov-sha",
+            },
+        },
+    }
+    store.iterations["res_ops"] = [
+        {
+            "id": 1,
+            "research_id": "res_ops",
+            "iteration": 1,
+            "primary_metric": 0.235,
+            "metric_name": "rl_profit_score",
+            "all_gates_passed": 1,
+            "decision": "keep",
+            "metrics_json": json.dumps(metrics),
+            "attempt_snapshot_json": json.dumps({"artifact_hash": "policy-sha"}),
+            "attempt_snapshot_hash": "attempt-sha",
+            "mlflow_run_id": "run-rl-ops",
+        }
+    ]
+    store.promotions = [
+        {
+            "id": 10,
+            "research_id": "res_ops",
+            "model_type": "rl",
+            "instrument": "DOGE_USDT",
+            "timeframe": "15m",
+            "iteration": 1,
+            "scope": "development",
+            "target_path": "/tmp/rl.yaml",
+            "metadata_path": "/tmp/rl.development.json",
+            "promoted_at": "2026-04-30T10:00:00+00:00",
+            "promotion_metadata": {
+                "schema_version": "development_promotion_metadata.v1",
+                "scope": "development",
+                "promotion_allowed": True,
+                "rollback_target": "rl_policy:0",
+            },
+        }
+    ]
+    store.audit_events = [
+        {
+            "event_id": "aud_1",
+            "timestamp": "2026-04-30T10:01:00+00:00",
+            "actor_id": "operator",
+            "action": "promotion.preview",
+            "research_id": "res_ops",
+            "pipeline_id": None,
+            "request_metadata": {"scope": "production"},
+            "outcome": "failure",
+            "error_message": "missing_canary_promotion",
+        }
+    ]
+
+    state = await results.get_research_state("res_ops")
+
+    ops = state["production_operations"]
+    assert ops["schema_version"] == "autoresearch_production_operations.v1"
+    assert ops["rl_profit"]["status"] == "passed"
+    assert ops["rl_profit"]["artifact_hash"] == "replay-sha"
+    assert ops["feature_readiness"]["status"] == "passed"
+    assert ops["oos_provenance"]["status"] == "passed"
+    assert ops["rollback"]["target"] == "rl_policy:0"
+    scopes = {item["scope"]: item for item in ops["promotion"]["scopes"]}
+    assert scopes["development"]["status"] == "promoted"
+    assert scopes["production"]["status"] == "blocked"
+    assert "missing_paper_promotion" in scopes["production"]["blockers"]
+    assert ops["audit_events"][0]["scope"] == "production"

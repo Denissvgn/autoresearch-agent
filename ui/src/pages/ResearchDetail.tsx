@@ -8,6 +8,7 @@ import IterationsTable from '../components/IterationsTable';
 import AgentLog from '../components/AgentLog';
 import PromotionModal from '../components/PromotionModal';
 import ResearchStatePanel from '../components/ResearchStatePanel';
+import ProductionOpsPanel from '../components/ProductionOpsPanel';
 
 export default function ResearchDetail() {
   const { id } = useParams<{ id: string }>();
@@ -21,7 +22,7 @@ export default function ResearchDetail() {
   const continueMut = useContinueSession();
   const [showPromotion, setShowPromotion] = useState(false);
   const [showExport, setShowExport] = useState(false);
-  const [tab, setTab] = useState<'state' | 'chart' | 'table' | 'log'>('state');
+  const [tab, setTab] = useState<'ops' | 'state' | 'chart' | 'table' | 'log'>('ops');
 
   if (isLoading || !session) {
     return <div className="text-gray-500">Loading...</div>;
@@ -186,18 +187,19 @@ export default function ResearchDetail() {
 
       {/* Tabs */}
       <div className="border-b border-gray-700 flex gap-4">
-        {(['state', 'chart', 'table', 'log'] as const).map((t) => (
+        {(['ops', 'state', 'chart', 'table', 'log'] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={`pb-2 text-sm capitalize ${tab === t ? 'text-indigo-400 border-b-2 border-indigo-400' : 'text-gray-500 hover:text-gray-300'}`}
           >
-            {t === 'state' ? 'State' : t === 'chart' ? 'Metrics Chart' : t === 'table' ? 'Iterations' : 'Agent Log'}
+            {t === 'ops' ? 'Operations' : t === 'state' ? 'State' : t === 'chart' ? 'Metrics Chart' : t === 'table' ? 'Iterations' : 'Agent Log'}
           </button>
         ))}
       </div>
 
       {/* Tab content */}
+      {tab === 'ops' && <ProductionOpsPanel state={researchState} />}
       {tab === 'state' && <ResearchStatePanel state={researchState} />}
       {tab === 'chart' && <MetricsChart iterations={iterations ?? []} />}
       {tab === 'table' && (
@@ -219,7 +221,11 @@ export default function ResearchDetail() {
 
       {/* Promotion modal */}
       {showPromotion && (
-        <PromotionModal researchId={id!} onClose={() => setShowPromotion(false)} />
+        <PromotionModal
+          researchId={id!}
+          operations={researchState?.production_operations ?? null}
+          onClose={() => setShowPromotion(false)}
+        />
       )}
     </div>
   );

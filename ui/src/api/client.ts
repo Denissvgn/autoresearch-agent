@@ -93,15 +93,78 @@ export interface Promotion {
   target_path: string;
   config_yaml: string;
   previous_yaml: string | null;
+  scope?: PromotionScope;
+  metadata_path?: string | null;
+  promotion_metadata?: Record<string, unknown> | null;
+  rolled_back_at?: string | null;
   promoted_at: string;
+}
+
+export type PromotionScope = 'development' | 'paper' | 'canary' | 'production';
+
+export interface PromotionApproval {
+  approver?: string;
+  reason?: string;
+  method?: string;
+  signature?: string;
+  approved?: boolean;
+}
+
+export interface PromotionScopeRequest {
+  scope: PromotionScope;
+  approval?: PromotionApproval | null;
 }
 
 export interface PromotionPreview {
   research_id: string;
   iteration: number;
+  model_type?: string;
+  instrument?: string;
+  timeframe?: string;
+  scope?: PromotionScope;
+  promotion_scope?: PromotionScope;
+  promotion_allowed?: boolean;
+  scope_promotion_allowed?: boolean;
   target_path: string;
   new_config: string;
   current_config: string | null;
+  best_metric?: number | null;
+  gates_passed?: boolean;
+  gate_bundle_evaluation?: PromotionGateEvaluation | null;
+  consistency_report?: ConsistencyReport | null;
+  development_promotion_metadata?: Record<string, unknown> | null;
+  scoped_promotion_metadata?: ScopedPromotionMetadata | null;
+  promotion_metadata?: Record<string, unknown> | null;
+  scope_gate_evaluation?: PromotionGateEvaluation | null;
+}
+
+export interface PromotionGateCheck {
+  name: string;
+  status: string;
+  reason?: string | null;
+  details?: unknown;
+}
+
+export interface PromotionGateEvaluation {
+  scope?: string;
+  passed?: boolean;
+  blockers?: string[];
+  checks?: PromotionGateCheck[];
+}
+
+export interface ScopedPromotionMetadata {
+  schema_version?: string;
+  scope?: PromotionScope;
+  promotion_allowed?: boolean;
+  blockers?: string[];
+  checks?: PromotionGateCheck[];
+  required_prior_scopes?: PromotionScope[];
+  prior_promotions?: Record<string, unknown>;
+  decision_chain?: Array<Record<string, unknown>>;
+  approval?: Record<string, unknown>;
+  evidence?: Record<string, unknown>;
+  rollback_target?: string | null;
+  rollback_targets?: Record<string, unknown>;
 }
 
 export interface StartResearchRequest {
@@ -184,6 +247,140 @@ export interface ResearchState {
   rollback_target: string | null;
   smoke_status: Record<string, unknown> | null;
   paper_status: unknown;
+  production_operations?: ProductionOperations | null;
+}
+
+export interface ProductionOperations {
+  schema_version: string;
+  research_id: string;
+  model_type: string;
+  candidate: ProductionCandidate | null;
+  promotion: {
+    blocked: boolean;
+    blockers: string[];
+    blocker_details: BlockerDetail[];
+    latest_scope?: PromotionScope | null;
+    latest_record?: CompactPromotion | null;
+    scopes: PromotionScopeStatus[];
+  };
+  warnings: ProductionWarning[];
+  rl_profit: RlProfitSummary;
+  feature_readiness: FeatureReadinessSummary;
+  oos_provenance: OosProvenanceSummary;
+  inference_parity: InferenceParitySummary;
+  rollback: RollbackStatusSummary;
+  audit_events: ProductionAuditEvent[];
+}
+
+export interface ProductionCandidate {
+  iteration: number;
+  primary_metric: number | null;
+  metric_name: string | null;
+  all_gates_passed: boolean;
+  decision?: string | null;
+  search_phase?: string | null;
+  config_snapshot_sha256?: string | null;
+  attempt_snapshot_hash?: string | null;
+  artifact_hash?: string | null;
+  mlflow_run_id?: string | null;
+}
+
+export interface BlockerDetail {
+  code: string;
+  label: string;
+}
+
+export interface CompactPromotion {
+  id?: number;
+  scope?: PromotionScope;
+  research_id?: string;
+  iteration?: number;
+  target_path?: string;
+  metadata_path?: string | null;
+  promoted_at?: string;
+  rolled_back_at?: string | null;
+  promotion_allowed?: boolean | null;
+  rollback_target?: string | null;
+}
+
+export interface PromotionScopeStatus {
+  scope: PromotionScope;
+  status: string;
+  ready: boolean;
+  requires_approval: boolean;
+  required_prior_scopes: PromotionScope[];
+  blockers: string[];
+  blocker_details: BlockerDetail[];
+  promotion?: CompactPromotion | null;
+}
+
+export interface ProductionWarning {
+  code: string;
+  severity: string;
+  message: string;
+  details?: unknown;
+}
+
+export interface RlProfitSummary {
+  status: string;
+  score?: number | null;
+  missing?: string[];
+  metrics?: Record<string, number>;
+  artifact_path?: string | null;
+  artifact_hash?: string | null;
+  schema_version?: string | null;
+}
+
+export interface FeatureReadinessChannel {
+  status: string;
+  passed: boolean;
+  metrics: Record<string, number>;
+  details?: Record<string, unknown>;
+}
+
+export interface FeatureReadinessSummary {
+  status: string;
+  direction?: FeatureReadinessChannel;
+  volatility?: FeatureReadinessChannel;
+}
+
+export interface OosProvenanceSummary {
+  status: string;
+  required: boolean;
+  blockers: string[];
+  blocker_details?: BlockerDetail[];
+  feature_bundle_hash?: string | null;
+  nested_validation?: boolean;
+  multi_seed?: boolean;
+  direction?: Record<string, unknown>;
+  volatility?: Record<string, unknown>;
+  details?: Record<string, unknown>;
+}
+
+export interface InferenceParitySummary {
+  status: string;
+  passed: boolean;
+  failed_checks: string[];
+  details?: Record<string, unknown>;
+}
+
+export interface RollbackStatusSummary {
+  status: string;
+  target?: string | null;
+  readiness?: Record<string, unknown>;
+  rolled_back_at?: string | null;
+}
+
+export interface ProductionAuditEvent {
+  event_id?: string;
+  timestamp?: string;
+  actor_id?: string;
+  action?: string;
+  outcome?: string;
+  research_id?: string | null;
+  pipeline_id?: string | null;
+  scope?: string | null;
+  error_message?: string | null;
 }
 
 export interface SystemStatus {
@@ -329,9 +526,17 @@ export const api = {
     ),
 
   // Promotions
-  previewPromotion: (id: string) => request<PromotionPreview>(`/research/${id}/promote/preview`, { method: 'POST' }),
+  previewPromotion: (id: string, body?: PromotionScopeRequest) =>
+    request<PromotionPreview>(`/research/${id}/promote/preview`, {
+      method: 'POST',
+      body: body ? JSON.stringify(body) : undefined,
+    }),
 
-  confirmPromotion: (id: string) => request<Promotion>(`/research/${id}/promote/confirm`, { method: 'POST' }),
+  confirmPromotion: (id: string, body?: PromotionScopeRequest) =>
+    request<Promotion>(`/research/${id}/promote/confirm`, {
+      method: 'POST',
+      body: body ? JSON.stringify(body) : undefined,
+    }),
 
   listPromotions: () => request<Promotion[]>('/promotions'),
 

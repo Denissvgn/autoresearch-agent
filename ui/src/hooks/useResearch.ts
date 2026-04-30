@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { api, StartResearchRequest } from '../api/client';
+import { api, PromotionScopeRequest, StartResearchRequest } from '../api/client';
 import { useWebSocket } from './useWebSocket';
 
 /**
@@ -200,13 +200,20 @@ export function useDeleteSession() {
 }
 
 export function usePreviewPromotion() {
-  return useMutation({ mutationFn: (id: string) => api.previewPromotion(id) });
+  return useMutation({
+    mutationFn: ({ id, request }: { id: string; request?: PromotionScopeRequest }) =>
+      api.previewPromotion(id, request),
+  });
 }
 
 export function useConfirmPromotion() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.confirmPromotion(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['promotions'] }),
+    mutationFn: ({ id, request }: { id: string; request?: PromotionScopeRequest }) =>
+      api.confirmPromotion(id, request),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['promotions'] });
+      qc.invalidateQueries({ queryKey: ['research-state'] });
+    },
   });
 }

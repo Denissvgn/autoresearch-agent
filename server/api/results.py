@@ -567,20 +567,73 @@ async def get_hpo_studies(research_id: str):
 @router.get("/research/{research_id}/state")
 async def get_research_state(research_id: str):
     """Operator-facing session state, reconstructable from DB rows only."""
-    _, session, _ = await _resolve_result_context(research_id)
+    pipeline, session, sessions = await _resolve_result_context(research_id)
     if not session:
         raise HTTPException(status_code=404, detail="Phase session not found yet")
     iterations = await _store.get_iterations(session["id"])
     hpo_studies = await _store.get_hpo_studies(session["id"])
     planned_trials = await _store.get_planned_trials(session["id"])
     promotions = await _store.list_promotions()
-    return build_research_state(
+    audit_events = await _collect_audit_events(
+        pipeline=pipeline,
         session=session,
+        sessions=sessions,
+    )
+    state_session = dict(session)
+    if pipeline:
+        state_session["pipeline_id"] = pipeline.get("id")
+        for key in (
+            "promotion_blocked_phase",
+            "promotion_blockers",
+            "promotion_blockers_json",
+            "promotion_preview",
+            "promotion_preview_json",
+        ):
+            if pipeline.get(key) is not None:
+                state_session[key] = pipeline.get(key)
+    return build_research_state(
+        session=state_session,
         iterations=iterations,
         hpo_studies=hpo_studies,
         planned_trials=planned_trials,
         promotions=promotions,
+        audit_events=audit_events,
     )
+
+
+async def _collect_audit_events(
+    *,
+    pipeline: Optional[Dict[str, Any]],
+    session: Dict[str, Any],
+    sessions: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    list_events = getattr(_store, "list_audit_events", None)
+    if list_events is None:
+        return []
+
+    seen: set[str] = set()
+    events: List[Dict[str, Any]] = []
+
+    async def add_for(**filters: Any) -> None:
+        try:
+            rows = await list_events(limit=20, **filters)
+        except TypeError:
+            return
+        for row in rows:
+            key = row.get("event_id") or json.dumps(row, sort_keys=True)
+            if key in seen:
+                continue
+            seen.add(key)
+            events.append(row)
+
+    if pipeline and pipeline.get("id"):
+        await add_for(pipeline_id=pipeline["id"])
+    for row in sessions or [session]:
+        sid = row.get("id")
+        if sid:
+            await add_for(research_id=sid)
+    events.sort(key=lambda row: row.get("timestamp") or "", reverse=True)
+    return events[:20]
 
 
 # ------------------------------------------------------------------
