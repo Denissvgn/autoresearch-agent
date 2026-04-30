@@ -35,20 +35,28 @@ HPO plans, cross-service consistency reports, and reconstructable
 
 ### 1. Configure environment
 
-Copy and edit the `.env` file:
+Copy the tracked sanitized template, then edit the local `.env` file:
 
 ```bash
 cd services/autoresearch-agent
-cp .env.example .env   # or edit .env directly
+cp .env.example .env
 ```
+
+`.env` is intentionally ignored by git. Commit changes to `.env.example` only
+when adding non-secret defaults or new variable names.
 
 Required variables:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `ANTHROPIC_BASE_URL` | API endpoint (Anthropic or proxy) | `https://api.anthropic.com` |
-| `ANTHROPIC_AUTH_TOKEN` | API key | `sk-ant-...` |
-| `ANTHROPIC_MODEL` | Model name | `claude-sonnet-4-20250514` or `qwen3.5-plus` |
+| `ANTHROPIC_BASE_URL` | API endpoint for Anthropic or a compatible proxy | provider URL |
+| `ANTHROPIC_AUTH_TOKEN` | LLM provider token | local secret, never committed |
+| `ANTHROPIC_MODEL` | Model name supported by that backend | provider model name |
+| `AUTORESEARCH_API_TOKEN` | Bearer token for operator/UI API calls | locally generated random value |
+
+Optional local controls such as `AUTORESEARCH_BIND_HOST`,
+`AUTORESEARCH_PORT`, CORS origins, preflight flags, iteration limits, and budget
+limits are documented in `.env.example`.
 
 ### 2. Build and run
 
@@ -57,6 +65,10 @@ Required variables:
 docker compose -f compose/base.yml -f compose/infra.yml -f compose/ml.yml -f compose/autoresearch.yml build autoresearch-agent
 docker compose -f compose/base.yml -f compose/infra.yml -f compose/ml.yml -f compose/autoresearch.yml up -d autoresearch-agent
 ```
+
+The Docker build consumes the tracked UI source, `package.json`, and
+`package-lock.json`. Keep `ui/node_modules/` and `ui/dist/` local and ignored;
+the image rebuilds UI assets from source.
 
 The service starts on **port 8030**. The ML platform services must already be running on the same Docker network (`traid-network`).
 
@@ -162,7 +174,8 @@ services/autoresearch-agent/
 ├── Dockerfile                  # 3-stage build (UI → Python deps → runtime)
 ├── CLAUDE.md                   # Agent system prompt ("Act, Don't Explore")
 ├── pyproject.toml              # Server Python dependencies
-└── .env                        # API credentials
+├── .env.example                # Tracked sanitized environment template
+└── .env                        # Local ignored API credentials
 ```
 
 ### Key API Endpoints
