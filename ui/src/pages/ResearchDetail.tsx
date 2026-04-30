@@ -29,6 +29,9 @@ export default function ResearchDetail() {
 
   const isActive = session.status === 'running' || session.status === 'paused';
   const canPromote = session.best_iteration != null && session.best_iteration > 0;
+  const canContinuePipeline = session.status === 'timed_out'
+    || session.status === 'phase_failed'
+    || session.status === 'promotion_blocked';
 
   return (
     <div className="max-w-5xl space-y-6">
@@ -86,7 +89,7 @@ export default function ResearchDetail() {
               </button>
             </>
           )}
-          {session.status === 'timed_out' && (
+          {canContinuePipeline && (
             <button
               onClick={() => continueMut.mutate(id!)}
               className="px-3 py-1.5 bg-blue-600/20 text-blue-400 rounded text-sm hover:bg-blue-600/30"
@@ -206,6 +209,11 @@ export default function ResearchDetail() {
       {session.error_message && (
         <div className="bg-red-900/20 border border-red-800 rounded p-3 text-sm text-red-300">
           {session.error_message}
+          {session.promotion_blockers && session.promotion_blockers.length > 0 && (
+            <div className="mt-2 text-xs text-red-200">
+              {session.promotion_blockers.join(', ')}
+            </div>
+          )}
         </div>
       )}
 

@@ -707,11 +707,17 @@ class SessionManager:
         timeout_minutes: Optional[int] = None,
         focus_hint: Optional[str] = None,
     ) -> Dict:
-        """Resume a timed_out or phase_failed pipeline from last incomplete phase."""
+        """Resume a terminal pipeline from its last incomplete phase."""
         pipe = await self._store.get_pipeline(pipeline_id)
         if not pipe:
             raise RuntimeError(f"Pipeline {pipeline_id} not found")
-        if pipe["status"] not in ("timed_out", "phase_failed", "completed", "failed"):
+        if pipe["status"] not in (
+            "timed_out",
+            "phase_failed",
+            "promotion_blocked",
+            "completed",
+            "failed",
+        ):
             raise RuntimeError(
                 f"Can only continue pipelines with terminal status, got: {pipe['status']}"
             )
@@ -746,7 +752,12 @@ class SessionManager:
         await self._run_preflight("pipeline")
 
         await self._store.update_pipeline(
-            pipeline_id, status="running", error_message=None,
+            pipeline_id,
+            status="running",
+            error_message=None,
+            promotion_blocked_phase=None,
+            promotion_blockers_json=None,
+            promotion_preview_json=None,
         )
 
         task = asyncio.create_task(

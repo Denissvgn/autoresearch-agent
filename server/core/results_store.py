@@ -126,7 +126,10 @@ CREATE TABLE IF NOT EXISTS pipelines (
     hpo_timesteps INTEGER,
     started_at TEXT NOT NULL,
     completed_at TEXT,
-    error_message TEXT
+    error_message TEXT,
+    promotion_blocked_phase TEXT,
+    promotion_blockers_json TEXT,
+    promotion_preview_json TEXT
 );
 
 CREATE TABLE IF NOT EXISTS audit_events (
@@ -319,6 +322,18 @@ class ResultsStore:
                 )
             except Exception:
                 pass
+            # ARP-005: pipeline-owned promotion diagnostics
+            for column in (
+                "promotion_blocked_phase TEXT",
+                "promotion_blockers_json TEXT",
+                "promotion_preview_json TEXT",
+            ):
+                try:
+                    await db.execute(
+                        f"ALTER TABLE pipelines ADD COLUMN {column}"
+                    )
+                except Exception:
+                    pass
             await db.commit()
         logger.info("Results store initialized at %s", self._db_path)
 
@@ -961,7 +976,11 @@ class ResultsStore:
                 "SELECT * FROM pipelines WHERE id = ?", (pipeline_id,),
             )
             row = await cursor.fetchone()
-            return dict(row) if row else None
+            if not row:
+                return None
+            result = dict(row)
+            self._decode_pipeline_metadata(result)
+            return result
 
     async def list_pipelines(
         self,
@@ -983,7 +1002,10 @@ class ResultsStore:
                 f"SELECT * FROM pipelines{where} ORDER BY started_at DESC",
                 params,
             )
-            return [dict(r) for r in await cursor.fetchall()]
+            rows = [dict(r) for r in await cursor.fetchall()]
+            for row in rows:
+                self._decode_pipeline_metadata(row)
+            return rows
 
     async def update_pipeline(
         self, pipeline_id: str, **fields: Any,
@@ -999,3 +1021,24 @@ class ResultsStore:
             )
             await db.commit()
         return await self.get_pipeline(pipeline_id)
+
+    @staticmethod
+    def _decode_pipeline_metadata(row: Dict[str, Any]) -> None:
+        raw_blockers = row.get("promotion_blockers_json")
+        if raw_blockers:
+            try:
+                parsed = json.loads(raw_blockers)
+                row["promotion_blockers"] = (
+                    parsed if isinstance(parsed, list) else []
+                )
+            except (json.JSONDecodeError, TypeError):
+                row["promotion_blockers"] = []
+        raw_preview = row.get("promotion_preview_json")
+        if raw_preview:
+            try:
+                parsed = json.loads(raw_preview)
+                row["promotion_preview"] = (
+                    parsed if isinstance(parsed, dict) else None
+                )
+            except (json.JSONDecodeError, TypeError):
+                row["promotion_preview"] = None

@@ -174,6 +174,36 @@ async def test_pipeline_agent_log_is_empty_before_first_phase():
 
 
 @pytest.mark.asyncio
+async def test_pipeline_results_expose_promotion_blockers():
+    store = FakeStore()
+    results.init(store)
+    store.pipelines["pipe_blocked"] = {
+        "id": "pipe_blocked",
+        "instrument": "DOGE_USDT",
+        "timeframe": "15m",
+        "status": "promotion_blocked",
+        "current_phase": "rl",
+        "direction_session_id": None,
+        "volatility_session_id": None,
+        "rl_session_id": None,
+        "promotion_blocked_phase": "rl",
+        "promotion_blockers_json": json.dumps(["missing_rl_oos_gates"]),
+        "promotion_preview_json": json.dumps(
+            {
+                "schema_version": "pipeline_promotion_blocked.v1",
+                "phase": "rl",
+                "blockers": ["missing_rl_oos_gates"],
+            }
+        ),
+    }
+
+    payload = await results.get_results("pipe_blocked")
+
+    assert payload["session"]["promotion_blockers"] == ["missing_rl_oos_gates"]
+    assert payload["session"]["promotion_preview"]["phase"] == "rl"
+
+
+@pytest.mark.asyncio
 async def test_hpo_studies_decode_structured_plan_fields():
     store = FakeStore()
     results.init(store)

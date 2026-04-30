@@ -31,6 +31,26 @@ def init(store, *, mlflow_external_url: str = "http://localhost:5000"):
     _mlflow_external_url = mlflow_external_url
 
 
+def _decode_pipeline_payload(pipeline: Dict[str, Any]) -> Dict[str, Any]:
+    decoded = dict(pipeline)
+    for source, target, fallback_type in (
+        ("promotion_blockers_json", "promotion_blockers", list),
+        ("promotion_preview_json", "promotion_preview", dict),
+    ):
+        if target in decoded:
+            continue
+        raw = decoded.get(source)
+        if not raw:
+            continue
+        try:
+            parsed = json.loads(raw) if isinstance(raw, str) else raw
+        except (json.JSONDecodeError, TypeError):
+            parsed = None
+        if isinstance(parsed, fallback_type):
+            decoded[target] = parsed
+    return decoded
+
+
 # ------------------------------------------------------------------
 # Iteration enrichment — parse metrics_json into structured fields
 # ------------------------------------------------------------------
@@ -192,6 +212,7 @@ async def _resolve_result_context(
         pipeline = await _store.get_pipeline(research_id)
         if not pipeline:
             raise HTTPException(status_code=404, detail="Pipeline not found")
+        pipeline = _decode_pipeline_payload(pipeline)
 
         sessions: list[Dict[str, Any]] = []
         for phase in _PIPELINE_PHASES:

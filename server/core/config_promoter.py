@@ -135,6 +135,14 @@ class ConfigPromoter:
         gate_bundle_evaluation = self._evaluate_gate_bundle(
             model_type, best_for_gate,
         )
+        gate_bundle_evaluation, consistency_report = (
+            self._apply_pipeline_feature_replay_policy(
+                session=session,
+                model_type=model_type,
+                gate_bundle_evaluation=gate_bundle_evaluation,
+                consistency_report=consistency_report,
+            )
+        )
         promotion_allowed = (
             bool(best["all_gates_passed"])
             and gate_bundle_evaluation.get("passed", False)
@@ -1031,6 +1039,95 @@ class ConfigPromoter:
             model_type=model_type,
             best_iteration=best_iteration,
         )
+
+    @staticmethod
+    def _apply_pipeline_feature_replay_policy(
+        *,
+        session: Dict[str, Any],
+        model_type: str,
+        gate_bundle_evaluation: Dict[str, Any],
+        consistency_report: Dict[str, Any],
+    ) -> tuple[Dict[str, Any], Dict[str, Any]]:
+        """Do not require standalone economic replay for pipeline feature phases.
+
+        Direction and volatility phases in the pipeline produce supervised
+        features for the RL policy. Their own promotion path may still demand
+        calibration, feature parity, rollback, smoke, and reload evidence, but
+        a missing standalone economic replay is not enough by itself to block
+        the phase handoff.
+        """
+        if not session.get("pipeline_id"):
+            return gate_bundle_evaluation, consistency_report
+        if model_type not in {"direction", "volatility"}:
+            return gate_bundle_evaluation, consistency_report
+
+        allowed = {"missing_economic_replay"}
+        gate_blockers = set(gate_bundle_evaluation.get("blockers") or [])
+        consistency_blockers = set(consistency_report.get("blockers") or [])
+        all_blockers = gate_blockers | consistency_blockers
+        if not all_blockers or not all_blockers.issubset(allowed):
+            return gate_bundle_evaluation, consistency_report
+
+        gate_eval = dict(gate_bundle_evaluation)
+        gate_eval["blockers"] = [
+            blocker
+            for blocker in gate_bundle_evaluation.get("blockers", [])
+            if blocker not in allowed
+        ]
+        gate_eval["checks"] = [
+            ConfigPromoter._waive_missing_replay_check(check)
+            for check in gate_bundle_evaluation.get("checks", [])
+        ]
+        gate_eval["passed"] = not gate_eval["blockers"]
+        notes = list(gate_eval.get("notes") or [])
+        notes.append(
+            "pipeline_feature_phase_missing_economic_replay_allowed"
+        )
+        gate_eval["notes"] = notes
+        gate_eval["waivers"] = sorted(
+            set(gate_eval.get("waivers") or [])
+            | {"pipeline_feature_phase_missing_economic_replay"}
+        )
+
+        consistency = dict(consistency_report)
+        consistency["blockers"] = [
+            blocker
+            for blocker in consistency_report.get("blockers", [])
+            if blocker not in allowed
+        ]
+        consistency["checks"] = [
+            ConfigPromoter._warn_missing_replay_check(check)
+            for check in consistency_report.get("checks", [])
+        ]
+        consistency["passed"] = not consistency["blockers"]
+        notes = list(consistency.get("notes") or [])
+        notes.append(
+            "pipeline_feature_phase_missing_economic_replay_allowed"
+        )
+        consistency["notes"] = notes
+        return gate_eval, consistency
+
+    @staticmethod
+    def _waive_missing_replay_check(check: Dict[str, Any]) -> Dict[str, Any]:
+        updated = dict(check)
+        if (
+            updated.get("status") == "failed"
+            and updated.get("reason") == "missing_economic_replay"
+        ):
+            updated["status"] = "waived"
+            updated["waiver"] = "pipeline_feature_phase_missing_economic_replay"
+        return updated
+
+    @staticmethod
+    def _warn_missing_replay_check(check: Dict[str, Any]) -> Dict[str, Any]:
+        updated = dict(check)
+        if (
+            updated.get("status") == "failed"
+            and updated.get("name") == "economic_replay_present"
+        ):
+            updated["status"] = "warning"
+            updated["detail"] = "pipeline feature phase; RL owns economic replay"
+        return updated
 
     def _resolve_artifacts_dir(
         self,

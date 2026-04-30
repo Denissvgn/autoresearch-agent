@@ -5,12 +5,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from server.config import settings
+from server.core.config_promoter import ConfigPromoter
 from server.core.results_store import ResultsStore
 from server.ws.events import broadcaster
 
@@ -18,6 +18,84 @@ logger = logging.getLogger(__name__)
 
 PHASES = ["direction", "volatility", "rl"]
 DEFAULT_BUDGET_RATIOS = {"direction": 0.4, "volatility": 0.3, "rl": 0.3}
+
+
+def _promotion_blockers(
+    preview: Optional[Dict[str, Any]],
+    *,
+    error: Optional[str] = None,
+) -> list[str]:
+    """Collect human-inspectable blockers from a ConfigPromoter preview."""
+    blockers: list[str] = []
+
+    def add(values: Any) -> None:
+        if isinstance(values, str):
+            values = [values]
+        if not isinstance(values, list):
+            return
+        for value in values:
+            text = str(value).strip()
+            if text and text not in blockers:
+                blockers.append(text)
+
+    if preview:
+        add((preview.get("gate_bundle_evaluation") or {}).get("blockers"))
+        add((preview.get("consistency_report") or {}).get("blockers"))
+        add((preview.get("candidate_pool_record") or {}).get("blockers"))
+        if preview.get("gates_passed") is False:
+            add("best_iteration_failed_gates")
+        if preview.get("promotion_allowed") is False and not blockers:
+            add("promotion_not_allowed")
+    if error:
+        add(error)
+    return blockers
+
+
+def _promotion_preview_summary(
+    preview: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """Keep blocked-promotion diagnostics inspectable without storing configs."""
+    if not preview:
+        return None
+    return {
+        "research_id": preview.get("research_id"),
+        "iteration": preview.get("iteration"),
+        "model_type": preview.get("model_type"),
+        "instrument": preview.get("instrument"),
+        "timeframe": preview.get("timeframe"),
+        "target_path": preview.get("target_path"),
+        "best_metric": preview.get("best_metric"),
+        "gates_passed": preview.get("gates_passed"),
+        "promotion_allowed": preview.get("promotion_allowed"),
+        "config_snapshot_sha256": preview.get("config_snapshot_sha256"),
+        "gate_bundle_evaluation": preview.get("gate_bundle_evaluation"),
+        "candidate_pool_record": preview.get("candidate_pool_record"),
+        "best_candidate_ownership": preview.get("best_candidate_ownership"),
+        "consistency_report": preview.get("consistency_report"),
+        "development_promotion_metadata": preview.get(
+            "development_promotion_metadata"
+        ),
+    }
+
+
+class PipelinePromotionBlocked(RuntimeError):
+    """Raised when a phase trains successfully but promotion gates block it."""
+
+    def __init__(
+        self,
+        *,
+        phase: str,
+        session_id: str,
+        preview: Optional[Dict[str, Any]] = None,
+        error: Optional[str] = None,
+    ) -> None:
+        self.phase = phase
+        self.session_id = session_id
+        self.preview = preview or {}
+        self.error = error
+        self.blockers = _promotion_blockers(self.preview, error=error)
+        detail = ", ".join(self.blockers) if self.blockers else "unknown"
+        super().__init__(f"{phase} promotion blocked: {detail}")
 
 
 class PipelineConfig:
@@ -174,12 +252,30 @@ class PipelineController:
                 phase_passed = await self._evaluate_phase(session_id)
 
                 if phase_passed:
-                    # Auto-promote winning config
-                    await self._auto_promote(session_id, phase, config)
+                    try:
+                        promotion, preview = await self._promote_phase(
+                            session_id, phase,
+                        )
+                    except PipelinePromotionBlocked as exc:
+                        await self._mark_promotion_blocked(
+                            pipeline_id=pipeline_id,
+                            phase=phase,
+                            session_id=session_id,
+                            completed_phases=completed_phases,
+                            exc=exc,
+                        )
+                        return
+
                     completed_phases.append(phase)
                     await self._store.update_pipeline(
                         pipeline_id,
                         completed_phases=json.dumps(completed_phases),
+                        promotion_blocked_phase=None,
+                        promotion_blockers_json=None,
+                        promotion_preview_json=json.dumps(
+                            _promotion_preview_summary(preview),
+                            sort_keys=True,
+                        ),
                     )
                     await broadcaster.broadcast({
                         "event": "pipeline_phase_completed",
@@ -187,6 +283,8 @@ class PipelineController:
                         "phase": phase,
                         "passed": True,
                         "session_id": session_id,
+                        "promotion_id": promotion.get("id"),
+                        "metadata_path": promotion.get("metadata_path"),
                     })
                     logger.info(
                         "Pipeline %s: phase %s completed + promoted",
@@ -294,126 +392,81 @@ class PipelineController:
         iterations = await self._store.get_iterations(session_id)
         return any(it.get("all_gates_passed") for it in iterations)
 
-    async def _auto_promote(
-        self,
-        session_id: str,
-        phase: str,
-        config: PipelineConfig,
-    ) -> None:
-        """Auto-promote the best config from a completed phase via promote.py."""
-        session = await self._store.get_session(session_id)
-        if not session:
-            return
-        best_iter_num = session.get("best_iteration")
-        if best_iter_num is None:
-            return
-
-        # Get the best iteration's config snapshot
-        iterations = await self._store.get_iterations(session_id)
-        best_it = next(
-            (it for it in iterations if it["iteration"] == best_iter_num),
-            None,
-        )
-        if not best_it or not best_it.get("config_snapshot"):
-            logger.warning(
-                "Pipeline auto-promote: no config snapshot for %s iter %d",
-                session_id, best_iter_num,
-            )
-            return
-
-        instrument = config.instrument.replace("-", "_")
-        timeframe = config.timeframe
-        workspace_path = session.get("workspace_path", "")
-
-        # Write snapshot to a temp file for promote.py
-        import tempfile
-        snap_dir = workspace_path or f"{settings.runs_dir}/{instrument}_{timeframe}/{phase}"
-        snap_abs = f"{settings.workspace_root}/{snap_dir}/pipeline_promote_snapshot.yaml"
+    async def _promote_phase(
+        self, session_id: str, phase: str,
+    ) -> tuple[Dict[str, Any], Dict[str, Any]]:
+        """Promote a completed phase through the audited ConfigPromoter path."""
+        promoter = ConfigPromoter(self._store)
+        preview: Optional[Dict[str, Any]] = None
         try:
-            from pathlib import Path as _Path
-            _Path(snap_abs).parent.mkdir(parents=True, exist_ok=True)
-            _Path(snap_abs).write_text(
-                best_it["config_snapshot"], encoding="utf-8",
-            )
+            preview = await promoter.preview(session_id)
+            if preview.get("promotion_allowed") is not True:
+                raise PipelinePromotionBlocked(
+                    phase=phase,
+                    session_id=session_id,
+                    preview=preview,
+                )
+            promotion = await promoter.confirm(session_id)
+        except PipelinePromotionBlocked:
+            raise
         except Exception as exc:
-            logger.warning(
-                "Pipeline auto-promote: failed to write snapshot: %s", exc,
-            )
-            return
+            raise PipelinePromotionBlocked(
+                phase=phase,
+                session_id=session_id,
+                preview=preview,
+                error=str(exc),
+            ) from exc
 
-        metric_map = {
-            "direction": "composite_direction_score",
-            "volatility": "auc",
-            "rl": "composite_rl_score",
+        if not promotion.get("id"):
+            raise PipelinePromotionBlocked(
+                phase=phase,
+                session_id=session_id,
+                preview=preview,
+                error="promotion_record_missing",
+            )
+        return promotion, preview or {}
+
+    async def _mark_promotion_blocked(
+        self,
+        *,
+        pipeline_id: str,
+        phase: str,
+        session_id: str,
+        completed_phases: List[str],
+        exc: PipelinePromotionBlocked,
+    ) -> None:
+        blocked_payload = {
+            "schema_version": "pipeline_promotion_blocked.v1",
+            "pipeline_id": pipeline_id,
+            "phase": phase,
+            "session_id": session_id,
+            "blockers": exc.blockers,
+            "error": exc.error,
+            "preview": _promotion_preview_summary(exc.preview),
         }
-        cmd = [
-            settings.venv_python,
-            f"{settings.autotuner_scripts_dir}/promote.py",
-            "--model", phase,
-            "--workspace", f"{settings.workspace_root}/{snap_dir}/..",
-            "--instrument", instrument,
-            "--timeframe", timeframe,
-            "--configs-dir", settings.host_configs_path,
-            "--config-file", snap_abs,
-        ]
-        if session.get("best_metric") is not None:
-            cmd += [
-                "--metric-name", metric_map.get(phase, "unknown"),
-                "--metric-value", str(session["best_metric"]),
-            ]
-        # ML-64: Pass model artifacts dir for stable model persistence
-        if phase in ("direction", "volatility"):
-            artifacts_dir = self._resolve_phase_artifacts_dir(phase, config)
-            if artifacts_dir:
-                cmd += ["--model-artifacts-dir", artifacts_dir]
-            cmd += [
-                "--stable-models-dir",
-                f"{settings.workspace_root}/runs/promoted_models",
-            ]
-
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=settings.workspace_root,
+        await self._store.update_pipeline(
+            pipeline_id,
+            status="promotion_blocked",
+            current_phase=phase,
+            completed_phases=json.dumps(completed_phases),
+            completed_at=datetime.now(timezone.utc).isoformat(),
+            error_message=str(exc)[:2000],
+            promotion_blocked_phase=phase,
+            promotion_blockers_json=json.dumps(exc.blockers, sort_keys=True),
+            promotion_preview_json=json.dumps(blocked_payload, sort_keys=True),
         )
-        stdout, stderr = await proc.communicate()
-        if proc.returncode == 0:
-            logger.info(
-                "Pipeline auto-promoted %s config for %s_%s: %s",
-                phase, instrument, timeframe, stdout.decode()[:200],
-            )
-        else:
-            logger.warning(
-                "Pipeline auto-promote failed for %s (rc=%d): %s",
-                phase, proc.returncode, stderr.decode()[:500],
-            )
-
-    def _resolve_phase_artifacts_dir(
-        self, phase: str, config: PipelineConfig,
-    ) -> str | None:
-        """Locate the training output directory for a pipeline phase."""
-        inst = config.instrument.replace("-", "_")
-        results_json = os.path.join(
-            settings.workspace_root, "runs", "autotuner",
-            f"{inst}_{config.timeframe}", phase, "results.json",
+        await broadcaster.broadcast({
+            "event": "pipeline_promotion_blocked",
+            "pipeline_id": pipeline_id,
+            "phase": phase,
+            "session_id": session_id,
+            "blockers": exc.blockers,
+            "error": exc.error,
+        })
+        logger.warning(
+            "Pipeline %s: phase %s promotion blocked: %s",
+            pipeline_id, phase, ", ".join(exc.blockers) or exc.error or "unknown",
         )
-        if os.path.exists(results_json):
-            try:
-                with open(results_json) as f:
-                    data = json.load(f)
-                model_rel = data.get("model_path")
-                if model_rel:
-                    model_abs = os.path.join(settings.workspace_root, model_rel)
-                    if os.path.exists(model_abs):
-                        return os.path.dirname(model_abs)
-            except Exception:
-                pass
-        direct = os.path.join(
-            settings.workspace_root, "runs", "autotuner",
-            f"{inst}_{config.timeframe}", phase,
-        )
-        return direct if os.path.isdir(direct) else None
 
     async def _run_enrichment(self, config: PipelineConfig) -> None:
         """Run enrich_rl_dataset.py between volatility and rl phases."""

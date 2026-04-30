@@ -25,6 +25,9 @@ export interface ResearchSession {
   next_action?: string | null;
   phase_state_json?: string | null;
   active_phase_session_id?: string | null;
+  promotion_blocked_phase?: string | null;
+  promotion_blockers?: string[];
+  promotion_preview?: Record<string, unknown> | null;
 }
 
 export interface SecondaryMetric {

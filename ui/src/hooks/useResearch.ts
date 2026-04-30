@@ -55,9 +55,24 @@ function useWSInvalidation() {
         qc.invalidateQueries({ queryKey: ['research-state'] });
         qc.invalidateQueries({ queryKey: ['status'] });
       }),
+      on('pipeline_promotion_blocked', () => {
+        qc.invalidateQueries({ queryKey: ['session'] });
+        qc.invalidateQueries({ queryKey: ['iterations'] });
+        qc.invalidateQueries({ queryKey: ['results'] });
+        qc.invalidateQueries({ queryKey: ['research-state'] });
+        qc.invalidateQueries({ queryKey: ['status'] });
+      }),
     ];
     return () => unsubs.forEach((u) => u());
   }, [on, qc]);
+}
+
+function isTerminalStatus(status?: string) {
+  return status === 'completed'
+    || status === 'failed'
+    || status === 'stopped'
+    || status === 'phase_failed'
+    || status === 'promotion_blocked';
 }
 
 export function useSessions() {
@@ -71,7 +86,7 @@ export function useSession(id: string) {
     queryFn: () => api.getSession(id),
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      if (status === 'completed' || status === 'failed' || status === 'stopped') return false;
+      if (isTerminalStatus(status)) return false;
       return 30_000;
     },
   });
@@ -83,7 +98,7 @@ export function useResults(id: string) {
     queryFn: () => api.getResults(id),
     refetchInterval: (query) => {
       const status = query.state.data?.session?.status;
-      if (status === 'completed' || status === 'failed' || status === 'stopped') return false;
+      if (isTerminalStatus(status)) return false;
       return 30_000;
     },
   });
