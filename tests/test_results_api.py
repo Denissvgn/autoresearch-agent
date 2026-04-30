@@ -14,6 +14,7 @@ class FakeStore:
         self.sessions: dict[str, dict] = {}
         self.iterations: dict[str, list[dict]] = {}
         self.hpo_studies: dict[str, list[dict]] = {}
+        self.planned_trials: dict[str, list[dict]] = {}
         self.promotions: list[dict] = []
 
     async def get_pipeline(self, pipeline_id: str):
@@ -40,6 +41,9 @@ class FakeStore:
 
     async def get_hpo_studies(self, research_id: str):
         return self.hpo_studies.get(research_id, [])
+
+    async def get_planned_trials(self, research_id: str):
+        return self.planned_trials.get(research_id, [])
 
     async def list_promotions(self):
         return self.promotions
@@ -310,6 +314,24 @@ async def test_research_state_endpoint_reconstructs_session_without_workspace():
             "budget_json": "{}",
         }
     ]
+    store.planned_trials["res_state"] = [
+        {
+            "id": 30,
+            "research_id": "res_state",
+            "study_id": "hpo_res_state_direction",
+            "trial_id": "trial_001_dz200_scoped_isotonic",
+            "trial_index": 1,
+            "search_phase": "hpo_screening",
+            "config_patch_json": json.dumps({"direction_pct_threshold": 0.020}),
+            "config_hash": "trial-sha",
+            "expected_command": (
+                ".venv/bin/python scripts/autotuner/direction/prepare.py "
+                "--config runs/autotuner/DOGE_USDT_15m/direction/"
+                "planned_trials/trial_001_dz200_scoped_isotonic/train.yaml --quick"
+            ),
+            "status": "planned",
+        }
+    ]
     store.promotions = [
         {
             "id": 20,
@@ -331,6 +353,8 @@ async def test_research_state_endpoint_reconstructs_session_without_workspace():
     assert state["current_phase"] == "adaptive_feature_sweeps"
     assert state["budget_usage"]["iterations_used"] == 2
     assert state["hpo_study_ids"] == ["hpo_res_state_direction"]
+    assert state["planned_trials"][0]["config_hash"] == "trial-sha"
+    assert state["search_plan"]["planned_trial_count"] == 1
     assert state["top_candidates"][0]["artifact_hash"] == "artifact-sha"
     assert state["failed_pruned_configs"][0]["status"] == "pruned"
     assert state["rollback_target"] == "direction_model:0"

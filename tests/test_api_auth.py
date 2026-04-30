@@ -108,6 +108,9 @@ class FakeStore:
     async def get_hpo_studies(self, research_id: str):
         return []
 
+    async def get_planned_trials(self, research_id: str):
+        return []
+
     async def list_promotions(self):
         return []
 

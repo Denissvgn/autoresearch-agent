@@ -129,6 +129,64 @@ async def test_results_store_persists_manifest_and_attempt_snapshot(tmp_path: Pa
     assert studies[0]["max_trials"] == 3
     assert studies[0]["quick_mode"] == 1
 
+    await store.record_planned_trials(
+        research_id="res_m8",
+        study_id="hpo_res_m8_direction",
+        trials=[
+            {
+                "trial_id": "trial_001_dz200_scoped_isotonic",
+                "trial_index": 1,
+                "study_id": "hpo_res_m8_direction",
+                "search_phase": "hpo_screening",
+                "config_patch": {"direction_pct_threshold": 0.020},
+                "config_hash": "trial-sha",
+                "expected_command": (
+                    ".venv/bin/python scripts/autotuner/direction/prepare.py "
+                    "--config runs/autotuner/DOGE_USDT_15m/direction/"
+                    "planned_trials/trial_001_dz200_scoped_isotonic/train.yaml --quick"
+                ),
+                "result_path": (
+                    "runs/autotuner/DOGE_USDT_15m/direction/planned_trials/"
+                    "trial_001_dz200_scoped_isotonic/results.json"
+                ),
+                "train_config_path": (
+                    "runs/autotuner/DOGE_USDT_15m/direction/planned_trials/"
+                    "trial_001_dz200_scoped_isotonic/train.yaml"
+                ),
+            }
+        ],
+    )
+    planned = await store.get_planned_trials("res_m8")
+    assert planned[0]["trial_id"] == "trial_001_dz200_scoped_isotonic"
+    assert planned[0]["config_patch"]["direction_pct_threshold"] == 0.020
+    assert planned[0]["config_hash"] == "trial-sha"
+
+    by_command = await store.get_planned_trial_for_command(
+        "res_m8",
+        planned[0]["expected_command"],
+    )
+    assert by_command["trial_id"] == planned[0]["trial_id"]
+
+    await store.update_planned_trial_status(
+        research_id="res_m8",
+        trial_id=planned[0]["trial_id"],
+        status="completed",
+        mlflow_run_id="run-planned",
+    )
+    completed = await store.get_planned_trial("res_m8", planned[0]["trial_id"])
+    assert completed["status"] == "completed"
+    assert completed["mlflow_run_id"] == "run-planned"
+
+    manual = await store.record_planned_trial_manual_review(
+        research_id="res_m8",
+        study_id="hpo_res_m8_direction",
+        expected_command="bad command",
+        reason="outside approved plan",
+    )
+    assert manual["status"] == "manual_review"
+    planned = await store.get_planned_trials("res_m8")
+    assert planned[-1]["manual_review_reason"] == "outside approved plan"
+
 
 @pytest.mark.asyncio
 async def test_results_store_records_audit_events(tmp_path: Path):

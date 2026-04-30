@@ -411,11 +411,13 @@ async def get_research_state(research_id: str):
         raise HTTPException(status_code=404, detail="Phase session not found yet")
     iterations = await _store.get_iterations(session["id"])
     hpo_studies = await _store.get_hpo_studies(session["id"])
+    planned_trials = await _store.get_planned_trials(session["id"])
     promotions = await _store.list_promotions()
     return build_research_state(
         session=session,
         iterations=iterations,
         hpo_studies=hpo_studies,
+        planned_trials=planned_trials,
         promotions=promotions,
     )
 

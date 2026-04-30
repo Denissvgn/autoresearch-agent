@@ -15,11 +15,13 @@ def build_research_state(
     iterations: Iterable[Dict[str, Any]],
     hpo_studies: Iterable[Dict[str, Any]],
     promotions: Iterable[Dict[str, Any]],
+    planned_trials: Iterable[Dict[str, Any]] = (),
 ) -> Dict[str, Any]:
     """Build a reconstructable state payload without reading workspace files."""
 
     iteration_rows = list(iterations)
     study_rows = [_decode_hpo_study(row) for row in hpo_studies]
+    planned_trial_rows = [_decode_planned_trial(row) for row in planned_trials]
     promotion_rows = list(promotions)
     phase_state = _session_phase_state(session) or build_phase_state(
         session=session,
@@ -50,6 +52,8 @@ def build_research_state(
         },
         "hpo_studies": study_rows,
         "hpo_study_ids": [row.get("study_id") or row.get("id") for row in study_rows],
+        "planned_trials": planned_trial_rows,
+        "search_plan": _search_plan_summary(study_rows, planned_trial_rows),
         "artifact_hashes": _artifact_hashes(iteration_rows),
         "mlflow_links": _mlflow_links(iteration_rows),
         "promoted_version": latest_promotion,
@@ -191,6 +195,41 @@ def _decode_hpo_study(row: Dict[str, Any]) -> Dict[str, Any]:
     return decoded
 
 
+def _decode_planned_trial(row: Dict[str, Any]) -> Dict[str, Any]:
+    decoded = dict(row)
+    raw = decoded.get("config_patch_json")
+    if raw and "config_patch" not in decoded:
+        decoded["config_patch"] = _parse_json(raw) or {}
+    return decoded
+
+
+def _search_plan_summary(
+    hpo_studies: List[Dict[str, Any]],
+    planned_trials: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    status_counts: Dict[str, int] = {}
+    for trial in planned_trials:
+        status = str(trial.get("status") or "unknown")
+        status_counts[status] = status_counts.get(status, 0) + 1
+    return {
+        "study_count": len(hpo_studies),
+        "planned_trial_count": sum(
+            count for status, count in status_counts.items()
+            if status != "manual_review"
+        ),
+        "manual_review_count": status_counts.get("manual_review", 0),
+        "status_counts": status_counts,
+        "search_spaces": [
+            {
+                "study_id": row.get("study_id") or row.get("id"),
+                "search_space": row.get("search_space") or {},
+                "budget": row.get("budget") or {},
+            }
+            for row in hpo_studies
+        ],
+    }
+
+
 def _parse_json(raw: Any) -> Any:
     if isinstance(raw, str) and raw.strip():
         try:
@@ -198,4 +237,3 @@ def _parse_json(raw: Any) -> Any:
         except json.JSONDecodeError:
             return None
     return raw
-

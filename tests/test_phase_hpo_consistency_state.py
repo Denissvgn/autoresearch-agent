@@ -2,10 +2,17 @@ from __future__ import annotations
 
 import json
 
+import pytest
+import yaml
+
 from server.core.consistency_validator import build_consistency_report
 from server.core.research_phase_plan import build_phase_state
 from server.core.research_state import build_research_state
-from server.core.structured_hpo import build_structured_hpo_plan
+from server.core.structured_hpo import (
+    build_structured_hpo_plan,
+    materialize_planned_trials,
+    validate_config_patch,
+)
 
 
 def _passing_metrics() -> dict:
@@ -58,6 +65,8 @@ def test_direction_phase_state_advances_past_tabular_sweeps():
 def test_structured_direction_hpo_plan_is_bounded_by_iterations():
     plan = build_structured_hpo_plan(
         research_id="res_hpo",
+        instrument="DOGE_USDT",
+        timeframe="15m",
         model_type="direction",
         quick_mode=True,
         max_iterations=6,
@@ -71,13 +80,20 @@ def test_structured_direction_hpo_plan_is_bounded_by_iterations():
     assert plan["enabled"] is True
     assert plan["study_id"] == "hpo_res_hpo_direction"
     assert plan["max_trials"] == 6
+    assert len(plan["trials"]) == 6
     assert "deadzone_width" in plan["search_space"]
+    assert "direction_pct_threshold" in plan["search_space"]
     assert plan["budget"]["max_budget_usd"] == 2.0
+    assert all(trial["config_hash"] for trial in plan["trials"])
+    assert all("expected_command" in trial for trial in plan["trials"])
+    assert all("planned_trials" in trial["expected_command"] for trial in plan["trials"])
 
 
 def test_structured_hpo_plan_never_inflates_requested_trials():
     direction_plan = build_structured_hpo_plan(
         research_id="res_hpo_small",
+        instrument="DOGE_USDT",
+        timeframe="15m",
         model_type="direction",
         quick_mode=False,
         max_iterations=1,
@@ -89,6 +105,8 @@ def test_structured_hpo_plan_never_inflates_requested_trials():
     )
     rl_plan = build_structured_hpo_plan(
         research_id="res_hpo_rl",
+        instrument="DOGE_USDT",
+        timeframe="15m",
         model_type="rl",
         quick_mode=False,
         max_iterations=100,
@@ -100,7 +118,112 @@ def test_structured_hpo_plan_never_inflates_requested_trials():
     )
 
     assert direction_plan["max_trials"] == 1
+    assert len(direction_plan["trials"]) == 1
     assert rl_plan["max_trials"] == 1
+    assert rl_plan["trials"] == []
+
+
+def test_structured_hpo_plan_bounds_direction_trials_by_budget():
+    plan = build_structured_hpo_plan(
+        research_id="res_hpo_budget",
+        instrument="DOGE_USDT",
+        timeframe="15m",
+        model_type="direction",
+        quick_mode=False,
+        max_iterations=10,
+        max_budget_usd=0.50,
+        timeout_s=600,
+        enable_hpo=True,
+        hpo_trials=10,
+        hpo_timesteps=50000,
+    )
+
+    assert plan["budget"]["per_trial_budget_usd"] == 0.25
+    assert plan["max_trials"] == 2
+    assert len(plan["trials"]) == 2
+
+
+def test_direction_structured_trials_include_deadzone_horizon_calibration_controls():
+    plan = build_structured_hpo_plan(
+        research_id="res_hpo_controls",
+        instrument="DOGE_USDT",
+        timeframe="15m",
+        model_type="direction",
+        quick_mode=True,
+        max_iterations=8,
+        max_budget_usd=2.0,
+        timeout_s=3600,
+        enable_hpo=True,
+        hpo_trials=8,
+        hpo_timesteps=50000,
+    )
+
+    patches = [trial["config_patch"] for trial in plan["trials"]]
+    thresholds = {patch["direction_pct_threshold"] for patch in patches}
+    rosters = {patch["roster_preset"] for patch in patches}
+    calibrations = {patch["stacking_calibration_method"] for patch in patches}
+
+    assert {0.020, 0.025}.issubset(thresholds)
+    assert "scoped_tabular" in rosters
+    assert "full_tabular" in rosters
+    assert "sigmoid" in calibrations
+    assert any(
+        patch.get("stacking_calibration_fallback_min_samples")
+        for patch in patches
+    )
+    assert all(patch["auto_select_horizon"] is True for patch in patches)
+    assert all("horizon_candidates" in patch for patch in patches)
+    assert all(patch["log_feature_provenance"] is True for patch in patches)
+    assert all(patch["validate_feature_consistency"] is True for patch in patches)
+    assert all("max_signal_rate" in patch for patch in patches)
+
+
+def test_structured_hpo_invalid_knobs_are_rejected():
+    with pytest.raises(ValueError, match="unsupported_knob"):
+        validate_config_patch("direction", {"unsupported_knob": 1})
+
+
+def test_materialize_planned_trials_writes_concrete_train_yamls(tmp_path):
+    workspace = tmp_path / "direction"
+    workspace.mkdir()
+    (workspace / "train.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "instrument": "DOGE_USDT",
+                "timeframe": "15m",
+                "direction_pct_threshold": 0.020,
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    plan = build_structured_hpo_plan(
+        research_id="res_hpo_materialize",
+        instrument="DOGE_USDT",
+        timeframe="15m",
+        model_type="direction",
+        quick_mode=True,
+        max_iterations=1,
+        max_budget_usd=2.0,
+        timeout_s=3600,
+        enable_hpo=True,
+        hpo_trials=1,
+        hpo_timesteps=50000,
+    )
+
+    written = materialize_planned_trials(plan, workspace)
+
+    assert len(written) == 1
+    trial = plan["trials"][0]
+    trial_config = workspace / "planned_trials" / trial["trial_id"] / "train.yaml"
+    assert trial_config.exists()
+    text = trial_config.read_text(encoding="utf-8")
+    assert f"# config_hash: {trial['config_hash']}" in text
+    payload = yaml.safe_load(text)
+    assert payload["direction_pct_threshold"] == (
+        trial["config_patch"]["direction_pct_threshold"]
+    )
+    assert (workspace / "server_hpo_plan.json").exists()
 
 
 def test_consistency_report_passes_for_complete_direction_candidate():
@@ -208,3 +331,55 @@ def test_research_state_summarizes_candidates_failures_and_budget():
     assert state["top_candidates"][0]["artifact_hash"] == "artifact-sha"
     assert state["failed_pruned_configs"][0]["status"] == "timeout"
     assert state["artifact_hashes"][0]["artifact_hash"] == "artifact-sha"
+
+
+def test_research_state_exposes_planned_trials_and_manual_review():
+    session = {
+        "id": "res_state_plan",
+        "model_type": "direction",
+        "status": "running",
+        "max_budget_usd": 5.0,
+        "total_api_cost_usd": 0.0,
+        "max_iterations": 4,
+    }
+
+    state = build_research_state(
+        session=session,
+        iterations=[],
+        hpo_studies=[
+            {
+                "id": 1,
+                "study_id": "hpo_res_state_plan_direction",
+                "search_space_json": json.dumps(
+                    {"direction_pct_threshold": [0.020, 0.025]}
+                ),
+                "budget_json": json.dumps({"max_iterations": 4}),
+            }
+        ],
+        planned_trials=[
+            {
+                "trial_id": "trial_001",
+                "trial_index": 1,
+                "status": "planned",
+                "config_patch_json": json.dumps(
+                    {"direction_pct_threshold": 0.020}
+                ),
+                "config_hash": "hash-1",
+            },
+            {
+                "trial_id": "manual_review_1",
+                "trial_index": -1,
+                "status": "manual_review",
+                "config_patch_json": json.dumps({"proposed_command": "bad"}),
+                "config_hash": "hash-2",
+            },
+        ],
+        promotions=[],
+    )
+
+    assert state["planned_trials"][0]["config_patch"]["direction_pct_threshold"] == 0.020
+    assert state["search_plan"]["planned_trial_count"] == 1
+    assert state["search_plan"]["manual_review_count"] == 1
+    assert state["search_plan"]["search_spaces"][0]["search_space"][
+        "direction_pct_threshold"
+    ] == [0.020, 0.025]

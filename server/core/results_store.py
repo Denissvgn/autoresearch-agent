@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -100,6 +101,26 @@ CREATE TABLE IF NOT EXISTS hpo_studies (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS planned_trials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    research_id TEXT NOT NULL REFERENCES research_sessions(id),
+    study_id TEXT,
+    trial_id TEXT NOT NULL,
+    trial_index INTEGER NOT NULL,
+    search_phase TEXT NOT NULL,
+    config_patch_json TEXT NOT NULL,
+    config_hash TEXT NOT NULL,
+    expected_command TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'planned',
+    result_path TEXT,
+    mlflow_run_id TEXT,
+    train_config_path TEXT,
+    manual_review_reason TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(research_id, trial_id)
+);
+
 CREATE TABLE IF NOT EXISTS pipelines (
     id TEXT PRIMARY KEY,
     instrument TEXT NOT NULL,
@@ -152,6 +173,10 @@ CREATE INDEX IF NOT EXISTS idx_audit_events_research_id
     ON audit_events(research_id);
 CREATE INDEX IF NOT EXISTS idx_audit_events_pipeline_id
     ON audit_events(pipeline_id);
+CREATE INDEX IF NOT EXISTS idx_planned_trials_research_id
+    ON planned_trials(research_id);
+CREATE INDEX IF NOT EXISTS idx_planned_trials_expected_command
+    ON planned_trials(research_id, expected_command);
 """
 
 _MODEL_TO_SKILL = {
@@ -520,6 +545,9 @@ class ResultsStore:
                 "DELETE FROM iterations WHERE research_id = ?", (session_id,),
             )
             await db.execute(
+                "DELETE FROM planned_trials WHERE research_id = ?", (session_id,),
+            )
+            await db.execute(
                 "DELETE FROM promotions WHERE research_id = ?", (session_id,),
             )
             cursor = await db.execute(
@@ -783,6 +811,203 @@ class ResultsStore:
                 (research_id,),
             )
             return [dict(r) for r in await cursor.fetchall()]
+
+    # ------------------------------------------------------------------
+    # Planned structured HPO trials (ARP-008)
+    # ------------------------------------------------------------------
+
+    async def record_planned_trials(
+        self,
+        *,
+        research_id: str,
+        study_id: Optional[str],
+        trials: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Persist server-owned planned trials before execution."""
+        if not trials:
+            return []
+        now = datetime.now(timezone.utc).isoformat()
+        async with aiosqlite.connect(self._db_path) as db:
+            for trial in trials:
+                config_patch = trial.get("config_patch") or {}
+                await db.execute(
+                    """INSERT OR REPLACE INTO planned_trials
+                       (research_id, study_id, trial_id, trial_index,
+                        search_phase, config_patch_json, config_hash,
+                        expected_command, status, result_path, mlflow_run_id,
+                        train_config_path, manual_review_reason, created_at,
+                        updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        research_id,
+                        trial.get("study_id") or study_id,
+                        trial["trial_id"],
+                        int(trial.get("trial_index") or 0),
+                        trial.get("search_phase") or "hpo_screening",
+                        json.dumps(config_patch, sort_keys=True),
+                        trial["config_hash"],
+                        trial["expected_command"],
+                        trial.get("status") or "planned",
+                        trial.get("result_path"),
+                        trial.get("mlflow_run_id"),
+                        trial.get("train_config_path"),
+                        trial.get("manual_review_reason"),
+                        now,
+                        now,
+                    ),
+                )
+            await db.commit()
+        return await self.get_planned_trials(research_id)
+
+    async def record_planned_trial_manual_review(
+        self,
+        *,
+        research_id: str,
+        study_id: Optional[str],
+        expected_command: str,
+        reason: str,
+        search_phase: str = "manual_review",
+        config_patch: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Record an off-plan structured HPO proposal for operator review."""
+        now = datetime.now(timezone.utc).isoformat()
+        payload = config_patch or {"proposed_command": expected_command}
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        config_hash = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+        trial_id = f"manual_review_{uuid.uuid4().hex[:12]}"
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute(
+                """INSERT INTO planned_trials
+                   (research_id, study_id, trial_id, trial_index, search_phase,
+                    config_patch_json, config_hash, expected_command, status,
+                    result_path, mlflow_run_id, train_config_path,
+                    manual_review_reason, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    research_id,
+                    study_id,
+                    trial_id,
+                    -1,
+                    search_phase,
+                    json.dumps(payload, sort_keys=True),
+                    config_hash,
+                    expected_command,
+                    "manual_review",
+                    None,
+                    None,
+                    None,
+                    reason,
+                    now,
+                    now,
+                ),
+            )
+            await db.commit()
+        row = await self.get_planned_trial(research_id, trial_id)
+        return row or {
+            "research_id": research_id,
+            "study_id": study_id,
+            "trial_id": trial_id,
+            "status": "manual_review",
+            "manual_review_reason": reason,
+        }
+
+    async def get_planned_trials(
+        self, research_id: str,
+    ) -> List[Dict[str, Any]]:
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """SELECT * FROM planned_trials
+                   WHERE research_id = ?
+                   ORDER BY
+                     CASE WHEN trial_index < 0 THEN 999999 ELSE trial_index END,
+                     created_at""",
+                (research_id,),
+            )
+            rows = [dict(r) for r in await cursor.fetchall()]
+        for row in rows:
+            self._decode_planned_trial(row)
+        return rows
+
+    async def get_planned_trial(
+        self,
+        research_id: str,
+        trial_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """SELECT * FROM planned_trials
+                   WHERE research_id = ? AND trial_id = ?""",
+                (research_id, trial_id),
+            )
+            row = await cursor.fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        self._decode_planned_trial(result)
+        return result
+
+    async def get_planned_trial_for_command(
+        self,
+        research_id: str,
+        expected_command: str,
+    ) -> Optional[Dict[str, Any]]:
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """SELECT * FROM planned_trials
+                   WHERE research_id = ?
+                     AND expected_command = ?
+                     AND status != 'manual_review'
+                   LIMIT 1""",
+                (research_id, expected_command),
+            )
+            row = await cursor.fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        self._decode_planned_trial(result)
+        return result
+
+    async def update_planned_trial_status(
+        self,
+        *,
+        research_id: str,
+        trial_id: str,
+        status: str,
+        result_path: Optional[str] = None,
+        mlflow_run_id: Optional[str] = None,
+        manual_review_reason: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        now = datetime.now(timezone.utc).isoformat()
+        fields: Dict[str, Any] = {"status": status, "updated_at": now}
+        if result_path is not None:
+            fields["result_path"] = result_path
+        if mlflow_run_id is not None:
+            fields["mlflow_run_id"] = mlflow_run_id
+        if manual_review_reason is not None:
+            fields["manual_review_reason"] = manual_review_reason
+        set_clause = ", ".join(f"{key} = ?" for key in fields)
+        values = list(fields.values()) + [research_id, trial_id]
+        async with aiosqlite.connect(self._db_path) as db:
+            await db.execute(
+                f"""UPDATE planned_trials
+                    SET {set_clause}
+                    WHERE research_id = ? AND trial_id = ?""",
+                values,
+            )
+            await db.commit()
+        return await self.get_planned_trial(research_id, trial_id)
+
+    @staticmethod
+    def _decode_planned_trial(row: Dict[str, Any]) -> None:
+        raw_patch = row.get("config_patch_json")
+        if raw_patch and "config_patch" not in row:
+            try:
+                row["config_patch"] = json.loads(raw_patch)
+            except (json.JSONDecodeError, TypeError):
+                row["config_patch"] = {}
 
     # ------------------------------------------------------------------
     # Promotions

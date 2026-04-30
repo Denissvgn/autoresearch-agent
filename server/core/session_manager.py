@@ -276,6 +276,8 @@ class SessionManager:
     def _build_hpo_plan(self, config: ResearchConfig) -> Dict[str, Any]:
         return build_structured_hpo_plan(
             research_id=config.id,
+            instrument=config.instrument,
+            timeframe=config.timeframe,
             model_type=config.model_type,
             quick_mode=config.quick_mode,
             max_iterations=config.max_iterations,
@@ -312,6 +314,11 @@ class SessionManager:
             budget_json=hpo_plan_json(hpo_plan.get("budget") or {}),
             timeout_s=int(hpo_plan.get("timeout_s") or 0),
             quick_mode=bool(hpo_plan.get("quick_mode")),
+        )
+        await self._store.record_planned_trials(
+            research_id=config.id,
+            study_id=hpo_plan["study_id"],
+            trials=list(hpo_plan.get("trials") or []),
         )
 
     async def _write_manifest(

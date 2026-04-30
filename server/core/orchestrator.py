@@ -7,7 +7,7 @@ import glob as glob_mod
 import json
 import logging
 import os
-import re
+import shlex
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -37,6 +37,7 @@ from server.core.iteration_snapshot import (
 from server.core.log_writer import AgentLogWriter
 from server.core.research_phase_plan import build_phase_state, phase_state_json
 from server.core.results_store import ResultsStore
+from server.core.structured_hpo import materialize_planned_trials
 from server.ws.events import broadcaster
 
 logger = logging.getLogger(__name__)
@@ -204,6 +205,44 @@ def _safe_path(raw: str, workspace: str) -> str:
     ws_real = os.path.realpath(workspace)
     if not resolved.startswith(ws_real + os.sep) and resolved != ws_real:
         raise ValueError(f"Path {raw!r} resolves outside workspace")
+    return resolved
+
+
+def _normalize_command_for_plan(command: str) -> str:
+    try:
+        return " ".join(shlex.split(command))
+    except ValueError:
+        return command.strip()
+
+
+def _is_setup_command(command: str) -> bool:
+    return "scripts/autotuner/setup.py" in command
+
+
+def _config_snapshot_path_from_command(
+    command: str,
+    workspace_root: str,
+    session_workspace: str,
+) -> Optional[str]:
+    try:
+        argv = shlex.split(command)
+    except ValueError:
+        return None
+    if "--config" not in argv:
+        return None
+    index = argv.index("--config") + 1
+    if index >= len(argv):
+        return None
+    raw_path = argv[index]
+    if os.path.isabs(raw_path):
+        resolved = os.path.realpath(raw_path)
+    elif raw_path.startswith("runs/") or raw_path.startswith("./runs/"):
+        resolved = os.path.realpath(os.path.join(workspace_root, raw_path))
+    else:
+        resolved = os.path.realpath(os.path.join(session_workspace, raw_path))
+    session_real = os.path.realpath(session_workspace)
+    if not resolved.startswith(session_real + os.sep) and resolved != session_real:
+        return None
     return resolved
 
 
@@ -652,13 +691,16 @@ class AgentOrchestrator:
         hpo_block = ""
         if config.enable_hpo and config.model_type in ("direction", "volatility"):
             hpo_block = (
-                "\n\nStructured HPO is enabled for this session. Keep the sweep "
-                f"bounded to at most {min(config.hpo_trials, config.max_iterations)} "
-                "training attempts and only vary manifest-approved knobs: "
-                "prediction_horizon, deadzone/ATR threshold, roster, calibration, "
-                "operating threshold, and adaptive_features. Mark HPO-screening "
-                "attempts with search_phase=hpo_screening in any explicit "
-                "ITERATION_RESULT payload."
+                "\n\nStructured HPO is enabled for this session. The server owns "
+                f"the trial list and has bounded it to at most "
+                f"{min(config.hpo_trials, config.max_iterations)} training "
+                "attempts. After setup, use `server_hpo_plan.json` and run only "
+                "the listed expected commands exactly. Do not edit `train.yaml` "
+                "or planned trial YAML files for HPO. If you want a follow-up "
+                "trial outside the plan, describe it as MANUAL_REVIEW_REQUEST "
+                "in text and do not run it. Mark HPO-screening attempts with "
+                "search_phase=hpo_screening in any explicit ITERATION_RESULT "
+                "payload."
             )
 
         # RL needs an enrichment step before the first training run
@@ -683,6 +725,21 @@ class AgentOrchestrator:
                 f"```\n\n"
                 f"5. After baseline, iterate: edit train.yaml → run prepare.py → "
                 f"check metrics → keep or revert."
+            )
+        elif config.enable_hpo and config.model_type in ("direction", "volatility"):
+            enrich_step = (
+                f"2. Read guidance (use read_file tool):\n"
+                f"   - `scripts/autotuner/{config.model_type}/README.md`\n"
+                f"   - `{workspace}/server_hpo_plan.json` after setup completes\n\n"
+                f"3. Run the server-owned structured trials:\n"
+                f"   - The server materializes "
+                f"`{workspace}/planned_trials/<trial_id>/train.yaml` files "
+                f"from the approved plan immediately after setup.\n"
+                f"   - Execute expected commands from "
+                f"`{workspace}/server_hpo_plan.json` exactly.\n\n"
+                f"4. After planned trials finish, interpret results and propose "
+                f"follow-up plans in text only. Off-plan commands require "
+                f"manual review."
             )
         else:
             enrich_step = (
@@ -1068,6 +1125,241 @@ class AgentOrchestrator:
                 exc_info=True,
             )
 
+    @staticmethod
+    def _structured_hpo_enforced(config: ResearchConfig) -> bool:
+        return bool(config.enable_hpo and config.model_type in {"direction", "volatility"})
+
+    async def _active_hpo_study_id(self, research_id: str) -> Optional[str]:
+        studies = await self._store.get_hpo_studies(research_id)
+        for study in studies:
+            if study.get("study_id"):
+                return str(study["study_id"])
+        return None
+
+    async def _ensure_structured_plan_materialized(
+        self,
+        *,
+        config: ResearchConfig,
+        workspace: str,
+        agent_log: AgentLogWriter,
+        turn: int,
+    ) -> None:
+        if not self._structured_hpo_enforced(config):
+            return
+        planned_trials = [
+            trial
+            for trial in await self._store.get_planned_trials(config.id)
+            if trial.get("status") != "manual_review"
+        ]
+        if not planned_trials:
+            return
+        plan = {
+            "schema_version": "autoresearch_structured_hpo_plan.v1",
+            "research_id": config.id,
+            "model_type": config.model_type,
+            "trials": planned_trials,
+        }
+        written = await asyncio.to_thread(
+            materialize_planned_trials,
+            plan,
+            workspace,
+        )
+        if not written:
+            await agent_log.append(
+                "warning",
+                "Structured HPO plan was not materialized because train.yaml "
+                "is not available yet.",
+                turn=turn,
+            )
+            return
+        for trial in written:
+            await self._store.update_planned_trial_status(
+                research_id=config.id,
+                trial_id=trial["trial_id"],
+                status="materialized",
+            )
+        await agent_log.append(
+            "system",
+            f"Materialized {len(written)} server-owned structured HPO trials "
+            f"under {workspace}/planned_trials.",
+            turn=turn,
+        )
+
+    async def _guard_structured_hpo_tool(
+        self,
+        *,
+        config: ResearchConfig,
+        turn: int,
+        tool_name: str,
+        input_data: Dict[str, Any],
+    ) -> tuple[Optional[Dict[str, Any]], Optional[ToolExecutionResult]]:
+        if not self._structured_hpo_enforced(config):
+            return None, None
+
+        if tool_name == "bash":
+            command = str(input_data.get("command", ""))
+            if _is_setup_command(command):
+                return None, None
+            is_training_command = (
+                "prepare.py" in command
+                or "run_phase1c_" in command
+                or "run_phase1b_" in command
+            )
+            if not is_training_command:
+                return None, None
+            normalized = _normalize_command_for_plan(command)
+            planned_trial = await self._store.get_planned_trial_for_command(
+                config.id,
+                normalized,
+            )
+            if planned_trial:
+                return planned_trial, None
+            reason = (
+                "Structured HPO command is outside the server-owned plan. "
+                "Run expected commands from server_hpo_plan.json exactly or "
+                "request manual review."
+            )
+            await self._record_structured_hpo_manual_review(
+                config=config,
+                turn=turn,
+                proposed_action=normalized,
+                reason=reason,
+                config_patch={"proposed_command": normalized},
+            )
+            return None, ToolExecutionResult(
+                (
+                    "Structured HPO manual review required: this training "
+                    "command is outside the server-owned plan. Read "
+                    "server_hpo_plan.json and run an expected_command exactly, "
+                    "or describe the desired follow-up as MANUAL_REVIEW_REQUEST."
+                ),
+                meta={
+                    "policy_allowed": False,
+                    "policy_reason": reason,
+                    "policy_operation": "structured_hpo.manual_review",
+                    "normalized_command": normalized,
+                    "returncode": None,
+                    "timed_out": False,
+                },
+            )
+
+        if tool_name == "write_file":
+            raw_path = str(input_data.get("path", ""))
+            if not self._is_structured_hpo_config_write(raw_path):
+                return None, None
+            reason = (
+                "Structured HPO config files are server-owned. Proposed YAML "
+                "edits must be routed to manual review instead of written."
+            )
+            await self._record_structured_hpo_manual_review(
+                config=config,
+                turn=turn,
+                proposed_action=f"write_file:{raw_path}",
+                reason=reason,
+                config_patch={
+                    "proposed_write_path": raw_path,
+                    "content_length": len(str(input_data.get("content", ""))),
+                },
+            )
+            return None, ToolExecutionResult(
+                (
+                    "Structured HPO manual review required: train.yaml and "
+                    "planned trial YAML files are server-owned in this mode. "
+                    "Describe the desired follow-up as MANUAL_REVIEW_REQUEST."
+                ),
+                meta={
+                    "policy_allowed": False,
+                    "policy_reason": reason,
+                    "policy_operation": "structured_hpo.manual_review",
+                    "returncode": None,
+                    "timed_out": False,
+                },
+            )
+
+        return None, None
+
+    @staticmethod
+    def _is_structured_hpo_config_write(raw_path: str) -> bool:
+        normalized = raw_path.replace("\\", "/")
+        basename = normalized.rsplit("/", 1)[-1]
+        if basename in {"train.yaml", "best_train.yaml"}:
+            return True
+        return "/planned_trials/" in normalized and normalized.endswith((".yaml", ".yml"))
+
+    async def _record_structured_hpo_manual_review(
+        self,
+        *,
+        config: ResearchConfig,
+        turn: int,
+        proposed_action: str,
+        reason: str,
+        config_patch: Dict[str, Any],
+    ) -> None:
+        try:
+            study_id = await self._active_hpo_study_id(config.id)
+            await self._store.record_planned_trial_manual_review(
+                research_id=config.id,
+                study_id=study_id,
+                expected_command=proposed_action,
+                reason=reason,
+                config_patch=config_patch,
+            )
+            await self._store.record_audit_event(
+                actor_id="autoresearch-agent",
+                action="structured_hpo.manual_review",
+                research_id=config.id,
+                pipeline_id=config.pipeline_id,
+                request_metadata={
+                    "turn": turn,
+                    "model_type": config.model_type,
+                    "proposed_action": redact_sensitive_text(proposed_action),
+                },
+                outcome="manual_review",
+                error_message=reason,
+            )
+        except Exception:
+            logger.warning(
+                "Research %s turn %d: failed to record structured HPO "
+                "manual-review state",
+                config.id,
+                turn,
+                exc_info=True,
+            )
+
+    @staticmethod
+    def _attach_planned_trial_metadata(
+        marker: Dict[str, Any],
+        planned_trial: Optional[Dict[str, Any]],
+    ) -> None:
+        if not planned_trial:
+            return
+        marker.setdefault(
+            "search_phase",
+            planned_trial.get("search_phase") or "hpo_screening",
+        )
+        marker["planned_trial_id"] = planned_trial.get("trial_id")
+        marker["config_hash"] = planned_trial.get("config_hash")
+        marker["expected_command"] = planned_trial.get("expected_command")
+        marker["planned_result_path"] = planned_trial.get("result_path")
+
+    async def _finish_planned_trial(
+        self,
+        *,
+        config: ResearchConfig,
+        planned_trial: Optional[Dict[str, Any]],
+        marker: Dict[str, Any],
+        status: str,
+    ) -> None:
+        if not planned_trial:
+            return
+        await self._store.update_planned_trial_status(
+            research_id=config.id,
+            trial_id=planned_trial["trial_id"],
+            status=status,
+            result_path=planned_trial.get("result_path"),
+            mlflow_run_id=marker.get("mlflow_run_id"),
+        )
+
     async def run(self, config: ResearchConfig) -> None:
         """Run the autonomous research loop for a single session."""
         research_id = config.id
@@ -1159,6 +1451,7 @@ class AgentOrchestrator:
                 tool_results = []
                 agent_text = ""
                 turn_recorded_iteration = False
+                last_planned_trial_for_turn: Optional[Dict[str, Any]] = None
 
                 for block in assistant_content:
                     if block.type == "text":
@@ -1188,12 +1481,29 @@ class AgentOrchestrator:
                             meta={"tool_id": block.id, "input": logged_input},
                         )
 
+                        planned_trial_for_tool: Optional[Dict[str, Any]] = None
+                        structured_rejection: Optional[ToolExecutionResult] = None
+                        if isinstance(block.input, dict):
+                            (
+                                planned_trial_for_tool,
+                                structured_rejection,
+                            ) = await self._guard_structured_hpo_tool(
+                                config=config,
+                                turn=turn,
+                                tool_name=block.name,
+                                input_data=block.input,
+                            )
+                        if planned_trial_for_tool:
+                            last_planned_trial_for_turn = planned_trial_for_tool
+
                         # Pre-snapshot: capture train.yaml BEFORE running
                         # prepare.py so we have an immutable config record
                         # for this attempt — preserved even on crash/timeout.
                         _pending_snapshot: Optional[str] = None
                         if (
-                            block.name == "bash"
+                            structured_rejection is None
+                            and isinstance(block.input, dict)
+                            and block.name == "bash"
                             and any(
                                 token in str(block.input.get("command", ""))
                                 for token in (
@@ -1203,24 +1513,40 @@ class AgentOrchestrator:
                                 )
                             )
                         ):
+                            command_for_snapshot = str(block.input.get("command", ""))
+                            snapshot_path = _config_snapshot_path_from_command(
+                                command_for_snapshot,
+                                settings.workspace_root,
+                                workspace,
+                            ) or os.path.join(workspace, "train.yaml")
                             try:
-                                _pending_snapshot = Path(
-                                    os.path.join(workspace, "train.yaml")
-                                ).read_text(encoding="utf-8")
+                                _pending_snapshot = Path(snapshot_path).read_text(
+                                    encoding="utf-8",
+                                )
                             except OSError:
                                 logger.warning(
                                     "Research %s: could not pre-snapshot "
-                                    "train.yaml before prepare.py run",
+                                    "%s before prepare.py run",
                                     research_id,
+                                    snapshot_path,
                                 )
 
-                        tool_execution = await asyncio.to_thread(
-                            _execute_tool,
-                            block.name,
-                            block.input,
-                            settings.workspace_root,
-                            workspace,
-                        )
+                        if structured_rejection is not None:
+                            tool_execution = structured_rejection
+                        else:
+                            if planned_trial_for_tool:
+                                await self._store.update_planned_trial_status(
+                                    research_id=config.id,
+                                    trial_id=planned_trial_for_tool["trial_id"],
+                                    status="running",
+                                )
+                            tool_execution = await asyncio.to_thread(
+                                _execute_tool,
+                                block.name,
+                                block.input,
+                                settings.workspace_root,
+                                workspace,
+                            )
                         tool_result = tool_execution.content
                         tool_meta = tool_execution.meta
                         logger.info(
@@ -1228,6 +1554,23 @@ class AgentOrchestrator:
                             research_id, turn, block.name,
                             tool_result[:200],
                         )
+                        raw_command_for_tool = (
+                            str(block.input.get("command", ""))
+                            if isinstance(block.input, dict)
+                            else ""
+                        )
+                        if (
+                            block.name == "bash"
+                            and _is_setup_command(raw_command_for_tool)
+                            and tool_meta.get("policy_allowed") is not False
+                            and tool_meta.get("returncode") in (0, None)
+                        ):
+                            await self._ensure_structured_plan_materialized(
+                                config=config,
+                                workspace=workspace,
+                                agent_log=agent_log,
+                                turn=turn,
+                            )
                         if (
                             block.name == "bash"
                             and tool_meta.get("policy_allowed") is False
@@ -1282,12 +1625,22 @@ class AgentOrchestrator:
                                     f"{hpo_result.n_trials} trials, best composite="
                                     f"{hpo_result.best_composite:.4f} (turn {turn})"
                                 )
+                                self._attach_planned_trial_metadata(
+                                    hpo_marker,
+                                    planned_trial_for_tool,
+                                )
                                 await self._record_iteration(
                                     research_id, iteration_count,
                                     hpo_marker, total_cost,
                                     workspace=workspace,
                                     turn=turn,
                                     command=_cmd_str,
+                                )
+                                await self._finish_planned_trial(
+                                    config=config,
+                                    planned_trial=planned_trial_for_tool,
+                                    marker=hpo_marker,
+                                    status="completed",
                                 )
                                 turn_recorded_iteration = True
                                 logger.info(
@@ -1330,12 +1683,22 @@ class AgentOrchestrator:
                                     f"Auto-detected from prepare.py output "
                                     f"(turn {turn})"
                                 )
+                                self._attach_planned_trial_metadata(
+                                    marker_from_tool,
+                                    planned_trial_for_tool,
+                                )
                                 await self._record_iteration(
                                     research_id, iteration_count,
                                     marker_from_tool, total_cost,
                                     workspace=workspace,
                                     turn=turn,
                                     command=_cmd_str,
+                                )
+                                await self._finish_planned_trial(
+                                    config=config,
+                                    planned_trial=planned_trial_for_tool,
+                                    marker=marker_from_tool,
+                                    status="completed",
                                 )
                                 turn_recorded_iteration = True
                                 logger.info(
@@ -1366,12 +1729,22 @@ class AgentOrchestrator:
                                     f"auto-detected from prepare.py output "
                                     f"(turn {turn})"
                                 )
+                                self._attach_planned_trial_metadata(
+                                    crash_marker,
+                                    planned_trial_for_tool,
+                                )
                                 await self._record_iteration(
                                     research_id, iteration_count,
                                     crash_marker, total_cost,
                                     workspace=workspace,
                                     turn=turn,
                                     command=_cmd_str,
+                                )
+                                await self._finish_planned_trial(
+                                    config=config,
+                                    planned_trial=planned_trial_for_tool,
+                                    marker=crash_marker,
+                                    status="failed",
                                 )
                                 turn_recorded_iteration = True
                                 logger.info(
@@ -1417,12 +1790,22 @@ class AgentOrchestrator:
                                         f"Auto-detected from marker file "
                                         f"(turn {turn})"
                                     )
+                                    self._attach_planned_trial_metadata(
+                                        marker_from_file,
+                                        planned_trial_for_tool,
+                                    )
                                     await self._record_iteration(
                                         research_id, iteration_count,
                                         marker_from_file, total_cost,
                                         workspace=workspace,
                                         turn=turn,
                                         command=_cmd_str,
+                                    )
+                                    await self._finish_planned_trial(
+                                        config=config,
+                                        planned_trial=planned_trial_for_tool,
+                                        marker=marker_from_file,
+                                        status="completed",
                                     )
                                     turn_recorded_iteration = True
                                     logger.info(
@@ -1447,12 +1830,22 @@ class AgentOrchestrator:
                                         f"auto-detected from marker file "
                                         f"(turn {turn})"
                                     )
+                                    self._attach_planned_trial_metadata(
+                                        crash_marker,
+                                        planned_trial_for_tool,
+                                    )
                                     await self._record_iteration(
                                         research_id, iteration_count,
                                         crash_marker, total_cost,
                                         workspace=workspace,
                                         turn=turn,
                                         command=_cmd_str,
+                                    )
+                                    await self._finish_planned_trial(
+                                        config=config,
+                                        planned_trial=planned_trial_for_tool,
+                                        marker=crash_marker,
+                                        status="failed",
                                     )
                                     turn_recorded_iteration = True
                                     logger.info(
@@ -1489,6 +1882,10 @@ class AgentOrchestrator:
                                     ),
                                     "config_snapshot": _pending_snapshot,
                                 }
+                                self._attach_planned_trial_metadata(
+                                    failed_marker,
+                                    planned_trial_for_tool,
+                                )
                                 await self._record_iteration(
                                     research_id, iteration_count,
                                     failed_marker, total_cost,
@@ -1496,12 +1893,30 @@ class AgentOrchestrator:
                                     turn=turn,
                                     command=_cmd_str,
                                 )
+                                await self._finish_planned_trial(
+                                    config=config,
+                                    planned_trial=planned_trial_for_tool,
+                                    marker=failed_marker,
+                                    status="failed",
+                                )
                                 turn_recorded_iteration = True
                                 logger.info(
                                     "Research %s turn %d: recorded failed "
                                     "attempt %d (%s) from command status",
                                     research_id, turn, iteration_count,
                                     failed_status,
+                                )
+
+                        if planned_trial_for_tool and not turn_recorded_iteration:
+                            rc = tool_meta.get("returncode")
+                            if tool_meta.get("timed_out") or (
+                                isinstance(rc, int) and rc != 0
+                            ):
+                                await self._store.update_planned_trial_status(
+                                    research_id=config.id,
+                                    trial_id=planned_trial_for_tool["trial_id"],
+                                    status="failed",
+                                    result_path=planned_trial_for_tool.get("result_path"),
                                 )
 
                 # Secondary: check for explicit ITERATION_RESULT: markers
@@ -1513,6 +1928,10 @@ class AgentOrchestrator:
                 if agent_text:
                     marker = parse_iteration_marker(agent_text)
                     if marker:
+                        self._attach_planned_trial_metadata(
+                            marker,
+                            last_planned_trial_for_turn,
+                        )
                         if turn_recorded_iteration:
                             # Overwrite last iteration with richer marker
                             await self._attach_consistency_report(
