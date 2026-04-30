@@ -67,6 +67,16 @@ def build_iteration_attempt_snapshot(
             "obs_spec_hash",
             "observation_spec_hash",
         ),
+        "rl_economic_replay_artifact_path": _first_present(
+            marker,
+            "rl_economic_replay_artifact_path",
+            "economic_replay_artifact_path",
+        ),
+        "rl_economic_replay_artifact_hash": _first_present(
+            marker,
+            "rl_economic_replay_artifact_hash",
+            "economic_replay_artifact_hash",
+        ),
         "artifact_hash": _first_present(
             marker,
             "artifact_hash",

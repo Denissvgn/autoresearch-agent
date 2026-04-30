@@ -24,6 +24,8 @@ def test_iteration_attempt_snapshot_hashes_config_and_writes_file(tmp_path: Path
             "status": "failed",
             "artifact_hash": "artifact-sha",
             "feature_schema_hash": "feature-sha",
+            "rl_economic_replay_artifact_path": "/tmp/rl_economic_replay.json",
+            "rl_economic_replay_artifact_hash": "rl-replay-sha",
         },
     )
 
@@ -31,6 +33,10 @@ def test_iteration_attempt_snapshot_hashes_config_and_writes_file(tmp_path: Path
     assert snapshot["status"] == "failed"
     assert snapshot["artifact_hash"] == "artifact-sha"
     assert snapshot["feature_schema_hash"] == "feature-sha"
+    assert snapshot["rl_economic_replay_artifact_path"] == (
+        "/tmp/rl_economic_replay.json"
+    )
+    assert snapshot["rl_economic_replay_artifact_hash"] == "rl-replay-sha"
     assert snapshot["config_snapshot_sha256"]
     assert snapshot["snapshot_hash"]
 

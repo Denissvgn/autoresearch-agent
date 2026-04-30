@@ -62,6 +62,9 @@ gate_tiers:
   economic_replay:
     checks:
       worsening_vs_baseline_blocks_promotion: true
+      replay_artifact_hash_required: true
+      replay_assumptions_required: true
+      profit_score_required: true
   inference_parity:
     required: true
     checks:
@@ -131,6 +134,11 @@ gate_tiers:
         - is_oos_ratio
         - folds_passed
 promotion_blockers:
+  - missing_economic_replay
+  - missing_rl_replay_metrics
+  - missing_rl_economic_replay_artifact_hash
+  - missing_rl_replay_assumptions
+  - missing_rl_profit_score
   - missing_oof_provenance
   - missing_volatility_oof_provenance
   - missing_direction_feature_provenance
@@ -362,6 +370,55 @@ def _passing_rl_oos() -> dict:
     }
 
 
+def _passing_rl_economic_replay() -> dict:
+    return {
+        "schema_version": "rl_economic_replay.v1",
+        "rl_profit_score": 0.235,
+        "artifact_path": "/tmp/autoresearch-session/rl_economic_replay.json",
+        "artifact_hash": "rl-economic-replay-sha",
+        "metrics": {
+            "post_cost_return": 0.03,
+            "max_drawdown": 0.08,
+            "sharpe": 0.4,
+            "sortino": 0.6,
+            "trade_count": 34,
+            "turnover": 8,
+            "hit_rate": 0.67,
+            "average_trade_return": 0.00088,
+        },
+        "assumptions": {
+            "fee_bps": 5.0,
+            "spread_bps": 1.0,
+            "slippage_bps": 2.0,
+            "control": "flat_position_control",
+        },
+        "comparison": {
+            "baseline_name": "flat_position_control",
+            "baseline_post_cost_return": 0.0,
+            "baseline_sharpe": 0.0,
+            "post_cost_return_delta_vs_baseline": 0.03,
+            "post_cost_sharpe_delta_vs_baseline": 0.4,
+        },
+        "gates": {
+            "all_gates_passed": True,
+            "worsening_vs_baseline": False,
+            "metrics": {"post_cost_return_delta_vs_baseline": 0.03},
+        },
+        "folds": [
+            {
+                "fold": 1,
+                "post_cost_return": 0.03,
+                "max_drawdown": 0.08,
+                "sharpe": 0.4,
+                "trade_count": 34,
+                "turnover": 8,
+                "hit_rate": 0.67,
+                "average_trade_return": 0.00088,
+            }
+        ],
+    }
+
+
 def _passing_m7_remaining_metrics() -> dict:
     metrics = _passing_metrics()
     metrics.pop("rollback_target", None)
@@ -406,6 +463,13 @@ def _passing_rl_metrics() -> dict:
             "finalist": True,
             "obs_spec_hash": "obs-spec-sha",
             "rl_oos": _passing_rl_oos(),
+            "rl_economic_replay": _passing_rl_economic_replay(),
+            "economic_replay": _passing_rl_economic_replay(),
+            "rl_profit_score": 0.235,
+            "rl_economic_replay_artifact_path": (
+                "/tmp/autoresearch-session/rl_economic_replay.json"
+            ),
+            "rl_economic_replay_artifact_hash": "rl-economic-replay-sha",
             "model_registry_name": "rl-model",
             "model_version": "5",
             "mlflow_run_id": "run-rl-5",
@@ -528,11 +592,31 @@ async def test_confirm_requires_development_gate_bundle_pass(tmp_path, monkeypat
     monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
     monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
     metrics = _passing_metrics()
-    metrics["economic_replay"] = {}
+    metrics["config"].pop("calibration_full_validation")
     store = FakePromotionStore(_best_iteration(metrics))
 
     with pytest.raises(ValueError, match="development gate bundle failed"):
         await ConfigPromoter(store).confirm("research_1")
+
+
+@pytest.mark.asyncio
+async def test_preview_allows_feature_candidate_without_economic_replay(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+    metrics = _passing_metrics()
+    metrics.pop("economic_replay")
+    store = FakePromotionStore(_best_iteration(metrics))
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    assert preview["promotion_allowed"] is True
+    assert "missing_economic_replay" not in preview["gate_bundle_evaluation"][
+        "blockers"
+    ]
 
 
 @pytest.mark.asyncio
@@ -787,6 +871,62 @@ async def test_preview_accepts_rl_candidate_with_honest_oos_provenance(
     assert gate_eval["passed"] is True
     assert preview["promotion_allowed"] is True
     assert preview["consistency_report"]["passed"] is True
+    assert preview["candidate_pool_record"]["artifact_hash"] is None
+    checks = {check["name"]: check for check in gate_eval["checks"]}
+    assert checks["rl_economic_replay_artifact_hash_recorded"]["status"] == "passed"
+
+
+@pytest.mark.asyncio
+async def test_preview_blocks_rl_candidate_missing_economic_replay(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle_with_rl(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+    metrics = _passing_rl_metrics()
+    metrics.pop("rl_economic_replay")
+    metrics.pop("economic_replay")
+    metrics.pop("rl_economic_replay_artifact_hash")
+    store = FakePromotionStore(_best_iteration(metrics), model_type="rl")
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    assert preview["promotion_allowed"] is False
+    assert "missing_economic_replay" in preview["gate_bundle_evaluation"]["blockers"]
+    assert "missing_economic_replay" in preview["consistency_report"]["blockers"]
+
+
+@pytest.mark.asyncio
+async def test_preview_blocks_rl_candidate_worsening_economic_replay(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle_with_rl(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+    metrics = _passing_rl_metrics()
+    metrics["rl_economic_replay"]["metrics"]["post_cost_return"] = -0.02
+    metrics["rl_economic_replay"]["comparison"][
+        "post_cost_return_delta_vs_baseline"
+    ] = -0.02
+    metrics["rl_economic_replay"]["gates"]["all_gates_passed"] = False
+    metrics["rl_economic_replay"]["gates"]["worsening_vs_baseline"] = True
+    metrics["rl_economic_replay"]["gates"]["metrics"][
+        "post_cost_return_delta_vs_baseline"
+    ] = -0.02
+    metrics["economic_replay"] = metrics["rl_economic_replay"]
+    store = FakePromotionStore(_best_iteration(metrics), model_type="rl")
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    assert preview["promotion_allowed"] is False
+    assert "worsening_post_cost_replay" in preview["gate_bundle_evaluation"][
+        "blockers"
+    ]
+    assert "worsening_post_cost_replay" in preview["consistency_report"][
+        "blockers"
+    ]
 
 
 @pytest.mark.asyncio

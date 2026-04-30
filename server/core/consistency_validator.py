@@ -70,14 +70,18 @@ def build_consistency_report(
         if promotable and model_type in {"direction", "volatility"}
         else None,
     )
-    replay = metrics.get("economic_replay")
+    replay = (
+        _rl_economic_replay_payload(metrics)
+        if model_type == "rl"
+        else metrics.get("economic_replay")
+    )
     replay_ok = _nested_bool(replay, ("gates", "all_gates_passed"))
     if replay is None:
         add(
             "economic_replay_present",
-            "failed" if promotable and model_type in {"direction", "volatility"} else "warning",
+            "failed" if promotable and model_type == "rl" else "warning",
             blocker="missing_economic_replay"
-            if promotable and model_type in {"direction", "volatility"}
+            if promotable and model_type == "rl"
             else None,
         )
     else:
@@ -200,6 +204,50 @@ def build_consistency_report(
                 else ("failed" if promotable else "warning"),
                 blocker="proxy_or_neutral_volatility_feature_fallback"
                 if promotable
+                else None,
+            )
+        if isinstance(replay, dict):
+            replay_hash = (
+                replay.get("artifact_hash")
+                or replay.get("replay_artifact_hash")
+                or metrics.get("rl_economic_replay_artifact_hash")
+            )
+            add(
+                "rl_economic_replay_artifact_hash_recorded",
+                "passed"
+                if replay_hash
+                else ("failed" if promotable else "warning"),
+                blocker="missing_rl_economic_replay_artifact_hash"
+                if promotable
+                else None,
+            )
+            add(
+                "rl_economic_replay_assumptions_present",
+                "passed"
+                if _rl_replay_assumptions_present(replay)
+                else ("failed" if promotable else "warning"),
+                blocker="missing_rl_replay_assumptions" if promotable else None,
+            )
+            add(
+                "rl_profit_score_present",
+                "passed"
+                if _first_number(
+                    replay.get("rl_profit_score"),
+                    metrics.get("rl_profit_score"),
+                )
+                is not None
+                else ("failed" if promotable else "warning"),
+                blocker="missing_rl_profit_score" if promotable else None,
+            )
+            replay_worsening = _rl_replay_worse_than_baseline(replay)
+            add(
+                "rl_economic_replay_not_worse_than_baseline",
+                "passed"
+                if not replay_worsening
+                else ("failed" if promotable else "warning"),
+                blocker="worsening_post_cost_replay" if promotable else None,
+                detail=json.dumps(replay_worsening, sort_keys=True)
+                if replay_worsening
                 else None,
             )
 
@@ -390,6 +438,65 @@ def _rl_feature_bundle_hash(
         if isinstance(value, str) and value.strip():
             return value.strip()
     return None
+
+
+def _rl_economic_replay_payload(metrics: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    rl_oos = _first_dict(metrics.get("rl_oos"), metrics.get("rl_oos_gates"))
+    replay = _first_dict(
+        metrics.get("rl_economic_replay"),
+        metrics.get("economic_replay"),
+        metrics.get("replay"),
+        rl_oos.get("rl_economic_replay"),
+        rl_oos.get("economic_replay"),
+    )
+    return replay or None
+
+
+def _rl_replay_assumptions_present(replay: Dict[str, Any]) -> bool:
+    assumptions = _first_dict(
+        replay.get("assumptions"),
+        replay.get("cost_assumptions"),
+    )
+    return all(
+        _first_number(assumptions.get(key)) is not None
+        for key in ("fee_bps", "spread_bps", "slippage_bps")
+    )
+
+
+def _rl_replay_worse_than_baseline(
+    replay: Dict[str, Any],
+) -> list[Dict[str, Any]]:
+    indicators: list[Dict[str, Any]] = []
+    boolean_keys = (
+        "worsening_vs_baseline",
+        "post_cost_worse_than_baseline",
+        "worse_than_baseline",
+    )
+    numeric_delta_keys = (
+        "post_cost_return_delta_vs_baseline",
+        "post_cost_pnl_delta_vs_baseline",
+        "net_return_delta_vs_baseline",
+        "net_pnl_delta_vs_baseline",
+        "post_cost_sharpe_delta_vs_baseline",
+        "profit_factor_delta_vs_baseline",
+    )
+    containers = [
+        ("replay", replay),
+        ("replay.metrics", _dict_at(replay, "metrics")),
+        ("replay.post_cost_metrics", _dict_at(replay, "post_cost_metrics")),
+        ("replay.comparison", _dict_at(replay, "comparison")),
+        ("replay.baseline_comparison", _dict_at(replay, "baseline_comparison")),
+        ("replay.gates", _dict_at(replay, "gates")),
+    ]
+    for source, container in containers:
+        for key in boolean_keys:
+            if container.get(key) is True:
+                indicators.append({"source": source, "key": key, "value": True})
+        for key in numeric_delta_keys:
+            value = _first_number(container.get(key))
+            if value is not None and value < 0.0:
+                indicators.append({"source": source, "key": key, "value": value})
+    return indicators
 
 
 def _rl_nested_validation_present(rl_oos: Dict[str, Any]) -> bool:

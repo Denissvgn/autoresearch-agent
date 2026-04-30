@@ -240,10 +240,14 @@ def evaluate_development_gate_bundle(
     replay = _first_dict(payload.get("economic_replay"), payload.get("replay"))
     replay_gates = _first_dict(replay.get("gates"), payload.get("replay_gates"))
     add_check(
-        "economic_replay_required",
-        bool(replay_gates),
-        "missing_economic_replay",
-        replay_gates,
+        "feature_model_economic_replay_not_required",
+        True,
+        "feature_model_economic_replay_not_required",
+        {
+            "model_type": model_type,
+            "reason": "RL policy owns post-cost action economics",
+            "replay_present": bool(replay),
+        },
     )
     if replay_gates:
         add_check(
@@ -386,6 +390,14 @@ def _evaluate_rl_development_gate_bundle(
         {"requested_scope": _requested_promotion_scope(payload)},
     )
 
+    _evaluate_rl_economic_replay_gates(
+        bundle=bundle,
+        payload=payload,
+        checks=checks,
+        blockers=blockers,
+        waivers=waivers,
+        add_check=add_check,
+    )
     _evaluate_rl_oos_gates(
         bundle=bundle,
         payload=payload,
@@ -483,6 +495,8 @@ def _post_cost_replay_worsening_details(
         ("replay.metrics", _dict_at(replay, "metrics")),
         ("replay.post_cost_metrics", _dict_at(replay, "post_cost_metrics")),
         ("replay_gates.metrics", _dict_at(replay_gates, "metrics")),
+        ("replay.comparison", _dict_at(replay, "comparison")),
+        ("replay.baseline_comparison", _dict_at(replay, "baseline_comparison")),
     ]
 
     for source, container in containers:
@@ -502,6 +516,191 @@ def _post_cost_replay_worsening_details(
         "worsened": bool(indicators),
         "indicators": indicators,
     }
+
+
+def _evaluate_rl_economic_replay_gates(
+    *,
+    bundle: dict[str, Any],
+    payload: dict[str, Any],
+    checks: list[dict[str, Any]],
+    blockers: list[str],
+    waivers: set[str],
+    add_check: Any,
+) -> None:
+    """Evaluate first-class RL post-cost economic replay evidence."""
+
+    economic_tier = bundle.get("gate_tiers", {}).get("economic_replay", {})
+    if not economic_tier:
+        return
+    tier_checks = economic_tier.get("checks", {}) if isinstance(economic_tier, dict) else {}
+    required = bool(
+        economic_tier.get("required")
+        or economic_tier.get("required_for_rl")
+        or economic_tier.get("required_for_rl_finalists")
+    )
+    finalist = bool(
+        payload.get("finalist")
+        or payload.get("is_finalist")
+        or payload.get("requires_rl_oos")
+        or payload.get("rl_oos")
+    )
+    replay = _rl_economic_replay_payload(payload)
+    if not required and not finalist and not replay:
+        return
+
+    add_check(
+        "rl_economic_replay_required",
+        bool(replay) if finalist or required else True,
+        "missing_economic_replay",
+        replay,
+    )
+    if not replay:
+        return
+
+    add_check(
+        "rl_economic_replay_schema",
+        replay.get("schema_version") == "rl_economic_replay.v1",
+        "invalid_rl_economic_replay_artifact",
+        {"schema_version": replay.get("schema_version")},
+    )
+    replay_gates = _first_dict(replay.get("gates"), payload.get("replay_gates"))
+    if replay_gates:
+        add_check(
+            "rl_economic_replay_gates_passed",
+            replay_gates.get("all_gates_passed") is True,
+            "worsening_post_cost_replay",
+            replay_gates,
+        )
+
+    metrics = _rl_economic_replay_metrics(replay)
+    required_metrics = (
+        "post_cost_return",
+        "max_drawdown",
+        "trade_count",
+        "turnover",
+        "hit_rate",
+        "average_trade_return",
+    )
+    missing_metrics = [
+        name for name in required_metrics if _rl_economic_metric_value(metrics, name) is None
+    ]
+    has_risk_metric = (
+        _rl_economic_metric_value(metrics, "sharpe") is not None
+        or _rl_economic_metric_value(metrics, "sortino") is not None
+    )
+    if not has_risk_metric:
+        missing_metrics.append("sharpe_or_sortino")
+    if tier_checks.get("post_cost_metrics_required", True):
+        add_check(
+            "rl_post_cost_metrics_required",
+            not missing_metrics,
+            "missing_rl_replay_metrics",
+            {"missing": missing_metrics, "metrics": metrics},
+        )
+
+    assumptions = _first_dict(
+        replay.get("assumptions"),
+        replay.get("cost_assumptions"),
+        payload.get("rl_replay_assumptions"),
+    )
+    missing_assumptions = [
+        key
+        for key in ("fee_bps", "spread_bps", "slippage_bps")
+        if _first_number(assumptions.get(key)) is None
+    ]
+    if tier_checks.get("replay_assumptions_required", True):
+        add_check(
+            "rl_replay_assumptions_required",
+            not missing_assumptions,
+            "missing_rl_replay_assumptions",
+            {"missing": missing_assumptions, "assumptions": assumptions},
+        )
+
+    if tier_checks.get("profit_score_required", True):
+        add_check(
+            "rl_profit_score_required",
+            _first_number(replay.get("rl_profit_score"), payload.get("rl_profit_score")) is not None,
+            "missing_rl_profit_score",
+            {"rl_profit_score": replay.get("rl_profit_score") or payload.get("rl_profit_score")},
+        )
+
+    if tier_checks.get("replay_artifact_hash_required", True):
+        add_check(
+            "rl_economic_replay_artifact_hash_recorded",
+            bool(
+                replay.get("artifact_hash")
+                or replay.get("replay_artifact_hash")
+                or payload.get("rl_economic_replay_artifact_hash")
+            ),
+            "missing_rl_economic_replay_artifact_hash",
+            {
+                "artifact_path": replay.get("artifact_path")
+                or payload.get("rl_economic_replay_artifact_path"),
+                "artifact_hash": replay.get("artifact_hash")
+                or replay.get("replay_artifact_hash")
+                or payload.get("rl_economic_replay_artifact_hash"),
+            },
+        )
+
+    if tier_checks.get("worsening_vs_baseline_blocks_promotion") is True:
+        worsening_details = _post_cost_replay_worsening_details(
+            replay,
+            replay_gates,
+        )
+        add_check(
+            "rl_economic_replay_not_worse_than_baseline",
+            not worsening_details["worsened"],
+            "worsening_post_cost_replay",
+            worsening_details,
+        )
+
+
+def _rl_economic_replay_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    rl_oos = _first_dict(payload.get("rl_oos"), payload.get("rl_oos_gates"))
+    replay = _first_dict(
+        payload.get("rl_economic_replay"),
+        payload.get("economic_replay"),
+        payload.get("replay"),
+        rl_oos.get("rl_economic_replay"),
+        rl_oos.get("economic_replay"),
+    )
+    if replay:
+        return replay
+    return {}
+
+
+def _rl_economic_replay_metrics(replay: dict[str, Any]) -> dict[str, Any]:
+    return _first_dict(
+        replay.get("metrics"),
+        replay.get("post_cost_metrics"),
+        replay.get("aggregate"),
+        replay,
+    )
+
+
+def _rl_economic_metric_value(metrics: dict[str, Any], name: str) -> float | None:
+    aliases = {
+        "post_cost_return": (
+            "post_cost_return",
+            "mean_post_cost_return",
+            "total_return",
+            "mean_oos_return",
+            "net_return",
+        ),
+        "max_drawdown": ("max_drawdown", "mean_max_drawdown", "mean_oos_drawdown"),
+        "sharpe": ("sharpe", "mean_sharpe", "mean_oos_sharpe", "oos_sharpe"),
+        "sortino": ("sortino", "mean_sortino", "mean_oos_sortino"),
+        "trade_count": ("trade_count", "trades", "mean_trades", "mean_oos_trades"),
+        "turnover": ("turnover", "mean_turnover", "mean_abs_delta", "mean_flip_count"),
+        "hit_rate": ("hit_rate", "win_rate", "mean_hit_rate", "mean_win_rate"),
+        "average_trade_return": (
+            "average_trade_return",
+            "avg_trade_return",
+            "mean_trade_return",
+        ),
+    }
+    candidates = aliases.get(name, (name,))
+    return _first_number(*(metrics.get(candidate) for candidate in candidates))
 
 
 def _requested_promotion_scope(payload: dict[str, Any]) -> str:
