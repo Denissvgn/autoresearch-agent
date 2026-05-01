@@ -38,6 +38,14 @@ class Settings(BaseSettings):
         default=None,
         description="Bearer token required for autoresearch API and WebSocket access.",
     )
+    autoresearch_prometheus_token: str | None = Field(
+        default=None,
+        description=(
+            "Optional bearer token required to scrape /metrics. When set, "
+            "callers must present 'Authorization: Bearer <token>' or the "
+            "scrape is rejected with HTTP 401. Phase 5.2 hardening."
+        ),
+    )
 
     # --- Anthropic ---
     anthropic_base_url: str = Field(
@@ -93,14 +101,16 @@ class Settings(BaseSettings):
         description="Number of messages before old tool results are compacted.",
     )
     autoresearch_cross_session_duplicate_check: bool = Field(
-        default=False,
+        default=True,
         validation_alias=AliasChoices(
             "AUTORESEARCH_CROSS_SESSION_DUPLICATE_CHECK",
             "AUTORESEARCH_ENABLE_CROSS_SESSION_DUPLICATE_CHECK",
         ),
         description=(
             "Reject duplicate config/seed/mode/split attempts across prior "
-            "sessions for the same instrument, timeframe, and model type."
+            "sessions for the same instrument, timeframe, and model type. "
+            "Phase 3.4: default flipped to True so wasted compute on "
+            "already-explored points is the opt-out, not the opt-in."
         ),
     )
 

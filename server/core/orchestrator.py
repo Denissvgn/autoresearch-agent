@@ -45,6 +45,17 @@ from server.ws.events import broadcaster
 
 logger = logging.getLogger(__name__)
 
+# Phase 2.2: Claude pricing constants (Sonnet 3.5 baseline). These mirror
+# the inline numbers used previously and are referenced both by the
+# post-call cost accounting and the pre-spend budget gate.
+_CLAUDE_INPUT_USD_PER_TOKEN = 3.0 / 1_000_000
+_CLAUDE_OUTPUT_USD_PER_TOKEN = 15.0 / 1_000_000
+_CLAUDE_MAX_OUTPUT_TOKENS = 8192
+
+# Phase 5.4: number of consecutive command-policy rejections after which
+# the agent loop aborts as ``failed`` and waits for operator review.
+_MAX_CONSECUTIVE_POLICY_REJECTIONS = 5
+
 # ---------------------------------------------------------------------------
 # Research config dataclass
 # ---------------------------------------------------------------------------
@@ -348,6 +359,11 @@ def _tool_grep(input_data: Dict[str, Any], workspace: str) -> str:
         cmd += [f"--include={include}"]
     cmd += [pattern, safe_dir]
 
+    # Phase 4.3: this synchronous subprocess.run call is intentional —
+    # _execute_tool is already invoked via ``asyncio.to_thread`` from the
+    # main agent loop, so blocking work here runs on a worker thread and
+    # cannot stall the event loop. Switching to asyncio.create_subprocess_*
+    # would force every tool call site to await individually.
     try:
         result = subprocess.run(
             cmd, capture_output=True, text=True, timeout=30,
@@ -402,28 +418,47 @@ class AgentOrchestrator:
         research_id: str,
         agent_log: AgentLogWriter,
         turn: int,
+        remaining_budget_s: Optional[float] = None,
     ) -> anthropic.types.Message:
         """Call messages.create() with retry + backoff on transient errors.
 
         Retries on APITimeoutError, APIConnectionError, InternalServerError,
         and RateLimitError (429) / 502 / 503 / 529 status codes.
+
+        Phase 2.3: when ``remaining_budget_s`` is provided, the loop refuses
+        to start a backoff sleep that would push the next attempt past the
+        session's wall-clock budget; in that case the last exception is
+        re-raised immediately so the outer turn loop can fail cleanly
+        instead of cancelling mid-sleep.
         """
         max_retries = settings.max_api_retries
         backoff_base = 30  # seconds
+        last_exc: Optional[BaseException] = None
 
         for attempt in range(max_retries + 1):
             try:
                 return await self._client.messages.create(
                     model=settings.anthropic_model,
-                    max_tokens=8192,
+                    max_tokens=_CLAUDE_MAX_OUTPUT_TOKENS,
                     system=system_prompt,
                     tools=AGENT_TOOLS,
                     messages=messages,
                 )
             except self._TRANSIENT_EXCEPTIONS as exc:
+                last_exc = exc
                 if attempt >= max_retries:
                     raise
                 wait = backoff_base * (2 ** attempt)
+                if (
+                    remaining_budget_s is not None
+                    and wait >= remaining_budget_s
+                ):
+                    logger.warning(
+                        "Research %s turn %d: skipping retry — backoff %ds "
+                        "exceeds remaining budget %.0fs",
+                        research_id, turn, wait, remaining_budget_s,
+                    )
+                    raise
                 logger.warning(
                     "Research %s turn %d: transient API error (%s), "
                     "retry %d/%d in %ds",
@@ -438,9 +473,21 @@ class AgentOrchestrator:
                 )
                 await asyncio.sleep(wait)
             except anthropic.APIStatusError as exc:
+                last_exc = exc
                 # Retry on 429 (rate-limit), 502, 503, 529 (overloaded)
                 if exc.status_code in (429, 502, 503, 529) and attempt < max_retries:
                     wait = backoff_base * (2 ** attempt)
+                    if (
+                        remaining_budget_s is not None
+                        and wait >= remaining_budget_s
+                    ):
+                        logger.warning(
+                            "Research %s turn %d: skipping retry on HTTP %d "
+                            "— backoff %ds exceeds remaining budget %.0fs",
+                            research_id, turn, exc.status_code, wait,
+                            remaining_budget_s,
+                        )
+                        raise
                     logger.warning(
                         "Research %s turn %d: API %d, retry %d/%d in %ds",
                         research_id, turn, exc.status_code,
@@ -551,12 +598,29 @@ class AgentOrchestrator:
         )
         marker_path = os.path.join(base_dir, "last_metrics.txt")
         if os.path.exists(marker_path):
+            # Phase 3.3: rename-then-read so a concurrent prepare.py write
+            # cannot have its fresh marker silently deleted by our cleanup.
+            # The rename is atomic on POSIX; if it fails because the file
+            # vanished underneath us we simply return None.
+            claim_path = (
+                f"{marker_path}.consumed.{os.getpid()}.{int(time.time() * 1000)}"
+            )
             try:
-                content = Path(marker_path).read_text(encoding="utf-8")
-                os.remove(marker_path)  # Consume so we don't recount
-                return content
-            except Exception:
+                os.replace(marker_path, claim_path)
+            except FileNotFoundError:
                 return None
+            try:
+                content = Path(claim_path).read_text(encoding="utf-8")
+            except Exception:
+                content = None
+            try:
+                os.remove(claim_path)
+            except OSError:
+                logger.debug(
+                    "Failed to unlink consumed marker %s", claim_path,
+                    exc_info=True,
+                )
+            return content
 
         # Fallback: synthesize a marker from results.json when the agent
         # ran the training script directly (bypassing prepare.py).
@@ -1489,6 +1553,12 @@ class AgentOrchestrator:
 
         iteration_count = 0
         total_cost = 0.0
+        last_input_tokens = 0  # Phase 2.2: rolling estimate for budget gate
+        # Phase 5.4: abort the session if the agent keeps trying to run
+        # commands the policy keeps rejecting — usually a sign of a bad
+        # plan/loop, and burning budget on rejected calls is wasteful.
+        policy_rejections_consecutive = 0
+        _policy_aborted = False
         start_time = time.monotonic()
         max_turns = config.max_iterations * 10  # ~10 turns per iteration
 
@@ -1519,6 +1589,11 @@ class AgentOrchestrator:
                 if self._should_stop(research_id):
                     break
 
+                if _policy_aborted:
+                    # Phase 5.4: bail out as soon as the rejection counter
+                    # tripped on the previous turn.
+                    break
+
                 # Check timeout (per-session override or server default)
                 elapsed = time.monotonic() - start_time
                 _timeout = config.timeout_s if config.timeout_s > 0 else settings.experiment_timeout_s
@@ -1526,6 +1601,35 @@ class AgentOrchestrator:
                     logger.info("Research %s: timeout after %.0fs", research_id, elapsed)
                     await agent_log.append("system", f"Timeout after {elapsed:.0f}s", turn=turn)
                     _timed_out = True
+                    break
+
+                # Phase 2.2: pre-spend cost gate. Refuse to call Claude if
+                # we are already over budget OR if the worst-case spend on
+                # the next turn would exceed the budget. ``last_input_tokens``
+                # tracks the last turn's input size as a proxy for the next
+                # turn's input prompt; for the first turn we fall back to a
+                # conservative max-context estimate.
+                projected_input = max(last_input_tokens, 32_000)
+                projected_turn_cost = (
+                    projected_input * _CLAUDE_INPUT_USD_PER_TOKEN
+                    + _CLAUDE_MAX_OUTPUT_TOKENS * _CLAUDE_OUTPUT_USD_PER_TOKEN
+                )
+                if total_cost >= config.max_budget_usd or (
+                    total_cost + projected_turn_cost > config.max_budget_usd
+                ):
+                    logger.info(
+                        "Research %s: budget gate triggered "
+                        "(spent=$%.4f, projected_next=$%.4f, cap=$%.4f)",
+                        research_id, total_cost, projected_turn_cost,
+                        config.max_budget_usd,
+                    )
+                    await agent_log.append(
+                        "system",
+                        f"Budget cap reached: spent=${total_cost:.4f}, "
+                        f"projected_next=${projected_turn_cost:.4f}, "
+                        f"cap=${config.max_budget_usd:.4f}",
+                        turn=turn,
+                    )
                     break
 
                 # Call Claude (ML-68: with retry + context compaction)
@@ -1538,13 +1642,16 @@ class AgentOrchestrator:
                     research_id=research_id,
                     agent_log=agent_log,
                     turn=turn,
+                    remaining_budget_s=max(0.0, _timeout - elapsed),
                 )
 
                 # Track cost (approximate from usage)
+                turn_cost = 0.0
                 if response.usage:
+                    last_input_tokens = response.usage.input_tokens
                     turn_cost = (
-                        response.usage.input_tokens * 3 / 1_000_000
-                        + response.usage.output_tokens * 15 / 1_000_000
+                        response.usage.input_tokens * _CLAUDE_INPUT_USD_PER_TOKEN
+                        + response.usage.output_tokens * _CLAUDE_OUTPUT_USD_PER_TOKEN
                     )
                     total_cost += turn_cost
 
@@ -1762,6 +1869,27 @@ class AgentOrchestrator:
                                 command=str(block.input.get("command", "")),
                                 tool_meta=tool_meta,
                             )
+                            policy_rejections_consecutive += 1
+                            if policy_rejections_consecutive >= _MAX_CONSECUTIVE_POLICY_REJECTIONS:
+                                _policy_aborted = True
+                                logger.warning(
+                                    "Research %s: aborting after %d "
+                                    "consecutive policy rejections",
+                                    research_id,
+                                    policy_rejections_consecutive,
+                                )
+                                await agent_log.append(
+                                    "system",
+                                    f"Aborting: {policy_rejections_consecutive} "
+                                    "consecutive command-policy rejections. "
+                                    "Operator review required.",
+                                    turn=turn,
+                                )
+                        elif (
+                            block.name == "bash"
+                            and tool_meta.get("policy_allowed") is True
+                        ):
+                            policy_rejections_consecutive = 0
                         await agent_log.append(
                             "tool_result", tool_result[:5000], turn=turn,
                             meta={
@@ -2187,8 +2315,20 @@ class AgentOrchestrator:
                     # Model generated text only — no more tool calls → done
                     break
 
-            # ML-62: Distinguish timeout from normal completion
-            final_status = "timed_out" if _timed_out else "completed"
+            # ML-62 / hardening Phase 1.1: distinguish stop/timeout/completion.
+            # Stop must take precedence over timeout: an operator-driven stop
+            # while the timeout window has also elapsed should not be reported
+            # as `timed_out`, and a stopped session must never auto-promote.
+            if self._should_stop(research_id):
+                final_status = "stopped"
+            elif _policy_aborted:
+                # Phase 5.4: explicit failure — agent kept hitting the
+                # command policy; operator review is required.
+                final_status = "failed"
+            elif _timed_out:
+                final_status = "timed_out"
+            else:
+                final_status = "completed"
             elapsed_total = time.monotonic() - start_time
             await self._store.update_session(
                 research_id,

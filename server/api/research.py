@@ -7,7 +7,7 @@ import os
 from typing import Any, Dict, Optional
 
 import yaml
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from server.api.audit import record_api_audit_event
@@ -232,10 +232,24 @@ async def list_research(
     status: Optional[str] = None,
     model_type: Optional[str] = None,
     instrument: Optional[str] = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
 ):
-    return await _store.list_sessions(
+    """Phase 5.1: paginated session listing."""
+
+    items = await _store.list_sessions(
+        status=status, model_type=model_type, instrument=instrument,
+        limit=limit, offset=offset,
+    )
+    total = await _store.count_sessions(
         status=status, model_type=model_type, instrument=instrument,
     )
+    return {
+        "items": items,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @router.get("/audit-events")
@@ -245,12 +259,26 @@ async def list_audit_events(
     research_id: Optional[str] = None,
     pipeline_id: Optional[str] = None,
 ):
-    return await _store.list_audit_events(
+    events = await _store.list_audit_events(
         limit=limit,
         action=action,
         research_id=research_id,
         pipeline_id=pipeline_id,
     )
+    # Phase 5.3: redact the SHA256 fingerprint suffix in actor_id so the
+    # full hash never leaves the service. We keep the prefix so operators
+    # can correlate events from the same caller across the audit log,
+    # but truncate enough that the full digest cannot be reconstructed.
+    for event in events:
+        actor_id = event.get("actor_id")
+        if (
+            isinstance(actor_id, str)
+            and actor_id.startswith("token_sha256:")
+            and len(actor_id) > len("token_sha256:") + 12
+        ):
+            prefix = actor_id[: len("token_sha256:") + 8]
+            event["actor_id"] = f"{prefix}…"
+    return events
 
 
 @router.get("/research/{research_id}")
@@ -618,8 +646,21 @@ async def list_models():
 async def list_pipelines(
     status: Optional[str] = None,
     instrument: Optional[str] = None,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
 ):
-    return await _store.list_pipelines(status=status, instrument=instrument)
+    """Phase 5.1: paginated pipeline listing."""
+
+    items = await _store.list_pipelines(
+        status=status, instrument=instrument, limit=limit, offset=offset,
+    )
+    total = await _store.count_pipelines(status=status, instrument=instrument)
+    return {
+        "items": items,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @router.get("/status")

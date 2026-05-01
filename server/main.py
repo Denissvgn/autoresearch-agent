@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import secrets
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -85,11 +86,24 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS
+# CORS — Phase 1.4 hardening: when origins is the wildcard, force
+# allow_credentials=False because Starlette will silently produce a
+# response that browsers reject anyway, and combining `*` with
+# credentials=True is unsafe with our shared bearer token.
+_cors_origins = settings.cors_origins
+_cors_allow_credentials = True
+if _cors_origins == ["*"]:
+    logger.warning(
+        "CORS origins is '*'; disabling allow_credentials to comply with "
+        "browser policy. Set AUTORESEARCH_CORS_ORIGINS to an explicit list "
+        "to keep credentialed requests working.",
+    )
+    _cors_allow_credentials = False
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=_cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -128,7 +142,20 @@ async def _collect_observability_snapshot():
 
 
 @app.get("/metrics", include_in_schema=False)
-async def metrics():
+async def metrics(request: Request):
+    # Phase 5.2: optional bearer-token gate for Prometheus scrapers. When
+    # ``autoresearch_prometheus_token`` is unset we keep the previous
+    # unauthenticated behavior (typical in-cluster scrape via NetworkPolicy);
+    # when set we require it explicitly so the endpoint is safe to expose
+    # outside the cluster boundary.
+    expected = settings.autoresearch_prometheus_token
+    if expected:
+        auth = request.headers.get("authorization") or ""
+        if not auth.lower().startswith("bearer "):
+            raise HTTPException(status_code=401, detail="missing bearer token")
+        provided = auth.split(" ", 1)[1].strip()
+        if not secrets.compare_digest(provided, expected):
+            raise HTTPException(status_code=401, detail="invalid scrape token")
     snapshot = await _collect_observability_snapshot()
     return Response(
         content=format_prometheus(snapshot),
@@ -170,15 +197,36 @@ async def websocket_events(websocket: WebSocket):
                 pass  # connection closed — let the outer handler clean up
 
         heartbeat_task = asyncio.create_task(_heartbeat())
+        # Phase 4.2: bound receive_text with a wall-clock timeout and drop
+        # the connection if the peer goes silent for more than N consecutive
+        # idle windows; this catches half-open TCP sockets the OS hasn't
+        # detected yet (heartbeat send failures cover the other direction).
+        idle_window_s = 60
+        max_idle_windows = 5
+        idle_count = 0
         try:
             while True:
-                await websocket.receive_text()
+                try:
+                    await asyncio.wait_for(
+                        websocket.receive_text(), timeout=idle_window_s,
+                    )
+                    idle_count = 0
+                except asyncio.TimeoutError:
+                    idle_count += 1
+                    if idle_count >= max_idle_windows:
+                        logger.info(
+                            "Closing idle WebSocket after %ds of silence",
+                            idle_window_s * max_idle_windows,
+                        )
+                        break
         finally:
             heartbeat_task.cancel()
     except WebSocketDisconnect:
-        broadcaster.disconnect(websocket)
+        await broadcaster.disconnect(websocket)
     except Exception:
-        broadcaster.disconnect(websocket)
+        await broadcaster.disconnect(websocket)
+    else:
+        await broadcaster.disconnect(websocket)
 
 
 # ------------------------------------------------------------------

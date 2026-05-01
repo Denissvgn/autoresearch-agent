@@ -9,7 +9,7 @@ import logging
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import aiosqlite
 
@@ -324,6 +324,29 @@ def _value_rows(values: Dict[str, float], key: str) -> List[Dict[str, Any]]:
     ]
 
 
+async def _add_column_if_missing(
+    db: aiosqlite.Connection,
+    table: str,
+    column_def: str,
+) -> None:
+    """Idempotent ``ALTER TABLE ADD COLUMN`` migration.
+
+    Phase 1.3 hardening: previously each migration was wrapped in a bare
+    ``try/except Exception: pass`` that silently swallowed real errors
+    (disk full, permission denied, locked database). We now query
+    ``PRAGMA table_info`` first and only ALTER when the column is missing,
+    letting any genuine OperationalError propagate so startup fails loudly.
+    """
+
+    column_name = column_def.split()[0]
+    cursor = await db.execute(f"PRAGMA table_info({table})")
+    rows = await cursor.fetchall()
+    existing = {row[1] for row in rows}
+    if column_name in existing:
+        return
+    await db.execute(f"ALTER TABLE {table} ADD COLUMN {column_def}")
+
+
 class ResultsStore:
     """Async SQLite store for experiment data."""
 
@@ -334,141 +357,63 @@ class ResultsStore:
         os.makedirs(os.path.dirname(self._db_path), exist_ok=True)
         async with aiosqlite.connect(self._db_path) as db:
             await db.executescript(_SCHEMA_SQL)
-            # ML-52: Add mlflow_run_id column (safe for existing DBs)
-            try:
-                await db.execute(
-                    "ALTER TABLE iterations ADD COLUMN mlflow_run_id TEXT"
-                )
-            except Exception:
-                pass  # Column already exists
-            # ML-59: Add search_phase + hpo_study_id columns
-            try:
-                await db.execute(
-                    "ALTER TABLE iterations ADD COLUMN search_phase TEXT"
-                )
-            except Exception:
-                pass
-            try:
-                await db.execute(
-                    "ALTER TABLE iterations ADD COLUMN hpo_study_id INTEGER"
-                )
-            except Exception:
-                pass
-            # ML-60: Add insights column for smart resume compaction
-            try:
-                await db.execute(
-                    "ALTER TABLE research_sessions ADD COLUMN insights TEXT"
-                )
-            except Exception:
-                pass
-            # ML-62: Add resumed_from column for session chaining on timeout
-            try:
-                await db.execute(
-                    "ALTER TABLE research_sessions ADD COLUMN resumed_from TEXT"
-                )
-            except Exception:
-                pass
-            # ML-63: Add pipeline_id column to research_sessions
-            try:
-                await db.execute(
-                    "ALTER TABLE research_sessions ADD COLUMN pipeline_id TEXT"
-                )
-            except Exception:
-                pass
-            # DPU-081: immutable research-session manifest
-            try:
-                await db.execute(
-                    "ALTER TABLE research_sessions ADD COLUMN manifest_json TEXT"
-                )
-            except Exception:
-                pass
-            try:
-                await db.execute(
-                    "ALTER TABLE research_sessions ADD COLUMN manifest_path TEXT"
-                )
-            except Exception:
-                pass
-            try:
-                await db.execute(
-                    "ALTER TABLE research_sessions ADD COLUMN manifest_hash TEXT"
-                )
-            except Exception:
-                pass
-            # DPU-084/DPU-087: operator-facing session phase state
-            for column in (
-                "current_phase TEXT",
-                "next_action TEXT",
-                "phase_state_json TEXT",
-            ):
-                try:
-                    await db.execute(
-                        f"ALTER TABLE research_sessions ADD COLUMN {column}"
-                    )
-                except Exception:
-                    pass
-            # DPU-082: server-owned per-attempt snapshots
-            try:
-                await db.execute(
-                    "ALTER TABLE iterations ADD COLUMN attempt_snapshot_json TEXT"
-                )
-            except Exception:
-                pass
-            try:
-                await db.execute(
-                    "ALTER TABLE iterations ADD COLUMN attempt_snapshot_path TEXT"
-                )
-            except Exception:
-                pass
-            try:
-                await db.execute(
-                    "ALTER TABLE iterations ADD COLUMN attempt_snapshot_hash TEXT"
-                )
-            except Exception:
-                pass
-            try:
-                await db.execute(
-                    "ALTER TABLE iterations ADD COLUMN consistency_report_json TEXT"
-                )
-            except Exception:
-                pass
-            # ARP-009: duplicate-safe config/seed trial identities
-            for column in (
+
+            # Phase 1.3 hardening: idempotent column-add migrations driven
+            # by PRAGMA table_info so we skip already-applied columns
+            # without swallowing real OperationalErrors (disk full,
+            # permission denied, locked database).
+            iterations_columns = (
+                # ML-52: MLflow run id
+                "mlflow_run_id TEXT",
+                # ML-59: HPO plan/result metadata
+                "search_phase TEXT",
+                "hpo_study_id INTEGER",
+                # DPU-082: server-owned per-attempt snapshots
+                "attempt_snapshot_json TEXT",
+                "attempt_snapshot_path TEXT",
+                "attempt_snapshot_hash TEXT",
+                "consistency_report_json TEXT",
+                # ARP-009: duplicate-safe config/seed trial identities
                 "canonical_config_hash TEXT",
                 "trial_identity_hash TEXT",
                 "trial_identity_json TEXT",
                 "duplicate_of_research_id TEXT",
                 "duplicate_of_iteration INTEGER",
                 "duplicate_reason TEXT",
-            ):
-                try:
-                    await db.execute(
-                        f"ALTER TABLE iterations ADD COLUMN {column}"
-                    )
-                except Exception:
-                    pass
-            for column in (
+            )
+            for column_def in iterations_columns:
+                await _add_column_if_missing(db, "iterations", column_def)
+
+            research_session_columns = (
+                # ML-60 / ML-62 / ML-63
+                "insights TEXT",
+                "resumed_from TEXT",
+                "pipeline_id TEXT",
+                # DPU-081: immutable research-session manifest
+                "manifest_json TEXT",
+                "manifest_path TEXT",
+                "manifest_hash TEXT",
+                # DPU-084 / DPU-087: operator-facing session phase state
+                "current_phase TEXT",
+                "next_action TEXT",
+                "phase_state_json TEXT",
+            )
+            for column_def in research_session_columns:
+                await _add_column_if_missing(
+                    db, "research_sessions", column_def,
+                )
+
+            for column_def in (
                 "canonical_config_hash TEXT",
                 "trial_identity_hash TEXT",
                 "trial_identity_json TEXT",
             ):
-                try:
-                    await db.execute(
-                        f"ALTER TABLE planned_trials ADD COLUMN {column}"
-                    )
-                except Exception:
-                    pass
-            for statement in (
-                "CREATE INDEX IF NOT EXISTS idx_iterations_trial_identity_hash "
-                "ON iterations(trial_identity_hash)",
-                "CREATE INDEX IF NOT EXISTS idx_planned_trials_trial_identity_hash "
-                "ON planned_trials(trial_identity_hash)",
-            ):
-                try:
-                    await db.execute(statement)
-                except Exception:
-                    pass
+                await _add_column_if_missing(
+                    db, "planned_trials", column_def,
+                )
+
             # DPU-085: structured HPO plan/result metadata
-            for column in (
+            for column_def in (
                 "study_id TEXT",
                 "max_trials INTEGER",
                 "search_space_json TEXT",
@@ -476,71 +421,45 @@ class ResultsStore:
                 "timeout_s INTEGER",
                 "quick_mode INTEGER DEFAULT 0",
             ):
-                try:
-                    await db.execute(
-                        f"ALTER TABLE hpo_studies ADD COLUMN {column}"
-                    )
-                except Exception:
-                    pass
-            # DPU-070: versioned development-promotion decision metadata
-            try:
-                await db.execute(
-                    "ALTER TABLE promotions "
-                    "ADD COLUMN scope TEXT NOT NULL DEFAULT 'development'"
+                await _add_column_if_missing(
+                    db, "hpo_studies", column_def,
                 )
-            except Exception:
-                pass
-            try:
-                await db.execute(
-                    "ALTER TABLE promotions ADD COLUMN metadata_path TEXT"
-                )
-            except Exception:
-                pass
-            try:
-                await db.execute(
-                    "ALTER TABLE promotions ADD COLUMN promotion_metadata_json TEXT"
-                )
-            except Exception:
-                pass
-            # DPU-071: development rollback audit metadata
-            try:
-                await db.execute(
-                    "ALTER TABLE promotions ADD COLUMN rollback_metadata_path TEXT"
-                )
-            except Exception:
-                pass
-            try:
-                await db.execute(
-                    "ALTER TABLE promotions ADD COLUMN rollback_metadata_json TEXT"
-                )
-            except Exception:
-                pass
-            try:
-                await db.execute(
-                    "ALTER TABLE promotions ADD COLUMN rolled_back_at TEXT"
-                )
-            except Exception:
-                pass
+
+            # DPU-070 / DPU-071: promotion decision + rollback metadata
+            promotion_columns = (
+                "scope TEXT NOT NULL DEFAULT 'development'",
+                "metadata_path TEXT",
+                "promotion_metadata_json TEXT",
+                "rollback_metadata_path TEXT",
+                "rollback_metadata_json TEXT",
+                "rolled_back_at TEXT",
+            )
+            for column_def in promotion_columns:
+                await _add_column_if_missing(db, "promotions", column_def)
+
             # ARP-005: pipeline-owned promotion diagnostics
-            for column in (
+            for column_def in (
                 "promotion_blocked_phase TEXT",
                 "promotion_blockers_json TEXT",
                 "promotion_preview_json TEXT",
             ):
-                try:
-                    await db.execute(
-                        f"ALTER TABLE pipelines ADD COLUMN {column}"
-                    )
-                except Exception:
-                    pass
-            try:
-                await db.execute(
-                    "CREATE INDEX IF NOT EXISTS "
-                    "idx_runtime_commands_research_status "
-                    "ON runtime_commands(research_id, status)"
-                )
-            except Exception:
-                pass
+                await _add_column_if_missing(db, "pipelines", column_def)
+
+            # CREATE INDEX IF NOT EXISTS is already idempotent at the SQL
+            # level; no helper needed.
+            for statement in (
+                "CREATE INDEX IF NOT EXISTS "
+                "idx_iterations_trial_identity_hash "
+                "ON iterations(trial_identity_hash)",
+                "CREATE INDEX IF NOT EXISTS "
+                "idx_planned_trials_trial_identity_hash "
+                "ON planned_trials(trial_identity_hash)",
+                "CREATE INDEX IF NOT EXISTS "
+                "idx_runtime_commands_research_status "
+                "ON runtime_commands(research_id, status)",
+            ):
+                await db.execute(statement)
+
             await db.commit()
         logger.info("Results store initialized at %s", self._db_path)
 
@@ -707,12 +626,58 @@ class ResultsStore:
         status: Optional[str] = None,
         model_type: Optional[str] = None,
         instrument: Optional[str] = None,
+        status_in: Optional[Sequence[str]] = None,
+        limit: Optional[int] = None,
+        offset: int = 0,
     ) -> List[Dict[str, Any]]:
         clauses = []
         params: list = []
         if status:
             clauses.append("status = ?")
             params.append(status)
+        if status_in:
+            placeholders = ",".join("?" for _ in status_in)
+            clauses.append(f"status IN ({placeholders})")
+            params.extend(status_in)
+        if model_type:
+            clauses.append("model_type = ?")
+            params.append(model_type)
+        if instrument:
+            clauses.append("instrument = ?")
+            params.append(instrument)
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        # Phase 5.1: pagination — bounded LIMIT/OFFSET so callers can't
+        # accidentally pull tens of thousands of rows in one shot.
+        suffix = ""
+        if limit is not None:
+            suffix = f" LIMIT {int(limit)} OFFSET {int(offset)}"
+        async with aiosqlite.connect(self._db_path) as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                f"SELECT * FROM research_sessions{where} "
+                f"ORDER BY started_at DESC{suffix}",
+                params,
+            )
+            return [dict(r) for r in await cursor.fetchall()]
+
+    async def count_sessions(
+        self,
+        status: Optional[str] = None,
+        model_type: Optional[str] = None,
+        instrument: Optional[str] = None,
+        status_in: Optional[Sequence[str]] = None,
+    ) -> int:
+        """Phase 5.1: total count for paginated listings."""
+
+        clauses = []
+        params: list = []
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if status_in:
+            placeholders = ",".join("?" for _ in status_in)
+            clauses.append(f"status IN ({placeholders})")
+            params.extend(status_in)
         if model_type:
             clauses.append("model_type = ?")
             params.append(model_type)
@@ -721,12 +686,11 @@ class ResultsStore:
             params.append(instrument)
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
         async with aiosqlite.connect(self._db_path) as db:
-            db.row_factory = aiosqlite.Row
             cursor = await db.execute(
-                f"SELECT * FROM research_sessions{where} ORDER BY started_at DESC",
-                params,
+                f"SELECT COUNT(*) FROM research_sessions{where}", params,
             )
-            return [dict(r) for r in await cursor.fetchall()]
+            row = await cursor.fetchone()
+            return int(row[0]) if row else 0
 
     # ------------------------------------------------------------------
     # Runtime commands (ARP-013)
@@ -2007,6 +1971,8 @@ class ResultsStore:
         self,
         status: Optional[str] = None,
         instrument: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: int = 0,
     ) -> List[Dict[str, Any]]:
         clauses = []
         params: list = []
@@ -2017,16 +1983,43 @@ class ResultsStore:
             clauses.append("instrument = ?")
             params.append(instrument)
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        suffix = ""
+        if limit is not None:
+            suffix = f" LIMIT {int(limit)} OFFSET {int(offset)}"
         async with aiosqlite.connect(self._db_path) as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
-                f"SELECT * FROM pipelines{where} ORDER BY started_at DESC",
+                f"SELECT * FROM pipelines{where} "
+                f"ORDER BY started_at DESC{suffix}",
                 params,
             )
             rows = [dict(r) for r in await cursor.fetchall()]
             for row in rows:
                 self._decode_pipeline_metadata(row)
             return rows
+
+    async def count_pipelines(
+        self,
+        status: Optional[str] = None,
+        instrument: Optional[str] = None,
+    ) -> int:
+        """Phase 5.1: total count for paginated pipeline listings."""
+
+        clauses = []
+        params: list = []
+        if status:
+            clauses.append("status = ?")
+            params.append(status)
+        if instrument:
+            clauses.append("instrument = ?")
+            params.append(instrument)
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        async with aiosqlite.connect(self._db_path) as db:
+            cursor = await db.execute(
+                f"SELECT COUNT(*) FROM pipelines{where}", params,
+            )
+            row = await cursor.fetchone()
+            return int(row[0]) if row else 0
 
     async def update_pipeline(
         self, pipeline_id: str, **fields: Any,

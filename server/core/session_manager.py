@@ -22,8 +22,15 @@ from server.core.service_preflight import (
     run_service_preflight,
 )
 from server.core.structured_hpo import build_structured_hpo_plan, hpo_plan_json
+from server.ws.events import broadcaster
 
 logger = logging.getLogger(__name__)
+
+# Phase 2.1: grace window added to the soft timeout when computing the
+# hard wall-clock cap enforced via asyncio.wait_for. The orchestrator's
+# per-turn timeout fires at the soft cap and finalizes state cleanly;
+# the hard cap is a safety net for stuck tool calls or hung API requests.
+_HARD_TIMEOUT_GRACE_S = 600  # 10 minutes
 
 
 @dataclass
@@ -51,9 +58,66 @@ class SessionManager:
     def is_running(self, research_id: str) -> bool:
         return research_id in self._active
 
+    # ------------------------------------------------------------------
+    # Phase 1.2: observe spawned-task exceptions
+    # ------------------------------------------------------------------
+
+    def _attach_done_callback(
+        self,
+        task: asyncio.Task,
+        *,
+        research_id: Optional[str] = None,
+        pipeline_id: Optional[str] = None,
+    ) -> None:
+        """Log + broadcast any uncaught exception escaping a background task.
+
+        The orchestrator's main ``run()`` catches and records exceptions
+        inside its own try/except, so this callback is a safety net for
+        failures in the wrapper coroutines (e.g. ``_run_and_cleanup``) or
+        for code paths that raise before/after the orchestrator's own
+        handler. Without this, such failures became silent
+        ``Task exception was never retrieved`` warnings at GC time with no
+        operator-visible signal.
+        """
+
+        def _on_done(t: asyncio.Task) -> None:
+            if t.cancelled():
+                return
+            exc = t.exception()
+            if exc is None:
+                return
+            kind = "pipeline" if pipeline_id else "research"
+            ident = pipeline_id or research_id or t.get_name()
+            logger.error(
+                "Background %s task %s crashed: %s",
+                kind, ident, exc, exc_info=exc,
+            )
+            event = {
+                "event": f"{kind}_failed",
+                f"{kind}_id": ident,
+                "error": str(exc)[:500],
+                "source": "task_done_callback",
+            }
+            try:
+                # Best-effort broadcast; we are inside a sync callback so
+                # we schedule the coroutine on the running loop.
+                loop = asyncio.get_running_loop()
+                loop.create_task(broadcaster.broadcast(event))
+            except RuntimeError:
+                # No running loop (interpreter shutdown) — drop silently.
+                pass
+
+        task.add_done_callback(_on_done)
+
     async def recover_orphaned_sessions(self) -> Dict[str, int]:
         """Classify sessions left active by a previous service process."""
-        sessions = await self._store.list_sessions()
+        # Phase 4.5: filter at the SQL layer to only candidate statuses;
+        # the prior implementation pulled every session ever recorded and
+        # then short-circuited on terminal statuses in Python, which got
+        # expensive once the DB had thousands of rows.
+        sessions = await self._store.list_sessions(
+            status_in=("running", "paused"),
+        )
         summary = {
             "resumable": 0,
             "interrupted": 0,
@@ -225,6 +289,7 @@ class SessionManager:
             self._run_and_cleanup(research_id, config),
             name=f"research-{research_id}",
         )
+        self._attach_done_callback(task, research_id=research_id)
         self._active[research_id] = ActiveSession(
             research_id=research_id,
             task=task,
@@ -242,9 +307,46 @@ class SessionManager:
     async def _run_and_cleanup(
         self, research_id: str, config: ResearchConfig,
     ) -> None:
-        """Wrapper that ensures cleanup after the orchestrator finishes."""
+        """Wrapper that ensures cleanup after the orchestrator finishes.
+
+        Phase 2.1: enforce a hard wall-clock timeout via ``asyncio.wait_for``
+        so a stuck tool call or hung Claude API request cannot keep the
+        session alive past its budget. The hard cap is the soft cap plus a
+        grace window so the orchestrator's per-turn timeout still has a
+        chance to fire and finalize state cleanly first.
+        """
+        soft_timeout = (
+            config.timeout_s if config.timeout_s > 0
+            else settings.experiment_timeout_s
+        )
+        hard_timeout = soft_timeout + _HARD_TIMEOUT_GRACE_S
         try:
-            await self._orchestrator.run(config)
+            await asyncio.wait_for(
+                self._orchestrator.run(config),
+                timeout=hard_timeout,
+            )
+        except asyncio.TimeoutError:
+            # The orchestrator's CancelledError branch already wrote
+            # status="stopped"; overwrite to "timed_out" because this was a
+            # safety-net cancel, not an operator stop.
+            logger.warning(
+                "Research %s exceeded hard timeout %ds — forcing timed_out",
+                research_id, hard_timeout,
+            )
+            try:
+                await self._store.update_session(
+                    research_id,
+                    status="timed_out",
+                    completed_at=datetime.now(timezone.utc).isoformat(),
+                    error_message=(
+                        f"Hard timeout ({hard_timeout}s) exceeded; "
+                        "session was forcibly cancelled."
+                    ),
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to mark research %s as timed_out", research_id,
+                )
         finally:
             self._active.pop(research_id, None)
 
@@ -534,6 +636,7 @@ class SessionManager:
             self._run_and_cleanup(research_id, config),
             name=f"research-{research_id}",
         )
+        self._attach_done_callback(task, research_id=research_id)
         self._active[research_id] = ActiveSession(
             research_id=research_id,
             task=task,
@@ -677,6 +780,7 @@ class SessionManager:
             self._run_pipeline_and_cleanup(pipeline_id, config),
             name=f"pipeline-{pipeline_id}",
         )
+        self._attach_done_callback(task, pipeline_id=pipeline_id)
         self._active_pipelines[pipeline_id] = task
 
         logger.info(
@@ -791,6 +895,7 @@ class SessionManager:
             self._run_and_cleanup(research_id, config),
             name=f"research-{research_id}",
         )
+        self._attach_done_callback(task, research_id=research_id)
         self._active[research_id] = ActiveSession(
             research_id=research_id,
             task=task,
@@ -806,7 +911,14 @@ class SessionManager:
         return await self._store.get_session(research_id)
 
     async def stop_pipeline(self, pipeline_id: str) -> bool:
-        """Stop a running pipeline and its current phase session."""
+        """Stop a running pipeline and its current phase session.
+
+        The pipeline's terminal status is set by the controller's finally
+        path; we only mark `stopped` here because the controller does not
+        own a stop-vs-complete distinction the way the per-session
+        orchestrator does. If you change PipelineController to surface
+        stop/complete distinctly, drop the eager update here too.
+        """
         task = self._active_pipelines.get(pipeline_id)
         if not task or task.done():
             return False
@@ -891,6 +1003,7 @@ class SessionManager:
             self._run_pipeline_and_cleanup(pipeline_id, config),
             name=f"pipeline-{pipeline_id}",
         )
+        self._attach_done_callback(task, pipeline_id=pipeline_id)
         self._active_pipelines[pipeline_id] = task
 
         logger.info(
@@ -900,12 +1013,17 @@ class SessionManager:
         return await self._store.get_pipeline(pipeline_id)
 
     async def stop_session(self, research_id: str) -> bool:
-        """Request a graceful stop for a running session."""
+        """Request a graceful stop for a running session.
+
+        The DB transition to a terminal status is intentionally left to the
+        orchestrator's finally-block so we don't race the loop and clobber a
+        legitimate `completed`/`timed_out`/`failed` status with `stopped`.
+        Callers should poll `get_session` if they need the final state.
+        """
         active = self._active.get(research_id)
         if not active:
             return False
         self._orchestrator.request_stop(research_id)
-        await self._store.update_session(research_id, status="stopped")
         logger.info("Stop requested for research %s", research_id)
         return True
 
@@ -944,9 +1062,14 @@ class SessionManager:
         )
         if tasks:
             await asyncio.wait(tasks, timeout=15)
-            for task in tasks:
-                if not task.done():
-                    task.cancel()
+            still_running = [t for t in tasks if not t.done()]
+            for task in still_running:
+                task.cancel()
+            # Phase 4.4: drain the cancellations so we never return from
+            # shutdown with detached tasks still being torn down. Suppress
+            # the cancellation exceptions since we are the ones cancelling.
+            if still_running:
+                await asyncio.gather(*still_running, return_exceptions=True)
         self._active.clear()
         self._active_pipelines.clear()
         logger.info("All sessions shut down")

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from server.api.audit import record_api_audit_event
 from server.api.auth import require_api_auth
@@ -55,6 +55,36 @@ class PromotionApproval(BaseModel):
 class PromotionScopeRequest(BaseModel):
     scope: str = "development"
     approval: PromotionApproval | None = None
+
+    @model_validator(mode="after")
+    def _enforce_production_approval(self) -> "PromotionScopeRequest":
+        """Phase 3.2: production scope requires a complete signed approval.
+
+        A production promotion is irreversible from the operator's view —
+        it overwrites the active config that live trading consumes — so we
+        refuse the request unless the caller provides ``approved=True``
+        plus a non-empty ``approver``, ``signature``, and ``method`` so the
+        audit log has full provenance.
+        """
+        if (self.scope or "").lower() != "production":
+            return self
+        approval = self.approval
+        missing: list[str] = []
+        if approval is None:
+            missing.append("approval")
+        else:
+            if approval.approved is not True:
+                missing.append("approval.approved=true")
+            for field_name in ("approver", "signature", "method"):
+                value = getattr(approval, field_name, None)
+                if not (isinstance(value, str) and value.strip()):
+                    missing.append(f"approval.{field_name}")
+        if missing:
+            raise ValueError(
+                "Production-scope promotion requires a signed approval; "
+                f"missing or invalid: {', '.join(missing)}"
+            )
+        return self
 
 
 def _approval_payload(approval: PromotionApproval | None) -> dict | None:

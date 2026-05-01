@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 import os
+import tempfile
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,6 +30,39 @@ from server.core.development_signal_health import build_development_signal_healt
 from server.core.results_store import ResultsStore
 
 logger = logging.getLogger(__name__)
+
+
+def _atomic_write_text(path: str, content: str) -> None:
+    """Sync helper: tmp+fsync+os.replace atomic write.
+
+    Phase 3.1 hardening for config/metadata promotion durability.
+    """
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        prefix=f".{target.name}.",
+        suffix=".tmp",
+        dir=str(target.parent),
+    )
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as fh:
+            fh.write(content)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp_path, str(target))
+        # fsync the directory entry so the rename survives a power loss
+        dir_fd = os.open(str(target.parent), os.O_DIRECTORY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except BaseException:
+        # Best-effort cleanup of the tmp file if the rename never happened
+        try:
+            os.unlink(tmp_path)
+        except FileNotFoundError:
+            pass
+        raise
 
 DEVELOPMENT_PROMOTION_METADATA_VERSION = "development_promotion_metadata.v1"
 SCOPED_PROMOTION_METADATA_VERSION = "scoped_promotion_decision.v1"
@@ -378,6 +412,7 @@ class ConfigPromoter:
         promote_script = os.path.join(
             settings.autotuner_scripts_dir, "promote.py",
         )
+        metadata_already_written = False
         if os.path.exists(promote_script):
             # Write the DB config snapshot to a versioned, immutable path
             # so promote.py reads the server-confirmed config and never
@@ -430,27 +465,34 @@ class ConfigPromoter:
                 )
             logger.info("promote.py succeeded: %s", result.stdout[:500])
         else:
-            # Direct write fallback
-            await asyncio.to_thread(os.makedirs, os.path.dirname(target_path), exist_ok=True)
-            await asyncio.to_thread(
-                Path(target_path).write_text, preview["new_config"], encoding="utf-8",
+            # Direct write fallback — Phase 3.1: write metadata sidecar
+            # first so a crash mid-promotion never leaves an active config
+            # without provenance metadata; then atomically swap the config.
+            metadata_path = self._metadata_sidecar_path(target_path, preview["iteration"])
+            metadata = self._finalize_development_promotion_metadata(
+                metadata=metadata,
+                metadata_path=metadata_path,
+                promotion_record_created=True,
             )
+            await self._write_text_file(
+                metadata_path,
+                json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+            )
+            await self._write_text_file(target_path, preview["new_config"])
             logger.info("Wrote promoted config to %s", target_path)
+            metadata_already_written = True
 
-        metadata_path = self._metadata_sidecar_path(target_path, preview["iteration"])
-        metadata = self._finalize_development_promotion_metadata(
-            metadata=metadata,
-            metadata_path=metadata_path,
-            promotion_record_created=True,
-        )
-        await asyncio.to_thread(
-            os.makedirs, os.path.dirname(metadata_path), exist_ok=True
-        )
-        await asyncio.to_thread(
-            Path(metadata_path).write_text,
-            json.dumps(metadata, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+        if not metadata_already_written:
+            metadata_path = self._metadata_sidecar_path(target_path, preview["iteration"])
+            metadata = self._finalize_development_promotion_metadata(
+                metadata=metadata,
+                metadata_path=metadata_path,
+                promotion_record_created=True,
+            )
+            await self._write_text_file(
+                metadata_path,
+                json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+            )
 
         # Record promotion
         promotion = await self._store.record_promotion(
@@ -1685,12 +1727,15 @@ class ConfigPromoter:
 
     @staticmethod
     async def _write_text_file(path: str, content: str) -> None:
-        await asyncio.to_thread(os.makedirs, os.path.dirname(path), exist_ok=True)
-        await asyncio.to_thread(
-            Path(path).write_text,
-            content,
-            encoding="utf-8",
-        )
+        """Atomic write: tmp file → fsync → os.replace.
+
+        Phase 3.1: durability hardening. A crash mid-write previously could
+        leave a half-written config or metadata sidecar at the target path;
+        the tmp+rename pattern guarantees readers either see the old
+        complete content or the new complete content. The directory is also
+        fsync'd so the rename itself survives a power loss.
+        """
+        await asyncio.to_thread(_atomic_write_text, path, content)
 
     def _build_rollback_readiness(
         self,
