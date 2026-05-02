@@ -242,6 +242,19 @@ async def _record_auth_rejection(
 ) -> None:
     store = _audit_store_from_connection(connection)
     if store is None:
+        metadata = _connection_metadata(
+            connection,
+            mechanism=mechanism,
+            status_code=exc.status_code,
+        )
+        logger.warning(
+            "Authentication rejection could not be audited "
+            "(mechanism=%s status=%s path=%s client=%s)",
+            mechanism,
+            exc.status_code,
+            metadata.get("path"),
+            metadata.get("client_host"),
+        )
         return
     try:
         await store.record_audit_event(

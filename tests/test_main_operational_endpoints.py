@@ -15,6 +15,9 @@ class FakeSessionManager:
 
 
 class FakeStore:
+    async def ping(self) -> bool:
+        return True
+
     async def collect_observability_metrics(self, *, active_sessions: int) -> dict[str, Any]:
         return empty_observability_snapshot(active_sessions=active_sessions)
 
@@ -28,10 +31,24 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     return TestClient(main_module.app)
 
 
-def test_metrics_exports_prometheus_client_runtime_and_custom_metrics(
+def test_metrics_returns_404_when_scrape_token_unset(
     client: TestClient,
 ) -> None:
     response = client.get("/metrics")
+
+    assert response.status_code == 404
+
+
+def test_metrics_exports_prometheus_client_runtime_and_custom_metrics(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(main_module.settings, "autoresearch_prometheus_token", "scrape-token")
+
+    response = client.get(
+        "/metrics",
+        headers={"Authorization": "Bearer scrape-token"},
+    )
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/plain")
@@ -76,6 +93,26 @@ def test_app_has_platform_header_dependency() -> None:
     )
 
 
+def test_runtime_config_requires_metrics_token_in_production(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(main_module.settings, "environment", "production")
+    monkeypatch.setattr(main_module.settings, "autoresearch_prometheus_token", None)
+
+    with pytest.raises(RuntimeError, match="PROMETHEUS_TOKEN"):
+        main_module._validate_runtime_configuration()
+
+
+def test_runtime_config_rejects_multiple_workers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(main_module.settings, "environment", "development")
+    monkeypatch.setenv("WEB_CONCURRENCY", "2")
+
+    with pytest.raises(RuntimeError, match="single-instance"):
+        main_module._validate_runtime_configuration()
+
+
 def test_readiness_reports_internal_state(client: TestClient) -> None:
     response = client.get("/health/ready")
 
@@ -87,4 +124,5 @@ def test_readiness_reports_internal_state(client: TestClient) -> None:
     assert payload["active_sessions"] == 3
     assert payload["checks"]["store_initialized"] is True
     assert payload["checks"]["session_manager_initialized"] is True
+    assert payload["checks"]["db_ready"] is True
     assert payload["dependencies"]["status"] == "not_run"

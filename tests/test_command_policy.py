@@ -87,6 +87,7 @@ def test_command_policy_allows_known_training_operations(tmp_path: Path):
         "cp train.yaml /tmp/best_train.yaml",
         ".venv/bin/python -c 'print(123)'",
         "cat results.json | head",
+        "ln -s train.yaml linked.yaml",
     ],
 )
 def test_command_policy_blocks_unsafe_commands(tmp_path: Path, command: str):
@@ -100,6 +101,44 @@ def test_command_policy_blocks_unsafe_commands(tmp_path: Path, command: str):
 
     assert not decision.allowed
     assert decision.reason
+
+
+def test_command_policy_rejects_symlink_escape_for_cat(tmp_path: Path):
+    workspace, session = _workspace(tmp_path)
+    outside = tmp_path / "outside" / "results.json"
+    outside.parent.mkdir()
+    outside.write_text("secret", encoding="utf-8")
+    link = Path(session) / "results.json"
+    link.symlink_to(outside)
+
+    decision = evaluate_command_policy(
+        "cat results.json",
+        workspace_root=workspace,
+        session_workspace=session,
+    )
+
+    assert not decision.allowed
+    assert "session workspace" in decision.reason
+
+
+def test_file_tools_reject_and_filter_symlink_escapes(tmp_path: Path):
+    workspace, _ = _workspace(tmp_path)
+    outside = tmp_path / "outside.txt"
+    outside.write_text("secret", encoding="utf-8")
+    link = Path(workspace) / "linked.txt"
+    link.symlink_to(outside)
+
+    read_result = _execute_tool("read_file", {"path": "linked.txt"}, workspace)
+    write_result = _execute_tool(
+        "write_file",
+        {"path": "linked.txt", "content": "replacement"},
+        workspace,
+    )
+    glob_result = _execute_tool("glob", {"pattern": "*.txt"}, workspace)
+
+    assert "resolves outside workspace" in read_result.content
+    assert "symlink" in write_result.content
+    assert "linked.txt" not in glob_result.content
 
 
 def test_governed_runner_executes_without_shell_and_redacts_output(tmp_path: Path):
@@ -145,7 +184,7 @@ def test_governed_runner_timeout_cleans_process_group(tmp_path: Path):
                 "import pathlib, subprocess, sys, time",
                 (
                     "child = subprocess.Popen([sys.executable, '-c', "
-                    "'import time; time.sleep(60)'])"
+                    "'import time; time.sleep(60)'], start_new_session=True)"
                 ),
                 f"pathlib.Path({str(child_pid_path)!r}).write_text(str(child.pid))",
                 "time.sleep(60)",

@@ -26,11 +26,10 @@ from src.ws.events import broadcaster
 
 logger = logging.getLogger(__name__)
 
-# Phase 2.1: grace window added to the soft timeout when computing the
-# hard wall-clock cap enforced via asyncio.wait_for. The orchestrator's
-# per-turn timeout fires at the soft cap and finalizes state cleanly;
-# the hard cap is a safety net for stuck tool calls or hung API requests.
-_HARD_TIMEOUT_GRACE_S = 600  # 10 minutes
+def _hard_timeout_grace_s(soft_timeout_s: int) -> int:
+    """Bound hard-timeout grace to 5% of the soft timeout, 3-10 minutes."""
+
+    return min(600, max(180, int(soft_timeout_s * 0.05)))
 
 
 @dataclass
@@ -50,6 +49,8 @@ class SessionManager:
         self._pipeline_ctrl = PipelineController(store, self)
         self._active: Dict[str, ActiveSession] = {}
         self._active_pipelines: Dict[str, asyncio.Task] = {}
+        self._session_spawn_lock = asyncio.Lock()
+        self._pipeline_spawn_lock = asyncio.Lock()
 
     @property
     def active_count(self) -> int:
@@ -188,7 +189,17 @@ class SessionManager:
             "running_commands": runtime_commands,
         }
 
-    async def start_session(
+    async def start_session(self, **kwargs: Any) -> Dict:
+        workspace_path = self._workspace_path_from_kwargs(kwargs)
+        async with self._session_spawn_lock:
+            try:
+                return await self._start_session_unlocked(**kwargs)
+            except Exception as exc:
+                if workspace_path and not isinstance(exc, RuntimeError):
+                    await self._cleanup_failed_start_workspace(workspace_path)
+                raise
+
+    async def _start_session_unlocked(
         self,
         *,
         instrument: str,
@@ -319,7 +330,8 @@ class SessionManager:
             config.timeout_s if config.timeout_s > 0
             else settings.experiment_timeout_s
         )
-        hard_timeout = soft_timeout + _HARD_TIMEOUT_GRACE_S
+        grace_s = _hard_timeout_grace_s(int(soft_timeout))
+        hard_timeout = soft_timeout + grace_s
         try:
             await asyncio.wait_for(
                 self._orchestrator.run(config),
@@ -339,7 +351,7 @@ class SessionManager:
                     status="timed_out",
                     completed_at=datetime.now(timezone.utc).isoformat(),
                     error_message=(
-                        f"Hard timeout ({hard_timeout}s) exceeded; "
+                        f"Hard timeout ({hard_timeout}s, grace={grace_s}s) exceeded; "
                         "session was forcibly cancelled."
                     ),
                 )
@@ -513,7 +525,11 @@ class SessionManager:
         )
         return str(path)
 
-    async def continue_session(
+    async def continue_session(self, parent_id: str, **kwargs: Any) -> Dict:
+        async with self._session_spawn_lock:
+            return await self._continue_session_unlocked(parent_id, **kwargs)
+
+    async def _continue_session_unlocked(
         self,
         parent_id: str,
         *,
@@ -696,7 +712,11 @@ class SessionManager:
     # Pipeline sessions (ML-63)
     # ------------------------------------------------------------------
 
-    async def start_pipeline(
+    async def start_pipeline(self, **kwargs: Any) -> Dict:
+        async with self._pipeline_spawn_lock:
+            return await self._start_pipeline_unlocked(**kwargs)
+
+    async def _start_pipeline_unlocked(
         self,
         *,
         instrument: str,
@@ -798,7 +818,17 @@ class SessionManager:
         finally:
             self._active_pipelines.pop(pipeline_id, None)
 
-    async def start_phase_session(
+    async def start_phase_session(self, **kwargs: Any) -> Dict:
+        workspace_path = self._workspace_path_from_kwargs(kwargs)
+        async with self._session_spawn_lock:
+            try:
+                return await self._start_phase_session_unlocked(**kwargs)
+            except Exception as exc:
+                if workspace_path and not isinstance(exc, RuntimeError):
+                    await self._cleanup_failed_start_workspace(workspace_path)
+                raise
+
+    async def _start_phase_session_unlocked(
         self,
         *,
         instrument: str,
@@ -931,13 +961,23 @@ class SessionManager:
             for phase in ("direction", "volatility", "rl"):
                 sid = pipe.get(f"{phase}_session_id")
                 if sid and self.is_running(sid):
-                    self._orchestrator.request_stop(sid)
+                    await self.stop_session(sid)
 
         await self._store.update_pipeline(pipeline_id, status="stopped")
+        await self._drain_or_cancel_task(
+            task,
+            label=f"pipeline {pipeline_id}",
+            active_dict=self._active_pipelines,
+            active_key=pipeline_id,
+        )
         logger.info("Stop requested for pipeline %s", pipeline_id)
         return True
 
-    async def continue_pipeline(
+    async def continue_pipeline(self, pipeline_id: str, **kwargs: Any) -> Dict:
+        async with self._pipeline_spawn_lock:
+            return await self._continue_pipeline_unlocked(pipeline_id, **kwargs)
+
+    async def _continue_pipeline_unlocked(
         self,
         pipeline_id: str,
         *,
@@ -1024,8 +1064,58 @@ class SessionManager:
         if not active:
             return False
         self._orchestrator.request_stop(research_id)
+        await self._drain_or_cancel_task(
+            active.task,
+            label=f"research {research_id}",
+            active_dict=self._active,
+            active_key=research_id,
+        )
         logger.info("Stop requested for research %s", research_id)
         return True
+
+    async def _drain_or_cancel_task(
+        self,
+        task: asyncio.Task,
+        *,
+        label: str,
+        active_dict: Dict[str, Any],
+        active_key: str,
+        grace_s: float = 5.0,
+    ) -> None:
+        """Wait briefly for graceful stop, then cancel and free the active slot."""
+
+        done, _ = await asyncio.wait({task}, timeout=grace_s)
+        if done:
+            return
+        logger.warning("%s did not stop within %.1fs; cancelling", label, grace_s)
+        task.cancel()
+        try:
+            await asyncio.wait_for(task, timeout=grace_s)
+        except asyncio.CancelledError:
+            pass
+        except asyncio.TimeoutError:
+            logger.error("%s cancellation did not drain within %.1fs", label, grace_s)
+        finally:
+            active_dict.pop(active_key, None)
+
+    @staticmethod
+    def _workspace_path_from_kwargs(kwargs: Dict[str, Any]) -> Optional[str]:
+        instrument = kwargs.get("instrument")
+        timeframe = kwargs.get("timeframe")
+        model_type = kwargs.get("model_type")
+        if not instrument or not timeframe or not model_type:
+            return None
+        return f"{settings.runs_dir}/{instrument}_{timeframe}/{model_type}"
+
+    async def _cleanup_failed_start_workspace(self, workspace_path: str) -> None:
+        path = Path(workspace_path)
+        if not path.exists():
+            return
+        try:
+            await asyncio.to_thread(shutil.rmtree, str(path), ignore_errors=True)
+            logger.warning("Cleaned workspace after failed session start: %s", path)
+        except Exception:
+            logger.exception("Failed to clean workspace after start failure: %s", path)
 
     async def pause_session(self, research_id: str) -> bool:
         active = self._active.get(research_id)
@@ -1056,20 +1146,20 @@ class SessionManager:
         for pipeline_id in list(self._active_pipelines):
             self._pipeline_ctrl.request_stop(pipeline_id)
         # Wait a few seconds for graceful completion
-        tasks = (
-            [s.task for s in self._active.values()]
-            + list(self._active_pipelines.values())
-        )
-        if tasks:
-            await asyncio.wait(tasks, timeout=15)
-            still_running = [t for t in tasks if not t.done()]
-            for task in still_running:
-                task.cancel()
-            # Phase 4.4: drain the cancellations so we never return from
-            # shutdown with detached tasks still being torn down. Suppress
-            # the cancellation exceptions since we are the ones cancelling.
-            if still_running:
-                await asyncio.gather(*still_running, return_exceptions=True)
-        self._active.clear()
-        self._active_pipelines.clear()
+        for research_id, active in list(self._active.items()):
+            await self._drain_or_cancel_task(
+                active.task,
+                label=f"research {research_id}",
+                active_dict=self._active,
+                active_key=research_id,
+                grace_s=5.0,
+            )
+        for pipeline_id, task in list(self._active_pipelines.items()):
+            await self._drain_or_cancel_task(
+                task,
+                label=f"pipeline {pipeline_id}",
+                active_dict=self._active_pipelines,
+                active_key=pipeline_id,
+                grace_s=5.0,
+            )
         logger.info("All sessions shut down")

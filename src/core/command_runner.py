@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-import re
 import os
+import re
 import signal
 import subprocess
 from dataclasses import dataclass
 
 from src.core.command_policy import CommandDecision, evaluate_command_policy
+
+try:
+    import psutil
+except ImportError:  # pragma: no cover - dependency is declared for runtime.
+    psutil = None  # type: ignore[assignment]
 
 
 _MAX_OUTPUT_LEN = 60_000
@@ -74,7 +79,11 @@ class GovernedCommandRunner:
                 partial = _truncate_output(redact_sensitive_text(partial))
             timeout_msg = f"\n[Command timed out after {timeout_s}s]"
             return CommandRunResult(
-                output=(partial + timeout_msg) if partial else f"Command timed out after {timeout_s}s",
+                output=(
+                    (partial + timeout_msg)
+                    if partial
+                    else f"Command timed out after {timeout_s}s"
+                ),
                 decision=decision,
                 returncode=proc.returncode,
                 timed_out=True,
@@ -121,8 +130,44 @@ def _truncate_output(output: str) -> str:
 
 
 def _terminate_process_group(proc: subprocess.Popen[str]) -> tuple[str | None, str | None]:
-    """Terminate a timed-out process and every child in its process group."""
+    """Terminate a timed-out process and its descendant tree."""
 
+    if psutil is not None:
+        try:
+            root = psutil.Process(proc.pid)
+            targets = root.children(recursive=True) + [root]
+            for process in targets:
+                try:
+                    process.terminate()
+                except psutil.NoSuchProcess:
+                    pass
+            _, alive = psutil.wait_procs(targets, timeout=5)
+            for process in alive:
+                try:
+                    process.kill()
+                except psutil.NoSuchProcess:
+                    pass
+            if alive:
+                psutil.wait_procs(alive, timeout=5)
+        except psutil.NoSuchProcess:
+            pass
+        try:
+            proc.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+        try:
+            return proc.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+            return proc.communicate()
+
+    # Fallback for environments that have not installed psutil yet.
     try:
         os.killpg(proc.pid, signal.SIGTERM)
     except ProcessLookupError:

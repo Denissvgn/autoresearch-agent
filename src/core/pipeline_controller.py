@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 PHASES = ["direction", "volatility", "rl"]
 DEFAULT_BUDGET_RATIOS = {"direction": 0.4, "volatility": 0.3, "rl": 0.3}
+VALID_PHASES = set(PHASES)
 
 
 def _promotion_blockers(
@@ -131,7 +132,7 @@ class PipelineConfig:
         self.max_budget_usd = max_budget_usd
         self.timeout_s = timeout_s
         self.focus_hint = focus_hint
-        self.phase_budgets = phase_budgets
+        self.phase_budgets = self._validate_phase_budgets(phase_budgets)
         self.completed_phases = completed_phases or []
         self.trading_mode = trading_mode
         self.agent_strategy = agent_strategy
@@ -139,6 +140,24 @@ class PipelineConfig:
         self.enable_hpo = enable_hpo
         self.hpo_trials = hpo_trials
         self.hpo_timesteps = hpo_timesteps
+
+    @staticmethod
+    def _validate_phase_budgets(
+        phase_budgets: Optional[Dict[str, int]],
+    ) -> Optional[Dict[str, int]]:
+        if phase_budgets is None:
+            return None
+        unknown = sorted(set(phase_budgets) - VALID_PHASES)
+        if unknown:
+            raise ValueError(f"Unknown phase budget keys: {', '.join(unknown)}")
+        invalid = {
+            phase: budget
+            for phase, budget in phase_budgets.items()
+            if not isinstance(budget, int) or budget < 1
+        }
+        if invalid:
+            raise ValueError("phase_budgets values must be integers >= 1")
+        return dict(phase_budgets)
 
 
 class PipelineController:
@@ -257,7 +276,7 @@ class PipelineController:
                             session_id, phase,
                         )
                     except PipelinePromotionBlocked as exc:
-                        await self._mark_promotion_blocked(
+                        await self._safe_mark_promotion_blocked(
                             pipeline_id=pipeline_id,
                             phase=phase,
                             session_id=session_id,
@@ -467,6 +486,55 @@ class PipelineController:
             "Pipeline %s: phase %s promotion blocked: %s",
             pipeline_id, phase, ", ".join(exc.blockers) or exc.error or "unknown",
         )
+
+    async def _safe_mark_promotion_blocked(
+        self,
+        *,
+        pipeline_id: str,
+        phase: str,
+        session_id: str,
+        completed_phases: List[str],
+        exc: PipelinePromotionBlocked,
+    ) -> None:
+        try:
+            await self._mark_promotion_blocked(
+                pipeline_id=pipeline_id,
+                phase=phase,
+                session_id=session_id,
+                completed_phases=completed_phases,
+                exc=exc,
+            )
+        except Exception as persist_exc:
+            logger.exception(
+                "Pipeline %s: failed to persist promotion_blocked state",
+                pipeline_id,
+            )
+            await self._store.update_pipeline(
+                pipeline_id,
+                status="phase_promotion_failed",
+                current_phase=phase,
+                completed_phases=json.dumps(completed_phases),
+                completed_at=datetime.now(timezone.utc).isoformat(),
+                error_message=(
+                    "promotion_blocked persistence failed: "
+                    f"{persist_exc}"
+                )[:2000],
+                promotion_blocked_phase=phase,
+                promotion_blockers_json=json.dumps(
+                    ["persistence_failed"],
+                    sort_keys=True,
+                ),
+                promotion_preview_json=json.dumps(
+                    {
+                        "schema_version": "pipeline_promotion_blocked.v1",
+                        "pipeline_id": pipeline_id,
+                        "phase": phase,
+                        "session_id": session_id,
+                        "reason": "persistence_failed",
+                    },
+                    sort_keys=True,
+                ),
+            )
 
     async def _run_enrichment(self, config: PipelineConfig) -> None:
         """Run enrich_rl_dataset.py between volatility and rl phases."""

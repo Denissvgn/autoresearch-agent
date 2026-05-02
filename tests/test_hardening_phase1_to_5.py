@@ -119,9 +119,13 @@ class _FakeWS:
     def __init__(self, *, fail: bool = False) -> None:
         self.fail = fail
         self.sent: list[str] = []
+        self.closed_code: int | None = None
 
     async def accept(self, *, subprotocol: str | None = None) -> None:
         return None
+
+    async def close(self, *, code: int = 1000) -> None:
+        self.closed_code = code
 
     async def send_text(self, payload: str) -> None:
         if self.fail:
@@ -145,6 +149,18 @@ async def test_broadcaster_drops_dead_clients_under_concurrent_churn() -> None:
     assert bc.client_count <= 1
 
 
+@pytest.mark.asyncio
+async def test_broadcaster_rejects_clients_over_cap() -> None:
+    bc = EventBroadcaster()
+    first = _FakeWS()
+    second = _FakeWS()
+
+    assert await bc.connect(first, max_clients=1) is True
+    assert await bc.connect(second, max_clients=1) is False
+    assert second.closed_code == 1013
+    assert bc.client_count == 1
+
+
 # ---------------------------------------------------------------------------
 # Phase 4.5 + 5.1 — list_sessions filtering and pagination
 # ---------------------------------------------------------------------------
@@ -155,7 +171,10 @@ async def store(tmp_path: Path) -> ResultsStore:
     db_path = tmp_path / "rs.db"
     s = ResultsStore(db_path=str(db_path))
     await s.initialize()
-    return s
+    try:
+        yield s
+    finally:
+        await s.close()
 
 
 @pytest.mark.asyncio
@@ -186,7 +205,40 @@ async def test_list_sessions_status_in_filters_at_sql_level(store: ResultsStore)
 
 @pytest.mark.asyncio
 async def test_results_store_records_schema_version(store: ResultsStore) -> None:
-    assert await store.get_schema_version() == 1
+    assert await store.get_schema_version() == 2
+    assert await store.ping() is True
+
+
+@pytest.mark.asyncio
+async def test_results_store_idempotency_records_replay_and_conflict(
+    store: ResultsStore,
+) -> None:
+    first = await store.begin_idempotency_record(
+        operation="research.continue",
+        parent_id="res_parent",
+        key_hash="key",
+        request_hash="request-a",
+    )
+    assert first is None
+
+    await store.complete_idempotency_record(
+        operation="research.continue",
+        parent_id="res_parent",
+        key_hash="key",
+        child_id="res_child",
+        response={"id": "res_child", "status": "running"},
+    )
+
+    replay = await store.begin_idempotency_record(
+        operation="research.continue",
+        parent_id="res_parent",
+        key_hash="key",
+        request_hash="request-a",
+    )
+    assert replay is not None
+    assert replay["status"] == "completed"
+    assert replay["child_id"] == "res_child"
+    assert replay["request_hash"] == "request-a"
 
 
 @pytest.mark.asyncio

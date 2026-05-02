@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 import os
 from pathlib import Path
 
@@ -89,6 +90,7 @@ class FakeSessionManager:
 class FakeStore:
     def __init__(self) -> None:
         self.audit_events: list[dict] = []
+        self.idempotency_records: dict[tuple[str, str, str], dict] = {}
 
     async def list_sessions(self, **kwargs):
         return []
@@ -137,6 +139,57 @@ class FakeStore:
         }
         self.audit_events.append(event)
         return event
+
+    async def begin_idempotency_record(
+        self,
+        *,
+        operation: str,
+        parent_id: str,
+        key_hash: str,
+        request_hash: str,
+    ):
+        key = (operation, parent_id, key_hash)
+        existing = self.idempotency_records.get(key)
+        if existing:
+            return dict(existing)
+        self.idempotency_records[key] = {
+            "operation": operation,
+            "parent_id": parent_id,
+            "key_hash": key_hash,
+            "request_hash": request_hash,
+            "status": "running",
+            "response_json": None,
+        }
+        return None
+
+    async def complete_idempotency_record(
+        self,
+        *,
+        operation: str,
+        parent_id: str,
+        key_hash: str,
+        child_id: str | None,
+        response: dict,
+    ):
+        import json
+
+        key = (operation, parent_id, key_hash)
+        self.idempotency_records[key].update(
+            {
+                "status": "completed",
+                "child_id": child_id,
+                "response_json": json.dumps(response, sort_keys=True),
+            }
+        )
+
+    async def delete_idempotency_record(
+        self,
+        *,
+        operation: str,
+        parent_id: str,
+        key_hash: str,
+    ):
+        self.idempotency_records.pop((operation, parent_id, key_hash), None)
 
     async def list_audit_events(
         self,
@@ -274,7 +327,7 @@ def test_authenticated_api_calls_preserve_existing_behavior(client: TestClient):
     runtime_resume = client.post(
         "/api/research/res_auth/runtime-resume",
         json={"reason": "operator reviewed recovery state"},
-        headers=auth_headers(),
+        headers={**auth_headers(), "Idempotency-Key": "runtime-resume-auth"},
     )
     assert runtime_resume.status_code == 201
     assert runtime_resume.json()["id"] == "res_auth_runtime_resumed"
@@ -286,6 +339,51 @@ def test_authenticated_api_calls_preserve_existing_behavior(client: TestClient):
     )
     assert rollback.status_code == 200
     assert rollback.json()["rolled_back"] is True
+
+
+def test_pipeline_phase_budgets_are_validated(client: TestClient):
+    response = client.post(
+        "/api/research/start",
+        json={
+            "instrument": "DOGE_USDT",
+            "timeframe": "15m",
+            "model_type": "pipeline",
+            "phase_budgets": {"direction": 1, "surprise": 2},
+        },
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 422
+
+
+def test_continue_requires_and_replays_idempotency_key(client: TestClient):
+    missing = client.post(
+        "/api/research/res_auth/continue",
+        headers=auth_headers(),
+    )
+    assert missing.status_code == 400
+
+    headers = {**auth_headers(), "Idempotency-Key": "continue-key"}
+    first = client.post(
+        "/api/research/res_auth/continue",
+        json={"max_iterations": 7},
+        headers=headers,
+    )
+    replay = client.post(
+        "/api/research/res_auth/continue",
+        json={"max_iterations": 7},
+        headers=headers,
+    )
+    conflict = client.post(
+        "/api/research/res_auth/continue",
+        json={"max_iterations": 8},
+        headers=headers,
+    )
+
+    assert first.status_code == 201
+    assert replay.status_code == 201
+    assert replay.json() == first.json()
+    assert conflict.status_code == 409
 
 
 def test_state_changing_research_requests_write_audit_events(
@@ -384,6 +482,22 @@ def test_rejected_api_auth_records_audit_fingerprint_not_token(
     assert event["outcome"] == "failure"
     assert event["actor_id"].startswith("token_sha256:")
     assert "wrong-token" not in str(event)
+
+
+def test_rejected_api_auth_warns_when_audit_store_missing(caplog):
+    app = FastAPI()
+    app.include_router(research.router)
+    local_client = TestClient(app)
+
+    with caplog.at_level(logging.WARNING):
+        response = local_client.get(
+            "/api/research",
+            headers={"Authorization": "Bearer wrong-token"},
+        )
+
+    assert response.status_code == 401
+    assert "could not be audited" in caplog.text
+    assert "wrong-token" not in caplog.text
 
 
 def test_identity_jwt_admin_token_is_accepted(

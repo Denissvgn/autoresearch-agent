@@ -26,12 +26,26 @@ class EventBroadcaster:
         self._clients: Set[WebSocket] = set()
         self._lock = asyncio.Lock()
 
-    async def connect(self, websocket: WebSocket, *, subprotocol: str | None = None) -> None:
-        await websocket.accept(subprotocol=subprotocol)
+    async def connect(
+        self,
+        websocket: WebSocket,
+        *,
+        subprotocol: str | None = None,
+        max_clients: int | None = None,
+    ) -> bool:
         async with self._lock:
+            if max_clients is not None and len(self._clients) >= max_clients:
+                logger.warning(
+                    "Rejecting WebSocket client: max clients reached (%d)",
+                    max_clients,
+                )
+                await websocket.close(code=1013)
+                return False
+            await websocket.accept(subprotocol=subprotocol)
             self._clients.add(websocket)
             count = len(self._clients)
         logger.info("WebSocket client connected (total: %d)", count)
+        return True
 
     async def disconnect(self, websocket: WebSocket) -> None:
         async with self._lock:
@@ -50,7 +64,8 @@ class EventBroadcaster:
         for ws in snapshot:
             try:
                 await ws.send_text(payload)
-            except Exception:
+            except Exception as exc:
+                logger.debug("WebSocket send failed: %s", exc)
                 dead.append(ws)
         if dead:
             async with self._lock:

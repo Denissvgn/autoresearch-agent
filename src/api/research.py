@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 import glob
+import hashlib
+import json
 import os
+from collections.abc import Awaitable, Callable
 from typing import Any, Dict, Optional
 
 import yaml
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from pydantic import BaseModel, Field, field_validator
 
 from src.api.audit import record_api_audit_event
 from src.api.auth import require_api_auth
 from src.config import settings
 
 router = APIRouter(prefix="/api", tags=["research"], dependencies=[Depends(require_api_auth)])
+VALID_PIPELINE_PHASES = {"direction", "volatility", "rl"}
 
 # These will be injected by main.py
 _session_manager = None
@@ -90,6 +94,93 @@ async def _audit(
     )
 
 
+def _validate_phase_budgets(value: Optional[Dict[str, int]]) -> Optional[Dict[str, int]]:
+    if value is None:
+        return None
+    unknown = sorted(set(value) - VALID_PIPELINE_PHASES)
+    if unknown:
+        raise ValueError(f"Unknown phase budget keys: {', '.join(unknown)}")
+    invalid = {
+        phase: budget
+        for phase, budget in value.items()
+        if not isinstance(budget, int) or budget < 1
+    }
+    if invalid:
+        raise ValueError("phase_budgets values must be integers >= 1")
+    return value
+
+
+def _json_hash(payload: Any) -> str:
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+async def _run_idempotent(
+    *,
+    operation: str,
+    parent_id: str,
+    key: str | None,
+    request_payload: Dict[str, Any],
+    call: Callable[[], Awaitable[Dict[str, Any]]],
+) -> Dict[str, Any]:
+    if not key or not key.strip():
+        raise HTTPException(status_code=400, detail="Idempotency-Key header is required")
+    if _store is None:
+        raise HTTPException(status_code=503, detail="Results store is not initialized")
+
+    key_hash = hashlib.sha256(key.strip().encode("utf-8")).hexdigest()
+    request_hash = _json_hash(
+        {
+            "operation": operation,
+            "parent_id": parent_id,
+            "request": request_payload,
+        }
+    )
+    existing = await _store.begin_idempotency_record(
+        operation=operation,
+        parent_id=parent_id,
+        key_hash=key_hash,
+        request_hash=request_hash,
+    )
+    if existing:
+        if existing.get("request_hash") != request_hash:
+            raise HTTPException(
+                status_code=409,
+                detail="Idempotency-Key was already used for a different request",
+            )
+        if existing.get("status") == "completed" and existing.get("response_json"):
+            try:
+                return json.loads(existing["response_json"])
+            except (json.JSONDecodeError, TypeError) as exc:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Stored idempotency response is invalid",
+                ) from exc
+        raise HTTPException(
+            status_code=409,
+            detail="Idempotent request is already in progress",
+        )
+
+    try:
+        response = await call()
+    except Exception:
+        await _store.delete_idempotency_record(
+            operation=operation,
+            parent_id=parent_id,
+            key_hash=key_hash,
+        )
+        raise
+
+    await _store.complete_idempotency_record(
+        operation=operation,
+        parent_id=parent_id,
+        key_hash=key_hash,
+        child_id=response.get("id"),
+        response=response,
+    )
+    return response
+
+
 # ------------------------------------------------------------------
 # Request / Response models
 # ------------------------------------------------------------------
@@ -143,7 +234,10 @@ class StartResearchRequest(BaseModel):
     # ML-63: Pipeline settings
     phase_budgets: Optional[Dict[str, int]] = Field(
         default=None,
-        description="Per-phase iteration budget for pipeline mode: {direction: N, volatility: N, rl: N}",
+        description=(
+            "Per-phase iteration budget for pipeline mode: "
+            "{direction: N, volatility: N, rl: N}"
+        ),
     )
     manifest: Optional[Dict[str, Any]] = Field(
         default=None,
@@ -152,6 +246,11 @@ class StartResearchRequest(BaseModel):
             "fields must still match the server-generated session."
         ),
     )
+
+    @field_validator("phase_budgets")
+    @classmethod
+    def validate_phase_budgets(cls, value: Optional[Dict[str, int]]) -> Optional[Dict[str, int]]:
+        return _validate_phase_budgets(value)
 
 
 # ------------------------------------------------------------------
@@ -434,6 +533,7 @@ async def continue_research(
     request: Request,
     research_id: str,
     req: ContinueResearchRequest = None,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     """ML-62: Continue a timed-out or completed session as a new chained session.
 
@@ -447,12 +547,18 @@ async def continue_research(
     try:
         # ML-63: Handle pipeline continue
         if research_id.startswith("pipe_"):
-            pipeline = await _session_manager.continue_pipeline(
-                research_id,
-                max_iterations=req.max_iterations,
-                max_budget_usd=req.max_budget_usd,
-                timeout_minutes=req.timeout_minutes,
-                focus_hint=req.focus_hint,
+            pipeline = await _run_idempotent(
+                operation="pipeline.continue",
+                parent_id=research_id,
+                key=idempotency_key,
+                request_payload=req.model_dump(),
+                call=lambda: _session_manager.continue_pipeline(
+                    research_id,
+                    max_iterations=req.max_iterations,
+                    max_budget_usd=req.max_budget_usd,
+                    timeout_minutes=req.timeout_minutes,
+                    focus_hint=req.focus_hint,
+                ),
             )
             await _audit(
                 request,
@@ -462,12 +568,18 @@ async def continue_research(
                 metadata={**metadata, "continued_pipeline_id": pipeline.get("id")},
             )
             return pipeline
-        session = await _session_manager.continue_session(
-            research_id,
-            max_iterations=req.max_iterations,
-            max_budget_usd=req.max_budget_usd,
-            timeout_minutes=req.timeout_minutes,
-            focus_hint=req.focus_hint,
+        session = await _run_idempotent(
+            operation="research.continue",
+            parent_id=research_id,
+            key=idempotency_key,
+            request_payload=req.model_dump(),
+            call=lambda: _session_manager.continue_session(
+                research_id,
+                max_iterations=req.max_iterations,
+                max_budget_usd=req.max_budget_usd,
+                timeout_minutes=req.timeout_minutes,
+                focus_hint=req.focus_hint,
+            ),
         )
         await _audit(
             request,
@@ -499,18 +611,25 @@ async def runtime_resume_research(
     request: Request,
     research_id: str,
     req: RuntimeResumeRequest,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
     """Resume a restart-recovered session only after explicit operator action."""
     metadata = _runtime_resume_metadata(req)
     try:
-        session = await _session_manager.resume_interrupted_session(
-            research_id,
-            reason=req.reason,
-            allow_interrupted=req.allow_interrupted,
-            max_iterations=req.max_iterations,
-            max_budget_usd=req.max_budget_usd,
-            timeout_minutes=req.timeout_minutes,
-            focus_hint=req.focus_hint,
+        session = await _run_idempotent(
+            operation="research.runtime_resume",
+            parent_id=research_id,
+            key=idempotency_key,
+            request_payload=req.model_dump(),
+            call=lambda: _session_manager.resume_interrupted_session(
+                research_id,
+                reason=req.reason,
+                allow_interrupted=req.allow_interrupted,
+                max_iterations=req.max_iterations,
+                max_budget_usd=req.max_budget_usd,
+                timeout_minutes=req.timeout_minutes,
+                focus_hint=req.focus_hint,
+            ),
         )
         await _audit(
             request,

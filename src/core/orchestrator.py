@@ -216,13 +216,30 @@ PROMOTION_HANDOFF_INSTRUCTION = (
 def _safe_path(raw: str, workspace: str) -> str:
     """Resolve a path and ensure it stays within the workspace."""
     if os.path.isabs(raw):
-        resolved = os.path.realpath(raw)
+        resolved = Path(raw).resolve(strict=False)
     else:
-        resolved = os.path.realpath(os.path.join(workspace, raw))
-    ws_real = os.path.realpath(workspace)
-    if not resolved.startswith(ws_real + os.sep) and resolved != ws_real:
-        raise ValueError(f"Path {raw!r} resolves outside workspace")
-    return resolved
+        resolved = Path(workspace, raw).resolve(strict=False)
+    ws_real = Path(workspace).resolve(strict=False)
+    try:
+        resolved.relative_to(ws_real)
+    except ValueError as exc:
+        raise ValueError(f"Path {raw!r} resolves outside workspace") from exc
+    return str(resolved)
+
+
+def _safe_write_path(raw: str, workspace: str) -> str:
+    """Resolve a writable path and ensure existing parents stay in workspace."""
+
+    path = Path(raw) if os.path.isabs(raw) else Path(workspace, raw)
+    resolved_parent = path.parent.resolve(strict=False)
+    workspace_root = Path(workspace).resolve(strict=False)
+    try:
+        resolved_parent.relative_to(workspace_root)
+    except ValueError as exc:
+        raise ValueError(f"Path {raw!r} parent resolves outside workspace") from exc
+    if path.exists() and path.is_symlink():
+        raise ValueError(f"Path {raw!r} is a symlink and cannot be overwritten")
+    return str(resolved_parent / path.name)
 
 
 def _normalize_command_for_plan(command: str) -> str:
@@ -333,7 +350,7 @@ def _tool_read_file(input_data: Dict[str, Any], workspace: str) -> str:
 
 
 def _tool_write_file(input_data: Dict[str, Any], workspace: str) -> str:
-    path = _safe_path(input_data["path"], workspace)
+    path = _safe_write_path(input_data["path"], workspace)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     Path(path).write_text(input_data["content"], encoding="utf-8")
     return f"Wrote {len(input_data['content'])} bytes to {input_data['path']}"
@@ -344,8 +361,14 @@ def _tool_glob(input_data: Dict[str, Any], workspace: str) -> str:
     full_pattern = os.path.join(workspace, pattern)
     matches = sorted(glob_mod.glob(full_pattern, recursive=True))
     # Return paths relative to workspace
-    ws = workspace.rstrip("/") + "/"
-    relative = [m.replace(ws, "", 1) for m in matches]
+    ws = str(Path(workspace).resolve(strict=False))
+    relative = []
+    for match in matches:
+        try:
+            safe_match = _safe_path(match, workspace)
+            relative.append(str(Path(safe_match).relative_to(ws)))
+        except ValueError:
+            logger.debug("Filtered glob match outside workspace: %s", match)
     if not relative:
         return "(no matches)"
     return "\n".join(relative[:500])
@@ -515,12 +538,11 @@ class AgentOrchestrator:
         messages: List[Dict[str, Any]],
         keep_recent: int = 40,
     ) -> List[Dict[str, Any]]:
-        """Truncate old tool results to reduce context size.
+        """Bound retained conversation history to avoid unbounded memory growth.
 
         Keeps the first message (initial prompt) and the last *keep_recent*
-        messages intact. For older messages, tool_result content blocks are
-        truncated to a short tail so the model retains awareness of what
-        happened without the full output.
+        messages intact. Older messages are represented by one deterministic
+        summary marker; detailed history remains in agent_log.jsonl and SQLite.
         """
         if len(messages) <= keep_recent + 1:
             return messages
@@ -528,22 +550,28 @@ class AgentOrchestrator:
         compacted = [messages[0]]  # preserve initial user prompt
 
         old_section = messages[1:-keep_recent]
-        for msg in old_section:
-            if msg.get("role") == "user" and isinstance(msg.get("content"), list):
-                # User messages with tool_result blocks
-                new_content = []
-                for block in msg["content"]:
-                    if isinstance(block, dict) and block.get("type") == "tool_result":
-                        text = block.get("content", "")
-                        if isinstance(text, str) and len(text) > 300:
-                            block = {
-                                **block,
-                                "content": f"[compacted — {len(text)} chars]\n…{text[-200:]}",
-                            }
-                    new_content.append(block)
-                compacted.append({**msg, "content": new_content})
-            else:
-                compacted.append(msg)
+        if old_section:
+            assistant_count = sum(1 for msg in old_section if msg.get("role") == "assistant")
+            user_count = sum(1 for msg in old_section if msg.get("role") == "user")
+            tool_result_count = 0
+            for msg in old_section:
+                content = msg.get("content")
+                if isinstance(content, list):
+                    tool_result_count += sum(
+                        1
+                        for block in content
+                        if isinstance(block, dict) and block.get("type") == "tool_result"
+                    )
+            compacted.append({
+                "role": "user",
+                "content": (
+                    "[system] Earlier conversation compacted: "
+                    f"{len(old_section)} messages "
+                    f"({assistant_count} assistant, {user_count} user, "
+                    f"{tool_result_count} tool results). "
+                    "Use the persisted iteration records and agent log for details."
+                ),
+            })
 
         compacted.extend(messages[-keep_recent:])
         return compacted
@@ -614,7 +642,8 @@ class AgentOrchestrator:
                 return None
             try:
                 content = Path(claim_path).read_text(encoding="utf-8")
-            except Exception:
+            except OSError as exc:
+                logger.debug("Failed to read marker file %s: %s", claim_path, exc)
                 content = None
             try:
                 os.remove(claim_path)
@@ -681,7 +710,8 @@ class AgentOrchestrator:
                 # bash invocation (it'll be regenerated by the next run).
                 os.remove(results_path)
                 return "\n".join(lines)
-            except Exception:
+            except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                logger.debug("Failed to synthesize metrics from results.json: %s", exc)
                 return None
 
         return None
@@ -1191,11 +1221,12 @@ class AgentOrchestrator:
                 outcome="failure",
                 error_message=reason,
             )
-        except Exception:
+        except Exception as exc:
             logger.warning(
-                "Research %s turn %d: failed to record command rejection audit event",
+                "Research %s turn %d: failed to record command rejection audit event: %s",
                 config.id,
                 turn,
+                exc,
                 exc_info=True,
             )
 
@@ -1413,12 +1444,13 @@ class AgentOrchestrator:
                 outcome="manual_review",
                 error_message=reason,
             )
-        except Exception:
+        except Exception as exc:
             logger.warning(
                 "Research %s turn %d: failed to record structured HPO "
-                "manual-review state",
+                "manual-review state: %s",
                 config.id,
                 turn,
+                exc,
                 exc_info=True,
             )
 
@@ -2322,6 +2354,10 @@ class AgentOrchestrator:
                         ),
                     })
                     messages.append({"role": "user", "content": tool_results})
+                    messages = self._compact_messages(
+                        messages,
+                        keep_recent=settings.context_compaction_threshold // 2,
+                    )
                 else:
                     # Model generated text only — no more tool calls → done
                     break

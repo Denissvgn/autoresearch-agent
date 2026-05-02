@@ -56,12 +56,34 @@ _session_manager: SessionManager | None = None
 _promoter: ConfigPromoter | None = None
 
 
+def _validate_runtime_configuration() -> None:
+    """Fail fast for settings that would break this service's invariants."""
+
+    env = settings.environment.lower()
+    if env in {"prod", "production"} and not secret_value(settings.autoresearch_prometheus_token):
+        raise RuntimeError("AUTORESEARCH_PROMETHEUS_TOKEN is required in production")
+    for name in ("WEB_CONCURRENCY", "UVICORN_WORKERS", "AUTORESEARCH_REPLICAS"):
+        raw = os.getenv(name)
+        if not raw:
+            continue
+        try:
+            value = int(raw)
+        except ValueError:
+            continue
+        if value > 1:
+            raise RuntimeError(
+                "autoresearch-agent is a single-instance SQLite control-plane "
+                f"service; {name}={value} is not supported"
+            )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup and shutdown logic."""
     global _store, _session_manager, _promoter
 
     logger.info("Starting autoresearch-agent service")
+    _validate_runtime_configuration()
     initialize_telemetry_from_env(settings.service_name)
     if _ml_logger:
         vault_status = get_vault_status()
@@ -100,6 +122,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Shutting down autoresearch-agent...")
     if _session_manager:
         await _session_manager.shutdown()
+    if _store:
+        await _store.close()
     shutdown_telemetry()
     logger.info("Shutdown complete")
 
@@ -164,7 +188,10 @@ async def readiness() -> dict[str, Any]:
     internal_checks = {
         "store_initialized": _store is not None,
         "session_manager_initialized": _session_manager is not None,
+        "db_ready": False,
     }
+    if _store is not None:
+        internal_checks["db_ready"] = await _store.ping()
     dependencies_ready = True
     if settings.preflight_enabled:
         try:
@@ -251,13 +278,14 @@ async def metrics(request: Request) -> Response:
     # when set we require it explicitly so the endpoint is safe to expose
     # outside the cluster boundary.
     expected = secret_value(settings.autoresearch_prometheus_token)
-    if expected:
-        auth = request.headers.get("authorization") or ""
-        if not auth.lower().startswith("bearer "):
-            raise HTTPException(status_code=401, detail="missing bearer token")
-        provided = auth.split(" ", 1)[1].strip()
-        if not secrets.compare_digest(provided, expected):
-            raise HTTPException(status_code=401, detail="invalid scrape token")
+    if not expected:
+        raise HTTPException(status_code=404, detail="metrics endpoint disabled")
+    auth = request.headers.get("authorization") or ""
+    if not auth.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="missing bearer token")
+    provided = auth.split(" ", 1)[1].strip()
+    if not secrets.compare_digest(provided, expected):
+        raise HTTPException(status_code=401, detail="invalid scrape token")
     snapshot = await _collect_observability_snapshot()
     return Response(
         content=format_prometheus(snapshot),
@@ -286,17 +314,26 @@ async def websocket_events(websocket: WebSocket) -> None:
     if actor is None:
         return
 
-    await broadcaster.connect(websocket, subprotocol=actor.websocket_subprotocol)
+    connected = await broadcaster.connect(
+        websocket,
+        subprotocol=actor.websocket_subprotocol,
+        max_clients=settings.ws_max_clients,
+    )
+    if not connected:
+        return
     try:
         # Server-side ping loop keeps the TCP connection alive during long
         # training runs when no application-level events are being sent.
+        heartbeat_failed = asyncio.Event()
+
         async def _heartbeat() -> None:
             try:
                 while True:
                     await asyncio.sleep(15)
                     await websocket.send_json({"type": "ping"})
-            except Exception:
-                pass  # connection closed — let the outer handler clean up
+            except Exception as exc:
+                logger.debug("WebSocket heartbeat failed: %s", exc)
+                heartbeat_failed.set()
 
         heartbeat_task = asyncio.create_task(_heartbeat())
         # Phase 4.2: bound receive_text with a wall-clock timeout and drop
@@ -308,19 +345,31 @@ async def websocket_events(websocket: WebSocket) -> None:
         idle_count = 0
         try:
             while True:
-                try:
-                    await asyncio.wait_for(
-                        websocket.receive_text(), timeout=idle_window_s,
-                    )
+                receive_task = asyncio.create_task(websocket.receive_text())
+                heartbeat_task_wait = asyncio.create_task(heartbeat_failed.wait())
+                done, pending = await asyncio.wait(
+                    {receive_task, heartbeat_task_wait},
+                    timeout=idle_window_s,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                for pending_task in pending:
+                    pending_task.cancel()
+                if heartbeat_task_wait in done and heartbeat_failed.is_set():
+                    logger.info("Closing WebSocket after heartbeat failure")
+                    break
+                if receive_task in done:
+                    await receive_task
                     idle_count = 0
-                except asyncio.TimeoutError:
-                    idle_count += 1
-                    if idle_count >= max_idle_windows:
-                        logger.info(
-                            "Closing idle WebSocket after %ds of silence",
-                            idle_window_s * max_idle_windows,
-                        )
-                        break
+                    continue
+                receive_task.cancel()
+                heartbeat_task_wait.cancel()
+                idle_count += 1
+                if idle_count >= max_idle_windows:
+                    logger.info(
+                        "Closing idle WebSocket after %ds of silence",
+                        idle_window_s * max_idle_windows,
+                    )
+                    break
         finally:
             heartbeat_task.cancel()
     except WebSocketDisconnect:

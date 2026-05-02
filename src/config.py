@@ -57,7 +57,12 @@ def _vault_settings_source() -> dict[str, Any]:
     try:
         return _load_vault_only(_SERVICE_NAME, env)
     except Exception as exc:
-        logger.warning("Failed to load Vault config for %s (%s): %s", _SERVICE_NAME, env, exc)
+        logger.warning(
+            "Failed to load Vault config for %s (%s): %s",
+            _SERVICE_NAME,
+            env,
+            type(exc).__name__,
+        )
         return {}
 
 
@@ -265,6 +270,15 @@ class Settings(BaseSettings):
             "already-explored points is the opt-out, not the opt-in."
         ),
     )
+    ws_max_clients: int = Field(
+        default=100,
+        ge=1,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_WS_MAX_CLIENTS",
+            "WS_MAX_CLIENTS",
+        ),
+        description="Maximum concurrently connected WebSocket event clients.",
+    )
 
     # --- ML Service URLs (Docker DNS) ---
     mlflow_tracking_uri: str = Field(default="http://mlflow:5000")
@@ -400,7 +414,7 @@ def get_vault_status() -> dict[str, Any]:
         try:
             status.update(_get_vault_client_status())
         except Exception as exc:
-            status["vault_client_error"] = str(exc)
+            status["vault_client_error"] = type(exc).__name__
     return status
 
 

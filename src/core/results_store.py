@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
 import os
 import uuid
 from collections import Counter, defaultdict
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, AsyncIterator, Dict, List, Optional, Sequence
 
 import aiosqlite
 
@@ -206,12 +208,29 @@ CREATE TABLE IF NOT EXISTS runtime_commands (
     metadata_json TEXT
 );
 
+CREATE TABLE IF NOT EXISTS idempotency_records (
+    operation TEXT NOT NULL,
+    parent_id TEXT NOT NULL,
+    key_hash TEXT NOT NULL,
+    request_hash TEXT NOT NULL,
+    status TEXT NOT NULL,
+    child_id TEXT,
+    response_json TEXT,
+    created_at TEXT NOT NULL,
+    completed_at TEXT,
+    PRIMARY KEY (operation, parent_id, key_hash)
+);
+
 CREATE INDEX IF NOT EXISTS idx_audit_events_timestamp
     ON audit_events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_audit_events_action
     ON audit_events(action);
 CREATE INDEX IF NOT EXISTS idx_audit_events_research_id
     ON audit_events(research_id);
+CREATE INDEX IF NOT EXISTS idx_audit_events_actor_timestamp
+    ON audit_events(actor_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_events_research_timestamp
+    ON audit_events(research_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_events_pipeline_id
     ON audit_events(pipeline_id);
 CREATE INDEX IF NOT EXISTS idx_planned_trials_research_id
@@ -464,15 +483,45 @@ async def _migrate_to_v1(db: aiosqlite.Connection) -> None:
         "idx_planned_trials_trial_identity_hash "
         "ON planned_trials(trial_identity_hash)",
         "CREATE INDEX IF NOT EXISTS "
-        "idx_runtime_commands_research_status "
-        "ON runtime_commands(research_id, status)",
+            "idx_runtime_commands_research_status "
+            "ON runtime_commands(research_id, status)",
+    ):
+        await db.execute(statement)
+
+
+async def _migrate_to_v2(db: aiosqlite.Connection) -> None:
+    """Add API idempotency records and audit query covering indexes."""
+
+    await db.execute(
+        """CREATE TABLE IF NOT EXISTS idempotency_records (
+            operation TEXT NOT NULL,
+            parent_id TEXT NOT NULL,
+            key_hash TEXT NOT NULL,
+            request_hash TEXT NOT NULL,
+            status TEXT NOT NULL,
+            child_id TEXT,
+            response_json TEXT,
+            created_at TEXT NOT NULL,
+            completed_at TEXT,
+            PRIMARY KEY (operation, parent_id, key_hash)
+        )"""
+    )
+    for statement in (
+        "CREATE INDEX IF NOT EXISTS "
+        "idx_audit_events_actor_timestamp "
+        "ON audit_events(actor_id, timestamp DESC)",
+        "CREATE INDEX IF NOT EXISTS "
+        "idx_audit_events_research_timestamp "
+        "ON audit_events(research_id, timestamp DESC)",
     ):
         await db.execute(statement)
 
 
 _MIGRATIONS = (
     (1, _migrate_to_v1),
+    (2, _migrate_to_v2),
 )
+_LATEST_SCHEMA_VERSION = _MIGRATIONS[-1][0]
 
 
 class ResultsStore:
@@ -480,13 +529,29 @@ class ResultsStore:
 
     def __init__(self, db_path: str) -> None:
         self._db_path = db_path
+        self._conn: aiosqlite.Connection | None = None
+        self._write_lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         os.makedirs(os.path.dirname(self._db_path), exist_ok=True)
-        async with aiosqlite.connect(self._db_path) as db:
+        if self._conn is not None:
+            await self.close()
+        db = await aiosqlite.connect(self._db_path)
+        db.row_factory = aiosqlite.Row
+        self._conn = db
+        try:
+            await db.execute("PRAGMA foreign_keys = ON")
+            await db.execute("PRAGMA journal_mode = WAL")
+            await db.execute("PRAGMA busy_timeout = 5000")
             await db.executescript(_SCHEMA_SQL)
 
             current_version = await _get_schema_version(db)
+            if current_version > _LATEST_SCHEMA_VERSION:
+                raise RuntimeError(
+                    "ResultsStore schema version "
+                    f"{current_version} is newer than supported "
+                    f"v{_LATEST_SCHEMA_VERSION}"
+                )
             for version, migration in _MIGRATIONS:
                 if current_version < version:
                     logger.info("Applying ResultsStore schema migration v%s", version)
@@ -495,11 +560,119 @@ class ResultsStore:
                     current_version = version
 
             await db.commit()
+        except Exception:
+            await db.close()
+            self._conn = None
+            raise
         logger.info("Results store initialized at %s", self._db_path)
 
+    @asynccontextmanager
+    async def connection(self) -> AsyncIterator[aiosqlite.Connection]:
+        """Yield the long-lived SQLite connection initialized at startup."""
+
+        if self._conn is None:
+            raise RuntimeError("ResultsStore is not initialized")
+        yield self._conn
+
+    async def close(self) -> None:
+        """Flush and close the long-lived SQLite connection."""
+
+        if self._conn is None:
+            return
+        conn = self._conn
+        self._conn = None
+        await conn.commit()
+        await conn.close()
+
+    async def ping(self) -> bool:
+        """Return True when the persistent DB connection can answer a query."""
+
+        try:
+            async with self.connection() as db:
+                async with await db.execute("SELECT 1") as cursor:
+                    row = await cursor.fetchone()
+            return bool(row and row[0] == 1)
+        except Exception:
+            logger.exception("ResultsStore ping failed")
+            return False
+
     async def get_schema_version(self) -> int:
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             return await _get_schema_version(db)
+
+    # ------------------------------------------------------------------
+    # Idempotency records
+    # ------------------------------------------------------------------
+
+    async def begin_idempotency_record(
+        self,
+        *,
+        operation: str,
+        parent_id: str,
+        key_hash: str,
+        request_hash: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Reserve an idempotency key or return the existing record."""
+
+        now = datetime.now(timezone.utc).isoformat()
+        async with self._write_lock:
+            async with self.connection() as db:
+                async with await db.execute(
+                    """SELECT * FROM idempotency_records
+                       WHERE operation = ? AND parent_id = ? AND key_hash = ?""",
+                    (operation, parent_id, key_hash),
+                ) as cursor:
+                    row = await cursor.fetchone()
+                if row:
+                    return dict(row)
+                await db.execute(
+                    """INSERT INTO idempotency_records
+                       (operation, parent_id, key_hash, request_hash, status, created_at)
+                       VALUES (?, ?, ?, ?, 'running', ?)""",
+                    (operation, parent_id, key_hash, request_hash, now),
+                )
+                await db.commit()
+        return None
+
+    async def complete_idempotency_record(
+        self,
+        *,
+        operation: str,
+        parent_id: str,
+        key_hash: str,
+        child_id: Optional[str],
+        response: Dict[str, Any],
+    ) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        response_json = json.dumps(response, sort_keys=True, default=str)
+        async with self._write_lock:
+            async with self.connection() as db:
+                await db.execute(
+                    """UPDATE idempotency_records
+                       SET status = 'completed',
+                           child_id = ?,
+                           response_json = ?,
+                           completed_at = ?
+                       WHERE operation = ? AND parent_id = ? AND key_hash = ?""",
+                    (child_id, response_json, now, operation, parent_id, key_hash),
+                )
+                await db.commit()
+
+    async def delete_idempotency_record(
+        self,
+        *,
+        operation: str,
+        parent_id: str,
+        key_hash: str,
+    ) -> None:
+        async with self._write_lock:
+            async with self.connection() as db:
+                await db.execute(
+                    """DELETE FROM idempotency_records
+                       WHERE operation = ? AND parent_id = ? AND key_hash = ?""",
+                    (operation, parent_id, key_hash),
+                )
+                await db.commit()
 
     # ------------------------------------------------------------------
     # Audit events (ARP-002)
@@ -520,7 +693,7 @@ class ResultsStore:
         timestamp = datetime.now(timezone.utc).isoformat()
         metadata = request_metadata or {}
         metadata_json = json.dumps(metadata, sort_keys=True)
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             await db.execute(
                 """INSERT INTO audit_events
                    (event_id, timestamp, actor_id, action, research_id,
@@ -585,7 +758,7 @@ class ResultsStore:
             params.append(pipeline_id)
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
         params.append(max(1, min(limit, 500)))
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 f"SELECT * FROM audit_events{where} ORDER BY timestamp DESC LIMIT ?",
@@ -623,7 +796,7 @@ class ResultsStore:
     ) -> Dict[str, Any]:
         skill_name = _MODEL_TO_SKILL[model_type]
         now = datetime.now(timezone.utc).isoformat()
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             await db.execute(
                 """INSERT INTO research_sessions
                    (id, instrument, timeframe, model_type, tag, skill_name,
@@ -651,7 +824,7 @@ class ResultsStore:
         return await self.get_session(session_id)
 
     async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 "SELECT * FROM research_sessions WHERE id = ?", (session_id,),
@@ -689,7 +862,7 @@ class ResultsStore:
         suffix = ""
         if limit is not None:
             suffix = f" LIMIT {int(limit)} OFFSET {int(offset)}"
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 f"SELECT * FROM research_sessions{where} "
@@ -723,7 +896,7 @@ class ResultsStore:
             clauses.append("instrument = ?")
             params.append(instrument)
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             cursor = await db.execute(
                 f"SELECT COUNT(*) FROM research_sessions{where}", params,
             )
@@ -752,7 +925,7 @@ class ResultsStore:
             if metadata is not None
             else None
         )
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             cursor = await db.execute(
                 """INSERT INTO runtime_commands
                    (research_id, turn, tool_name, command, normalized_command,
@@ -812,7 +985,7 @@ class ResultsStore:
             if metadata is not None
             else None
         )
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             await db.execute(
                 """UPDATE runtime_commands
                    SET status = ?,
@@ -871,7 +1044,7 @@ class ResultsStore:
             clauses.append("id = ?")
             params.append(command_id)
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 f"SELECT * FROM runtime_commands{where} ORDER BY started_at DESC, id DESC",
@@ -896,7 +1069,7 @@ class ResultsStore:
     ) -> Dict[str, Any]:
         """Collect production research metrics from persisted state."""
 
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             db.row_factory = aiosqlite.Row
 
             async def fetch_all(sql: str) -> List[Dict[str, Any]]:
@@ -1080,7 +1253,7 @@ class ResultsStore:
         reason: str,
     ) -> int:
         now = datetime.now(timezone.utc).isoformat()
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             cursor = await db.execute(
                 """UPDATE runtime_commands
                    SET status = 'interrupted',
@@ -1100,7 +1273,7 @@ class ResultsStore:
             return await self.get_session(session_id)
         set_clause = ", ".join(f"{k} = ?" for k in fields)
         values = list(fields.values()) + [session_id]
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             await db.execute(
                 f"UPDATE research_sessions SET {set_clause} WHERE id = ?",
                 values,
@@ -1118,7 +1291,7 @@ class ResultsStore:
         return await self.get_session(session_id)
 
     async def delete_session(self, session_id: str) -> bool:
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             await db.execute(
                 "DELETE FROM runtime_commands WHERE research_id = ?", (session_id,),
             )
@@ -1168,7 +1341,7 @@ class ResultsStore:
         consistency_report_json: Optional[str] = None,
     ) -> Dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             await db.execute(
                 """INSERT INTO iterations
                    (research_id, iteration, primary_metric, metric_name,
@@ -1256,7 +1429,7 @@ class ResultsStore:
     async def get_iterations(
         self, research_id: str,
     ) -> List[Dict[str, Any]]:
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 "SELECT * FROM iterations WHERE research_id = ? ORDER BY iteration",
@@ -1326,7 +1499,7 @@ class ResultsStore:
 
         set_clause = ", ".join(f"{k} = ?" for k in fields)
         values = list(fields.values()) + [research_id, iteration]
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             await db.execute(
                 f"UPDATE iterations SET {set_clause} "
                 f"WHERE research_id = ? AND iteration = ?",
@@ -1337,7 +1510,7 @@ class ResultsStore:
     async def get_iteration(
         self, research_id: str, iteration: int,
     ) -> Optional[Dict[str, Any]]:
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 "SELECT * FROM iterations WHERE research_id = ? AND iteration = ?",
@@ -1370,7 +1543,7 @@ class ResultsStore:
         else:
             scope_sql = "i.research_id = ?"
             params.append(research_id)
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 f"""SELECT i.*, s.instrument, s.timeframe, s.model_type
@@ -1390,7 +1563,7 @@ class ResultsStore:
     async def get_best_iteration(
         self, research_id: str,
     ) -> Optional[Dict[str, Any]]:
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             db.row_factory = aiosqlite.Row
             # ML-53: Include 'improve' decisions (research progress)
             cursor = await db.execute(
@@ -1425,7 +1598,7 @@ class ResultsStore:
         quick_mode: bool = False,
     ) -> Dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             cursor = await db.execute(
                 """INSERT INTO hpo_studies
                    (research_id, iteration, n_trials, study_id, max_trials,
@@ -1486,7 +1659,7 @@ class ResultsStore:
     async def get_hpo_studies(
         self, research_id: str,
     ) -> List[Dict[str, Any]]:
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 "SELECT * FROM hpo_studies WHERE research_id = ? ORDER BY created_at",
@@ -1509,7 +1682,7 @@ class ResultsStore:
         if not trials:
             return []
         now = datetime.now(timezone.utc).isoformat()
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             for trial in trials:
                 config_patch = trial.get("config_patch") or {}
                 await db.execute(
@@ -1580,7 +1753,7 @@ class ResultsStore:
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         config_hash = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
         trial_id = f"manual_review_{uuid.uuid4().hex[:12]}"
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             await db.execute(
                 """INSERT INTO planned_trials
                    (research_id, study_id, trial_id, trial_index, search_phase,
@@ -1632,7 +1805,7 @@ class ResultsStore:
     async def get_planned_trials(
         self, research_id: str,
     ) -> List[Dict[str, Any]]:
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 """SELECT * FROM planned_trials
@@ -1652,7 +1825,7 @@ class ResultsStore:
         research_id: str,
         trial_id: str,
     ) -> Optional[Dict[str, Any]]:
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 """SELECT * FROM planned_trials
@@ -1671,7 +1844,7 @@ class ResultsStore:
         research_id: str,
         expected_command: str,
     ) -> Optional[Dict[str, Any]]:
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 """SELECT * FROM planned_trials
@@ -1726,7 +1899,7 @@ class ResultsStore:
             fields["trial_identity_json"] = trial_identity_json
         set_clause = ", ".join(f"{key} = ?" for key in fields)
         values = list(fields.values()) + [research_id, trial_id]
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             await db.execute(
                 f"""UPDATE planned_trials
                     SET {set_clause}
@@ -1785,7 +1958,7 @@ class ResultsStore:
             if promotion_metadata is not None
             else None
         )
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             cursor = await db.execute(
                 """INSERT INTO promotions
                    (research_id, iteration, model_type, instrument, timeframe,
@@ -1823,7 +1996,7 @@ class ResultsStore:
             }
 
     async def list_promotions(self) -> List[Dict[str, Any]]:
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 "SELECT * FROM promotions ORDER BY promoted_at DESC",
@@ -1840,7 +2013,7 @@ class ResultsStore:
         instrument: str,
         timeframe: str,
     ) -> Optional[Dict[str, Any]]:
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 """SELECT * FROM promotions
@@ -1867,7 +2040,7 @@ class ResultsStore:
         timeframe: str,
         scope: str,
     ) -> Optional[Dict[str, Any]]:
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 """SELECT * FROM promotions
@@ -1895,7 +2068,7 @@ class ResultsStore:
     ) -> Optional[Dict[str, Any]]:
         now = datetime.now(timezone.utc).isoformat()
         rollback_metadata_json = json.dumps(rollback_metadata, sort_keys=True)
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             await db.execute(
                 """UPDATE promotions
                    SET rollback_metadata_path = ?,
@@ -1910,7 +2083,7 @@ class ResultsStore:
                 ),
             )
             await db.commit()
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 "SELECT * FROM promotions WHERE id = ?",
@@ -1963,7 +2136,7 @@ class ResultsStore:
         hpo_timesteps: Optional[int],
     ) -> Dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             await db.execute(
                 """INSERT INTO pipelines
                    (id, instrument, timeframe, tag, status, current_phase,
@@ -1993,7 +2166,7 @@ class ResultsStore:
         return await self.get_pipeline(pipeline_id)
 
     async def get_pipeline(self, pipeline_id: str) -> Optional[Dict[str, Any]]:
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 "SELECT * FROM pipelines WHERE id = ?", (pipeline_id,),
@@ -2024,7 +2197,7 @@ class ResultsStore:
         suffix = ""
         if limit is not None:
             suffix = f" LIMIT {int(limit)} OFFSET {int(offset)}"
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             db.row_factory = aiosqlite.Row
             cursor = await db.execute(
                 f"SELECT * FROM pipelines{where} "
@@ -2052,7 +2225,7 @@ class ResultsStore:
             clauses.append("instrument = ?")
             params.append(instrument)
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             cursor = await db.execute(
                 f"SELECT COUNT(*) FROM pipelines{where}", params,
             )
@@ -2066,7 +2239,7 @@ class ResultsStore:
             return await self.get_pipeline(pipeline_id)
         set_clause = ", ".join(f"{k} = ?" for k in fields)
         values = list(fields.values()) + [pipeline_id]
-        async with aiosqlite.connect(self._db_path) as db:
+        async with self.connection() as db:
             await db.execute(
                 f"UPDATE pipelines SET {set_clause} WHERE id = ?",
                 values,

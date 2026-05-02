@@ -5,8 +5,8 @@ from __future__ import annotations
 import os
 import shlex
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Iterable
-
 
 _ALLOWED_PYTHON = (".venv/bin/python", "./.venv/bin/python")
 _ALLOWED_SCRIPTS = {
@@ -29,6 +29,7 @@ _DISALLOWED_EXECUTABLES = {
     "curl",
     "docker",
     "git",
+    "ln",
     "pip",
     "pip3",
     "scp",
@@ -256,12 +257,12 @@ def _evaluate_cat(
 
 def _workspace_relative(path: str, workspace_root: str) -> str:
     if os.path.isabs(path):
-        resolved = os.path.realpath(path)
+        resolved = Path(path).resolve(strict=False)
     else:
-        resolved = os.path.realpath(os.path.join(workspace_root, path))
-    workspace_real = os.path.realpath(workspace_root)
+        resolved = Path(workspace_root, path).resolve(strict=False)
+    workspace_real = Path(workspace_root).resolve(strict=False)
     try:
-        return os.path.relpath(resolved, workspace_real)
+        return str(resolved.relative_to(workspace_real))
     except ValueError:
         return path
 
@@ -273,13 +274,17 @@ def _resolve_workspace_file(
     session_workspace: str | None,
 ) -> str:
     if os.path.isabs(raw):
-        return os.path.realpath(raw)
+        return str(Path(raw).resolve(strict=False))
     if session_workspace and os.sep not in raw:
-        return os.path.realpath(os.path.join(session_workspace, raw))
-    return os.path.realpath(os.path.join(workspace_root, raw))
+        return str(Path(session_workspace, raw).resolve(strict=False))
+    return str(Path(workspace_root, raw).resolve(strict=False))
 
 
 def _is_within(path: str, directory: str) -> bool:
-    resolved = os.path.realpath(path)
-    root = os.path.realpath(directory)
-    return resolved == root or resolved.startswith(root + os.sep)
+    resolved = Path(path).resolve(strict=False)
+    root = Path(directory).resolve(strict=False)
+    try:
+        resolved.relative_to(root)
+        return True
+    except ValueError:
+        return False

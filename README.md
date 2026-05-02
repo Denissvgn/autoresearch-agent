@@ -69,6 +69,13 @@ environment and `.env` values first, then Vault defaults from
 `secret/config/autoresearch-agent/<env>`, then code defaults. The high-value
 `ANTHROPIC_AUTH_TOKEN`, `AUTORESEARCH_API_TOKEN`, and optional
 `AUTORESEARCH_PROMETHEUS_TOKEN` should live in Vault outside local development.
+`AUTORESEARCH_PROMETHEUS_TOKEN` is required in production; without it the
+`/metrics` endpoint is disabled.
+
+Autoresearch-agent is intentionally deployed as a single-instance SQLite
+control-plane service. Keep Uvicorn at one worker and do not scale the
+container above one replica unless session state and idempotency locks are
+moved to a distributed store.
 
 ### 2. Build and run
 

@@ -485,6 +485,14 @@ async function triggerDownload(url: string): Promise<void> {
   URL.revokeObjectURL(a.href);
 }
 
+function makeIdempotencyKey(scope: string, id: string): string {
+  const random =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `${scope}:${id}:${random}`;
+}
+
 export const api = {
   // Research sessions
   startResearch: (req: StartResearchRequest) =>
@@ -503,7 +511,10 @@ export const api = {
   continueSession: (id: string, body?: { max_iterations?: number; focus_hint?: string; timeout_minutes?: number }) =>
     request<ResearchSession>(`/research/${id}/continue`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': makeIdempotencyKey('continue', id),
+      },
       body: body ? JSON.stringify(body) : undefined,
     }),
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SERVICE_DIR = REPO_ROOT / "services" / "autoresearch-agent"
 
@@ -36,6 +35,7 @@ def test_env_example_exists_and_contains_only_sanitized_values():
         "AUTORESEARCH_MAX_BUDGET_USD",
         "AUTORESEARCH_TIMEOUT_S",
         "AUTORESEARCH_MAX_CONCURRENT",
+        "AUTORESEARCH_WS_MAX_CLIENTS",
         "AUTORESEARCH_LOG_LEVEL",
         "AUTORESEARCH_IDENTITY_SERVICE_URL",
         "AUTORESEARCH_IDENTITY_INTROSPECTION_TIMEOUT_S",
@@ -115,6 +115,17 @@ def test_autoresearch_dockerfile_matches_ml_service_runtime_contract():
     assert "useradd -u 1001" in dockerfile
     assert "services/shared /app/services/shared" in dockerfile
     assert "-e ./libs/ml_artifacts" in dockerfile
+    assert '"--workers", "1"' in dockerfile
+
+
+def test_autoresearch_deployment_documents_single_instance_constraint():
+    readme = (SERVICE_DIR / "README.md").read_text(encoding="utf-8")
+    compose = (REPO_ROOT / "compose" / "autoresearch.yml").read_text(encoding="utf-8")
+    swarm = (REPO_ROOT / "compose" / "swarm-overrides.yml").read_text(encoding="utf-8")
+
+    assert "single-instance SQLite" in readme
+    assert "replicas:" not in compose
+    assert "autoresearch-agent:" not in swarm
 
 
 def test_readme_uses_tracked_env_template_without_token_samples():
