@@ -15,7 +15,7 @@ from fastapi import Depends, HTTPException, Request, WebSocket, status
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from src.config import settings
+from src.config import secret_value, settings
 
 try:
     from identity_client import introspect_token as _introspect_token
@@ -28,6 +28,7 @@ introspect_token: IdentityIntrospector | None = _introspect_token
 logger = logging.getLogger(__name__)
 
 _bearer_scheme = HTTPBearer(auto_error=False)
+_bearer_dependency = Depends(_bearer_scheme)
 _WS_TOKEN_SUBPROTOCOL_PREFIX = "autoresearch.token."
 _ADMIN_ROLES = {"admin", "administrator", "ml_admin"}
 
@@ -44,7 +45,7 @@ class AuthenticatedActor:
 
 
 def _configured_token() -> str | None:
-    token = settings.autoresearch_api_token
+    token = secret_value(settings.autoresearch_api_token)
     if token is None:
         return None
     token = token.strip()
@@ -174,7 +175,7 @@ async def _authenticate_token(
 
 async def require_api_auth(
     request: Request,
-    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+    credentials: HTTPAuthorizationCredentials | None = _bearer_dependency,
 ) -> AuthenticatedActor:
     """Require ``Authorization: Bearer <token>`` for HTTP API routes."""
 
@@ -328,7 +329,7 @@ async def require_websocket_auth(websocket: WebSocket) -> AuthenticatedActor | N
             headers=headers,
         )
         try:
-            send_denial_response = getattr(websocket, "send_denial_response")
+            send_denial_response = websocket.send_denial_response
             await send_denial_response(response)
         except (AttributeError, RuntimeError):
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)

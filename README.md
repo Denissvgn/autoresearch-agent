@@ -64,6 +64,12 @@ identity-service are also accepted when `AUTORESEARCH_IDENTITY_SERVICE_URL`
 or its fallback alias `IDENTITY_SERVICE_URL` is configured; the static token
 remains useful for local operator/UI workflows.
 
+In platform deployments, settings are loaded with this precedence: process
+environment and `.env` values first, then Vault defaults from
+`secret/config/autoresearch-agent/<env>`, then code defaults. The high-value
+`ANTHROPIC_AUTH_TOKEN`, `AUTORESEARCH_API_TOKEN`, and optional
+`AUTORESEARCH_PROMETHEUS_TOKEN` should live in Vault outside local development.
+
 ### 2. Build and run
 
 ```bash
@@ -210,6 +216,7 @@ services/autoresearch-agent/
 | `GET` | `/api/models` | Available model types |
 | `GET` | `/api/status` | Server status and settings |
 | `GET` | `/health` | Lightweight Docker health endpoint |
+| `GET` | `/health/ready` | Kubernetes-style readiness with dependency preflight |
 | `GET` | `/monitoring/health` | Dependency/preflight-style readiness |
 | `GET` | `/metrics` | Prometheus metrics (optionally bearer-token gated) |
 | `WS` | `/ws/events` | WebSocket for real-time events |
@@ -247,6 +254,11 @@ The agent calls these services over Docker DNS during training:
 | Admin Service | `admin-service:8000` | Admin API discovery/status |
 | MinIO | `minio:9000` | Model artifact storage |
 
+The agent intentionally does not publish NATS events or use `libs.model_naming`
+today. It drives the ML services through REST calls, records session state in
+SQLite, and computes promotion paths locally; event publishing and shared model
+naming remain future integration surfaces.
+
 ### Runtime State
 
 The compose stack persists autoresearch state across restarts:
@@ -256,6 +268,11 @@ The compose stack persists autoresearch state across restarts:
 | `/app/workspace/runs` | `autoresearch_runs` | Run workspaces, manifests, attempt snapshots, logs |
 | `/app/workspace/db` | `autoresearch_db` | SQLite research/iteration/promotion database |
 | `/host/configs` | `../configs` bind mount | Development config promotion target |
+
+SQLite schema changes are versioned by `ResultsStore.initialize()` through a
+single-row `schema_version` table and numbered idempotent migrations. This is
+the service's Alembic alternative and preserves the single-container SQLite
+operational model.
 
 `GET /api/status` exposes the Docker DNS service URLs, browser MLflow URL,
 and persistence paths currently used by the server. The same URL set is copied

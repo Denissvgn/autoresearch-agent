@@ -3,12 +3,30 @@
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
+import os
+from functools import lru_cache
+from typing import Any, List, Optional
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
+
+try:
+    from libs.config.config.vault_loader import get_vault_status as _get_vault_client_status
+    from libs.config.config.vault_loader import load_vault_only as _load_vault_only
+
+    _VAULT_AVAILABLE = True
+except ImportError:
+    try:
+        from config.vault_loader import get_vault_status as _get_vault_client_status
+        from config.vault_loader import load_vault_only as _load_vault_only
+
+        _VAULT_AVAILABLE = True
+    except ImportError:
+        _VAULT_AVAILABLE = False
+        _get_vault_client_status = None
+        _load_vault_only = None
 
 DEFAULT_CORS_ORIGINS = (
     "http://localhost:8030,"
@@ -16,6 +34,39 @@ DEFAULT_CORS_ORIGINS = (
     "http://localhost:5173,"
     "http://127.0.0.1:5173"
 )
+
+_SERVICE_NAME = "autoresearch-agent"
+
+
+def _settings_env() -> str:
+    return (
+        os.getenv("APP_ENV")
+        or os.getenv("AUTORESEARCH_ENVIRONMENT")
+        or os.getenv("ENVIRONMENT")
+        or "development"
+    )
+
+
+@lru_cache(maxsize=1)
+def _vault_settings_source() -> dict[str, Any]:
+    """Load service defaults from Vault only, leaving env/.env precedence intact."""
+
+    if not _VAULT_AVAILABLE or _load_vault_only is None:
+        return {}
+    env = _settings_env()
+    try:
+        return _load_vault_only(_SERVICE_NAME, env)
+    except Exception as exc:
+        logger.warning("Failed to load Vault config for %s (%s): %s", _SERVICE_NAME, env, exc)
+        return {}
+
+
+def secret_value(value: SecretStr | str | None) -> str | None:
+    """Return a plain string for secret values at API/client boundaries."""
+
+    if isinstance(value, SecretStr):
+        return value.get_secret_value()
+    return value
 
 
 class Settings(BaseSettings):
@@ -26,7 +77,27 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        populate_by_name=True,
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: Any,
+        env_settings: Any,
+        dotenv_settings: Any,
+        file_secret_settings: Any,
+    ) -> tuple[Any, ...]:
+        """Use Vault as defaults below explicit init args, env vars, and .env."""
+
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            _vault_settings_source,
+            file_secret_settings,
+        )
 
     # --- Service ---
     service_name: str = Field(
@@ -49,12 +120,14 @@ class Settings(BaseSettings):
         default="INFO",
         validation_alias=AliasChoices("AUTORESEARCH_LOG_LEVEL", "LOG_LEVEL"),
     )
-    autoresearch_api_token: str | None = Field(
+    autoresearch_api_token: SecretStr | None = Field(
         default=None,
+        repr=False,
         description="Bearer token required for autoresearch API and WebSocket access.",
     )
-    autoresearch_prometheus_token: str | None = Field(
+    autoresearch_prometheus_token: SecretStr | None = Field(
         default=None,
+        repr=False,
         validation_alias=AliasChoices(
             "AUTORESEARCH_PROMETHEUS_TOKEN",
             "PROMETHEUS_TOKEN",
@@ -88,8 +161,9 @@ class Settings(BaseSettings):
         ...,
         description="Anthropic API base URL (e.g. https://api.anthropic.com)",
     )
-    anthropic_auth_token: str = Field(
+    anthropic_auth_token: SecretStr = Field(
         ...,
+        repr=False,
         description="Anthropic API authentication token",
     )
     anthropic_model: str = Field(
@@ -138,8 +212,14 @@ class Settings(BaseSettings):
     )
     default_quick_mode: bool = Field(
         default=True,
-        validation_alias=AliasChoices("AUTORESEARCH_DEFAULT_QUICK_MODE", "DEFAULT_QUICK_MODE"),
-        description="Quick mode by default (2 folds, 50k steps). Override per-session with quick_mode=false.",
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_DEFAULT_QUICK_MODE",
+            "DEFAULT_QUICK_MODE",
+        ),
+        description=(
+            "Quick mode by default (2 folds, 50k steps). "
+            "Override per-session with quick_mode=false."
+        ),
     )
     max_concurrent_sessions: int = Field(
         default=2,
@@ -296,4 +376,32 @@ class Settings(BaseSettings):
         return self.mlflow_s3_endpoint_url or self.s3_endpoint_url
 
 
-settings = Settings()  # type: ignore[call-arg]
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    """Return the cached service settings instance."""
+
+    settings = Settings()  # type: ignore[call-arg]
+    logger.info("Settings loaded for %s", settings.service_name)
+    return settings
+
+
+def get_vault_status() -> dict[str, Any]:
+    """Return Vault configuration status for health/debug endpoints."""
+
+    vault_config = _vault_settings_source()
+    status: dict[str, Any] = {
+        "vault_library_available": _VAULT_AVAILABLE,
+        "vault_config_loaded": bool(vault_config),
+        "vault_config_keys": len(vault_config),
+        "service_name": _SERVICE_NAME,
+        "app_env": _settings_env(),
+    }
+    if _VAULT_AVAILABLE and _get_vault_client_status is not None:
+        try:
+            status.update(_get_vault_client_status())
+        except Exception as exc:
+            status["vault_client_error"] = str(exc)
+    return status
+
+
+settings = get_settings()

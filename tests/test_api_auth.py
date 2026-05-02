@@ -16,10 +16,11 @@ except ImportError:  # Starlette <0.37 closes denied sockets instead.
 os.environ.setdefault("ANTHROPIC_BASE_URL", "http://anthropic.invalid")
 os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "test-token")
 
+from src import config as config_module
 from src.api import auth as auth_module
 from src.api import promotion, research, results
 from src.api.auth import require_websocket_auth
-from src.config import Settings, settings
+from src.config import Settings, secret_value, settings
 
 API_TOKEN = "test-autoresearch-token"
 
@@ -548,6 +549,53 @@ def test_settings_keep_bare_env_fallbacks(monkeypatch):
 
     assert cfg.max_iterations == 11
     assert cfg.workspace_root == "/legacy/workspace"
+
+
+def test_settings_use_vault_defaults_below_env(monkeypatch):
+    for key in (
+        "ANTHROPIC_BASE_URL",
+        "ANTHROPIC_AUTH_TOKEN",
+        "AUTORESEARCH_API_TOKEN",
+        "AUTORESEARCH_PROMETHEUS_TOKEN",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    def fake_vault_source():
+        return {
+            "anthropic_base_url": "http://vault-anthropic.invalid",
+            "anthropic_auth_token": "vault-anthropic-token",
+            "autoresearch_api_token": "vault-api-token",
+            "autoresearch_prometheus_token": "vault-scrape-token",
+        }
+
+    monkeypatch.setattr(config_module, "_vault_settings_source", fake_vault_source)
+
+    cfg = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert cfg.anthropic_base_url == "http://vault-anthropic.invalid"
+    assert secret_value(cfg.anthropic_auth_token) == "vault-anthropic-token"
+    assert secret_value(cfg.autoresearch_api_token) == "vault-api-token"
+    assert secret_value(cfg.autoresearch_prometheus_token) == "vault-scrape-token"
+
+    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "env-anthropic-token")
+    monkeypatch.setenv("AUTORESEARCH_API_TOKEN", "env-api-token")
+    env_cfg = Settings(_env_file=None)  # type: ignore[call-arg]
+    assert secret_value(env_cfg.anthropic_auth_token) == "env-anthropic-token"
+    assert secret_value(env_cfg.autoresearch_api_token) == "env-api-token"
+
+
+def test_sensitive_settings_do_not_leak_in_repr():
+    cfg = Settings(
+        anthropic_base_url="http://anthropic.invalid",
+        anthropic_auth_token="super-secret-anthropic",
+        autoresearch_api_token="super-secret-api",
+        autoresearch_prometheus_token="super-secret-prometheus",
+        _env_file=None,
+    )
+
+    rendered = repr(cfg)
+    assert "super-secret-anthropic" not in rendered
+    assert "super-secret-api" not in rendered
+    assert "super-secret-prometheus" not in rendered
 
 
 def test_compose_binds_autoresearch_port_to_loopback_by_default():

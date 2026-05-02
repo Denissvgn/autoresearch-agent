@@ -18,6 +18,16 @@ Prometheus scrapers can be separated from operator tokens by setting
 `AUTORESEARCH_PROMETHEUS_TOKEN`. When that value is set, `/metrics` requires
 `Authorization: Bearer <token>`.
 
+## Configuration and Vault
+
+Autoresearch uses the platform Vault loader with environment precedence:
+process environment and `.env` values win, Vault provides service defaults from
+`secret/config/autoresearch-agent/<env>`, and code defaults fill the rest.
+
+Store `ANTHROPIC_AUTH_TOKEN`, `AUTORESEARCH_API_TOKEN`, and
+`AUTORESEARCH_PROMETHEUS_TOKEN` in Vault for shared environments. Local `.env`
+files remain acceptable for developer machines and are ignored by git.
+
 ## Metrics
 
 `GET /metrics` uses `prometheus-client` and includes the standard
@@ -37,6 +47,10 @@ The JSON alert endpoint remains available at
 `GET /health` is intentionally lightweight and is used by Docker healthchecks.
 It should not call downstream ML services.
 
+`GET /health/ready` is the Kubernetes-style readiness endpoint. It reports
+internal initialization state and, when preflight is enabled, the same required
+dependency checks used before a session can spend LLM budget.
+
 `GET /monitoring/health` returns readiness-style details, including active
 session count and the same dependency/preflight checks used before a session can
 spend LLM budget. Use it for dashboards and deployment probes that need to know
@@ -54,7 +68,19 @@ docker compose -f compose/base.yml -f compose/infra.yml -f compose/ml.yml -f com
 
 The image copies `services/shared`, shared `libs/`, `traid_training_sdk`, the
 committed `poetry.lock`, and the `src/` backend package. The runtime command is
-`uvicorn src.main:app`.
+`uvicorn src.main:app --loop uvloop`.
+
+## SQLite Schema
+
+SQLite remains intentional for this single-writer service. Schema evolution is
+handled in `ResultsStore.initialize()` with a `schema_version` table and
+numbered idempotent migrations instead of Alembic.
+
+## Intentional Non-Integrations
+
+The service does not publish NATS events or use `libs.model_naming` today.
+Session lifecycle events and shared naming should be revisited when the agent
+starts emitting platform domain events.
 
 ## UID 1001
 

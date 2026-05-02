@@ -18,12 +18,12 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 import anthropic
 import httpx
 
-from src.config import settings
+from src.config import secret_value, settings
+from src.core.command_runner import GovernedCommandRunner, redact_sensitive_text
 from src.core.consistency_validator import (
     build_consistency_report,
     consistency_report_json,
 )
-from src.core.command_runner import GovernedCommandRunner, redact_sensitive_text
 from src.core.experiment_parser import (
     is_hpo_study_output,
     parse_hpo_study_output,
@@ -141,7 +141,10 @@ AGENT_TOOLS: List[Dict[str, Any]] = [
     },
     {
         "name": "write_file",
-        "description": "Write content to a file in the workspace. Creates parent directories if needed.",
+        "description": (
+            "Write content to a file in the workspace. "
+            "Creates parent directories if needed."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -388,7 +391,7 @@ class AgentOrchestrator:
         self._store = store
         self._client = anthropic.AsyncAnthropic(
             base_url=settings.anthropic_base_url,
-            api_key=settings.anthropic_auth_token,
+            api_key=secret_value(settings.anthropic_auth_token),
             timeout=httpx.Timeout(settings.anthropic_api_timeout_s, connect=30.0),
         )
         self._stop_flags: Dict[str, bool] = {}
@@ -882,7 +885,11 @@ class AgentOrchestrator:
                 f"  {num}. metric={metric_s} gates={gates} "
                 f"decision={decision} — {desc}"
             )
-        iter_summary = "\n".join(iter_summary_lines) if iter_summary_lines else "  (no iterations recorded)"
+        iter_summary = (
+            "\n".join(iter_summary_lines)
+            if iter_summary_lines
+            else "  (no iterations recorded)"
+        )
 
         # RL fixed settings notice
         fixed_settings_notice = ""
@@ -1596,7 +1603,11 @@ class AgentOrchestrator:
 
                 # Check timeout (per-session override or server default)
                 elapsed = time.monotonic() - start_time
-                _timeout = config.timeout_s if config.timeout_s > 0 else settings.experiment_timeout_s
+                _timeout = (
+                    config.timeout_s
+                    if config.timeout_s > 0
+                    else settings.experiment_timeout_s
+                )
                 if elapsed > _timeout:
                     logger.info("Research %s: timeout after %.0fs", research_id, elapsed)
                     await agent_log.append("system", f"Timeout after {elapsed:.0f}s", turn=turn)

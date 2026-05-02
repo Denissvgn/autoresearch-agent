@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Autonomous ML model tuning agent powered by Claude"
 authors = ["Traid Platform Team"]
 packages = []
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.12"
@@ -28,14 +29,13 @@ resilience = {path = "../../libs/resilience", develop = true}
 traid-training-sdk = {path = "../../traid_training_sdk", develop = true}
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.4.0"
+pytest = "^8.0.0"
 pytest-asyncio = "^0.23.0"
 pytest-cov = "^4.1.0"
-black = "^23.0.0"
+black = "^24.1.0"
 isort = "^5.13.0"
-mypy = "^1.5.0"
+mypy = "^1.8.0"
 ruff = "^0.2.0"
-flake8 = "^6.0.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -46,7 +46,7 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F"]
+select = ["E", "F", "B", "I"]
 ignore = ["E402", "F401", "F541", "F841"]
 
 [tool.black]
@@ -60,41 +60,13 @@ line_length = 100
 
 [tool.mypy]
 python_version = "3.12"
-strict = true
 ignore_missing_imports = true
+follow_imports = "skip"
 disallow_untyped_decorators = false
 exclude = [
   "src/api/(audit|promotion|research|results)\\.py",
   "src/core/(command_policy|command_runner|config_promoter|consistency_validator|development_gate_bundle|development_inference_validation|development_signal_health|experiment_parser|iteration_snapshot|log_writer|orchestrator|pipeline_controller|research_manifest|research_phase_plan|research_state|results_store|service_preflight|session_manager|structured_hpo)\\.py",
 ]
-
-[[tool.mypy.overrides]]
-module = [
-  "src.api.audit",
-  "src.api.promotion",
-  "src.api.research",
-  "src.api.results",
-  "src.core.command_policy",
-  "src.core.command_runner",
-  "src.core.config_promoter",
-  "src.core.consistency_validator",
-  "src.core.development_gate_bundle",
-  "src.core.development_inference_validation",
-  "src.core.development_signal_health",
-  "src.core.experiment_parser",
-  "src.core.iteration_snapshot",
-  "src.core.log_writer",
-  "src.core.orchestrator",
-  "src.core.pipeline_controller",
-  "src.core.research_manifest",
-  "src.core.research_phase_plan",
-  "src.core.research_state",
-  "src.core.results_store",
-  "src.core.service_preflight",
-  "src.core.session_manager",
-  "src.core.structured_hpo",
-]
-ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

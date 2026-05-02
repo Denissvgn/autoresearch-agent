@@ -174,4 +174,4 @@ EXPOSE 8000
 
 # Entrypoint
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--loop", "uvloop"]

@@ -22,7 +22,6 @@ from src.core.config_promoter import _atomic_write_text
 from src.core.results_store import ResultsStore, _add_column_if_missing
 from src.ws.events import EventBroadcaster
 
-
 # ---------------------------------------------------------------------------
 # Phase 1.3 — _add_column_if_missing
 # ---------------------------------------------------------------------------
@@ -183,6 +182,11 @@ async def test_list_sessions_status_in_filters_at_sql_level(store: ResultsStore)
     assert "r_running" in ids
     assert "r_done" not in ids
     assert "r_failed" not in ids
+
+
+@pytest.mark.asyncio
+async def test_results_store_records_schema_version(store: ResultsStore) -> None:
+    assert await store.get_schema_version() == 1
 
 
 @pytest.mark.asyncio

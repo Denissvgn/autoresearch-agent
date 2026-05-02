@@ -13,9 +13,14 @@ from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSock
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
+from libs.observability import (
+    ensure_app_platform_headers,
+    initialize_telemetry_from_env,
+    shutdown_telemetry,
+)
 
 from src.api.auth import require_api_auth, require_websocket_auth
-from src.config import settings
+from src.config import get_vault_status, secret_value, settings
 from src.core.config_promoter import ConfigPromoter
 from src.core.observability import (
     PROMETHEUS_CONTENT_TYPE,
@@ -23,15 +28,27 @@ from src.core.observability import (
     format_prometheus,
 )
 from src.core.results_store import ResultsStore
-from src.core.session_manager import SessionManager
 from src.core.service_preflight import build_not_run_preflight, run_service_preflight
+from src.core.session_manager import SessionManager
 from src.ws.events import broadcaster
 
-logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper(), logging.INFO),
-    format="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
-)
-logger = logging.getLogger(__name__)
+try:
+    from libs.config.ml_service_logging import setup_ml_service_logging
+
+    _ml_logger = setup_ml_service_logging(
+        service_name=settings.service_name,
+        level=settings.log_level,
+        json_logs=settings.environment == "production",
+        mask_secrets=True,
+    )
+    logger = _ml_logger.logger
+except Exception:
+    logging.basicConfig(
+        level=getattr(logging, settings.log_level.upper(), logging.INFO),
+        format="%(asctime)s %(levelname)-8s %(name)s - %(message)s",
+    )
+    logger = logging.getLogger(settings.service_name)
+    _ml_logger = None
 
 # Global instances (initialized in lifespan)
 _store: ResultsStore | None = None
@@ -45,6 +62,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global _store, _session_manager, _promoter
 
     logger.info("Starting autoresearch-agent service")
+    initialize_telemetry_from_env(settings.service_name)
+    if _ml_logger:
+        vault_status = get_vault_status()
+        _ml_logger.log_service_startup(settings, vault_status)
+        _ml_logger.log_config_loaded(settings, vault_status.get("vault_config_keys", 0))
     logger.info("Model: %s", settings.anthropic_model)
     logger.info("Default quick mode: %s", settings.default_quick_mode)
     logger.info("Max iterations: %d", settings.max_iterations)
@@ -78,6 +100,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Shutting down autoresearch-agent...")
     if _session_manager:
         await _session_manager.shutdown()
+    shutdown_telemetry()
     logger.info("Shutdown complete")
 
 
@@ -87,6 +110,7 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+ensure_app_platform_headers(app)
 
 # CORS — Phase 1.4 hardening: when origins is the wildcard, force
 # allow_credentials=False because Starlette will silently produce a
@@ -131,6 +155,49 @@ async def health() -> dict[str, Any]:
         "status": "ok",
         "service": settings.service_name,
         "active_sessions": _session_manager.active_count if _session_manager else 0,
+    }
+
+
+@app.get("/health/ready")
+async def readiness() -> dict[str, Any]:
+    active_sessions = _session_manager.active_count if _session_manager else 0
+    internal_checks = {
+        "store_initialized": _store is not None,
+        "session_manager_initialized": _session_manager is not None,
+    }
+    dependencies_ready = True
+    if settings.preflight_enabled:
+        try:
+            preflight = await run_service_preflight(model_type="all")
+        except Exception as exc:
+            preflight = {
+                "schema_version": "autoresearch_service_preflight.v1",
+                "status": "failed",
+                "required_ready": False,
+                "required_failures": ["preflight"],
+                "error": str(exc),
+            }
+        dependencies_ready = bool(
+            preflight.get("required_ready") or settings.allow_unready_services,
+        )
+    else:
+        preflight = build_not_run_preflight()
+
+    ready = all(internal_checks.values()) and dependencies_ready
+    status_text = "ready" if ready else "not_ready"
+    if _ml_logger:
+        _ml_logger.log_health_check(
+            status_text,
+            {**internal_checks, "active_sessions": active_sessions},
+        )
+
+    return {
+        "ready": ready,
+        "status": status_text,
+        "service": settings.service_name,
+        "active_sessions": active_sessions,
+        "checks": internal_checks,
+        "dependencies": preflight,
     }
 
 
@@ -183,7 +250,7 @@ async def metrics(request: Request) -> Response:
     # unauthenticated behavior (typical in-cluster scrape via NetworkPolicy);
     # when set we require it explicitly so the endpoint is safe to expose
     # outside the cluster boundary.
-    expected = settings.autoresearch_prometheus_token
+    expected = secret_value(settings.autoresearch_prometheus_token)
     if expected:
         auth = request.headers.get("authorization") or ""
         if not auth.lower().startswith("bearer "):

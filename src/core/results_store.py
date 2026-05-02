@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections import Counter, defaultdict
 import hashlib
 import json
 import logging
 import os
 import uuid
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -22,6 +22,12 @@ from src.core.observability import (
 logger = logging.getLogger(__name__)
 
 _SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS schema_version (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    version INTEGER NOT NULL,
+    applied_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS research_sessions (
     id TEXT PRIMARY KEY,
     instrument TEXT NOT NULL,
@@ -216,6 +222,8 @@ CREATE INDEX IF NOT EXISTS idx_runtime_commands_research_status
     ON runtime_commands(research_id, status);
 """
 
+_CURRENT_SCHEMA_VERSION = 1
+
 _MODEL_TO_SKILL = {
     "direction": "direction-autotuner",
     "volatility": "volatility-autotuner",
@@ -347,6 +355,126 @@ async def _add_column_if_missing(
     await db.execute(f"ALTER TABLE {table} ADD COLUMN {column_def}")
 
 
+async def _get_schema_version(db: aiosqlite.Connection) -> int:
+    cursor = await db.execute("SELECT version FROM schema_version WHERE id = 1")
+    row = await cursor.fetchone()
+    return int(row[0]) if row else 0
+
+
+async def _set_schema_version(db: aiosqlite.Connection, version: int) -> None:
+    await db.execute(
+        """INSERT INTO schema_version (id, version, applied_at)
+           VALUES (1, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             version = excluded.version,
+             applied_at = excluded.applied_at""",
+        (version, datetime.now(timezone.utc).isoformat()),
+    )
+
+
+async def _migrate_to_v1(db: aiosqlite.Connection) -> None:
+    """Reconcile the current pre-versioned SQLite schema."""
+
+    # Phase 1.3 hardening: idempotent column-add migrations driven by
+    # PRAGMA table_info so we skip already-applied columns without
+    # swallowing real OperationalErrors.
+    iterations_columns = (
+        # ML-52: MLflow run id
+        "mlflow_run_id TEXT",
+        # ML-59: HPO plan/result metadata
+        "search_phase TEXT",
+        "hpo_study_id INTEGER",
+        # DPU-082: server-owned per-attempt snapshots
+        "attempt_snapshot_json TEXT",
+        "attempt_snapshot_path TEXT",
+        "attempt_snapshot_hash TEXT",
+        "consistency_report_json TEXT",
+        # ARP-009: duplicate-safe config/seed trial identities
+        "canonical_config_hash TEXT",
+        "trial_identity_hash TEXT",
+        "trial_identity_json TEXT",
+        "duplicate_of_research_id TEXT",
+        "duplicate_of_iteration INTEGER",
+        "duplicate_reason TEXT",
+    )
+    for column_def in iterations_columns:
+        await _add_column_if_missing(db, "iterations", column_def)
+
+    research_session_columns = (
+        # ML-60 / ML-62 / ML-63
+        "insights TEXT",
+        "resumed_from TEXT",
+        "pipeline_id TEXT",
+        # DPU-081: immutable research-session manifest
+        "manifest_json TEXT",
+        "manifest_path TEXT",
+        "manifest_hash TEXT",
+        # DPU-084 / DPU-087: operator-facing session phase state
+        "current_phase TEXT",
+        "next_action TEXT",
+        "phase_state_json TEXT",
+    )
+    for column_def in research_session_columns:
+        await _add_column_if_missing(db, "research_sessions", column_def)
+
+    for column_def in (
+        "canonical_config_hash TEXT",
+        "trial_identity_hash TEXT",
+        "trial_identity_json TEXT",
+    ):
+        await _add_column_if_missing(db, "planned_trials", column_def)
+
+    # DPU-085: structured HPO plan/result metadata
+    for column_def in (
+        "study_id TEXT",
+        "max_trials INTEGER",
+        "search_space_json TEXT",
+        "budget_json TEXT",
+        "timeout_s INTEGER",
+        "quick_mode INTEGER DEFAULT 0",
+    ):
+        await _add_column_if_missing(db, "hpo_studies", column_def)
+
+    # DPU-070 / DPU-071: promotion decision + rollback metadata
+    promotion_columns = (
+        "scope TEXT NOT NULL DEFAULT 'development'",
+        "metadata_path TEXT",
+        "promotion_metadata_json TEXT",
+        "rollback_metadata_path TEXT",
+        "rollback_metadata_json TEXT",
+        "rolled_back_at TEXT",
+    )
+    for column_def in promotion_columns:
+        await _add_column_if_missing(db, "promotions", column_def)
+
+    # ARP-005: pipeline-owned promotion diagnostics
+    for column_def in (
+        "promotion_blocked_phase TEXT",
+        "promotion_blockers_json TEXT",
+        "promotion_preview_json TEXT",
+    ):
+        await _add_column_if_missing(db, "pipelines", column_def)
+
+    # CREATE INDEX IF NOT EXISTS is already idempotent at the SQL level.
+    for statement in (
+        "CREATE INDEX IF NOT EXISTS "
+        "idx_iterations_trial_identity_hash "
+        "ON iterations(trial_identity_hash)",
+        "CREATE INDEX IF NOT EXISTS "
+        "idx_planned_trials_trial_identity_hash "
+        "ON planned_trials(trial_identity_hash)",
+        "CREATE INDEX IF NOT EXISTS "
+        "idx_runtime_commands_research_status "
+        "ON runtime_commands(research_id, status)",
+    ):
+        await db.execute(statement)
+
+
+_MIGRATIONS = (
+    (1, _migrate_to_v1),
+)
+
+
 class ResultsStore:
     """Async SQLite store for experiment data."""
 
@@ -358,110 +486,20 @@ class ResultsStore:
         async with aiosqlite.connect(self._db_path) as db:
             await db.executescript(_SCHEMA_SQL)
 
-            # Phase 1.3 hardening: idempotent column-add migrations driven
-            # by PRAGMA table_info so we skip already-applied columns
-            # without swallowing real OperationalErrors (disk full,
-            # permission denied, locked database).
-            iterations_columns = (
-                # ML-52: MLflow run id
-                "mlflow_run_id TEXT",
-                # ML-59: HPO plan/result metadata
-                "search_phase TEXT",
-                "hpo_study_id INTEGER",
-                # DPU-082: server-owned per-attempt snapshots
-                "attempt_snapshot_json TEXT",
-                "attempt_snapshot_path TEXT",
-                "attempt_snapshot_hash TEXT",
-                "consistency_report_json TEXT",
-                # ARP-009: duplicate-safe config/seed trial identities
-                "canonical_config_hash TEXT",
-                "trial_identity_hash TEXT",
-                "trial_identity_json TEXT",
-                "duplicate_of_research_id TEXT",
-                "duplicate_of_iteration INTEGER",
-                "duplicate_reason TEXT",
-            )
-            for column_def in iterations_columns:
-                await _add_column_if_missing(db, "iterations", column_def)
-
-            research_session_columns = (
-                # ML-60 / ML-62 / ML-63
-                "insights TEXT",
-                "resumed_from TEXT",
-                "pipeline_id TEXT",
-                # DPU-081: immutable research-session manifest
-                "manifest_json TEXT",
-                "manifest_path TEXT",
-                "manifest_hash TEXT",
-                # DPU-084 / DPU-087: operator-facing session phase state
-                "current_phase TEXT",
-                "next_action TEXT",
-                "phase_state_json TEXT",
-            )
-            for column_def in research_session_columns:
-                await _add_column_if_missing(
-                    db, "research_sessions", column_def,
-                )
-
-            for column_def in (
-                "canonical_config_hash TEXT",
-                "trial_identity_hash TEXT",
-                "trial_identity_json TEXT",
-            ):
-                await _add_column_if_missing(
-                    db, "planned_trials", column_def,
-                )
-
-            # DPU-085: structured HPO plan/result metadata
-            for column_def in (
-                "study_id TEXT",
-                "max_trials INTEGER",
-                "search_space_json TEXT",
-                "budget_json TEXT",
-                "timeout_s INTEGER",
-                "quick_mode INTEGER DEFAULT 0",
-            ):
-                await _add_column_if_missing(
-                    db, "hpo_studies", column_def,
-                )
-
-            # DPU-070 / DPU-071: promotion decision + rollback metadata
-            promotion_columns = (
-                "scope TEXT NOT NULL DEFAULT 'development'",
-                "metadata_path TEXT",
-                "promotion_metadata_json TEXT",
-                "rollback_metadata_path TEXT",
-                "rollback_metadata_json TEXT",
-                "rolled_back_at TEXT",
-            )
-            for column_def in promotion_columns:
-                await _add_column_if_missing(db, "promotions", column_def)
-
-            # ARP-005: pipeline-owned promotion diagnostics
-            for column_def in (
-                "promotion_blocked_phase TEXT",
-                "promotion_blockers_json TEXT",
-                "promotion_preview_json TEXT",
-            ):
-                await _add_column_if_missing(db, "pipelines", column_def)
-
-            # CREATE INDEX IF NOT EXISTS is already idempotent at the SQL
-            # level; no helper needed.
-            for statement in (
-                "CREATE INDEX IF NOT EXISTS "
-                "idx_iterations_trial_identity_hash "
-                "ON iterations(trial_identity_hash)",
-                "CREATE INDEX IF NOT EXISTS "
-                "idx_planned_trials_trial_identity_hash "
-                "ON planned_trials(trial_identity_hash)",
-                "CREATE INDEX IF NOT EXISTS "
-                "idx_runtime_commands_research_status "
-                "ON runtime_commands(research_id, status)",
-            ):
-                await db.execute(statement)
+            current_version = await _get_schema_version(db)
+            for version, migration in _MIGRATIONS:
+                if current_version < version:
+                    logger.info("Applying ResultsStore schema migration v%s", version)
+                    await migration(db)
+                    await _set_schema_version(db, version)
+                    current_version = version
 
             await db.commit()
         logger.info("Results store initialized at %s", self._db_path)
+
+    async def get_schema_version(self) -> int:
+        async with aiosqlite.connect(self._db_path) as db:
+            return await _get_schema_version(db)
 
     # ------------------------------------------------------------------
     # Audit events (ARP-002)

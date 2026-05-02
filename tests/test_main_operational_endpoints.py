@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from libs.observability import bind_platform_headers
 
 from src import main as main_module
 from src.core.observability import empty_observability_snapshot
@@ -64,4 +65,26 @@ def test_monitoring_health_reports_preflight_details(client: TestClient) -> None
     assert payload["status"] == "degraded"
     assert payload["service"] == main_module.settings.service_name
     assert payload["active_sessions"] == 3
+    assert payload["dependencies"]["status"] == "not_run"
+
+
+def test_app_has_platform_header_dependency() -> None:
+    dependencies = main_module.app.router.dependencies
+    assert any(
+        getattr(dependency, "dependency", None) is bind_platform_headers
+        for dependency in dependencies
+    )
+
+
+def test_readiness_reports_internal_state(client: TestClient) -> None:
+    response = client.get("/health/ready")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ready"] is True
+    assert payload["status"] == "ready"
+    assert payload["service"] == main_module.settings.service_name
+    assert payload["active_sessions"] == 3
+    assert payload["checks"]["store_initialized"] is True
+    assert payload["checks"]["session_manager_initialized"] is True
     assert payload["dependencies"]["status"] == "not_run"
