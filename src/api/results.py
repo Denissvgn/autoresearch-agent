@@ -10,13 +10,13 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, Response
 
-from server.api.auth import require_api_auth
-from server.core.consistency_validator import (
+from src.api.auth import require_api_auth
+from src.core.consistency_validator import (
     build_consistency_report,
     parse_consistency_report,
 )
-from server.core.log_writer import AgentLogWriter, _format_entry
-from server.core.research_state import build_research_state
+from src.core.log_writer import AgentLogWriter, _format_entry
+from src.core.research_state import build_research_state
 
 router = APIRouter(prefix="/api", tags=["results"], dependencies=[Depends(require_api_auth)])
 

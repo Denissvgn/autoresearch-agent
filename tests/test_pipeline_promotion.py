@@ -6,11 +6,11 @@ from typing import Any
 
 import pytest
 
-from server.core import config_promoter, pipeline_controller
-from server.core.config_promoter import ConfigPromoter
-from server.core.development_gate_bundle import DEFAULT_GATE_BUNDLE_RELATIVE_PATH
-from server.core.pipeline_controller import PipelineConfig, PipelineController
-from server.core.results_store import ResultsStore
+from src.core import config_promoter, pipeline_controller
+from src.core.config_promoter import ConfigPromoter
+from src.core.development_gate_bundle import DEFAULT_GATE_BUNDLE_RELATIVE_PATH
+from src.core.pipeline_controller import PipelineConfig, PipelineController
+from src.core.results_store import ResultsStore
 
 
 class FakeSessionManager:

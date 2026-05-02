@@ -24,7 +24,7 @@ except ModuleNotFoundError:
         APIStatusError=_FakeAPIStatusError,
     )
 
-from server.core.orchestrator import (  # noqa: E402
+from src.core.orchestrator import (  # noqa: E402
     AgentOrchestrator,
     PROMOTION_HANDOFF_INSTRUCTION,
     ResearchConfig,

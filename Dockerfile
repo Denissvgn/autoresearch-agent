@@ -17,7 +17,7 @@ WORKDIR /app/ui
 
 # Copy UI source and install deps
 COPY services/autoresearch-agent/ui/package.json services/autoresearch-agent/ui/package-lock.json* ./
-RUN npm ci --ignore-scripts 2>/dev/null || npm install
+RUN npm ci --ignore-scripts
 
 COPY services/autoresearch-agent/ui/ ./
 RUN npx vite build
@@ -45,14 +45,23 @@ RUN poetry self add poetry-plugin-export
 WORKDIR /app
 
 # --- Server venv (FastAPI + Anthropic SDK) ---
+COPY libs/vdmc_core /libs/vdmc_core
+COPY libs/config /libs/config
+COPY libs/data_clients /libs/data_clients
+COPY libs/feature_engineering /libs/feature_engineering
+COPY libs/identity_client /libs/identity_client
+COPY libs/observability /libs/observability
+COPY libs/ml_artifacts /libs/ml_artifacts
+COPY libs/resilience /libs/resilience
+COPY libs/__init__.py /libs/__init__.py
+COPY traid_training_sdk /traid_training_sdk
 COPY services/autoresearch-agent/pyproject.toml ./
 COPY services/autoresearch-agent/poetry.lock* ./
 
 ENV POETRY_HTTP_TIMEOUT=300
 ENV PIP_DEFAULT_TIMEOUT=300
 
-RUN poetry lock 2>/dev/null; \
-    poetry export --without dev --format requirements.txt --output server-requirements.txt --without-hashes && \
+RUN poetry export --without dev --format requirements.txt --output server-requirements.txt --without-hashes && \
     python -m venv /app/.venv && \
     /app/.venv/bin/pip install --no-cache-dir --timeout 300 -r server-requirements.txt
 
@@ -98,9 +107,9 @@ RUN cd /app/workspace && \
     -e ./libs/feature_engineering \
     -e ./libs/identity_client \
     -e ./libs/observability \
+    -e ./libs/ml_artifacts \
     -e ./libs/resilience \
-    -e ./traid_training_sdk \
-    2>/dev/null || true
+    -e ./traid_training_sdk
 
 # CLAUDE.md — agent workspace context
 COPY services/autoresearch-agent/CLAUDE.md /app/workspace/CLAUDE.md
@@ -120,11 +129,15 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Non-root user (UID 1000 to match host for bind-mount writes)
-RUN groupadd -g 1000 appuser && useradd -u 1000 -g appuser -m appuser
+# Non-root user aligned with the ML services.
+RUN groupadd -g 1001 appuser && useradd -u 1001 -g appuser -m appuser
 
 # Copy server venv from builder
 COPY --from=python-builder /app/.venv /app/.venv
+
+# Copy editable path dependencies used by the server venv.
+COPY --from=python-builder --chown=appuser:appuser /libs /libs
+COPY --from=python-builder --chown=appuser:appuser /traid_training_sdk /traid_training_sdk
 
 # Copy workspace (including .venv) from builder
 COPY --from=python-builder --chown=appuser:appuser /app/workspace /app/workspace
@@ -132,8 +145,10 @@ COPY --from=python-builder --chown=appuser:appuser /app/workspace /app/workspace
 # Copy built UI from ui-builder
 COPY --from=ui-builder /app/ui/dist /app/ui/dist
 
-# Copy server source code
-COPY --chown=appuser:appuser services/autoresearch-agent/server/ /app/server/
+# Copy shared service helpers and server source code
+COPY --chown=appuser:appuser services/__init__.py /app/services/__init__.py
+COPY --chown=appuser:appuser services/shared /app/services/shared
+COPY --chown=appuser:appuser services/autoresearch-agent/src/ /app/src/
 
 # Create runtime directories
 RUN mkdir -p /app/workspace/runs /app/workspace/db && \
@@ -147,7 +162,7 @@ WORKDIR /app
 
 # Environment
 ENV PATH="/app/.venv/bin:$PATH" \
-    PYTHONPATH="/app" \
+    PYTHONPATH="/app:/" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
@@ -159,4 +174,4 @@ EXPOSE 8000
 
 # Entrypoint
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["uvicorn", "server.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

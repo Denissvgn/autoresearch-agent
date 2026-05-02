@@ -7,23 +7,25 @@ import logging
 import os
 import secrets
 from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator
 
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from server.api.auth import require_api_auth, require_websocket_auth
-from server.config import settings
-from server.core.config_promoter import ConfigPromoter
-from server.core.observability import (
+from src.api.auth import require_api_auth, require_websocket_auth
+from src.config import settings
+from src.core.config_promoter import ConfigPromoter
+from src.core.observability import (
     PROMETHEUS_CONTENT_TYPE,
     empty_observability_snapshot,
     format_prometheus,
 )
-from server.core.results_store import ResultsStore
-from server.core.session_manager import SessionManager
-from server.ws.events import broadcaster
+from src.core.results_store import ResultsStore
+from src.core.session_manager import SessionManager
+from src.core.service_preflight import build_not_run_preflight, run_service_preflight
+from src.ws.events import broadcaster
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
@@ -38,7 +40,7 @@ _promoter: ConfigPromoter | None = None
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup and shutdown logic."""
     global _store, _session_manager, _promoter
 
@@ -62,11 +64,11 @@ async def lifespan(app: FastAPI):
     _promoter = ConfigPromoter(_store)
 
     # Wire API modules
-    from server.api import promotion, research, results
+    from src.api import promotion, research, results
 
-    research.init(_session_manager, _store)
+    research.init(_session_manager, _store)  # type: ignore[no-untyped-call]
     results.init(_store, mlflow_external_url=settings.mlflow_external_url)
-    promotion.init(_promoter, _store)
+    promotion.init(_promoter, _store)  # type: ignore[no-untyped-call]
 
     logger.info("Autoresearch-agent ready")
 
@@ -109,9 +111,9 @@ app.add_middleware(
 )
 
 # Include API routers
-from server.api.promotion import router as promotion_router
-from server.api.research import router as research_router
-from server.api.results import router as results_router
+from src.api.promotion import router as promotion_router
+from src.api.research import router as research_router
+from src.api.results import router as results_router
 
 app.include_router(research_router)
 app.include_router(results_router)
@@ -124,7 +126,7 @@ app.include_router(promotion_router)
 
 
 @app.get("/health")
-async def health():
+async def health() -> dict[str, Any]:
     return {
         "status": "ok",
         "service": settings.service_name,
@@ -132,7 +134,40 @@ async def health():
     }
 
 
-async def _collect_observability_snapshot():
+@app.get("/monitoring/health")
+async def monitoring_health() -> dict[str, Any]:
+    active_sessions = _session_manager.active_count if _session_manager else 0
+    if settings.preflight_enabled:
+        try:
+            preflight = await run_service_preflight(model_type="all")
+        except Exception as exc:
+            preflight = {
+                "schema_version": "autoresearch_service_preflight.v1",
+                "status": "failed",
+                "required_ready": False,
+                "required_failures": ["preflight"],
+                "error": str(exc),
+            }
+    else:
+        preflight = build_not_run_preflight()
+
+    preflight_status = preflight.get("status")
+    if preflight_status == "ready":
+        status_text = "healthy"
+    elif preflight_status in {"degraded", "skipped", "not_run"}:
+        status_text = "degraded"
+    else:
+        status_text = "unhealthy"
+
+    return {
+        "status": status_text,
+        "service": settings.service_name,
+        "active_sessions": active_sessions,
+        "dependencies": preflight,
+    }
+
+
+async def _collect_observability_snapshot() -> dict[str, Any]:
     active_sessions = _session_manager.active_count if _session_manager else 0
     if _store is None:
         return empty_observability_snapshot(active_sessions=active_sessions)
@@ -142,7 +177,7 @@ async def _collect_observability_snapshot():
 
 
 @app.get("/metrics", include_in_schema=False)
-async def metrics(request: Request):
+async def metrics(request: Request) -> Response:
     # Phase 5.2: optional bearer-token gate for Prometheus scrapers. When
     # ``autoresearch_prometheus_token`` is unset we keep the previous
     # unauthenticated behavior (typical in-cluster scrape via NetworkPolicy);
@@ -164,7 +199,7 @@ async def metrics(request: Request):
 
 
 @app.get("/api/observability/alerts", dependencies=[Depends(require_api_auth)])
-async def observability_alerts():
+async def observability_alerts() -> dict[str, Any]:
     snapshot = await _collect_observability_snapshot()
     return {
         "schema_version": snapshot["schema_version"],
@@ -179,7 +214,7 @@ async def observability_alerts():
 
 
 @app.websocket("/ws/events")
-async def websocket_events(websocket: WebSocket):
+async def websocket_events(websocket: WebSocket) -> None:
     actor = await require_websocket_auth(websocket)
     if actor is None:
         return
@@ -188,7 +223,7 @@ async def websocket_events(websocket: WebSocket):
     try:
         # Server-side ping loop keeps the TCP connection alive during long
         # training runs when no application-level events are being sent.
-        async def _heartbeat():
+        async def _heartbeat() -> None:
             try:
                 while True:
                     await asyncio.sleep(15)
@@ -242,7 +277,7 @@ if os.path.isdir(_ui_dist):
     _index_html = os.path.join(_ui_dist, "index.html")
 
     @app.get("/{full_path:path}")
-    async def spa_fallback(full_path: str):
+    async def spa_fallback(full_path: str) -> FileResponse:
         # Serve actual files if they exist (favicon.ico, etc.)
         file_path = os.path.join(_ui_dist, full_path)
         if full_path and os.path.isfile(file_path):

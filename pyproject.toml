@@ -7,8 +7,8 @@ packages = []
 
 [tool.poetry.dependencies]
 python = "^3.12"
-fastapi = "^0.115.0"
-uvicorn = {version = "^0.34.0", extras = ["standard"]}
+fastapi = "^0.109.0"
+uvicorn = {version = "^0.27.0", extras = ["standard"]}
 pydantic = "^2.5.0"
 pydantic-settings = "^2.1.0"
 anthropic = "^0.52.0"
@@ -16,12 +16,26 @@ pyyaml = "^6.0"
 aiosqlite = "^0.20.0"
 websockets = "^14.0"
 httpx = "^0.27.0"
+prometheus-client = "^0.19.0"
+vdmc-core = {path = "../../libs/vdmc_core", develop = true}
+traid-config = {path = "../../libs/config", develop = true}
+data-clients = {path = "../../libs/data_clients", develop = true}
+identity-client = {path = "../../libs/identity_client", develop = true}
+observability = {path = "../../libs/observability", develop = true}
+ml-artifacts = {path = "../../libs/ml_artifacts", develop = true}
+feature-engineering = {path = "../../libs/feature_engineering", develop = true}
+resilience = {path = "../../libs/resilience", develop = true}
+traid-training-sdk = {path = "../../traid_training_sdk", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
 pytest-asyncio = "^0.23.0"
 pytest-cov = "^4.1.0"
+black = "^23.0.0"
+isort = "^5.13.0"
+mypy = "^1.5.0"
 ruff = "^0.2.0"
+flake8 = "^6.0.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -30,3 +44,61 @@ build-backend = "poetry.core.masonry.api"
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+ignore = ["E402", "F401", "F541", "F841"]
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 100
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+disallow_untyped_decorators = false
+exclude = [
+  "src/api/(audit|promotion|research|results)\\.py",
+  "src/core/(command_policy|command_runner|config_promoter|consistency_validator|development_gate_bundle|development_inference_validation|development_signal_health|experiment_parser|iteration_snapshot|log_writer|orchestrator|pipeline_controller|research_manifest|research_phase_plan|research_state|results_store|service_preflight|session_manager|structured_hpo)\\.py",
+]
+
+[[tool.mypy.overrides]]
+module = [
+  "src.api.audit",
+  "src.api.promotion",
+  "src.api.research",
+  "src.api.results",
+  "src.core.command_policy",
+  "src.core.command_runner",
+  "src.core.config_promoter",
+  "src.core.consistency_validator",
+  "src.core.development_gate_bundle",
+  "src.core.development_inference_validation",
+  "src.core.development_signal_health",
+  "src.core.experiment_parser",
+  "src.core.iteration_snapshot",
+  "src.core.log_writer",
+  "src.core.orchestrator",
+  "src.core.pipeline_controller",
+  "src.core.research_manifest",
+  "src.core.research_phase_plan",
+  "src.core.research_state",
+  "src.core.results_store",
+  "src.core.service_preflight",
+  "src.core.session_manager",
+  "src.core.structured_hpo",
+]
+ignore_errors = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"

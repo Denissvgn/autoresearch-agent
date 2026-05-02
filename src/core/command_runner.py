@@ -8,7 +8,7 @@ import signal
 import subprocess
 from dataclasses import dataclass
 
-from server.core.command_policy import CommandDecision, evaluate_command_policy
+from src.core.command_policy import CommandDecision, evaluate_command_policy
 
 
 _MAX_OUTPUT_LEN = 60_000

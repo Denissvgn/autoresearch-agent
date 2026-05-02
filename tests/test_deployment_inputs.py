@@ -29,6 +29,7 @@ def test_env_example_exists_and_contains_only_sanitized_values():
     }
     optional_keys = {
         "AUTORESEARCH_BIND_HOST",
+        "AUTORESEARCH_HOST",
         "AUTORESEARCH_PORT",
         "AUTORESEARCH_CORS_ORIGINS",
         "AUTORESEARCH_MAX_ITERATIONS",
@@ -36,6 +37,9 @@ def test_env_example_exists_and_contains_only_sanitized_values():
         "AUTORESEARCH_TIMEOUT_S",
         "AUTORESEARCH_MAX_CONCURRENT",
         "AUTORESEARCH_LOG_LEVEL",
+        "AUTORESEARCH_IDENTITY_SERVICE_URL",
+        "AUTORESEARCH_IDENTITY_INTROSPECTION_TIMEOUT_S",
+        "AUTORESEARCH_PROMETHEUS_TOKEN",
         "AUTORESEARCH_PREFLIGHT_ENABLED",
         "AUTORESEARCH_ALLOW_UNREADY_SERVICES",
         "AUTORESEARCH_PREFLIGHT_TIMEOUT_S",
@@ -88,6 +92,29 @@ def test_autoresearch_ui_build_inputs_are_tracked_and_outputs_ignored():
         == 0
     )
     assert _git("check-ignore", "-q", "services/autoresearch-agent/ui/dist").returncode == 0
+
+
+def test_autoresearch_backend_uses_src_layout_and_committed_lockfile():
+    assert (SERVICE_DIR / "src" / "main.py").exists()
+    assert not (SERVICE_DIR / "server").exists()
+    assert (SERVICE_DIR / "poetry.lock").exists()
+
+    result = _git("check-ignore", "-q", "services/autoresearch-agent/poetry.lock")
+    assert result.returncode == 1
+
+
+def test_autoresearch_dockerfile_matches_ml_service_runtime_contract():
+    dockerfile = (SERVICE_DIR / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "poetry lock" not in dockerfile
+    assert "|| true" not in dockerfile
+    assert "2>/dev/null" not in dockerfile
+    assert "services/autoresearch-agent/src/ /app/src/" in dockerfile
+    assert 'CMD ["uvicorn", "src.main:app"' in dockerfile
+    assert "groupadd -g 1001 appuser" in dockerfile
+    assert "useradd -u 1001" in dockerfile
+    assert "services/shared /app/services/shared" in dockerfile
+    assert "-e ./libs/ml_artifacts" in dockerfile
 
 
 def test_readme_uses_tracked_env_template_without_token_samples():

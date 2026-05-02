@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, Iterable, List, Optional
 
-from server.core.consistency_validator import parse_consistency_report
-from server.core.observability import alert_suggestions
-from server.core.research_phase_plan import build_phase_state
+from src.core.consistency_validator import parse_consistency_report
+from src.core.observability import alert_suggestions
+from src.core.research_phase_plan import build_phase_state
 
 
 def build_research_state(

@@ -5,10 +5,10 @@ import json
 import pytest
 import yaml
 
-from server.core.consistency_validator import build_consistency_report
-from server.core.research_phase_plan import build_phase_state
-from server.core.research_state import build_research_state
-from server.core.structured_hpo import (
+from src.core.consistency_validator import build_consistency_report
+from src.core.research_phase_plan import build_phase_state
+from src.core.research_state import build_research_state
+from src.core.structured_hpo import (
     build_structured_hpo_plan,
     materialize_planned_trials,
     validate_config_patch,

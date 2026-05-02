@@ -55,8 +55,14 @@ Required variables:
 | `AUTORESEARCH_API_TOKEN` | Bearer token for operator/UI API calls | locally generated random value |
 
 Optional local controls such as `AUTORESEARCH_BIND_HOST`,
-`AUTORESEARCH_PORT`, CORS origins, preflight flags, iteration limits, and budget
-limits are documented in `.env.example`.
+`AUTORESEARCH_HOST`, `AUTORESEARCH_PORT`, CORS origins, identity-service
+introspection, Prometheus scrape auth, preflight flags, iteration limits, and
+budget limits are documented in `.env.example`.
+
+API clients may authenticate with `AUTORESEARCH_API_TOKEN`. Admin JWTs issued by
+identity-service are also accepted when `AUTORESEARCH_IDENTITY_SERVICE_URL`
+or its fallback alias `IDENTITY_SERVICE_URL` is configured; the static token
+remains useful for local operator/UI workflows.
 
 ### 2. Build and run
 
@@ -146,7 +152,7 @@ The **History** page shows:
 
 ```
 services/autoresearch-agent/
-├── server/                     # FastAPI backend
+├── src/                        # FastAPI backend
 │   ├── main.py                 # App entry, lifespan, CORS, static files
 │   ├── config.py               # Settings (env vars → pydantic)
 │   ├── core/
@@ -174,6 +180,9 @@ services/autoresearch-agent/
 ├── Dockerfile                  # 3-stage build (UI → Python deps → runtime)
 ├── CLAUDE.md                   # Agent system prompt ("Act, Don't Explore")
 ├── pyproject.toml              # Server Python dependencies
+├── poetry.lock                 # Reproducible server dependency lock
+├── RUNBOOK.md                  # Auth, metrics, health, Docker, UID, parity ops
+├── CHANGELOG.md                # Service-level consistency changes
 ├── .env.example                # Tracked sanitized environment template
 └── .env                        # Local ignored API credentials
 ```
@@ -200,7 +209,10 @@ services/autoresearch-agent/
 | `GET` | `/api/instruments` | Available instruments |
 | `GET` | `/api/models` | Available model types |
 | `GET` | `/api/status` | Server status and settings |
-| `WS` | `/ws` | WebSocket for real-time events |
+| `GET` | `/health` | Lightweight Docker health endpoint |
+| `GET` | `/monitoring/health` | Dependency/preflight-style readiness |
+| `GET` | `/metrics` | Prometheus metrics (optionally bearer-token gated) |
+| `WS` | `/ws/events` | WebSocket for real-time events |
 
 ### Docker Compose
 
@@ -209,12 +221,12 @@ services/autoresearch-agent/
 services:
   autoresearch-agent:
     container_name: traid_autoresearch_agent
-    ports: ["8030:8000"]
+    ports: ["127.0.0.1:8030:8000"]
     networks: [traid-network]
     volumes:
       - autoresearch_runs:/app/workspace/runs    # Experiment artifacts
       - autoresearch_db:/app/workspace/db         # SQLite database
-      - ../configs:/host/configs                  # Config promotion target
+      - ../configs:/host/configs                  # Config promotion target (UID 1001)
     deploy:
       resources:
         limits: { memory: 2G, cpus: "2.0" }
@@ -249,8 +261,14 @@ The compose stack persists autoresearch state across restarts:
 and persistence paths currently used by the server. The same URL set is copied
 into each session manifest for reproducibility.
 
+The container runs as UID/GID `1001`, matching the main ML service images.
+Ensure any host-owned `configs/` path used for promotions is writable by that
+identity.
+
 ### Direction Upgrade Runbooks
 
+- `services/autoresearch-agent/RUNBOOK.md` covers service auth, metrics,
+  health/readiness, Docker build, UID `1001`, and workspace dependency parity.
 - `docs/ml/autoresearch_direction_runbook.md` covers operator workflow,
   phase-state inspection, HPO rules, promotion readiness, rollback triggers,
   and verification commands.
@@ -273,8 +291,8 @@ Any API compatible with the Anthropic Messages format:
 
 | Setting | Default | Env Variable |
 |---------|---------|-------------|
-| Max iterations per session | 30 | `MAX_ITERATIONS` |
-| Max API budget per session | $10.00 | `MAX_BUDGET_USD` |
-| Experiment timeout | 2 hours | `EXPERIMENT_TIMEOUT_S` |
-| Max concurrent sessions | 2 | `MAX_CONCURRENT_SESSIONS` |
-| Quick mode default | off | `DEFAULT_QUICK_MODE` |
+| Max iterations per session | 30 | `AUTORESEARCH_MAX_ITERATIONS` |
+| Max API budget per session | $10.00 | `AUTORESEARCH_MAX_BUDGET_USD` |
+| Experiment timeout | 2 hours | `AUTORESEARCH_TIMEOUT_S` |
+| Max concurrent sessions | 2 | `AUTORESEARCH_MAX_CONCURRENT` |
+| Quick mode default | off | `AUTORESEARCH_DEFAULT_QUICK_MODE` |

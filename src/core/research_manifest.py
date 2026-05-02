@@ -9,8 +9,8 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from server.config import settings
-from server.core.service_preflight import build_not_run_preflight, sanitize_service_url
+from src.config import settings
+from src.core.service_preflight import build_not_run_preflight, sanitize_service_url
 
 
 class ResearchSessionManifest(BaseModel):

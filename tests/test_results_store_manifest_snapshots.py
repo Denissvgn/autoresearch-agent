@@ -9,11 +9,11 @@ import pytest
 os.environ.setdefault("ANTHROPIC_BASE_URL", "http://anthropic.invalid")
 os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "test-token")
 
-from server.api.results import _enrich_iteration
-from server.core.consistency_validator import build_consistency_report
-from server.core.iteration_snapshot import build_trial_identity, trial_identity_hash
-from server.core.research_phase_plan import phase_state_json
-from server.core.results_store import ResultsStore
+from src.api.results import _enrich_iteration
+from src.core.consistency_validator import build_consistency_report
+from src.core.iteration_snapshot import build_trial_identity, trial_identity_hash
+from src.core.research_phase_plan import phase_state_json
+from src.core.results_store import ResultsStore
 
 
 @pytest.mark.asyncio

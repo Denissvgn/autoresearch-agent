@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import Request
 
-from server.api.auth import AuthenticatedActor
+from src.api.auth import AuthenticatedActor
 
 
 def _request_actor(request: Request) -> AuthenticatedActor | None:

@@ -30,9 +30,9 @@ except ModuleNotFoundError:
         APIStatusError=_FakeAPIStatusError,
     )
 
-from server.core.orchestrator import AgentOrchestrator
-from server.core.results_store import ResultsStore
-from server.core.session_manager import SessionManager
+from src.core.orchestrator import AgentOrchestrator
+from src.core.results_store import ResultsStore
+from src.core.session_manager import SessionManager
 
 
 async def _create_session(

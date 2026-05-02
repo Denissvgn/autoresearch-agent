@@ -17,10 +17,10 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from server.api.promotion import PromotionApproval, PromotionScopeRequest
-from server.core.config_promoter import _atomic_write_text
-from server.core.results_store import ResultsStore, _add_column_if_missing
-from server.ws.events import EventBroadcaster
+from src.api.promotion import PromotionApproval, PromotionScopeRequest
+from src.core.config_promoter import _atomic_write_text
+from src.core.results_store import ResultsStore, _add_column_if_missing
+from src.ws.events import EventBroadcaster
 
 
 # ---------------------------------------------------------------------------

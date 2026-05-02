@@ -18,30 +18,30 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 import anthropic
 import httpx
 
-from server.config import settings
-from server.core.consistency_validator import (
+from src.config import settings
+from src.core.consistency_validator import (
     build_consistency_report,
     consistency_report_json,
 )
-from server.core.command_runner import GovernedCommandRunner, redact_sensitive_text
-from server.core.experiment_parser import (
+from src.core.command_runner import GovernedCommandRunner, redact_sensitive_text
+from src.core.experiment_parser import (
     is_hpo_study_output,
     parse_hpo_study_output,
     parse_iteration_marker,
     parse_prepare_output,
 )
-from server.core.iteration_snapshot import (
+from src.core.iteration_snapshot import (
     build_iteration_attempt_snapshot,
     build_trial_identity,
     canonical_config_hash,
     trial_identity_hash,
     write_iteration_attempt_snapshot,
 )
-from server.core.log_writer import AgentLogWriter
-from server.core.research_phase_plan import build_phase_state, phase_state_json
-from server.core.results_store import ResultsStore
-from server.core.structured_hpo import materialize_planned_trials
-from server.ws.events import broadcaster
+from src.core.log_writer import AgentLogWriter
+from src.core.research_phase_plan import build_phase_state, phase_state_json
+from src.core.results_store import ResultsStore
+from src.core.structured_hpo import materialize_planned_trials
+from src.ws.events import broadcaster
 
 logger = logging.getLogger(__name__)
 
@@ -2447,7 +2447,7 @@ class AgentOrchestrator:
                 return
 
             # Import here to avoid circular dependency at module level
-            from server.core.config_promoter import ConfigPromoter
+            from src.core.config_promoter import ConfigPromoter
 
             promoter = ConfigPromoter(self._store)
             result = await promoter.confirm(research_id)

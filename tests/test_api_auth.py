@@ -7,14 +7,19 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.testclient import TestClient
-from starlette.testclient import WebSocketDenialResponse
+
+try:
+    from starlette.testclient import WebSocketDenialResponse
+except ImportError:  # Starlette <0.37 closes denied sockets instead.
+    WebSocketDenialResponse = None
 
 os.environ.setdefault("ANTHROPIC_BASE_URL", "http://anthropic.invalid")
 os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "test-token")
 
-from server.api import promotion, research, results
-from server.api.auth import require_websocket_auth
-from server.config import Settings, settings
+from src.api import auth as auth_module
+from src.api import promotion, research, results
+from src.api.auth import require_websocket_auth
+from src.config import Settings, settings
 
 API_TOKEN = "test-autoresearch-token"
 
@@ -183,6 +188,11 @@ class FakePromoter:
 @pytest.fixture(autouse=True)
 def configure_api_auth(monkeypatch):
     monkeypatch.setattr(settings, "autoresearch_api_token", API_TOKEN)
+
+    async def fake_inactive_introspection(base_url: str, token: str, timeout: float):
+        return {"active": False}
+
+    monkeypatch.setattr(auth_module, "introspect_token", fake_inactive_introspection)
     store = FakeStore()
     research.init(FakeSessionManager(), store)
     results.init(store)
@@ -375,17 +385,100 @@ def test_rejected_api_auth_records_audit_fingerprint_not_token(
     assert "wrong-token" not in str(event)
 
 
+def test_identity_jwt_admin_token_is_accepted(
+    client: TestClient,
+    configure_api_auth: FakeStore,
+    monkeypatch,
+):
+    async def fake_introspect_token(base_url: str, token: str, timeout: float):
+        assert base_url == settings.identity_service_url
+        assert token == "jwt-admin-token"
+        assert timeout == settings.identity_introspection_timeout_s
+        return {
+            "active": True,
+            "sub": "user-123",
+            "username": "ml-admin",
+            "roles": ["ml_admin"],
+            "is_admin": False,
+        }
+
+    monkeypatch.setattr(auth_module, "introspect_token", fake_introspect_token)
+
+    response = client.post(
+        "/api/research/start",
+        json=start_payload(),
+        headers={"Authorization": "Bearer jwt-admin-token"},
+    )
+
+    assert response.status_code == 201
+    event = configure_api_auth.audit_events[-1]
+    assert event["actor_id"] == "identity:user-123"
+    assert event["request_metadata"]["auth_mechanism"] == "bearer:identity-jwt"
+
+
+def test_identity_jwt_without_admin_role_is_rejected(
+    client: TestClient,
+    configure_api_auth: FakeStore,
+    monkeypatch,
+):
+    async def fake_introspect_token(base_url: str, token: str, timeout: float):
+        return {
+            "active": True,
+            "sub": "user-456",
+            "username": "viewer",
+            "roles": ["viewer"],
+            "is_admin": False,
+        }
+
+    monkeypatch.setattr(auth_module, "introspect_token", fake_introspect_token)
+
+    response = client.post(
+        "/api/research/start",
+        json=start_payload(),
+        headers={"Authorization": "Bearer jwt-viewer-token"},
+    )
+
+    assert response.status_code == 403
+    assert len(configure_api_auth.audit_events) == 1
+    event = configure_api_auth.audit_events[0]
+    assert event["action"] == "auth.reject"
+    assert event["outcome"] == "failure"
+    assert event["request_metadata"]["status_code"] == 403
+
+
 def test_websocket_requires_authentication(client: TestClient):
-    with pytest.raises(WebSocketDenialResponse) as exc:
+    with pytest.raises(Exception) as exc:
         with client.websocket_connect("/ws/events"):
             pass
 
-    assert exc.value.status_code == 401
-    assert exc.value.headers["www-authenticate"] == "Bearer"
+    if WebSocketDenialResponse is not None and isinstance(exc.value, WebSocketDenialResponse):
+        assert exc.value.status_code == 401
+        assert exc.value.headers["www-authenticate"] == "Bearer"
+    else:
+        assert isinstance(exc.value, WebSocketDisconnect)
+        assert exc.value.code == 1008
 
 
 def test_websocket_accepts_authorization_header(client: TestClient):
     with client.websocket_connect("/ws/events", headers=auth_headers()):
+        pass
+
+
+def test_websocket_accepts_identity_jwt_header(client: TestClient, monkeypatch):
+    async def fake_introspect_token(base_url: str, token: str, timeout: float):
+        return {
+            "active": True,
+            "sub": "user-ws",
+            "username": "ws-admin",
+            "roles": ["admin"],
+        }
+
+    monkeypatch.setattr(auth_module, "introspect_token", fake_introspect_token)
+
+    with client.websocket_connect(
+        "/ws/events",
+        headers={"Authorization": "Bearer jwt-websocket-token"},
+    ):
         pass
 
 
@@ -409,6 +502,52 @@ def test_default_cors_origins_are_local_not_wildcard(monkeypatch):
     assert "*" not in cfg.cors_origins
     assert "http://localhost:8030" in cfg.cors_origins
     assert "http://localhost:5173" in cfg.cors_origins
+
+
+def test_settings_accept_canonical_autoresearch_aliases(monkeypatch):
+    env_values = {
+        "AUTORESEARCH_WORKSPACE_ROOT": "/custom/workspace",
+        "AUTORESEARCH_HOST_CONFIGS_PATH": "/custom/configs",
+        "AUTORESEARCH_MAX_ITERATIONS": "7",
+        "AUTORESEARCH_MAX_BUDGET_USD": "3.25",
+        "AUTORESEARCH_TIMEOUT_S": "42",
+        "AUTORESEARCH_DEFAULT_QUICK_MODE": "false",
+        "AUTORESEARCH_MAX_CONCURRENT": "4",
+        "AUTORESEARCH_LOG_LEVEL": "DEBUG",
+        "AUTORESEARCH_IDENTITY_SERVICE_URL": "http://identity:8000",
+    }
+    for key, value in env_values.items():
+        monkeypatch.setenv(key, value)
+
+    cfg = Settings(
+        anthropic_base_url="http://anthropic.invalid",
+        anthropic_auth_token="test-token",
+    )
+
+    assert cfg.workspace_root == "/custom/workspace"
+    assert cfg.host_configs_path == "/custom/configs"
+    assert cfg.max_iterations == 7
+    assert cfg.max_budget_usd == 3.25
+    assert cfg.experiment_timeout_s == 42
+    assert cfg.default_quick_mode is False
+    assert cfg.max_concurrent_sessions == 4
+    assert cfg.log_level == "DEBUG"
+    assert cfg.identity_service_url == "http://identity:8000"
+
+
+def test_settings_keep_bare_env_fallbacks(monkeypatch):
+    for key in ("AUTORESEARCH_MAX_ITERATIONS", "AUTORESEARCH_WORKSPACE_ROOT"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("MAX_ITERATIONS", "11")
+    monkeypatch.setenv("WORKSPACE_ROOT", "/legacy/workspace")
+
+    cfg = Settings(
+        anthropic_base_url="http://anthropic.invalid",
+        anthropic_auth_token="test-token",
+    )
+
+    assert cfg.max_iterations == 11
+    assert cfg.workspace_root == "/legacy/workspace"
 
 
 def test_compose_binds_autoresearch_port_to_loopback_by_default():

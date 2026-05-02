@@ -10,9 +10,9 @@ import yaml
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from server.api.audit import record_api_audit_event
-from server.api.auth import require_api_auth
-from server.config import settings
+from src.api.audit import record_api_audit_event
+from src.api.auth import require_api_auth
+from src.config import settings
 
 router = APIRouter(prefix="/api", tags=["research"], dependencies=[Depends(require_api_auth)])
 

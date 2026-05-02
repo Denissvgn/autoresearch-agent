@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from server.core.iteration_snapshot import (
+from src.core.iteration_snapshot import (
     build_iteration_attempt_snapshot,
     build_trial_identity,
     canonical_config_hash,

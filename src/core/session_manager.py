@@ -12,17 +12,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from server.config import settings
-from server.core.orchestrator import AgentOrchestrator, ResearchConfig
-from server.core.pipeline_controller import PipelineConfig, PipelineController
-from server.core.research_manifest import build_research_manifest, manifest_pretty_json
-from server.core.results_store import ResultsStore
-from server.core.service_preflight import (
+from src.config import settings
+from src.core.orchestrator import AgentOrchestrator, ResearchConfig
+from src.core.pipeline_controller import PipelineConfig, PipelineController
+from src.core.research_manifest import build_research_manifest, manifest_pretty_json
+from src.core.results_store import ResultsStore
+from src.core.service_preflight import (
     require_preflight_ready,
     run_service_preflight,
 )
-from server.core.structured_hpo import build_structured_hpo_plan, hpo_plan_json
-from server.ws.events import broadcaster
+from src.core.structured_hpo import build_structured_hpo_plan, hpo_plan_json
+from src.ws.events import broadcaster
 
 logger = logging.getLogger(__name__)
 

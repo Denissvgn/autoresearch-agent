@@ -27,9 +27,9 @@ except ModuleNotFoundError:
         APIStatusError=_FakeAPIStatusError,
     )
 
-from server.config import settings
-from server.core.results_store import ResultsStore
-from server.core.service_preflight import (
+from src.config import settings
+from src.core.results_store import ResultsStore
+from src.core.service_preflight import (
     ServicePreflightError,
     require_preflight_ready,
     run_service_preflight,
@@ -112,7 +112,7 @@ async def test_service_preflight_blocks_unhealthy_required_service(
 async def test_session_start_persists_preflight_in_manifest(monkeypatch, tmp_path):
     _configure_preflight(monkeypatch, tmp_path)
 
-    import server.core.session_manager as session_manager_module
+    import src.core.session_manager as session_manager_module
 
     class FakeOrchestrator:
         def __init__(self, store) -> None:
@@ -183,7 +183,7 @@ async def test_session_start_persists_preflight_in_manifest(monkeypatch, tmp_pat
 async def test_session_start_preflight_failure_skips_llm_call(monkeypatch, tmp_path):
     _configure_preflight(monkeypatch, tmp_path)
 
-    import server.core.session_manager as session_manager_module
+    import src.core.session_manager as session_manager_module
 
     class FakeOrchestrator:
         def __init__(self, store) -> None:

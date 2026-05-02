@@ -8,7 +8,7 @@ import pytest
 os.environ.setdefault("ANTHROPIC_BASE_URL", "http://anthropic.invalid")
 os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "test-token")
 
-from server.core.research_manifest import build_research_manifest, manifest_pretty_json
+from src.core.research_manifest import build_research_manifest, manifest_pretty_json
 
 
 def _build_manifest(**overrides):

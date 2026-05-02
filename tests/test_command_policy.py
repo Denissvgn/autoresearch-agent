@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from server.core.command_policy import evaluate_command_policy
-from server.core.command_runner import GovernedCommandRunner, redact_sensitive_text
+from src.core.command_policy import evaluate_command_policy
+from src.core.command_runner import GovernedCommandRunner, redact_sensitive_text
 
 try:
     import anthropic  # noqa: F401
@@ -29,7 +29,7 @@ except ModuleNotFoundError:
         APIStatusError=_FakeAPIStatusError,
     )
 
-from server.core.orchestrator import _execute_tool
+from src.core.orchestrator import _execute_tool
 
 
 def _workspace(tmp_path: Path) -> tuple[str, str]:

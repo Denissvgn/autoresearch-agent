@@ -5,8 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, model_validator
 
-from server.api.audit import record_api_audit_event
-from server.api.auth import require_api_auth
+from src.api.audit import record_api_audit_event
+from src.api.auth import require_api_auth
 
 router = APIRouter(prefix="/api", tags=["promotion"], dependencies=[Depends(require_api_auth)])
 

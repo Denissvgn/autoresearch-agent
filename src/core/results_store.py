@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import aiosqlite
 
-from server.core.observability import (
+from src.core.observability import (
     OBSERVABILITY_SCHEMA_VERSION,
     alert_suggestions,
     log_research_event,

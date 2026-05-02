@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from server.ws.events import broadcaster
+from src.ws.events import broadcaster
 
 logger = logging.getLogger(__name__)
 

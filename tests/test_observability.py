@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from server.core.observability import format_prometheus
-from server.core.results_store import ResultsStore
+from src.core.observability import format_prometheus
+from src.core.results_store import ResultsStore
 
 
 async def _create_rl_session(store: ResultsStore, tmp_path: Path) -> None:
@@ -113,6 +113,7 @@ async def test_observability_snapshot_exports_prometheus_metrics(tmp_path: Path)
     text = format_prometheus(snapshot)
 
     assert snapshot["schema_version"] == "autoresearch_observability.v1"
+    assert "python_info" in text
     assert "autoresearch_active_sessions 2" in text
     assert "autoresearch_api_cost_usd_total 12.5" in text
     assert (
@@ -147,7 +148,7 @@ async def test_structured_logs_include_research_trace_context(
     await store.initialize()
     await _create_rl_session(store, tmp_path)
 
-    caplog.set_level(logging.INFO, logger="server.core.results_store")
+    caplog.set_level(logging.INFO, logger="src.core.results_store")
     await store.add_iteration(
         research_id="res_obs",
         iteration=1,

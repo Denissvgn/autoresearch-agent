@@ -7,28 +7,40 @@ import binascii
 import hashlib
 import logging
 import secrets
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from typing import Any
 
 from fastapi import Depends, HTTPException, Request, WebSocket, status
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from server.config import settings
+from src.config import settings
+
+try:
+    from identity_client import introspect_token as _introspect_token
+except ImportError:  # pragma: no cover - dependency is declared, fallback is defensive.
+    _introspect_token = None
+
+IdentityIntrospector = Callable[[str, str, float], Awaitable[dict[str, Any]]]
+introspect_token: IdentityIntrospector | None = _introspect_token
 
 logger = logging.getLogger(__name__)
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 _WS_TOKEN_SUBPROTOCOL_PREFIX = "autoresearch.token."
+_ADMIN_ROLES = {"admin", "administrator", "ml_admin"}
 
 
 @dataclass(frozen=True)
 class AuthenticatedActor:
-    """Authenticated caller context reserved for future JWT/RBAC expansion."""
+    """Authenticated caller context used for audit metadata."""
 
     subject: str
     actor_id: str
     mechanism: str
     websocket_subprotocol: str | None = None
+    roles: tuple[str, ...] = ()
 
 
 def _configured_token() -> str | None:
@@ -50,7 +62,14 @@ def _auth_required() -> HTTPException:
 def _auth_not_configured() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail="Autoresearch API token is not configured",
+        detail="Autoresearch authentication is not configured",
+    )
+
+
+def _admin_required() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Admin access required",
     )
 
 
@@ -63,23 +82,94 @@ def token_fingerprint(token: str | None) -> str | None:
     return f"token_sha256:{digest[:16]}"
 
 
-def _authenticate_token(
+def _roles_from_identity_payload(payload: dict[str, Any]) -> tuple[str, ...]:
+    roles = payload.get("roles")
+    if isinstance(roles, list):
+        return tuple(str(role) for role in roles if role is not None)
+    if isinstance(roles, str):
+        return (roles,)
+    role = payload.get("role")
+    if isinstance(role, str) and role:
+        return (role,)
+    return ()
+
+
+def _identity_is_admin(payload: dict[str, Any]) -> bool:
+    roles = set(_roles_from_identity_payload(payload))
+    return bool(payload.get("is_admin")) or bool(roles & _ADMIN_ROLES)
+
+
+def _identity_subject(payload: dict[str, Any]) -> str:
+    for key in ("sub", "user_id", "username", "email", "client_id"):
+        value = payload.get(key)
+        if value:
+            return str(value)
+    return "identity-token"
+
+
+async def _authenticate_identity_token(
+    token: str,
+    *,
+    mechanism: str,
+    websocket_subprotocol: str | None = None,
+) -> AuthenticatedActor:
+    if introspect_token is None:
+        logger.warning("identity-client is unavailable for autoresearch JWT introspection")
+        raise _auth_required()
+    try:
+        payload = await introspect_token(
+            settings.identity_service_url,
+            token,
+            settings.identity_introspection_timeout_s,
+        )
+    except Exception as exc:
+        logger.warning("Identity token introspection failed: %s", exc)
+        raise _auth_required() from exc
+
+    if not payload or not payload.get("active"):
+        raise _auth_required()
+    if not _identity_is_admin(payload):
+        raise _admin_required()
+
+    subject = _identity_subject(payload)
+    return AuthenticatedActor(
+        subject=subject,
+        actor_id=f"identity:{subject}",
+        mechanism=f"{mechanism}:identity-jwt",
+        websocket_subprotocol=websocket_subprotocol,
+        roles=_roles_from_identity_payload(payload),
+    )
+
+
+async def _authenticate_token(
     token: str | None,
     *,
     mechanism: str,
     websocket_subprotocol: str | None = None,
 ) -> AuthenticatedActor:
+    if not token:
+        raise _auth_required()
+
     configured = _configured_token()
+    if configured and secrets.compare_digest(token, configured):
+        return AuthenticatedActor(
+            subject="api-token",
+            actor_id=token_fingerprint(token) or "unknown",
+            mechanism=mechanism,
+            websocket_subprotocol=websocket_subprotocol,
+            roles=("admin", "ml_admin"),
+        )
+
+    if settings.identity_service_url:
+        return await _authenticate_identity_token(
+            token,
+            mechanism=mechanism,
+            websocket_subprotocol=websocket_subprotocol,
+        )
+
     if not configured:
         raise _auth_not_configured()
-    if not token or not secrets.compare_digest(token, configured):
-        raise _auth_required()
-    return AuthenticatedActor(
-        subject="api-token",
-        actor_id=token_fingerprint(token) or "unknown",
-        mechanism=mechanism,
-        websocket_subprotocol=websocket_subprotocol,
-    )
+    raise _auth_required()
 
 
 async def require_api_auth(
@@ -98,7 +188,7 @@ async def require_api_auth(
         )
         raise exc
     try:
-        actor = _authenticate_token(credentials.credentials, mechanism="bearer")
+        actor = await _authenticate_token(credentials.credentials, mechanism="bearer")
     except HTTPException as exc:
         await _record_auth_rejection(
             request,
@@ -111,7 +201,7 @@ async def require_api_auth(
     return actor
 
 
-def _audit_store_from_connection(connection: Request | WebSocket):
+def _audit_store_from_connection(connection: Request | WebSocket) -> Any:
     app = getattr(connection, "app", None)
     if app is None:
         app = connection.scope.get("app")
@@ -209,7 +299,7 @@ async def require_websocket_auth(websocket: WebSocket) -> AuthenticatedActor | N
         if header_token:
             attempted_token = header_token
             attempted_mechanism = "bearer"
-            return _authenticate_token(header_token, mechanism="bearer")
+            return await _authenticate_token(header_token, mechanism="bearer")
 
         protocol_token, selected_protocol = _parse_websocket_subprotocol_token(
             websocket.headers.get("sec-websocket-protocol")
@@ -217,7 +307,7 @@ async def require_websocket_auth(websocket: WebSocket) -> AuthenticatedActor | N
         if protocol_token:
             attempted_token = protocol_token
             attempted_mechanism = "websocket-subprotocol"
-            return _authenticate_token(
+            return await _authenticate_token(
                 protocol_token,
                 mechanism="websocket-subprotocol",
                 websocket_subprotocol=selected_protocol,
@@ -238,7 +328,8 @@ async def require_websocket_auth(websocket: WebSocket) -> AuthenticatedActor | N
             headers=headers,
         )
         try:
-            await websocket.send_denial_response(response)
-        except RuntimeError:
+            send_denial_response = getattr(websocket, "send_denial_response")
+            await send_denial_response(response)
+        except (AttributeError, RuntimeError):
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return None

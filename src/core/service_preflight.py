@@ -11,7 +11,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
-from server.config import settings
+from src.config import settings
 
 SCHEMA_VERSION = "autoresearch_service_preflight.v1"
 

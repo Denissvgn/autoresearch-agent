@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from server.api import results
+from src.api import results
 
 
 class FakeStore:

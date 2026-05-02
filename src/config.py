@@ -29,22 +29,58 @@ class Settings(BaseSettings):
     )
 
     # --- Service ---
-    service_name: str = Field(default="autoresearch-agent")
-    host: str = Field(default="0.0.0.0")
-    port: int = Field(default=8000)
-    environment: str = Field(default="development")
-    log_level: str = Field(default="INFO")
+    service_name: str = Field(
+        default="autoresearch-agent",
+        validation_alias=AliasChoices("AUTORESEARCH_SERVICE_NAME", "SERVICE_NAME"),
+    )
+    host: str = Field(
+        default="0.0.0.0",
+        validation_alias=AliasChoices("AUTORESEARCH_HOST", "HOST"),
+    )
+    port: int = Field(
+        default=8000,
+        validation_alias=AliasChoices("AUTORESEARCH_PORT", "PORT"),
+    )
+    environment: str = Field(
+        default="development",
+        validation_alias=AliasChoices("AUTORESEARCH_ENVIRONMENT", "ENVIRONMENT"),
+    )
+    log_level: str = Field(
+        default="INFO",
+        validation_alias=AliasChoices("AUTORESEARCH_LOG_LEVEL", "LOG_LEVEL"),
+    )
     autoresearch_api_token: str | None = Field(
         default=None,
         description="Bearer token required for autoresearch API and WebSocket access.",
     )
     autoresearch_prometheus_token: str | None = Field(
         default=None,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_PROMETHEUS_TOKEN",
+            "PROMETHEUS_TOKEN",
+        ),
         description=(
             "Optional bearer token required to scrape /metrics. When set, "
             "callers must present 'Authorization: Bearer <token>' or the "
             "scrape is rejected with HTTP 401. Phase 5.2 hardening."
         ),
+    )
+    identity_service_url: str = Field(
+        default="http://identity-service:8000",
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_IDENTITY_SERVICE_URL",
+            "IDENTITY_SERVICE_URL",
+        ),
+        description="Identity-service base URL used for JWT bearer-token introspection.",
+    )
+    identity_introspection_timeout_s: float = Field(
+        default=5.0,
+        gt=0,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_IDENTITY_INTROSPECTION_TIMEOUT_S",
+            "IDENTITY_INTROSPECTION_TIMEOUT_S",
+        ),
+        description="Timeout in seconds for identity-service token introspection.",
     )
 
     # --- Anthropic ---
@@ -74,30 +110,66 @@ class Settings(BaseSettings):
     )
 
     # --- Workspace ---
-    workspace_root: str = Field(default="/app/workspace")
-    host_configs_path: str = Field(default="/host/configs")
+    workspace_root: str = Field(
+        default="/app/workspace",
+        validation_alias=AliasChoices("AUTORESEARCH_WORKSPACE_ROOT", "WORKSPACE_ROOT"),
+    )
+    host_configs_path: str = Field(
+        default="/host/configs",
+        validation_alias=AliasChoices("AUTORESEARCH_HOST_CONFIGS_PATH", "HOST_CONFIGS_PATH"),
+    )
 
     # --- Experiment Limits ---
-    max_iterations: int = Field(default=30)
-    max_budget_usd: float = Field(default=10.0)
-    experiment_timeout_s: int = Field(default=14400)
+    max_iterations: int = Field(
+        default=30,
+        validation_alias=AliasChoices("AUTORESEARCH_MAX_ITERATIONS", "MAX_ITERATIONS"),
+    )
+    max_budget_usd: float = Field(
+        default=10.0,
+        validation_alias=AliasChoices("AUTORESEARCH_MAX_BUDGET_USD", "MAX_BUDGET_USD"),
+    )
+    experiment_timeout_s: int = Field(
+        default=14400,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_TIMEOUT_S",
+            "AUTORESEARCH_EXPERIMENT_TIMEOUT_S",
+            "EXPERIMENT_TIMEOUT_S",
+        ),
+    )
     default_quick_mode: bool = Field(
         default=True,
+        validation_alias=AliasChoices("AUTORESEARCH_DEFAULT_QUICK_MODE", "DEFAULT_QUICK_MODE"),
         description="Quick mode by default (2 folds, 50k steps). Override per-session with quick_mode=false.",
     )
-    max_concurrent_sessions: int = Field(default=2)
+    max_concurrent_sessions: int = Field(
+        default=2,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_MAX_CONCURRENT",
+            "AUTORESEARCH_MAX_CONCURRENT_SESSIONS",
+            "MAX_CONCURRENT_SESSIONS",
+        ),
+    )
 
     # --- API Robustness (ML-68) ---
     anthropic_api_timeout_s: int = Field(
         default=600,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_ANTHROPIC_API_TIMEOUT_S",
+            "ANTHROPIC_API_TIMEOUT_S",
+        ),
         description="Per-request timeout for Anthropic API calls (seconds).",
     )
     max_api_retries: int = Field(
         default=3,
+        validation_alias=AliasChoices("AUTORESEARCH_MAX_API_RETRIES", "MAX_API_RETRIES"),
         description="Max retries on transient API errors (timeout, 500, 429).",
     )
     context_compaction_threshold: int = Field(
         default=80,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_CONTEXT_COMPACTION_THRESHOLD",
+            "CONTEXT_COMPACTION_THRESHOLD",
+        ),
         description="Number of messages before old tool results are compacted.",
     )
     autoresearch_cross_session_duplicate_check: bool = Field(
@@ -224,4 +296,4 @@ class Settings(BaseSettings):
         return self.mlflow_s3_endpoint_url or self.s3_endpoint_url
 
 
-settings = Settings()
+settings = Settings()  # type: ignore[call-arg]

@@ -24,8 +24,8 @@ except ModuleNotFoundError:
         APIStatusError=_FakeAPIStatusError,
     )
 
-from server.core.orchestrator import AgentOrchestrator, ResearchConfig
-from server.core.results_store import ResultsStore
+from src.core.orchestrator import AgentOrchestrator, ResearchConfig
+from src.core.results_store import ResultsStore
 
 
 @pytest.mark.asyncio

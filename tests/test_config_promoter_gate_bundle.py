@@ -9,13 +9,13 @@ import pytest
 os.environ.setdefault("ANTHROPIC_BASE_URL", "http://anthropic.invalid")
 os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "test-token")
 
-from server.core import config_promoter
-from server.core.config_promoter import ConfigPromoter
-from server.core.development_gate_bundle import (
+from src.core import config_promoter
+from src.core.config_promoter import ConfigPromoter
+from src.core.development_gate_bundle import (
     DEFAULT_GATE_BUNDLE_RELATIVE_PATH,
     PRODUCTION_GATE_BUNDLE_RELATIVE_PATH,
 )
-from server.core.results_store import ResultsStore
+from src.core.results_store import ResultsStore
 
 
 class FakePromotionStore:
