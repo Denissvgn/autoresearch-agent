@@ -58,7 +58,7 @@ def _healthy_transport() -> httpx.MockTransport:
         ("mlflow", "/health"),
         ("mlflow-service", "/health"),
         ("data-ingest", "/readiness"),
-        ("ensemble-trainer", "/health"),
+        ("ensemble-trainer", "/health/ready"),
         ("rl-trainer", "/health/ready"),
         ("feature-service", "/health"),
         ("minio", "/minio/health/ready"),
@@ -83,6 +83,11 @@ async def test_service_preflight_records_healthy_services(monkeypatch, tmp_path)
     assert result["status"] == "ready"
     assert result["required_failures"] == []
     assert result["services"]["data_ingest"]["checked_url"].endswith("/readiness")
+    assert result["services"]["ensemble_trainer"]["health_paths"] == [
+        "/health/ready",
+        "/health",
+    ]
+    assert result["services"]["ensemble_trainer"]["checked_url"].endswith("/health/ready")
     assert result["services"]["artifact_store"]["url"] == "http://minio:9000"
     assert all(check["status"] == "ready" for check in result["services"].values())
 

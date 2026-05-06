@@ -60,7 +60,11 @@ def build_service_preflight_targets(settings_obj=settings) -> list[ServicePrefli
             settings_obj.data_ingest_url,
             health_paths=("/readiness", "/health"),
         ),
-        ServicePreflightTarget("ensemble_trainer", settings_obj.ensemble_trainer_url),
+        ServicePreflightTarget(
+            "ensemble_trainer",
+            settings_obj.ensemble_trainer_url,
+            health_paths=("/health/ready", "/health"),
+        ),
         ServicePreflightTarget(
             "rl_trainer",
             settings_obj.rl_trainer_url,
