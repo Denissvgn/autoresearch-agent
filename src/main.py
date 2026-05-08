@@ -163,9 +163,23 @@ from src.api.promotion import router as promotion_router
 from src.api.research import router as research_router
 from src.api.results import router as results_router
 
-app.include_router(research_router)
-app.include_router(results_router)
-app.include_router(promotion_router)
+
+def _normalise_api_prefix(prefix: str) -> str:
+    cleaned = (prefix or "").strip().strip("/")
+    return f"/{cleaned}" if cleaned else "/api/v1"
+
+
+_API_V1_PREFIX = _normalise_api_prefix(settings.api_v1_prefix)
+
+
+def _include_api_routers(prefix: str, *, include_in_schema: bool = True) -> None:
+    app.include_router(research_router, prefix=prefix, include_in_schema=include_in_schema)
+    app.include_router(results_router, prefix=prefix, include_in_schema=include_in_schema)
+    app.include_router(promotion_router, prefix=prefix, include_in_schema=include_in_schema)
+
+
+_include_api_routers(_API_V1_PREFIX)
+_include_api_routers("/api", include_in_schema=False)
 
 
 # ------------------------------------------------------------------
@@ -179,6 +193,21 @@ async def health() -> dict[str, Any]:
         "status": "ok",
         "service": settings.service_name,
         "active_sessions": _session_manager.active_count if _session_manager else 0,
+    }
+
+
+@app.get("/info")
+async def info(request: Request) -> dict[str, Any]:
+    base_url = str(request.base_url).rstrip("/")
+    return {
+        "service": settings.service_name,
+        "version": app.version,
+        "docs_url": "/docs",
+        "health_url": "/health",
+        "websocket_path": "/ws/events",
+        "api_prefix": _API_V1_PREFIX,
+        "legacy_api_prefix": "/api",
+        "api_base_url": f"{base_url}{_API_V1_PREFIX}",
     }
 
 
@@ -272,11 +301,10 @@ async def _collect_observability_snapshot() -> dict[str, Any]:
 
 @app.get("/metrics", include_in_schema=False)
 async def metrics(request: Request) -> Response:
-    # Phase 5.2: optional bearer-token gate for Prometheus scrapers. When
-    # ``autoresearch_prometheus_token`` is unset we keep the previous
-    # unauthenticated behavior (typical in-cluster scrape via NetworkPolicy);
-    # when set we require it explicitly so the endpoint is safe to expose
-    # outside the cluster boundary.
+    # Phase 5.2: bearer-token gate for Prometheus scrapers. When
+    # ``autoresearch_prometheus_token`` is unset the endpoint is intentionally
+    # unavailable; when set we require it explicitly so the endpoint is safe to
+    # expose outside the cluster boundary.
     expected = secret_value(settings.autoresearch_prometheus_token)
     if not expected:
         raise HTTPException(status_code=404, detail="metrics endpoint disabled")
@@ -293,7 +321,12 @@ async def metrics(request: Request) -> Response:
     )
 
 
-@app.get("/api/observability/alerts", dependencies=[Depends(require_api_auth)])
+@app.get(f"{_API_V1_PREFIX}/observability/alerts", dependencies=[Depends(require_api_auth)])
+@app.get(
+    "/api/observability/alerts",
+    include_in_schema=False,
+    dependencies=[Depends(require_api_auth)],
+)
 async def observability_alerts() -> dict[str, Any]:
     snapshot = await _collect_observability_snapshot()
     return {
@@ -301,6 +334,15 @@ async def observability_alerts() -> dict[str, Any]:
         "collected_at": snapshot["collected_at"],
         "alert_suggestions": snapshot["alert_suggestions"],
     }
+
+
+@app.api_route(
+    f"{_API_V1_PREFIX}/{{full_path:path}}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    include_in_schema=False,
+)
+async def api_v1_not_found(full_path: str) -> None:
+    raise HTTPException(status_code=404, detail="API endpoint not found")
 
 
 # ------------------------------------------------------------------

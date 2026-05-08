@@ -625,6 +625,71 @@ def _promotion_row(scope: str, promotion_id: int = 1) -> dict:
     }
 
 
+class FakeMlflowResponse:
+    def __init__(self, status_code: int, payload: object) -> None:
+        self.status_code = status_code
+        self._payload = payload
+        self.text = json.dumps(payload)
+
+    def json(self) -> object:
+        return self._payload
+
+
+class FakeMlflowAsyncClient:
+    def __init__(
+        self,
+        *,
+        composites: list[dict],
+        promote_payload: dict | None = None,
+        promote_status_code: int = 200,
+    ) -> None:
+        self.composites = composites
+        self.promote_payload = promote_payload or {
+            "id": "composite-prod",
+            "status": "production",
+            "promoted_at": "2026-05-08T12:00:00+00:00",
+        }
+        self.promote_status_code = promote_status_code
+        self.calls: list[dict] = []
+
+    def __call__(self, *args, **kwargs) -> "FakeMlflowAsyncClient":
+        return self
+
+    async def __aenter__(self) -> "FakeMlflowAsyncClient":
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+    async def get(self, url: str, *, headers: dict | None = None, params: dict | None = None):
+        self.calls.append(
+            {"method": "GET", "url": url, "headers": headers or {}, "params": params or {}}
+        )
+        return FakeMlflowResponse(200, self.composites)
+
+    async def post(self, url: str, *, headers: dict | None = None, json: dict | None = None):
+        self.calls.append(
+            {"method": "POST", "url": url, "headers": headers or {}, "json": json or {}}
+        )
+        return FakeMlflowResponse(self.promote_status_code, self.promote_payload)
+
+
+def _install_fake_mlflow_client(
+    monkeypatch,
+    *,
+    composites: list[dict],
+    promote_payload: dict | None = None,
+    promote_status_code: int = 200,
+) -> FakeMlflowAsyncClient:
+    client = FakeMlflowAsyncClient(
+        composites=composites,
+        promote_payload=promote_payload,
+        promote_status_code=promote_status_code,
+    )
+    monkeypatch.setattr(config_promoter.httpx, "AsyncClient", client)
+    return client
+
+
 def _best_iteration(metrics: dict) -> dict:
     return {
         "iteration": 3,
@@ -996,8 +1061,28 @@ async def test_production_scope_records_full_decision_chain(
     monkeypatch.setattr(
         config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
     )
+    monkeypatch.setattr(config_promoter.settings, "mlflow_service_auth_token", "service-token")
+    monkeypatch.setattr(config_promoter.settings, "mlflow_service_url", "http://mlflow-service")
+    metrics = _production_scope_metrics()
+    metrics["rollup_score"] = 0.77
+    mlflow_client = _install_fake_mlflow_client(
+        monkeypatch,
+        composites=[
+            {
+                "id": "composite-prod",
+                "instrument": "DOGE_USDT",
+                "status": "staging",
+                "direction_model_version": "direction-model:12",
+            }
+        ],
+        promote_payload={
+            "id": "composite-prod",
+            "status": "production",
+            "promoted_at": "2026-05-08T12:00:00+00:00",
+        },
+    )
     store = FakePromotionStore(
-        _best_iteration(_production_scope_metrics()),
+        _best_iteration(metrics),
         promotions=[
             _promotion_row("development", 1),
             _promotion_row("paper", 2),
@@ -1029,7 +1114,165 @@ async def test_production_scope_records_full_decision_chain(
         "production",
     ]
     assert metadata["rollback_targets"]["production"] == "direction_model:12"
+    assert metadata["mlflow_service"] == {
+        "outcome": "promoted",
+        "composite_id": "composite-prod",
+        "prior_status": "staging",
+        "final_status": "production",
+        "promoted_at": "2026-05-08T12:00:00+00:00",
+        "url": "http://mlflow-service/api/v1/composites/composite-prod",
+    }
     assert store.promotions[-1]["promotion_metadata"]["scope"] == "production"
+    assert store.promotions[-1]["promotion_metadata"]["mlflow_service"]["outcome"] == "promoted"
+    assert mlflow_client.calls[0]["method"] == "GET"
+    assert mlflow_client.calls[0]["headers"]["Authorization"] == "Bearer service-token"
+    assert mlflow_client.calls[0]["headers"]["X-Service-Name"] == "autoresearch-agent"
+    assert mlflow_client.calls[0]["params"] == {
+        "instrument": "DOGE_USDT",
+        "page_size": 100,
+    }
+    assert mlflow_client.calls[1]["method"] == "POST"
+    assert mlflow_client.calls[1]["json"] == {
+        "target_stage": "production",
+        "reason": "stage gate approved",
+        "rollup_score": 0.77,
+    }
+
+
+@pytest.mark.asyncio
+async def test_production_scope_requires_mlflow_service_token(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle_with_m7_remaining(tmp_path)
+    _write_production_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(
+        config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
+    )
+    monkeypatch.setattr(config_promoter.settings, "mlflow_service_auth_token", None)
+    store = FakePromotionStore(
+        _best_iteration(_production_scope_metrics()),
+        promotions=[
+            _promotion_row("development", 1),
+            _promotion_row("paper", 2),
+            _promotion_row("canary", 3),
+        ],
+    )
+
+    with pytest.raises(ValueError, match="requires .*MLFLOW_SERVICE_AUTH_TOKEN"):
+        await ConfigPromoter(store).confirm(
+            "research_1",
+            scope="production",
+            approval=_approval(),
+        )
+
+    assert len(store.promotions) == 3
+
+
+@pytest.mark.asyncio
+async def test_production_scope_fails_without_matching_composite_before_record(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle_with_m7_remaining(tmp_path)
+    _write_production_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(
+        config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
+    )
+    monkeypatch.setattr(config_promoter.settings, "mlflow_service_auth_token", "service-token")
+    _install_fake_mlflow_client(monkeypatch, composites=[])
+    store = FakePromotionStore(
+        _best_iteration(_production_scope_metrics()),
+        promotions=[
+            _promotion_row("development", 1),
+            _promotion_row("paper", 2),
+            _promotion_row("canary", 3),
+        ],
+    )
+
+    with pytest.raises(ValueError, match="No non-retired mlflow-service composite"):
+        await ConfigPromoter(store).confirm(
+            "research_1",
+            scope="production",
+            approval=_approval(),
+        )
+
+    assert len(store.promotions) == 3
+
+
+@pytest.mark.asyncio
+async def test_production_scope_fails_on_ambiguous_composite_before_record(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle_with_m7_remaining(tmp_path)
+    _write_production_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(
+        config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
+    )
+    monkeypatch.setattr(config_promoter.settings, "mlflow_service_auth_token", "service-token")
+    _install_fake_mlflow_client(
+        monkeypatch,
+        composites=[
+            {
+                "id": "composite-a",
+                "status": "staging",
+                "direction_model_version": "direction-model:12",
+            },
+            {
+                "id": "composite-b",
+                "status": "production",
+                "direction_model_version": "direction-model:12",
+            },
+        ],
+    )
+    store = FakePromotionStore(
+        _best_iteration(_production_scope_metrics()),
+        promotions=[
+            _promotion_row("development", 1),
+            _promotion_row("paper", 2),
+            _promotion_row("canary", 3),
+        ],
+    )
+
+    with pytest.raises(ValueError, match="Multiple non-retired mlflow-service composites"):
+        await ConfigPromoter(store).confirm(
+            "research_1",
+            scope="production",
+            approval=_approval(),
+        )
+
+    assert len(store.promotions) == 3
+
+
+@pytest.mark.asyncio
+async def test_paper_scope_remains_local_only(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle_with_m7_remaining(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(
+        config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
+    )
+    mlflow_client = _install_fake_mlflow_client(monkeypatch, composites=[])
+    store = FakePromotionStore(
+        _best_iteration(_production_scope_metrics()),
+        promotions=[_promotion_row("development", 1)],
+    )
+
+    result = await ConfigPromoter(store).confirm(
+        "research_1",
+        scope="paper",
+        approval=_approval(),
+    )
+
+    assert result["scope"] == "paper"
+    assert "mlflow_service" not in result["promotion_metadata"]
+    assert mlflow_client.calls == []
 
 
 @pytest.mark.asyncio

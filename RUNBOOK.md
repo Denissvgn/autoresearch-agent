@@ -11,12 +11,25 @@ If it does not match, the token is introspected through
 Useful local checks:
 
 ```bash
-curl -H "Authorization: Bearer $AUTORESEARCH_API_TOKEN" http://localhost:8030/api/status
+curl -H "Authorization: Bearer $AUTORESEARCH_API_TOKEN" http://localhost:8030/api/v1/status
+curl http://localhost:8030/info
 ```
 
 Prometheus scrapers can be separated from operator tokens by setting
-`AUTORESEARCH_PROMETHEUS_TOKEN`. When that value is set, `/metrics` requires
-`Authorization: Bearer <token>`.
+`AUTORESEARCH_PROMETHEUS_TOKEN`. `/metrics` is disabled when that value is
+unset and requires `Authorization: Bearer <token>` when configured. A minimal
+Prometheus scrape job looks like:
+
+```yaml
+scrape_configs:
+  - job_name: autoresearch-agent
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["autoresearch-agent:8000"]
+    authorization:
+      type: Bearer
+      credentials: ${AUTORESEARCH_PROMETHEUS_TOKEN}
+```
 
 ## Configuration and Vault
 
@@ -25,8 +38,10 @@ process environment and `.env` values win, Vault provides service defaults from
 `secret/config/autoresearch-agent/<env>`, and code defaults fill the rest.
 
 Store `ANTHROPIC_AUTH_TOKEN`, `AUTORESEARCH_API_TOKEN`, and
-`AUTORESEARCH_PROMETHEUS_TOKEN` in Vault for shared environments. Local `.env`
-files remain acceptable for developer machines and are ignored by git.
+`AUTORESEARCH_PROMETHEUS_TOKEN` in Vault for shared environments. Store
+`AUTORESEARCH_MLFLOW_SERVICE_AUTH_TOKEN` there too when production promotion is
+enabled. Local `.env` files remain acceptable for developer machines and are
+ignored by git.
 
 ## Metrics
 
@@ -40,7 +55,28 @@ files remain acceptable for developer machines and are ignored by git.
 - `autoresearch_active_sessions`
 
 The JSON alert endpoint remains available at
-`GET /api/observability/alerts`.
+`GET /api/v1/observability/alerts`; the legacy `/api/observability/alerts`
+path remains compatible.
+
+## API Paths
+
+`/api/v1` is the preferred API prefix and the UI default. The older `/api`
+prefix remains mounted for compatibility, but it is hidden from OpenAPI and
+should not be used for new clients. `/info` returns the service name, version,
+docs URL, health URL, WebSocket path, and preferred API prefix.
+
+## Production Promotion
+
+Development promotion remains local to the host config mount. Paper and canary
+promotion scopes record local audit decisions. Production-scope promotion
+requires `AUTORESEARCH_MLFLOW_SERVICE_AUTH_TOKEN` and calls mlflow-service as
+`X-Service-Name: autoresearch-agent`.
+
+The service lists `/api/v1/composites?instrument=<instrument>&page_size=100`,
+selects the single non-retired composite whose relevant component version
+matches the winning `model_registry_name:model_version`, and then calls
+`POST /api/v1/composites/{composite_id}/promote`. If mlflow-service returns an
+error, no local production promotion record is created.
 
 ## Health
 
@@ -102,7 +138,7 @@ the ML services, so its critical modelling packages must stay aligned with the
 locked ML services. Run the parity check from the repo root:
 
 ```bash
-python scripts/ci/check_ml_dep_parity.py
+.venv/bin/python scripts/ci/check_ml_dep_parity.py
 ```
 
 When all ML service locks agree on a version, autoresearch must pin the exact

@@ -1,4 +1,4 @@
-const BASE = '/api';
+const BASE = '/api/v1';
 const API_TOKEN_STORAGE_KEY = 'autoresearch.apiToken';
 
 export interface ResearchSession {

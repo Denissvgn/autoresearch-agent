@@ -8,7 +8,7 @@ from pydantic import BaseModel, model_validator
 from src.api.audit import record_api_audit_event
 from src.api.auth import require_api_auth
 
-router = APIRouter(prefix="/api", tags=["promotion"], dependencies=[Depends(require_api_auth)])
+router = APIRouter(tags=["promotion"], dependencies=[Depends(require_api_auth)])
 
 _promoter = None
 _store = None

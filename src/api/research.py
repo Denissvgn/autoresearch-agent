@@ -17,7 +17,7 @@ from src.api.audit import record_api_audit_event
 from src.api.auth import require_api_auth
 from src.config import settings
 
-router = APIRouter(prefix="/api", tags=["research"], dependencies=[Depends(require_api_auth)])
+router = APIRouter(tags=["research"], dependencies=[Depends(require_api_auth)])
 VALID_PIPELINE_PHASES = {"direction", "volatility", "rl"}
 
 # These will be injected by main.py

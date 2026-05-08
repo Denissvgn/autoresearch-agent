@@ -85,6 +85,27 @@ def test_monitoring_health_reports_preflight_details(client: TestClient) -> None
     assert payload["dependencies"]["status"] == "not_run"
 
 
+def test_info_reports_service_metadata(client: TestClient) -> None:
+    response = client.get("/info")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["service"] == main_module.settings.service_name
+    assert payload["version"] == main_module.app.version
+    assert payload["docs_url"] == "/docs"
+    assert payload["health_url"] == "/health"
+    assert payload["websocket_path"] == "/ws/events"
+    assert payload["api_prefix"] == "/api/v1"
+    assert payload["legacy_api_prefix"] == "/api"
+
+
+def test_unknown_api_v1_path_returns_404(client: TestClient) -> None:
+    response = client.get("/api/v1/not-a-real-route")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "API endpoint not found"
+
+
 def test_app_has_platform_header_dependency() -> None:
     dependencies = main_module.app.router.dependencies
     assert any(

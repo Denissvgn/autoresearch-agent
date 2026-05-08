@@ -29,9 +29,10 @@ API_TOKEN = "test-autoresearch-token"
 def create_test_app() -> FastAPI:
     app = FastAPI()
     app.state.audit_store = getattr(research, "_store", None)
-    app.include_router(research.router)
-    app.include_router(results.router)
-    app.include_router(promotion.router)
+    for prefix in ("/api/v1", "/api"):
+        app.include_router(research.router, prefix=prefix)
+        app.include_router(results.router, prefix=prefix)
+        app.include_router(promotion.router, prefix=prefix)
 
     @app.get("/health")
     async def health():
@@ -94,6 +95,9 @@ class FakeStore:
 
     async def list_sessions(self, **kwargs):
         return []
+
+    async def count_sessions(self, **kwargs):
+        return 0
 
     async def get_pipeline(self, pipeline_id: str):
         return None
@@ -341,6 +345,16 @@ def test_authenticated_api_calls_preserve_existing_behavior(client: TestClient):
     assert rollback.json()["rolled_back"] is True
 
 
+def test_api_v1_and_legacy_api_prefixes_are_both_protected(client: TestClient):
+    for prefix in ("/api/v1", "/api"):
+        missing_auth = client.get(f"{prefix}/research")
+        assert missing_auth.status_code == 401
+
+        response = client.get(f"{prefix}/research", headers=auth_headers())
+        assert response.status_code == 200
+        assert response.json()["items"] == []
+
+
 def test_pipeline_phase_budgets_are_validated(client: TestClient):
     response = client.post(
         "/api/research/start",
@@ -486,7 +500,7 @@ def test_rejected_api_auth_records_audit_fingerprint_not_token(
 
 def test_rejected_api_auth_warns_when_audit_store_missing(caplog):
     app = FastAPI()
-    app.include_router(research.router)
+    app.include_router(research.router, prefix="/api")
     local_client = TestClient(app)
 
     with caplog.at_level(logging.WARNING):

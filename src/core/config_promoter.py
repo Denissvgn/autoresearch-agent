@@ -16,7 +16,7 @@ from typing import Any, Dict, Optional
 import httpx
 import yaml
 
-from src.config import settings
+from src.config import secret_value, settings
 from src.core.consistency_validator import build_consistency_report
 from src.core.development_gate_bundle import (
     evaluate_development_gate_bundle,
@@ -76,6 +76,7 @@ PROMOTION_SCOPES = (
     CANARY_PROMOTION_SCOPE,
     PRODUCTION_PROMOTION_SCOPE,
 )
+MLFLOW_COMPOSITES_API_PREFIX = "/api/v1/composites"
 
 
 class ConfigPromoter:
@@ -562,6 +563,15 @@ class ConfigPromoter:
                 f"({blockers})"
             )
 
+        best = await self._store.get_best_iteration(research_id)
+        metrics_payload = self._best_iteration_payload(best or {})
+        if scope == PRODUCTION_PROMOTION_SCOPE:
+            metadata["mlflow_service"] = await self._promote_production_composite(
+                preview=preview,
+                metrics_payload=metrics_payload,
+                approval=approval,
+            )
+
         metadata_path = self._metadata_sidecar_path(
             preview["target_path"],
             preview["iteration"],
@@ -590,6 +600,168 @@ class ConfigPromoter:
             metadata_path=metadata_path,
             promotion_metadata=metadata,
         )
+
+    def _mlflow_service_auth_headers(self, *, require_token: bool) -> dict[str, str] | None:
+        token = secret_value(settings.mlflow_service_auth_token)
+        if not token:
+            if require_token:
+                raise ValueError(
+                    "Production-scope promotion requires "
+                    "AUTORESEARCH_MLFLOW_SERVICE_AUTH_TOKEN, "
+                    "MLFLOW_SERVICE_AUTH_TOKEN, SERVICE_AUTH_TOKEN, or "
+                    "ML_ADMIN_TOKEN"
+                )
+            return None
+        return {
+            "Authorization": f"Bearer {token}",
+            "X-Service-Name": settings.service_name,
+        }
+
+    @staticmethod
+    def _composite_version_key(model_type: str) -> str | None:
+        return {
+            "direction": "direction_model_version",
+            "volatility": "volatility_model_version",
+            "rl": "rl_model_version",
+        }.get(model_type)
+
+    @staticmethod
+    def _model_version_tag(metrics_payload: Dict[str, Any]) -> str:
+        registry_name = (
+            metrics_payload.get("model_registry_name")
+            or metrics_payload.get("registered_model_name")
+        )
+        model_version = (
+            metrics_payload.get("model_version")
+            or metrics_payload.get("registered_model_version")
+        )
+        if not registry_name or model_version in (None, ""):
+            raise ValueError(
+                "Production-scope promotion requires winning iteration "
+                "model_registry_name and model_version"
+            )
+        return f"{registry_name}:{model_version}"
+
+    async def _promote_production_composite(
+        self,
+        *,
+        preview: Dict[str, Any],
+        metrics_payload: Dict[str, Any],
+        approval: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Promote the authoritative mlflow-service composite to production."""
+        headers = self._mlflow_service_auth_headers(require_token=True)
+        model_type = str(preview["model_type"])
+        version_key = self._composite_version_key(model_type)
+        if not version_key:
+            raise ValueError(f"Unknown model_type {model_type!r}")
+        version_tag = self._model_version_tag(metrics_payload)
+
+        base_url = settings.mlflow_service_url.rstrip("/")
+        list_url = f"{base_url}{MLFLOW_COMPOSITES_API_PREFIX}"
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                list_resp = await client.get(
+                    list_url,
+                    headers=headers,
+                    params={
+                        "instrument": preview["instrument"],
+                        "page_size": 100,
+                    },
+                )
+        except httpx.HTTPError as exc:
+            raise RuntimeError(
+                "Failed to list mlflow-service composites for production "
+                f"promotion: {exc}"
+            ) from exc
+
+        if list_resp.status_code != 200:
+            raise RuntimeError(
+                "Failed to list mlflow-service composites for production "
+                f"promotion: HTTP {list_resp.status_code} {list_resp.text[:300]}"
+            )
+
+        composites_payload = list_resp.json()
+        if isinstance(composites_payload, list):
+            composites = composites_payload
+        elif isinstance(composites_payload, dict):
+            composites = composites_payload.get("items") or composites_payload.get("composites") or []
+        else:
+            composites = []
+
+        matches = [
+            composite
+            for composite in composites
+            if isinstance(composite, dict)
+            and str(composite.get("status") or "").lower() != "retired"
+            and str(composite.get(version_key) or "") == version_tag
+        ]
+        if not matches:
+            raise ValueError(
+                "No non-retired mlflow-service composite matches "
+                f"{version_key}={version_tag} for {preview['instrument']}"
+            )
+        if len(matches) > 1:
+            ids = ", ".join(str(match.get("id")) for match in matches)
+            raise ValueError(
+                "Multiple non-retired mlflow-service composites match "
+                f"{version_key}={version_tag}: {ids}"
+            )
+
+        selected = matches[0]
+        composite_id = str(selected.get("id") or "")
+        if not composite_id:
+            raise RuntimeError("Matched mlflow-service composite has no id")
+        prior_status = str(selected.get("status") or "")
+        composite_url = f"{list_url}/{composite_id}"
+        if prior_status.lower() == PRODUCTION_PROMOTION_SCOPE:
+            return {
+                "outcome": "already_production",
+                "composite_id": composite_id,
+                "prior_status": prior_status,
+                "final_status": prior_status,
+                "promoted_at": selected.get("promoted_at"),
+                "url": composite_url,
+            }
+
+        reason = (approval or {}).get("reason") or "autoresearch production promotion"
+        promote_payload: dict[str, Any] = {
+            "target_stage": PRODUCTION_PROMOTION_SCOPE,
+            "reason": reason,
+        }
+        if "rollup_score" in metrics_payload and metrics_payload.get("rollup_score") is not None:
+            rollup_score = self._numeric_value(metrics_payload.get("rollup_score"))
+            if rollup_score is None:
+                raise ValueError("metrics.rollup_score must be numeric when present")
+            promote_payload["rollup_score"] = rollup_score
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                promote_resp = await client.post(
+                    f"{composite_url}/promote",
+                    headers=headers,
+                    json=promote_payload,
+                )
+        except httpx.HTTPError as exc:
+            raise RuntimeError(
+                "Failed to promote mlflow-service composite to production: "
+                f"{exc}"
+            ) from exc
+
+        if promote_resp.status_code not in {200, 201}:
+            raise RuntimeError(
+                "Failed to promote mlflow-service composite to production: "
+                f"HTTP {promote_resp.status_code} {promote_resp.text[:300]}"
+            )
+        promoted = promote_resp.json()
+        return {
+            "outcome": "promoted",
+            "composite_id": composite_id,
+            "prior_status": prior_status,
+            "final_status": promoted.get("status") or PRODUCTION_PROMOTION_SCOPE,
+            "promoted_at": promoted.get("promoted_at"),
+            "url": composite_url,
+        }
 
     async def _build_scoped_promotion_metadata(
         self,
@@ -2105,29 +2277,32 @@ class ConfigPromoter:
     ) -> None:
         """PATCH the composite in mlflow-service with the new model version.
 
-        Uses the unauthenticated PATCH /by-instrument/{instrument}/versions
+        Uses the service-token protected PATCH /by-instrument/{instrument}/versions
         endpoint. If no composite exists (404), logs a warning and moves on.
         """
-        version_key = {
-            "direction": "direction_model_version",
-            "volatility": "volatility_model_version",
-            "rl": "rl_model_version",
-        }.get(model_type)
+        version_key = self._composite_version_key(model_type)
         if not version_key:
             logger.warning(
                 "Unknown model_type %r — skipping composite update", model_type,
             )
             return
+        headers = self._mlflow_service_auth_headers(require_token=False)
+        if not headers:
+            logger.warning(
+                "Skipping composite update for %s: no mlflow-service auth token configured",
+                instrument,
+            )
+            return
 
         url = (
-            f"{settings.mlflow_service_url}/api/v1/composites"
+            f"{settings.mlflow_service_url.rstrip('/')}{MLFLOW_COMPOSITES_API_PREFIX}"
             f"/by-instrument/{instrument}/versions"
         )
         body = {version_key: version_tag}
 
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.patch(url, json=body)
+                resp = await client.patch(url, headers=headers, json=body)
             if resp.status_code == 200:
                 data = resp.json()
                 logger.info(

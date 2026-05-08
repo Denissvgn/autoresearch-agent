@@ -18,7 +18,7 @@ from src.core.consistency_validator import (
 from src.core.log_writer import AgentLogWriter, _format_entry
 from src.core.research_state import build_research_state
 
-router = APIRouter(prefix="/api", tags=["results"], dependencies=[Depends(require_api_auth)])
+router = APIRouter(tags=["results"], dependencies=[Depends(require_api_auth)])
 
 _store = None
 _mlflow_external_url: str = "http://localhost:5000"

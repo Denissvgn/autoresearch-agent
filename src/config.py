@@ -125,6 +125,11 @@ class Settings(BaseSettings):
         default="INFO",
         validation_alias=AliasChoices("AUTORESEARCH_LOG_LEVEL", "LOG_LEVEL"),
     )
+    api_v1_prefix: str = Field(
+        default="/api/v1",
+        validation_alias=AliasChoices("AUTORESEARCH_API_V1_PREFIX", "API_V1_PREFIX"),
+        description="Preferred versioned API prefix for autoresearch routes.",
+    )
     autoresearch_api_token: SecretStr | None = Field(
         default=None,
         repr=False,
@@ -297,6 +302,20 @@ class Settings(BaseSettings):
         description=(
             "Service owning promotion/composite APIs. Defaults to mlflow-service "
             "because autoresearch development promotion updates composites there."
+        ),
+    )
+    mlflow_service_auth_token: SecretStr | None = Field(
+        default=None,
+        repr=False,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_MLFLOW_SERVICE_AUTH_TOKEN",
+            "MLFLOW_SERVICE_AUTH_TOKEN",
+            "SERVICE_AUTH_TOKEN",
+            "ML_ADMIN_TOKEN",
+        ),
+        description=(
+            "Bearer token used when autoresearch writes mlflow-service composite "
+            "versions or promotes production composites."
         ),
     )
     s3_endpoint_url: Optional[str] = Field(

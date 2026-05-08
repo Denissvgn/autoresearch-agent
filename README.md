@@ -56,8 +56,8 @@ Required variables:
 
 Optional local controls such as `AUTORESEARCH_BIND_HOST`,
 `AUTORESEARCH_HOST`, `AUTORESEARCH_PORT`, CORS origins, identity-service
-introspection, Prometheus scrape auth, preflight flags, iteration limits, and
-budget limits are documented in `.env.example`.
+introspection, Prometheus scrape auth, mlflow-service write auth, preflight
+flags, iteration limits, and budget limits are documented in `.env.example`.
 
 API clients may authenticate with `AUTORESEARCH_API_TOKEN`. Admin JWTs issued by
 identity-service are also accepted when `AUTORESEARCH_IDENTITY_SERVICE_URL`
@@ -68,9 +68,9 @@ In platform deployments, settings are loaded with this precedence: process
 environment and `.env` values first, then Vault defaults from
 `secret/config/autoresearch-agent/<env>`, then code defaults. The high-value
 `ANTHROPIC_AUTH_TOKEN`, `AUTORESEARCH_API_TOKEN`, and optional
-`AUTORESEARCH_PROMETHEUS_TOKEN` should live in Vault outside local development.
-`AUTORESEARCH_PROMETHEUS_TOKEN` is required in production; without it the
-`/metrics` endpoint is disabled.
+`AUTORESEARCH_PROMETHEUS_TOKEN` and `AUTORESEARCH_MLFLOW_SERVICE_AUTH_TOKEN`
+should live in Vault outside local development. `AUTORESEARCH_PROMETHEUS_TOKEN`
+is required in production; without it the `/metrics` endpoint is disabled.
 
 Autoresearch-agent is intentionally deployed as a single-instance SQLite
 control-plane service. Keep Uvicorn at one worker and do not scale the
@@ -86,8 +86,10 @@ docker compose -f compose/base.yml -f compose/infra.yml -f compose/ml.yml -f com
 ```
 
 The Docker build consumes the tracked UI source, `package.json`, and
-`package-lock.json`. Keep `ui/node_modules/` and `ui/dist/` local and ignored;
-the image rebuilds UI assets from source.
+`package-lock.json`. The root `.dockerignore` excludes `.env`,
+`services/**/.env`, nested `ui/node_modules/`, `ui/dist/`, and coverage outputs
+while keeping `.env.example`, package manifests, and source files available to
+Docker builds.
 
 The service starts on **port 8030**. The ML platform services must already be running on the same Docker network (`traid-network`).
 
@@ -151,7 +153,16 @@ After a session completes (or is stopped), if it has a best iteration:
    - Side-by-side diff: current production config vs. proposed new config
 3. Review the diff, then click **"Confirm Promotion"**
 
-This writes the best config to `configs/instrument_configs/` so future training and inference use it as the new baseline.
+Development-scope promotion writes the best config to
+`configs/instrument_configs/` so future training and inference use it as the
+new baseline. Paper and canary scopes record auditable local decisions.
+Production-scope promotion is fail-closed and delegates the live lifecycle
+transition to mlflow-service: autoresearch resolves the matching non-retired
+composite by winning `model_registry_name:model_version`, then calls
+`POST /api/v1/composites/{composite_id}/promote` with
+`Authorization: Bearer $AUTORESEARCH_MLFLOW_SERVICE_AUTH_TOKEN` and
+`X-Service-Name: autoresearch-agent`. If mlflow-service cannot be updated, no
+local production promotion record is created.
 
 ### History
 
@@ -202,30 +213,34 @@ services/autoresearch-agent/
 
 ### Key API Endpoints
 
+The documented API prefix is `/api/v1`. The legacy `/api` prefix remains
+available for backward compatibility but is not the UI default.
+
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/research/start` | Start a new research session |
-| `GET` | `/api/research` | List all sessions (filterable) |
-| `GET` | `/api/research/{id}` | Get session details |
-| `POST` | `/api/research/{id}/stop` | Stop a running session |
-| `POST` | `/api/research/{id}/pause` | Pause a running session |
-| `POST` | `/api/research/{id}/resume` | Resume a paused session |
-| `DELETE` | `/api/research/{id}` | Delete a session (not while running) |
-| `GET` | `/api/research/{id}/iterations` | Get all iterations |
-| `GET` | `/api/research/{id}/hpo-studies` | Get structured HPO plans/results |
-| `GET` | `/api/research/{id}/state` | Get reconstructable operational session state |
-| `GET` | `/api/research/{id}/best` | Get best iteration |
-| `GET` | `/api/research/{id}/agent-log` | Get agent conversation log |
-| `POST` | `/api/research/{id}/promote/preview` | Preview config promotion |
-| `POST` | `/api/research/{id}/promote/confirm` | Confirm and write promoted config |
-| `GET` | `/api/promotions` | List all promotions |
-| `GET` | `/api/instruments` | Available instruments |
-| `GET` | `/api/models` | Available model types |
-| `GET` | `/api/status` | Server status and settings |
+| `POST` | `/api/v1/research/start` | Start a new research session |
+| `GET` | `/api/v1/research` | List all sessions (filterable) |
+| `GET` | `/api/v1/research/{id}` | Get session details |
+| `POST` | `/api/v1/research/{id}/stop` | Stop a running session |
+| `POST` | `/api/v1/research/{id}/pause` | Pause a running session |
+| `POST` | `/api/v1/research/{id}/resume` | Resume a paused session |
+| `DELETE` | `/api/v1/research/{id}` | Delete a session (not while running) |
+| `GET` | `/api/v1/research/{id}/iterations` | Get all iterations |
+| `GET` | `/api/v1/research/{id}/hpo-studies` | Get structured HPO plans/results |
+| `GET` | `/api/v1/research/{id}/state` | Get reconstructable operational session state |
+| `GET` | `/api/v1/research/{id}/best` | Get best iteration |
+| `GET` | `/api/v1/research/{id}/agent-log` | Get agent conversation log |
+| `POST` | `/api/v1/research/{id}/promote/preview` | Preview config promotion |
+| `POST` | `/api/v1/research/{id}/promote/confirm` | Confirm promotion for the requested scope |
+| `GET` | `/api/v1/promotions` | List all promotions |
+| `GET` | `/api/v1/instruments` | Available instruments |
+| `GET` | `/api/v1/models` | Available model types |
+| `GET` | `/api/v1/status` | Server status and settings |
+| `GET` | `/info` | Service metadata and preferred API paths |
 | `GET` | `/health` | Lightweight Docker health endpoint |
 | `GET` | `/health/ready` | Kubernetes-style readiness with dependency preflight |
 | `GET` | `/monitoring/health` | Dependency/preflight-style readiness |
-| `GET` | `/metrics` | Prometheus metrics (optionally bearer-token gated) |
+| `GET` | `/metrics` | Prometheus metrics (disabled unless bearer-token scrape auth is configured) |
 | `WS` | `/ws/events` | WebSocket for real-time events |
 
 ### Docker Compose
@@ -281,7 +296,7 @@ single-row `schema_version` table and numbered idempotent migrations. This is
 the service's Alembic alternative and preserves the single-container SQLite
 operational model.
 
-`GET /api/status` exposes the Docker DNS service URLs, browser MLflow URL,
+`GET /api/v1/status` exposes the Docker DNS service URLs, browser MLflow URL,
 and persistence paths currently used by the server. The same URL set is copied
 into each session manifest for reproducibility.
 
