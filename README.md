@@ -56,8 +56,9 @@ Required variables:
 
 Optional local controls such as `AUTORESEARCH_BIND_HOST`,
 `AUTORESEARCH_HOST`, `AUTORESEARCH_PORT`, CORS origins, identity-service
-introspection, Prometheus scrape auth, mlflow-service write auth, preflight
-flags, iteration limits, and budget limits are documented in `.env.example`.
+introspection, Prometheus scrape auth, mlflow-service write auth, VDMC service
+URL, preflight flags, iteration limits, and budget limits are documented in
+`.env.example`.
 
 API clients may authenticate with `AUTORESEARCH_API_TOKEN`. Admin JWTs issued by
 identity-service are also accepted when `AUTORESEARCH_IDENTITY_SERVICE_URL`
@@ -271,6 +272,7 @@ The agent calls these services over Docker DNS during training:
 | Feature Service | `feature-service:8000` | Technical indicators |
 | Ensemble Trainer | `ensemble-trainer:8000` | Walk-forward model training |
 | RL Trainer | `rl-trainer:8000` | PPO agent training |
+| VDMC Indicator | `vdmc-indicator:8000` | VDMC readiness for RL/pipeline sessions |
 | MLflow | `mlflow:5000` | Experiment tracking |
 | MLflow Service | `mlflow-service:8000` | Promotion/composite API |
 | Admin Service | `admin-service:8000` | Admin API discovery/status |
@@ -296,9 +298,12 @@ single-row `schema_version` table and numbered idempotent migrations. This is
 the service's Alembic alternative and preserves the single-container SQLite
 operational model.
 
-`GET /api/v1/status` exposes the Docker DNS service URLs, browser MLflow URL,
-and persistence paths currently used by the server. The same URL set is copied
-into each session manifest for reproducibility.
+`GET /api/v1/status` exposes the Docker DNS service URLs, including
+`vdmc_indicator`, browser MLflow URL, and persistence paths currently used by
+the server. The same URL set is copied into each session manifest for
+reproducibility. VDMC readiness is required for `rl`, `pipeline`, and
+health-wide `all` preflight checks; it is observed but non-blocking for
+`direction` and `volatility` sessions.
 
 The container runs as UID/GID `1001`, matching the main ML service images.
 Ensure any host-owned `configs/` path used for promotions is writable by that

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-05-09
+
+- Added vdmc-indicator as an autoresearch service dependency for manifests,
+  status, and preflight, with blocking readiness for RL/pipeline sessions.
+
 ## 2026-05-02
 
 - Moved the backend package from `server/` to the ML-service standard `src/`

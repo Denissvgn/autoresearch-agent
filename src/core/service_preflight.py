@@ -32,6 +32,14 @@ class ServicePreflightError(RuntimeError):
         super().__init__(format_preflight_error(result))
 
 
+def _normalise_model_type(model_type: str | None) -> str:
+    return (model_type or "all").strip().lower() or "all"
+
+
+def _vdmc_required_for(model_type: str | None) -> bool:
+    return _normalise_model_type(model_type) in {"rl", "pipeline", "all"}
+
+
 def sanitize_service_url(raw: str | None) -> str:
     """Return a URL safe for manifests by removing credentials and query data."""
     if not raw:
@@ -46,7 +54,11 @@ def sanitize_service_url(raw: str | None) -> str:
     return urlunsplit((parsed.scheme, netloc, parsed.path.rstrip("/"), "", ""))
 
 
-def build_service_preflight_targets(settings_obj=settings) -> list[ServicePreflightTarget]:
+def build_service_preflight_targets(
+    settings_obj=settings,
+    *,
+    model_type: str = "all",
+) -> list[ServicePreflightTarget]:
     """Build the service dependency list from current server settings."""
     targets = [
         ServicePreflightTarget(
@@ -71,6 +83,12 @@ def build_service_preflight_targets(settings_obj=settings) -> list[ServicePrefli
             health_paths=("/health/ready", "/health"),
         ),
         ServicePreflightTarget("feature_service", settings_obj.feature_service_url),
+        ServicePreflightTarget(
+            "vdmc_indicator",
+            settings_obj.vdmc_indicator_url,
+            health_paths=("/api/v1/health/ready", "/health/ready"),
+            required=_vdmc_required_for(model_type),
+        ),
     ]
     if settings_obj.artifact_logging_required:
         targets.append(
@@ -83,12 +101,18 @@ def build_service_preflight_targets(settings_obj=settings) -> list[ServicePrefli
     return targets
 
 
-def build_not_run_preflight(settings_obj=settings) -> dict[str, Any]:
+def build_not_run_preflight(
+    settings_obj=settings,
+    *,
+    model_type: str = "all",
+) -> dict[str, Any]:
     """Build a manifest-safe dependency snapshot when checks have not run."""
+    targets = build_service_preflight_targets(settings_obj, model_type=model_type)
     return {
         "schema_version": SCHEMA_VERSION,
         "status": "not_run",
         "checked_at": None,
+        "model_type": _normalise_model_type(model_type),
         "required_ready": False,
         "override_allowed_unready": False,
         "timeout_s": settings_obj.preflight_timeout_s,
@@ -99,7 +123,7 @@ def build_not_run_preflight(settings_obj=settings) -> dict[str, Any]:
                 "status": "not_run",
                 "health_paths": list(target.health_paths),
             }
-            for target in build_service_preflight_targets(settings_obj)
+            for target in targets
         },
         "required_failures": [],
     }
@@ -112,11 +136,12 @@ async def run_service_preflight(
     client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
     """Check required ML dependencies before launching a research session."""
-    targets = build_service_preflight_targets(settings_obj)
+    normalised_model_type = _normalise_model_type(model_type)
+    targets = build_service_preflight_targets(settings_obj, model_type=normalised_model_type)
     base = {
         "schema_version": SCHEMA_VERSION,
         "checked_at": datetime.now(timezone.utc).isoformat(),
-        "model_type": model_type,
+        "model_type": normalised_model_type,
         "required_ready": True,
         "override_allowed_unready": bool(settings_obj.allow_unready_services),
         "timeout_s": settings_obj.preflight_timeout_s,

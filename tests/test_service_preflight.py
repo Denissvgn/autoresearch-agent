@@ -49,6 +49,7 @@ def _configure_preflight(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Non
     monkeypatch.setattr(settings, "ensemble_trainer_url", "http://ensemble-trainer:8000")
     monkeypatch.setattr(settings, "rl_trainer_url", "http://rl-trainer:8000")
     monkeypatch.setattr(settings, "feature_service_url", "http://feature-service:8000")
+    monkeypatch.setattr(settings, "vdmc_indicator_url", "http://vdmc-indicator:8000")
     monkeypatch.setattr(settings, "s3_endpoint_url", "http://minio:9000")
     monkeypatch.setattr(settings, "mlflow_s3_endpoint_url", None)
 
@@ -61,6 +62,7 @@ def _healthy_transport() -> httpx.MockTransport:
         ("ensemble-trainer", "/health/ready"),
         ("rl-trainer", "/health/ready"),
         ("feature-service", "/health"),
+        ("vdmc-indicator", "/api/v1/health/ready"),
         ("minio", "/minio/health/ready"),
     }
 
@@ -89,6 +91,10 @@ async def test_service_preflight_records_healthy_services(monkeypatch, tmp_path)
     ]
     assert result["services"]["ensemble_trainer"]["checked_url"].endswith("/health/ready")
     assert result["services"]["artifact_store"]["url"] == "http://minio:9000"
+    assert result["services"]["vdmc_indicator"]["required"] is False
+    assert result["services"]["vdmc_indicator"]["checked_url"].endswith(
+        "/api/v1/health/ready"
+    )
     assert all(check["status"] == "ready" for check in result["services"].values())
 
 
@@ -111,6 +117,34 @@ async def test_service_preflight_blocks_unhealthy_required_service(
     assert result["required_failures"] == ["mlflow_service"]
     with pytest.raises(ServicePreflightError, match="mlflow_service"):
         require_preflight_ready(result)
+
+
+@pytest.mark.asyncio
+async def test_vdmc_preflight_required_for_rl_pipeline_and_all_only(monkeypatch, tmp_path):
+    _configure_preflight(monkeypatch, tmp_path)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "vdmc-indicator":
+            return httpx.Response(503, json={"status": "not_ready"})
+        return httpx.Response(200, json={"status": "ready"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        direction = await run_service_preflight(model_type="direction", client=client)
+        volatility = await run_service_preflight(model_type="volatility", client=client)
+        rl = await run_service_preflight(model_type="rl", client=client)
+        pipeline = await run_service_preflight(model_type="pipeline", client=client)
+        all_services = await run_service_preflight(model_type="all", client=client)
+
+    for result in (direction, volatility):
+        assert result["status"] == "ready"
+        assert result["required_failures"] == []
+        assert result["services"]["vdmc_indicator"]["required"] is False
+        assert result["services"]["vdmc_indicator"]["status"] == "failed"
+
+    for result in (rl, pipeline, all_services):
+        assert result["status"] == "failed"
+        assert result["required_failures"] == ["vdmc_indicator"]
+        assert result["services"]["vdmc_indicator"]["required"] is True
 
 
 @pytest.mark.asyncio

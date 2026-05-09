@@ -296,6 +296,14 @@ class Settings(BaseSettings):
     ensemble_trainer_url: str = Field(default="http://ensemble-trainer:8000")
     rl_trainer_url: str = Field(default="http://rl-trainer:8000")
     feature_service_url: str = Field(default="http://feature-service:8000")
+    vdmc_indicator_url: str = Field(
+        default="http://vdmc-indicator:8000",
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_VDMC_INDICATOR_URL",
+            "VDMC_SERVICE_URL",
+        ),
+        description="VDMC indicator service URL used by RL/pipeline preflight checks.",
+    )
     admin_service_url: str = Field(default="http://admin-service:8000")
     promotion_service_url: str = Field(
         default="http://mlflow-service:8000",

@@ -345,6 +345,13 @@ def test_authenticated_api_calls_preserve_existing_behavior(client: TestClient):
     assert rollback.json()["rolled_back"] is True
 
 
+def test_authenticated_status_includes_vdmc_service_url(client: TestClient):
+    response = client.get("/api/v1/status", headers=auth_headers())
+
+    assert response.status_code == 200
+    assert response.json()["service_urls"]["vdmc_indicator"] == settings.vdmc_indicator_url
+
+
 def test_api_v1_and_legacy_api_prefixes_are_both_protected(client: TestClient):
     for prefix in ("/api/v1", "/api"):
         missing_auth = client.get(f"{prefix}/research")
@@ -644,6 +651,7 @@ def test_settings_accept_canonical_autoresearch_aliases(monkeypatch):
         "AUTORESEARCH_MAX_CONCURRENT": "4",
         "AUTORESEARCH_LOG_LEVEL": "DEBUG",
         "AUTORESEARCH_IDENTITY_SERVICE_URL": "http://identity:8000",
+        "AUTORESEARCH_VDMC_INDICATOR_URL": "http://vdmc-custom:8000",
     }
     for key, value in env_values.items():
         monkeypatch.setenv(key, value)
@@ -662,6 +670,18 @@ def test_settings_accept_canonical_autoresearch_aliases(monkeypatch):
     assert cfg.max_concurrent_sessions == 4
     assert cfg.log_level == "DEBUG"
     assert cfg.identity_service_url == "http://identity:8000"
+    assert cfg.vdmc_indicator_url == "http://vdmc-custom:8000"
+
+
+def test_settings_accept_vdmc_service_url_alias(monkeypatch):
+    monkeypatch.setenv("VDMC_SERVICE_URL", "http://vdmc-alias:8000")
+
+    cfg = Settings(
+        anthropic_base_url="http://anthropic.invalid",
+        anthropic_auth_token="test-token",
+    )
+
+    assert cfg.vdmc_indicator_url == "http://vdmc-alias:8000"
 
 
 def test_settings_keep_bare_env_fallbacks(monkeypatch):
@@ -731,4 +751,5 @@ def test_compose_binds_autoresearch_port_to_loopback_by_default():
     compose_text = (repo_root / "compose" / "autoresearch.yml").read_text(encoding="utf-8")
 
     assert "${AUTORESEARCH_BIND_HOST:-127.0.0.1}:${AUTORESEARCH_PORT:-8030}:8000" in compose_text
+    assert "VDMC_SERVICE_URL: http://vdmc-indicator:8000" in compose_text
     assert '"8030:8000"' not in compose_text

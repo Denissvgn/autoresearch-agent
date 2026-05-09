@@ -796,6 +796,7 @@ async def system_status():
             "data_ingest": settings.data_ingest_url,
             "ensemble_trainer": settings.ensemble_trainer_url,
             "feature_service": settings.feature_service_url,
+            "vdmc_indicator": settings.vdmc_indicator_url,
             "rl_trainer": settings.rl_trainer_url,
             "mlflow_tracking": settings.mlflow_tracking_uri,
             "mlflow_service": settings.mlflow_service_url,

@@ -43,6 +43,11 @@ Store `ANTHROPIC_AUTH_TOKEN`, `AUTORESEARCH_API_TOKEN`, and
 enabled. Local `.env` files remain acceptable for developer machines and are
 ignored by git.
 
+Use `AUTORESEARCH_VDMC_INDICATOR_URL` or its compose-compatible alias
+`VDMC_SERVICE_URL` to override the VDMC indicator dependency. VDMC readiness is
+required for `rl`, `pipeline`, and service-wide `all` preflight checks; it is
+recorded but non-blocking for `direction` and `volatility` sessions.
+
 ## Metrics
 
 `GET /metrics` uses `prometheus-client` and includes the standard
@@ -91,7 +96,8 @@ dependency checks used before a session can spend LLM budget.
 session count and the same dependency/preflight checks used before a session can
 spend LLM budget. Use it for dashboards and deployment probes that need to know
 whether data ingest, feature service, trainers, MLflow, and artifact storage are
-ready.
+ready. For RL/pipeline sessions, the same dependency set also includes
+vdmc-indicator readiness.
 
 ## Docker
 

@@ -653,15 +653,10 @@ paths:
       tags:
       - research
       summary: Continue Research
-      description: 'ML-62: Continue a timed-out or completed session as a new chained
-        session.
-
-
-        Creates a new session that inherits all settings from the parent and
-
-        picks up where it left off — workspace is preserved, no setup/baseline
-
-        re-run.'
+      description: "ML-62: Continue a timed-out or completed session as a new chained\
+        \ session.\n\nCreates a new session that inherits all settings from the parent\
+        \ and\npicks up where it left off \u2014 workspace is preserved, no setup/baseline\n\
+        re-run."
       operationId: continue_research_api_v1_research__research_id__continue_post
       security:
       - HTTPBearer: []
@@ -1442,8 +1437,8 @@ paths:
       tags:
       - results
       summary: Get Agent Log
-      description: Agent conversation log — full Claude transcript captured during
-        execution.
+      description: "Agent conversation log \u2014 full Claude transcript captured\
+        \ during execution."
       operationId: get_agent_log_api_v1_research__research_id__agent_log_get
       security:
       - HTTPBearer: []

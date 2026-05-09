@@ -178,6 +178,7 @@ def build_research_manifest(
             "ensemble_trainer": sanitize_service_url(settings.ensemble_trainer_url),
             "rl_trainer": sanitize_service_url(settings.rl_trainer_url),
             "feature_service": sanitize_service_url(settings.feature_service_url),
+            "vdmc_indicator": sanitize_service_url(settings.vdmc_indicator_url),
             "data_ingest": sanitize_service_url(settings.data_ingest_url),
             "mlflow_tracking": sanitize_service_url(settings.mlflow_tracking_uri),
             "mlflow_service": sanitize_service_url(settings.mlflow_service_url),
@@ -185,7 +186,7 @@ def build_research_manifest(
             "admin_service": sanitize_service_url(settings.admin_service_url),
             "promotion_api": sanitize_service_url(settings.promotion_service_url),
         },
-        "preflight": build_not_run_preflight(),
+        "preflight": build_not_run_preflight(model_type=model_type),
         "runtime": {
             "environment": settings.environment,
             "workspace_root": settings.workspace_root,

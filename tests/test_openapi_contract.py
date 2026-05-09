@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+import yaml
+
 from src import main as main_module
 
 
@@ -60,3 +64,10 @@ def test_openapi_documents_health_info_and_excludes_metrics() -> None:
     assert "/monitoring/health" in paths
     assert "/info" in paths
     assert "/metrics" not in paths
+
+
+def test_checked_openapi_yaml_matches_app_schema() -> None:
+    openapi_path = Path(__file__).resolve().parents[1] / "openapi.yaml"
+
+    assert openapi_path.exists()
+    assert yaml.safe_load(openapi_path.read_text(encoding="utf-8")) == _schema()

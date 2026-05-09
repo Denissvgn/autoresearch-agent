@@ -45,11 +45,14 @@ def test_build_research_manifest_has_required_runtime_sections():
     assert payload["data_window"]["instrument"] == "DOGE_USDT"
     assert payload["data_window"]["start"] == "2026-03-01"
     assert payload["service_urls"]["feature_service"].startswith("http://")
+    assert payload["service_urls"]["vdmc_indicator"].startswith("http://")
     assert payload["service_urls"]["admin_service"].startswith("http://")
     assert payload["service_urls"]["mlflow_external"].startswith("http://")
     assert payload["preflight"]["schema_version"] == "autoresearch_service_preflight.v1"
     assert payload["preflight"]["status"] == "not_run"
     assert "mlflow_tracking" in payload["preflight"]["services"]
+    assert "vdmc_indicator" in payload["preflight"]["services"]
+    assert payload["preflight"]["services"]["vdmc_indicator"]["required"] is False
     assert payload["runtime"]["runs_dir"].endswith("/runs/autotuner")
     assert payload["runtime"]["db_path"].endswith("/db/experiments.db")
 
