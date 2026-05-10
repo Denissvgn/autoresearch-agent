@@ -16,6 +16,7 @@ def build_iteration_context_digest(
     iterations: Iterable[Mapping[str, Any]],
     hpo_studies: Iterable[Mapping[str, Any]] = (),
     planned_trials: Iterable[Mapping[str, Any]] = (),
+    phase_state: Optional[Mapping[str, Any]] = None,
     max_chars: int = 6000,
     recent_attempts: int = 5,
 ) -> str:
@@ -57,6 +58,25 @@ def build_iteration_context_digest(
     if hpo_line:
         lines.append(f"- HPO/planned trials: {hpo_line}")
     lines.append(f"- Next decision guidance: {_next_guidance(rows)}")
+
+    # Phase guidance — surfaced every turn so the LLM knows which research
+    # phase to advance and is warned immediately when it stalls in one phase.
+    if phase_state:
+        current_phase_id = phase_state.get("current_phase") or ""
+        phase_next_action = phase_state.get("next_action") or ""
+        stalled = int(phase_state.get("iterations_in_current_phase") or 0)
+        if current_phase_id and phase_next_action:
+            lines.append(
+                f"- Research phase: {current_phase_id} \u2192 {phase_next_action}"
+            )
+        if stalled >= 5:
+            lines.append(
+                f"  \u26a0 STALL DETECTED: {stalled} consecutive iterations in "
+                f"phase '{current_phase_id}' without advancing. "
+                "Switch tools/approach now — do not run another experiment "
+                "of the same kind until phase-appropriate tooling has been used."
+            )
+
     return _cap_text("\n".join(lines), max_chars)
 
 

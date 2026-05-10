@@ -37,10 +37,27 @@ def build_consistency_report(
         if blocker and status == "failed":
             blockers.append(blocker)
 
+    # A candidate is "promotable" (eligible for hard consistency blockers) only
+    # when the agent has explicitly nominated it as a finalist or promotion
+    # candidate, OR when all_gates_passed is set AND late-phase evidence is
+    # already present (calibration/replay/inference data from later research
+    # phases).  Early tabular sweeps that pass primary gates alone must NOT
+    # trigger hard blockers — those checks are meaningful only for finalists
+    # that have completed the calibration/replay and inference-parity phases.
+    _has_late_phase_evidence = bool(
+        metrics.get("calibration_full_validation")
+        or (
+            isinstance(metrics.get("config"), dict)
+            and metrics["config"].get("calibration_full_validation")
+        )
+        or metrics.get("economic_replay")
+        or metrics.get("inference_parity")
+        or metrics.get("inference_reload_validation")
+    )
     promotable = bool(
-        metrics.get("all_gates_passed")
-        or metrics.get("finalist")
+        metrics.get("finalist")
         or metrics.get("promotion_candidate")
+        or (metrics.get("all_gates_passed") and _has_late_phase_evidence)
     )
 
     add(

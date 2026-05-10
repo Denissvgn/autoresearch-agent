@@ -99,6 +99,7 @@ def build_phase_state(
     blocked = _blocked_reason(rows)
     current_phase = _select_current_phase(phases, completed, blocked)
     next_action = _next_action(phases, current_phase, blocked)
+    stalled_count = _count_stalled_iterations(rows, phases, current_phase)
 
     return {
         "schema_version": "autoresearch_phase_state.v1",
@@ -109,10 +110,11 @@ def build_phase_state(
         "next_action": next_action,
         "blocked": blocked is not None,
         "block_reason": blocked,
+        "iterations_in_current_phase": stalled_count,
         "phases": [
             {
                 **phase,
-                "status": _phase_status(phase["id"], current_phase, completed, blocked),
+                "status": _phase_status(phase["id"], current_phase, completed, blocked, phases),
             }
             for phase in phases
         ],
@@ -121,6 +123,33 @@ def build_phase_state(
 
 def phase_state_json(state: Dict[str, Any]) -> str:
     return json.dumps(state, sort_keys=True)
+
+
+# Maps each phase id to the metrics_json evidence keys whose presence in an
+# iteration marks that phase as having produced output.  Mirrors the logic in
+# _completed_phase_ids() so both stay in sync.
+_PHASE_ADVANCEMENT_KEYS: Dict[str, tuple] = {
+    "baseline_capture": (),
+    "tabular_sweeps": (),
+    "hpo_screening": (),
+    "validation": (),
+    "adaptive_feature_sweeps": ("adaptive_features", "adaptive_feature_version"),
+    "tsfm_sweeps": ("tsfm", "tsfm_adapter", "tsfm_fallback_validation"),
+    "calibration_replay_gates": ("calibration_full_validation", "economic_replay"),
+    "rl_finalist_retraining": ("rl_oos", "direction_probability_provenance"),
+    "multi_seed_robustness": ("seed_trials", "n_seed_trials", "seeds_passed_gates"),
+    "inference_parity_replay": ("inference_parity", "inference_reload_validation"),
+    "promotion_proposal": (
+        "development_promotion_metadata",
+        "promotion_allowed",
+        "promotion_consistency_report",
+        "promotion_decision",
+        "promotion_metadata",
+        "promotion_preview_ready",
+        "promotion_scope",
+        "scoped_promotion_metadata",
+    ),
+}
 
 
 def _completed_phase_ids(
@@ -178,8 +207,10 @@ def _select_current_phase(
     completed: set[str],
     blocked: Optional[str],
 ) -> str:
-    if blocked:
-        return "promotion_proposal" if "promotion_proposal" in completed else phases[-1]["id"]
+    # Always select the first incomplete phase, regardless of any consistency
+    # blocker on the last iteration.  Blockers are surfaced in next_action as
+    # advisory context rather than overriding the phase pointer, so the LLM
+    # always receives forward-looking phase guidance.
     for phase in phases:
         if phase["id"] not in completed:
             return phase["id"]
@@ -191,11 +222,19 @@ def _phase_status(
     current_phase: str,
     completed: set[str],
     blocked: Optional[str],
+    phases: List[Dict[str, str]],
 ) -> str:
     if phase_id in completed and phase_id != current_phase:
         return "completed"
     if phase_id == current_phase:
-        return "blocked" if blocked else "in_progress"
+        # Mark "blocked" only when we are at the terminal promotion phase and
+        # consistency gates are preventing promotion.  Mid-pipeline phases
+        # stay "in_progress" so the agent receives forward-looking guidance
+        # rather than a dead-end blocked status.
+        is_terminal = bool(phases) and phase_id == phases[-1]["id"]
+        if blocked and is_terminal:
+            return "blocked"
+        return "in_progress"
     return "pending"
 
 
@@ -204,12 +243,54 @@ def _next_action(
     current_phase: str,
     blocked: Optional[str],
 ) -> str:
-    if blocked:
-        return blocked
-    for phase in phases:
-        if phase["id"] == current_phase:
-            return phase["next_action"]
-    return "Inspect session state."
+    is_terminal = bool(phases) and current_phase == phases[-1]["id"]
+    base = next(
+        (p["next_action"] for p in phases if p["id"] == current_phase),
+        "Inspect session state.",
+    )
+    if not blocked:
+        return base
+    if is_terminal:
+        # At the final phase the blocker IS the primary concern — promotion
+        # cannot proceed until it is resolved.
+        return f"{base} Resolve consistency blockers first: {blocked}"
+    # Mid-pipeline: append as an advisory note.  The phase's own action
+    # takes priority so the agent knows WHAT to run next.
+    return f"{base} (Advisory — last attempt has consistency notes: {blocked})"
+
+
+def _count_stalled_iterations(
+    rows: List[Dict[str, Any]],
+    phases: List[Dict[str, str]],
+    current_phase: str,
+) -> int:
+    """Return how many consecutive trailing iterations produced no later-phase evidence.
+
+    When this count is high the agent is stuck: it keeps running experiments
+    for the current phase without producing the metrics keys that would advance
+    the phase plan forward.  Callers can surface this as a stall warning in the
+    iteration context digest.
+    """
+    current_idx = next(
+        (i for i, p in enumerate(phases) if p["id"] == current_phase),
+        len(phases) - 1,
+    )
+    # Collect all advancement keys for phases strictly AFTER the current one.
+    later_keys: tuple = tuple(
+        key
+        for phase in phases[current_idx + 1 :]
+        for key in _PHASE_ADVANCEMENT_KEYS.get(phase["id"], ())
+    )
+    if not later_keys:
+        # Already at the terminal phase — every iteration contributed here.
+        return len(rows)
+
+    count = 0
+    for row in reversed(rows):
+        if _has_metric(row, *later_keys):
+            break
+        count += 1
+    return count
 
 
 def _blocked_reason(iterations: List[Dict[str, Any]]) -> Optional[str]:

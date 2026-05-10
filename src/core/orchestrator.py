@@ -1678,11 +1678,21 @@ class AgentOrchestrator:
             hpo_studies = await get_hpo(config.id) if get_hpo else []
             get_planned = getattr(self._store, "get_planned_trials", None)
             planned_trials = await get_planned(config.id) if get_planned else []
+            # Read persisted phase state so the digest can surface the current
+            # phase action and stall warning to the LLM on every turn.
+            phase_state: Optional[Dict[str, Any]] = None
+            phase_state_raw = session.get("phase_state_json")
+            if phase_state_raw:
+                try:
+                    phase_state = json.loads(phase_state_raw)
+                except (json.JSONDecodeError, TypeError):
+                    phase_state = None
             return build_iteration_context_digest(
                 session=session,
                 iterations=iterations,
                 hpo_studies=hpo_studies,
                 planned_trials=planned_trials,
+                phase_state=phase_state,
                 max_chars=settings.iteration_context_max_chars,
                 recent_attempts=settings.iteration_context_recent_attempts,
             )
