@@ -296,6 +296,35 @@ class Settings(BaseSettings):
     ensemble_trainer_url: str = Field(default="http://ensemble-trainer:8000")
     rl_trainer_url: str = Field(default="http://rl-trainer:8000")
     feature_service_url: str = Field(default="http://feature-service:8000")
+    inference_service_url: str = Field(default="http://inference-service:8000")
+    nats_url: Optional[str] = Field(
+        default="nats://nats:4222",
+        validation_alias=AliasChoices("NATS_URL", "AUTORESEARCH_NATS_URL"),
+    )
+    inference_replay_sample_path: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "INFERENCE_REPLAY_SAMPLE_PATH",
+            "AUTORESEARCH_INFERENCE_REPLAY_SAMPLE_PATH",
+        ),
+        description=(
+            "Optional replay sample path supplied to inference-service replay "
+            "validation. Defaults are resolved by the training helper."
+        ),
+    )
+    rl_trainer_service_token: SecretStr | None = Field(
+        default=None,
+        repr=False,
+        validation_alias=AliasChoices(
+            "RL_TRAINER_SERVICE_TOKEN",
+            "AUTORESEARCH_RL_TRAINER_SERVICE_TOKEN",
+            "ML_ADMIN_TOKEN",
+        ),
+        description=(
+            "Bearer token used by workspace scripts when delegating to "
+            "rl-trainer. Defaults to ML_ADMIN_TOKEN in compose."
+        ),
+    )
     vdmc_indicator_url: str = Field(
         default="http://vdmc-indicator:8000",
         validation_alias=AliasChoices(

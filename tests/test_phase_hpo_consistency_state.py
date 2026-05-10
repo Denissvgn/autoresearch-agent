@@ -173,9 +173,30 @@ def test_direction_structured_trials_include_deadzone_horizon_calibration_contro
     )
     assert all(patch["auto_select_horizon"] is True for patch in patches)
     assert all("horizon_candidates" in patch for patch in patches)
+    assert {patch["feature_library_version"] for patch in patches} == {"2.3.0"}
     assert all(patch["log_feature_provenance"] is True for patch in patches)
     assert all(patch["validate_feature_consistency"] is True for patch in patches)
     assert all("max_signal_rate" in patch for patch in patches)
+
+
+def test_structured_volatility_hpo_uses_current_feature_library_version():
+    plan = build_structured_hpo_plan(
+        research_id="res_hpo_volatility",
+        instrument="DOGE_USDT",
+        timeframe="15m",
+        model_type="volatility",
+        quick_mode=True,
+        max_iterations=4,
+        max_budget_usd=2.0,
+        timeout_s=3600,
+        enable_hpo=True,
+        hpo_trials=4,
+        hpo_timesteps=50000,
+    )
+
+    assert {trial["config_patch"]["feature_library_version"] for trial in plan["trials"]} == {
+        "2.3.0"
+    }
 
 
 def test_structured_hpo_invalid_knobs_are_rejected():

@@ -382,8 +382,9 @@ class ConfigPromoter:
                 try:
                     metrics = json.loads(metrics_raw) if isinstance(metrics_raw, str) else metrics_raw
                     mlflow_run_id = mlflow_run_id or metrics.get("mlflow_run_id")
-                    model_version = metrics.get("model_version")
-                    model_registry_name = metrics.get("model_registry_name")
+                    model_registry_name, model_version = self._model_version_components(
+                        metrics
+                    )
                 except (json.JSONDecodeError, TypeError):
                     pass
 
@@ -626,19 +627,39 @@ class ConfigPromoter:
         }.get(model_type)
 
     @staticmethod
-    def _model_version_tag(metrics_payload: Dict[str, Any]) -> str:
-        registry_name = (
+    def _model_version_components(
+        metrics_payload: Dict[str, Any],
+    ) -> tuple[str | None, Any]:
+        base_registry = (
             metrics_payload.get("model_registry_name")
             or metrics_payload.get("registered_model_name")
         )
+        ensemble_version = metrics_payload.get("ensemble_model_version")
+        ensemble_registry = metrics_payload.get("ensemble_model_registry_name")
+        if ensemble_version and not ensemble_registry and base_registry:
+            ensemble_registry = f"{base_registry}_ensemble"
+        registry_name = (
+            metrics_payload.get("serving_model_registry_name")
+            or metrics_payload.get("serving_registered_model_name")
+            or ensemble_registry
+            or base_registry
+        )
         model_version = (
-            metrics_payload.get("model_version")
+            metrics_payload.get("serving_model_version")
+            or metrics_payload.get("serving_registered_model_version")
+            or ensemble_version
+            or metrics_payload.get("model_version")
             or metrics_payload.get("registered_model_version")
         )
+        return registry_name, model_version
+
+    @classmethod
+    def _model_version_tag(cls, metrics_payload: Dict[str, Any]) -> str:
+        registry_name, model_version = cls._model_version_components(metrics_payload)
         if not registry_name or model_version in (None, ""):
             raise ValueError(
                 "Production-scope promotion requires winning iteration "
-                "model_registry_name and model_version"
+                "serving, ensemble, or base model registry name and version"
             )
         return f"{registry_name}:{model_version}"
 
@@ -1833,6 +1854,9 @@ class ConfigPromoter:
         best_iteration: Dict[str, Any],
         metrics_payload: Dict[str, Any],
     ) -> Dict[str, Any]:
+        serving_registry, serving_version = ConfigPromoter._model_version_components(
+            metrics_payload
+        )
         return {
             "mlflow_run_id": (
                 best_iteration.get("mlflow_run_id")
@@ -1840,6 +1864,12 @@ class ConfigPromoter:
             ),
             "model_registry_name": metrics_payload.get("model_registry_name"),
             "model_version": metrics_payload.get("model_version"),
+            "ensemble_model_registry_name": metrics_payload.get(
+                "ensemble_model_registry_name"
+            ),
+            "ensemble_model_version": metrics_payload.get("ensemble_model_version"),
+            "serving_model_registry_name": serving_registry,
+            "serving_model_version": serving_version,
             "artifact_uri": metrics_payload.get("artifact_uri"),
         }
 

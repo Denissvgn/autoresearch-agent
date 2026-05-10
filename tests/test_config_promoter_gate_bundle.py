@@ -700,6 +700,32 @@ def _best_iteration(metrics: dict) -> dict:
     }
 
 
+def test_model_version_tag_prefers_serving_and_ensemble_fields():
+    assert ConfigPromoter._model_version_tag(
+        {
+            "model_registry_name": "direction-model",
+            "model_version": "12",
+            "ensemble_model_version": "21",
+        }
+    ) == "direction-model_ensemble:21"
+    assert ConfigPromoter._model_version_tag(
+        {
+            "model_registry_name": "direction-model",
+            "model_version": "12",
+            "ensemble_model_registry_name": "custom-ensemble",
+            "ensemble_model_version": "22",
+            "serving_model_registry_name": "serving-direction",
+            "serving_model_version": "23",
+        }
+    ) == "serving-direction:23"
+    assert ConfigPromoter._model_version_tag(
+        {
+            "model_registry_name": "direction-model",
+            "model_version": "12",
+        }
+    ) == "direction-model:12"
+
+
 @pytest.mark.asyncio
 async def test_preview_includes_blocking_gate_bundle_result(tmp_path, monkeypatch):
     _write_gate_bundle(tmp_path)

@@ -22,6 +22,7 @@ class ServicePreflightTarget:
     url: str | None
     health_paths: tuple[str, ...] = ("/health",)
     required: bool = True
+    transport: str = "http"
 
 
 class ServicePreflightError(RuntimeError):
@@ -38,6 +39,10 @@ def _normalise_model_type(model_type: str | None) -> str:
 
 def _vdmc_required_for(model_type: str | None) -> bool:
     return _normalise_model_type(model_type) in {"rl", "pipeline", "all"}
+
+
+def _full_stack_required_for(model_type: str | None) -> bool:
+    return _normalise_model_type(model_type) in {"pipeline", "all"}
 
 
 def sanitize_service_url(raw: str | None) -> str:
@@ -60,6 +65,7 @@ def build_service_preflight_targets(
     model_type: str = "all",
 ) -> list[ServicePreflightTarget]:
     """Build the service dependency list from current server settings."""
+    full_stack_required = _full_stack_required_for(model_type)
     targets = [
         ServicePreflightTarget(
             "mlflow_tracking",
@@ -84,12 +90,34 @@ def build_service_preflight_targets(
         ),
         ServicePreflightTarget("feature_service", settings_obj.feature_service_url),
         ServicePreflightTarget(
+            "inference_service",
+            settings_obj.inference_service_url,
+            health_paths=("/api/v1/health", "/health"),
+            required=full_stack_required,
+        ),
+        ServicePreflightTarget(
+            "admin_service",
+            settings_obj.admin_service_url,
+            health_paths=("/api/v1/health", "/health"),
+            required=full_stack_required,
+        ),
+        ServicePreflightTarget(
             "vdmc_indicator",
             settings_obj.vdmc_indicator_url,
             health_paths=("/api/v1/health/ready", "/health/ready"),
             required=_vdmc_required_for(model_type),
         ),
     ]
+    if full_stack_required and settings_obj.nats_url:
+        targets.append(
+            ServicePreflightTarget(
+                "nats",
+                settings_obj.nats_url,
+                health_paths=(),
+                required=True,
+                transport="tcp",
+            )
+        )
     if settings_obj.artifact_logging_required:
         targets.append(
             ServicePreflightTarget(
@@ -122,6 +150,7 @@ def build_not_run_preflight(
                 "required": target.required,
                 "status": "not_run",
                 "health_paths": list(target.health_paths),
+                "transport": target.transport,
             }
             for target in targets
         },
@@ -160,6 +189,7 @@ async def run_service_preflight(
                         "required": target.required,
                         "status": "skipped",
                         "health_paths": list(target.health_paths),
+                        "transport": target.transport,
                     }
                     for target in targets
                 },
@@ -175,7 +205,12 @@ async def run_service_preflight(
     active_client = client or httpx.AsyncClient(timeout=timeout, follow_redirects=True)
     try:
         checks = await asyncio.gather(
-            *(_check_target(active_client, target) for target in targets)
+            *(
+                _check_tcp_target(target, settings_obj.preflight_timeout_s)
+                if target.transport == "tcp"
+                else _check_target(active_client, target)
+                for target in targets
+            )
         )
     finally:
         if owns_client:
@@ -231,6 +266,7 @@ async def _check_target(
         "required": target.required,
         "status": "failed",
         "health_paths": list(target.health_paths),
+        "transport": target.transport,
         "checked_url": None,
         "status_code": None,
         "latency_ms": None,
@@ -261,6 +297,53 @@ async def _check_target(
     if result["status"] != "ready":
         result["status_code"] = last_status
         result["error"] = last_error or "service did not return a ready status"
+    return result
+
+
+async def _check_tcp_target(
+    target: ServicePreflightTarget,
+    timeout_s: float,
+) -> dict[str, Any]:
+    started = time.monotonic()
+    url = sanitize_service_url(target.url)
+    result = {
+        "name": target.name,
+        "url": url,
+        "required": target.required,
+        "status": "failed",
+        "health_paths": list(target.health_paths),
+        "transport": target.transport,
+        "checked_url": url,
+        "status_code": None,
+        "latency_ms": None,
+        "error": None,
+    }
+    if not target.url:
+        result["error"] = "service URL is not configured"
+        return result
+    parsed = urlsplit(target.url)
+    host = parsed.hostname
+    port = parsed.port or (4222 if parsed.scheme == "nats" else None)
+    if not host or port is None:
+        result["error"] = "service URL must include host and port"
+        return result
+    writer: asyncio.StreamWriter | None = None
+    try:
+        _, writer = await asyncio.wait_for(
+            asyncio.open_connection(host, port),
+            timeout=timeout_s,
+        )
+        result["status"] = "ready"
+    except (OSError, asyncio.TimeoutError) as exc:
+        result["error"] = f"{type(exc).__name__}: {exc}"
+    finally:
+        if writer is not None:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
+        result["latency_ms"] = round((time.monotonic() - started) * 1000, 2)
     return result
 
 

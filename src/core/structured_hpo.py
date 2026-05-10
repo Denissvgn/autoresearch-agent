@@ -14,6 +14,7 @@ import yaml
 
 PLAN_SCHEMA_VERSION = "autoresearch_structured_hpo_plan.v1"
 TRIAL_SCHEMA_VERSION = "autoresearch_structured_trial.v1"
+CURRENT_FEATURE_LIBRARY_VERSION = "2.3.0"
 
 DIRECTION_SCOPED_ROSTER = ["lgb", "lgb_deep", "xgb", "rf", "rf_deep"]
 DIRECTION_FULL_ROSTER = [
@@ -57,7 +58,7 @@ DIRECTION_SEARCH_SPACE: Dict[str, Any] = {
         "threshold_beta": [0.3, 0.5, 0.7],
         "max_signal_rate": [0.25, 0.35, 0.45],
     },
-    "feature_library_version": ["2.1.0", "2.2.0"],
+    "feature_library_version": [CURRENT_FEATURE_LIBRARY_VERSION],
     "feature_flags": {
         "use_shared_feature_library": [True],
         "log_feature_provenance": [True],
@@ -78,7 +79,7 @@ VOLATILITY_SEARCH_SPACE: Dict[str, Any] = {
         "threshold_strategy": ["f_beta"],
         "threshold_beta": [0.5, 0.7],
     },
-    "feature_library_version": ["2.1.0", "2.2.0"],
+    "feature_library_version": [CURRENT_FEATURE_LIBRARY_VERSION],
     "feature_flags": {
         "use_shared_feature_library": [True],
         "log_feature_provenance": [True],
@@ -388,7 +389,7 @@ def _direction_trial_patches() -> List[Dict[str, Any]]:
             calibration="isotonic",
             beta=0.5,
             signal_cap=0.35,
-            feature_version="2.1.0",
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
         ),
         _direction_patch(
             threshold=0.025,
@@ -397,7 +398,7 @@ def _direction_trial_patches() -> List[Dict[str, Any]]:
             calibration="isotonic",
             beta=0.5,
             signal_cap=0.35,
-            feature_version="2.2.0",
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
         ),
         _direction_patch(
             threshold=0.0225,
@@ -406,7 +407,7 @@ def _direction_trial_patches() -> List[Dict[str, Any]]:
             calibration="sigmoid",
             beta=0.7,
             signal_cap=0.25,
-            feature_version="2.2.0",
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
             fallback_min_samples=200,
         ),
         _direction_patch(
@@ -416,7 +417,7 @@ def _direction_trial_patches() -> List[Dict[str, Any]]:
             calibration="sigmoid",
             beta=0.5,
             signal_cap=0.25,
-            feature_version="2.1.0",
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
             fallback_min_samples=400,
         ),
         _direction_patch(
@@ -426,7 +427,7 @@ def _direction_trial_patches() -> List[Dict[str, Any]]:
             calibration="isotonic",
             beta=0.3,
             signal_cap=0.45,
-            feature_version="2.2.0",
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
         ),
     ]
     return _extend_unique_patches(
@@ -451,7 +452,7 @@ def _direction_trial_patches() -> List[Dict[str, Any]]:
             for roster in ["scoped_tabular", "full_tabular"]
             for calibration in ["isotonic", "sigmoid"]
             for beta, signal_cap in [(0.5, 0.35), (0.7, 0.25), (0.3, 0.45)]
-            for feature_version in ["2.1.0", "2.2.0"]
+            for feature_version in [CURRENT_FEATURE_LIBRARY_VERSION]
         )
     )
 
@@ -464,7 +465,7 @@ def _volatility_trial_patches() -> List[Dict[str, Any]]:
             roster="scoped_tabular",
             calibration="isotonic",
             beta=0.5,
-            feature_version="2.1.0",
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
         ),
         _volatility_patch(
             atr_mult=2.5,
@@ -472,7 +473,7 @@ def _volatility_trial_patches() -> List[Dict[str, Any]]:
             roster="full_tabular",
             calibration="isotonic",
             beta=0.5,
-            feature_version="2.2.0",
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
         ),
         _volatility_patch(
             atr_mult=1.5,
@@ -480,7 +481,7 @@ def _volatility_trial_patches() -> List[Dict[str, Any]]:
             roster="scoped_tabular",
             calibration="sigmoid",
             beta=0.7,
-            feature_version="2.2.0",
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
         ),
     ]
     return _extend_unique_patches(
@@ -499,7 +500,7 @@ def _volatility_trial_patches() -> List[Dict[str, Any]]:
             for roster in ["scoped_tabular", "full_tabular"]
             for calibration in ["isotonic", "sigmoid"]
             for beta in [0.5, 0.7]
-            for feature_version in ["2.1.0", "2.2.0"]
+            for feature_version in [CURRENT_FEATURE_LIBRARY_VERSION]
         )
     )
 
