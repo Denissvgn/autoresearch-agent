@@ -30,6 +30,13 @@ export interface ResearchSession {
   promotion_preview?: Record<string, unknown> | null;
 }
 
+interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface SecondaryMetric {
   label: string;
   value: number | string;
@@ -462,6 +469,14 @@ async function request<T>(path: string, opts?: RequestInit): Promise<T> {
   return res.json();
 }
 
+export function normalizeListResponse<T>(
+  payload: T[] | PaginatedResponse<T>,
+): T[] {
+  if (Array.isArray(payload)) return payload;
+  if (payload && Array.isArray(payload.items)) return payload.items;
+  return [];
+}
+
 /** Trigger a browser file download from an API endpoint. */
 async function triggerDownload(url: string): Promise<void> {
   const res = await fetch(url, { headers: withAuthHeaders() });
@@ -498,7 +513,12 @@ export const api = {
   startResearch: (req: StartResearchRequest) =>
     request<ResearchSession>('/research/start', { method: 'POST', body: JSON.stringify(req) }),
 
-  listSessions: () => request<ResearchSession[]>('/research'),
+  listSessions: async () =>
+    normalizeListResponse(
+      await request<ResearchSession[] | PaginatedResponse<ResearchSession>>(
+        '/research',
+      ),
+    ),
 
   getSession: (id: string) => request<ResearchSession>(`/research/${id}`),
 

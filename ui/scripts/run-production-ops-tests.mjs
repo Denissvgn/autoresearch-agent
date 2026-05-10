@@ -25,26 +25,31 @@ execFileSync(
     '--skipLibCheck',
     '--outDir',
     outDir,
+    join(root, 'src', 'vite-env.d.ts'),
     join(root, 'src', 'utils', 'productionOps.ts'),
+    join(root, 'src', 'api', 'client.ts'),
   ],
   { stdio: 'inherit' }
 );
 
-function findCompiledModule(dir) {
+function findCompiledModule(dir, fileName) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) {
-      const found = findCompiledModule(path);
+      const found = findCompiledModule(path, fileName);
       if (found) return found;
     }
-    if (entry.isFile() && entry.name === 'productionOps.js') return path;
+    if (entry.isFile() && entry.name === fileName) return path;
   }
   return null;
 }
 
-const compiledPath = findCompiledModule(outDir);
+const compiledPath = findCompiledModule(outDir, 'productionOps.js');
 assert.ok(compiledPath, 'compiled productionOps.js exists');
 const ops = await import(pathToFileURL(compiledPath).href);
+const compiledClientPath = findCompiledModule(outDir, 'client.js');
+assert.ok(compiledClientPath, 'compiled client.js exists');
+const client = await import(pathToFileURL(compiledClientPath).href);
 
 test('scopeSummary blocks promotion when prior scopes are missing', () => {
   const summary = ops.scopeSummary({
@@ -95,4 +100,11 @@ test('productionReady recognizes promoted production scope', () => {
 test('humanizeBlocker keeps operator-readable fallback labels', () => {
   assert.equal(ops.humanizeBlocker('missing_rl_oos_provenance'), 'RL OOS and feature provenance evidence is missing.');
   assert.equal(ops.humanizeBlocker('custom_blocker_name'), 'Custom blocker name.');
+});
+
+test('normalizeListResponse accepts paginated and legacy array API shapes', () => {
+  const items = [{ id: 'research-1' }];
+  assert.deepEqual(client.normalizeListResponse(items), items);
+  assert.deepEqual(client.normalizeListResponse({ items, total: 1, limit: 100, offset: 0 }), items);
+  assert.deepEqual(client.normalizeListResponse({ detail: 'not a list' }), []);
 });
