@@ -262,6 +262,32 @@ class Settings(BaseSettings):
         ),
         description="Number of messages before old tool results are compacted.",
     )
+    iteration_context_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_ITERATION_CONTEXT_ENABLED",
+            "ITERATION_CONTEXT_ENABLED",
+        ),
+        description="Inject a compact persisted-iteration digest after recorded attempts.",
+    )
+    iteration_context_max_chars: int = Field(
+        default=6000,
+        ge=500,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_ITERATION_CONTEXT_MAX_CHARS",
+            "ITERATION_CONTEXT_MAX_CHARS",
+        ),
+        description="Maximum characters in the injected iteration context digest.",
+    )
+    iteration_context_recent_attempts: int = Field(
+        default=5,
+        ge=1,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_ITERATION_CONTEXT_RECENT_ATTEMPTS",
+            "ITERATION_CONTEXT_RECENT_ATTEMPTS",
+        ),
+        description="Number of recent attempts summarized in iteration context.",
+    )
     autoresearch_cross_session_duplicate_check: bool = Field(
         default=True,
         validation_alias=AliasChoices(

@@ -37,6 +37,10 @@ from src.core.iteration_snapshot import (
     trial_identity_hash,
     write_iteration_attempt_snapshot,
 )
+from src.core.iteration_context import (
+    ITERATION_CONTEXT_DIGEST_MARKER,
+    build_iteration_context_digest,
+)
 from src.core.log_writer import AgentLogWriter
 from src.core.research_phase_plan import build_phase_state, phase_state_json
 from src.core.results_store import ResultsStore
@@ -562,19 +566,42 @@ class AgentOrchestrator:
                         for block in content
                         if isinstance(block, dict) and block.get("type") == "tool_result"
                     )
-            compacted.append({
-                "role": "user",
-                "content": (
-                    "[system] Earlier conversation compacted: "
-                    f"{len(old_section)} messages "
-                    f"({assistant_count} assistant, {user_count} user, "
-                    f"{tool_result_count} tool results). "
-                    "Use the persisted iteration records and agent log for details."
-                ),
-            })
+            content = (
+                "[system] Earlier conversation compacted: "
+                f"{len(old_section)} messages "
+                f"({assistant_count} assistant, {user_count} user, "
+                f"{tool_result_count} tool results). "
+                "Use the persisted iteration records and agent log for details."
+            )
+            latest_digest = AgentOrchestrator._latest_iteration_context_digest(
+                old_section
+            )
+            if latest_digest:
+                content = f"{content}\n\n{latest_digest}"
+            compacted.append({"role": "user", "content": content})
 
         compacted.extend(messages[-keep_recent:])
         return compacted
+
+    @staticmethod
+    def _latest_iteration_context_digest(
+        messages: List[Dict[str, Any]],
+    ) -> Optional[str]:
+        for message in reversed(messages):
+            content = message.get("content")
+            if isinstance(content, str) and ITERATION_CONTEXT_DIGEST_MARKER in content:
+                return content
+            if not isinstance(content, list):
+                continue
+            for block in reversed(content):
+                if (
+                    isinstance(block, dict)
+                    and block.get("type") == "text"
+                    and isinstance(block.get("text"), str)
+                    and ITERATION_CONTEXT_DIGEST_MARKER in block["text"]
+                ):
+                    return block["text"]
+        return None
 
     def _should_stop(self, research_id: str) -> bool:
         return self._stop_flags.get(research_id, False)
@@ -724,25 +751,88 @@ class AgentOrchestrator:
             f"{instrument_underscore}_{config.timeframe}",
             "research_resume.md",
         )
-        if not os.path.exists(resume_path):
+        content = self._read_research_resume_file(resume_path)
+        if not content:
+            try:
+                self._generate_research_resume_file(
+                    config=config,
+                    resume_path=resume_path,
+                )
+            except Exception as exc:
+                logger.warning("Research resume fallback raised: %s", exc)
+            content = self._read_research_resume_file(resume_path)
+        if not content:
             return ""
+        return (
+            "\n\n## Research Resume (prior experiments on this instrument)\n\n"
+            "Use this context to avoid repeating failed experiments and "
+            "build on what worked.\n\n"
+            f"{content}"
+        )
+
+    @staticmethod
+    def _read_research_resume_file(resume_path: str) -> str:
         try:
-            with open(resume_path) as f:
+            if not os.path.exists(resume_path):
+                return ""
+            with open(resume_path, encoding="utf-8") as f:
                 content = f.read()
             if not content.strip():
                 return ""
             # Truncate to avoid context window bloat
             if len(content) > 12_000:
                 content = content[:6000] + "\n\n*[truncated]*\n\n" + content[-6000:]
-            return (
-                "\n\n## Research Resume (prior experiments on this instrument)\n\n"
-                "Use this context to avoid repeating failed experiments and "
-                "build on what worked.\n\n"
-                f"{content}"
-            )
+            return content
         except Exception as exc:
             logger.warning("Failed to load research resume: %s", exc)
             return ""
+
+    @staticmethod
+    def _generate_research_resume_file(
+        *,
+        config: ResearchConfig,
+        resume_path: str,
+    ) -> None:
+        try:
+            resume_script = os.path.join(
+                settings.workspace_root,
+                "scripts",
+                "autotuner",
+                "resume.py",
+            )
+            if not os.path.exists(resume_script):
+                logger.warning("Resume script not found: %s", resume_script)
+                return
+            instrument_underscore = config.instrument.replace("-", "_")
+            cmd = [
+                settings.venv_python,
+                resume_script,
+                "--instrument",
+                instrument_underscore,
+                "--timeframe",
+                config.timeframe,
+                "--db",
+                settings.db_path,
+                "--runs-dir",
+                settings.runs_dir,
+                "--output",
+                resume_path,
+            ]
+            result = subprocess.run(
+                cmd,
+                cwd=settings.workspace_root,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode != 0:
+                logger.warning(
+                    "Resume fallback generation failed (rc=%d): %s",
+                    result.returncode,
+                    result.stderr[:500],
+                )
+        except Exception as exc:
+            logger.warning("Failed to generate research resume fallback: %s", exc)
 
     def _build_prompt(self, config: ResearchConfig) -> str:
         quick_flag = " --quick" if config.quick_mode else ""
@@ -1565,6 +1655,58 @@ class AgentOrchestrator:
             },
         ), marker
 
+    async def _build_iteration_context_digest(
+        self,
+        *,
+        config: ResearchConfig,
+        total_cost: float,
+    ) -> Optional[str]:
+        """Build advisory context from persisted attempts for the next turn."""
+
+        try:
+            session = await self._store.get_session(config.id) or {}
+            session = dict(session)
+            session.setdefault("id", config.id)
+            session.setdefault("instrument", config.instrument)
+            session.setdefault("timeframe", config.timeframe)
+            session.setdefault("model_type", config.model_type)
+            session.setdefault("max_iterations", config.max_iterations)
+            session.setdefault("max_budget_usd", config.max_budget_usd)
+            session["total_api_cost_usd"] = total_cost
+            iterations = await self._store.get_iterations(config.id)
+            get_hpo = getattr(self._store, "get_hpo_studies", None)
+            hpo_studies = await get_hpo(config.id) if get_hpo else []
+            get_planned = getattr(self._store, "get_planned_trials", None)
+            planned_trials = await get_planned(config.id) if get_planned else []
+            return build_iteration_context_digest(
+                session=session,
+                iterations=iterations,
+                hpo_studies=hpo_studies,
+                planned_trials=planned_trials,
+                max_chars=settings.iteration_context_max_chars,
+                recent_attempts=settings.iteration_context_recent_attempts,
+            )
+        except Exception as exc:
+            logger.warning("Failed to build iteration context digest: %s", exc)
+            return None
+
+    async def _append_iteration_context_digest(
+        self,
+        *,
+        config: ResearchConfig,
+        tool_results: List[Dict[str, Any]],
+        turn_recorded_iteration: bool,
+        total_cost: float,
+    ) -> None:
+        if not turn_recorded_iteration or not settings.iteration_context_enabled:
+            return
+        digest = await self._build_iteration_context_digest(
+            config=config,
+            total_cost=total_cost,
+        )
+        if digest:
+            tool_results.append({"type": "text", "text": digest})
+
     async def run(self, config: ResearchConfig) -> None:
         """Run the autonomous research loop for a single session."""
         research_id = config.id
@@ -2342,6 +2484,12 @@ class AgentOrchestrator:
                 messages.append({"role": "assistant", "content": assistant_content})
 
                 if tool_results:
+                    await self._append_iteration_context_digest(
+                        config=config,
+                        tool_results=tool_results,
+                        turn_recorded_iteration=turn_recorded_iteration,
+                        total_cost=total_cost,
+                    )
                     # Inject orchestrator iteration count so the agent's
                     # numbering stays in sync with the DB record.
                     tool_results.append({
