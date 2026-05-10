@@ -121,6 +121,17 @@ def test_autoresearch_dockerfile_matches_ml_service_runtime_contract():
     assert "services/shared /app/services/shared" in dockerfile
     assert "-e ./libs/ml_artifacts" in dockerfile
     assert '"--workers", "1"' in dockerfile
+    assert (
+        "reports/direction-tuning/promotion/ "
+        "/app/workspace/reports/direction-tuning/promotion/"
+    ) in dockerfile
+    assert (
+        REPO_ROOT
+        / "reports"
+        / "direction-tuning"
+        / "promotion"
+        / "development_gate_bundle_v1.yaml"
+    ).exists()
 
 
 def test_autoresearch_deployment_documents_single_instance_constraint():

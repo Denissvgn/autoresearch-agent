@@ -149,11 +149,28 @@ def _completed_phase_ids(
         completed.add("multi_seed_robustness")
     if any(_has_metric(it, "inference_parity", "inference_reload_validation") for it in iterations):
         completed.add("inference_parity_replay")
-    if any(it.get("all_gates_passed") for it in iterations) or promotions:
-        completed.add("promotion_proposal")
-    if model_type != "direction" and any(it.get("all_gates_passed") for it in iterations):
+    if _has_promotion_evidence(iterations, promotions):
         completed.add("promotion_proposal")
     return completed
+
+
+def _has_promotion_evidence(
+    iterations: List[Dict[str, Any]],
+    promotions: List[Dict[str, Any]],
+) -> bool:
+    if promotions:
+        return True
+    evidence_keys = (
+        "development_promotion_metadata",
+        "promotion_allowed",
+        "promotion_consistency_report",
+        "promotion_decision",
+        "promotion_metadata",
+        "promotion_preview_ready",
+        "promotion_scope",
+        "scoped_promotion_metadata",
+    )
+    return any(_has_metric(row, *evidence_keys) for row in iterations)
 
 
 def _select_current_phase(
@@ -225,4 +242,3 @@ def _parse_json(raw: Any) -> Any:
         except json.JSONDecodeError:
             return None
     return raw
-

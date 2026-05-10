@@ -39,12 +39,31 @@ def build_research_state(
     top_candidates = _top_candidates(iteration_rows)
     failed = _failed_or_pruned(iteration_rows)
     latest_promotion = _latest_promotion(session, promotion_rows)
+    production_operations = _production_operations_summary(
+        session=session,
+        iterations=iteration_rows,
+        promotions=promotion_rows,
+        latest_promotion=latest_promotion,
+        audit_events=audit_event_rows,
+    )
+    research_outcome = _research_outcome(
+        session=session,
+        iterations=iteration_rows,
+        phase_state=phase_state,
+        production_operations=production_operations,
+    )
 
     return {
         "schema_version": "autoresearch_state.v1",
         "research_id": session.get("id"),
         "model_type": session.get("model_type"),
         "status": session.get("status"),
+        "research_outcome": research_outcome,
+        "terminal_reason": _terminal_reason(
+            session=session,
+            iterations=iteration_rows,
+            research_outcome=research_outcome,
+        ),
         "current_phase": phase_state.get("current_phase"),
         "next_action": phase_state.get("next_action"),
         "phase_state": phase_state,
@@ -68,13 +87,7 @@ def build_research_state(
         "rollback_target": _rollback_target(latest_promotion),
         "smoke_status": _metadata_field(latest_promotion, "smoke_validation"),
         "paper_status": _paper_status(latest_promotion),
-        "production_operations": _production_operations_summary(
-            session=session,
-            iterations=iteration_rows,
-            promotions=promotion_rows,
-            latest_promotion=latest_promotion,
-            audit_events=audit_event_rows,
-        ),
+        "production_operations": production_operations,
     }
 
 
@@ -381,6 +394,102 @@ def _search_plan_summary(
             for row in hpo_studies
         ],
     }
+
+
+def _research_outcome(
+    *,
+    session: Dict[str, Any],
+    iterations: List[Dict[str, Any]],
+    phase_state: Dict[str, Any],
+    production_operations: Dict[str, Any],
+) -> Optional[str]:
+    status = str(session.get("status") or "").strip().lower()
+    if status in {"queued", "running"}:
+        return "running"
+    if status in {"failed", "error"}:
+        return "failed"
+    if status == "timed_out":
+        return "timed_out"
+    if status in {"stopped", "cancelled", "canceled"}:
+        return "operator_stopped"
+    if status != "completed":
+        return status or None
+    if _iteration_budget_reached(session, iterations) and _has_unfinished_phase(
+        phase_state
+    ):
+        return "iteration_budget_exhausted"
+    if _promotion_is_blocked(production_operations):
+        return "promotion_blocked"
+    if _has_unfinished_phase(phase_state):
+        return "phase_incomplete"
+    return "phase_complete"
+
+
+def _terminal_reason(
+    *,
+    session: Dict[str, Any],
+    iterations: List[Dict[str, Any]],
+    research_outcome: Optional[str],
+) -> Optional[str]:
+    status = str(session.get("status") or "").strip().lower()
+    if research_outcome == "iteration_budget_exhausted":
+        return (
+            "max_iterations"
+            if _iteration_budget_reached(session, iterations)
+            else "budget"
+        )
+    if research_outcome == "promotion_blocked":
+        return "promotion_gates_blocked"
+    if research_outcome == "phase_incomplete":
+        return "completed_before_phase_plan_finished"
+    if status == "timed_out":
+        return "timeout"
+    if status in {"stopped", "cancelled", "canceled"}:
+        return "operator_stopped"
+    if status in {"failed", "error"}:
+        return "error"
+    return None
+
+
+def _iteration_budget_reached(
+    session: Dict[str, Any],
+    iterations: List[Dict[str, Any]],
+) -> bool:
+    max_iterations = _first_number(session.get("max_iterations"))
+    return (
+        max_iterations is not None
+        and max_iterations > 0
+        and len(iterations) >= int(max_iterations)
+    )
+
+
+def _has_unfinished_phase(phase_state: Dict[str, Any]) -> bool:
+    phases = phase_state.get("phases")
+    if not isinstance(phases, list):
+        return False
+    return any(
+        isinstance(phase, dict)
+        and phase.get("status") in {"pending", "blocked"}
+        for phase in phases
+    )
+
+
+def _promotion_is_blocked(production_operations: Dict[str, Any]) -> bool:
+    promotion = production_operations.get("promotion")
+    if not isinstance(promotion, dict):
+        return False
+    if promotion.get("blocked"):
+        return True
+    scopes = promotion.get("scopes")
+    if not isinstance(scopes, list):
+        return False
+    return any(
+        isinstance(scope, dict)
+        and scope.get("scope") == "development"
+        and scope.get("status") == "blocked"
+        and bool(scope.get("blockers"))
+        for scope in scopes
+    )
 
 
 _PROMOTION_SCOPES = ("development", "paper", "canary", "production")

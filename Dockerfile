@@ -92,6 +92,9 @@ COPY .github/skills/rl-autotuner/ /app/workspace/.github/skills/rl-autotuner/
 # Production configs (baseline for promotion)
 COPY configs/ /app/workspace/configs/
 
+# Promotion gate bundles consumed by ConfigPromoter.
+COPY reports/direction-tuning/promotion/ /app/workspace/reports/direction-tuning/promotion/
+
 # Shared Python libraries used by training scripts
 COPY libs/ /app/workspace/libs/
 

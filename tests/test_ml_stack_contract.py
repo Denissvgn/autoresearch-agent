@@ -75,6 +75,25 @@ def test_predictive_prepare_defaults_and_serving_versions_align_with_stack():
     assert volatility_metrics["serving_model_version"] == "9"
 
 
+def test_direction_prepare_maps_platt_alias_to_sigmoid_for_stacking_schema():
+    direction = _load_module(
+        "autoresearch_direction_prepare_calibration_contract",
+        REPO_ROOT / "scripts" / "autotuner" / "direction" / "prepare.py",
+    )
+
+    cfg = direction.build_phase1c_config(
+        {
+            "instrument": "DOGE_USDT",
+            "timeframe": "15m",
+            "stacking_calibration_method": "platt",
+            "stacking_calibration_fallback_method": "platt",
+        }
+    )
+
+    assert cfg["stacking_calibration_method"] == "sigmoid"
+    assert cfg["stacking_calibration_fallback_method"] == "sigmoid"
+
+
 def test_rl_trainer_requests_include_service_auth(monkeypatch):
     rl_prepare = _load_module(
         "autoresearch_rl_prepare_contract",

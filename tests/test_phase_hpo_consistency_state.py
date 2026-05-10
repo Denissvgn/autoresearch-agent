@@ -15,6 +15,14 @@ from src.core.structured_hpo import (
 )
 
 
+def _phase_status(state: dict, phase_id: str) -> str:
+    return next(
+        phase["status"]
+        for phase in state["phases"]
+        if phase["id"] == phase_id
+    )
+
+
 def _passing_metrics() -> dict:
     return {
         "all_gates_passed": True,
@@ -60,6 +68,79 @@ def test_direction_phase_state_advances_past_tabular_sweeps():
     assert state["current_phase"] == "adaptive_feature_sweeps"
     assert state["phases"][0]["status"] == "completed"
     assert state["phases"][1]["status"] == "completed"
+    assert _phase_status(state, "promotion_proposal") == "pending"
+
+
+def test_promotion_proposal_requires_preview_or_promotion_evidence():
+    session = {
+        "id": "res_phase_promotion",
+        "model_type": "direction",
+    }
+    iterations = [
+        {
+            "iteration": 1,
+            "metrics_json": json.dumps(_passing_metrics()),
+            "all_gates_passed": 1,
+        },
+    ]
+
+    state = build_phase_state(session=session, iterations=iterations)
+
+    assert _phase_status(state, "promotion_proposal") == "pending"
+
+    iterations[0]["metrics_json"] = json.dumps(
+        {
+            **_passing_metrics(),
+            "development_promotion_metadata": {
+                "promotion_allowed": True,
+                "rollback_target": "direction_model:1",
+            },
+        }
+    )
+
+    state = build_phase_state(session=session, iterations=iterations)
+
+    assert _phase_status(state, "promotion_proposal") == "completed"
+
+
+def test_research_state_marks_iteration_budget_exhausted_when_phases_pending():
+    session = {
+        "id": "res_phase_budget",
+        "model_type": "direction",
+        "status": "completed",
+        "max_iterations": 2,
+        "max_budget_usd": 1.0,
+        "total_api_cost_usd": 0.4,
+    }
+    iterations = [
+        {
+            "iteration": 1,
+            "metrics_json": json.dumps({"config": {}}),
+            "all_gates_passed": 0,
+            "primary_metric": 0.52,
+            "metric_name": "score",
+            "decision": "keep",
+        },
+        {
+            "iteration": 2,
+            "metrics_json": json.dumps({"all_gates_passed": True}),
+            "all_gates_passed": 1,
+            "primary_metric": 0.57,
+            "metric_name": "score",
+            "decision": "keep",
+        },
+    ]
+
+    state = build_research_state(
+        session=session,
+        iterations=iterations,
+        hpo_studies=[],
+        promotions=[],
+    )
+
+    assert state["research_outcome"] == "iteration_budget_exhausted"
+    assert state["terminal_reason"] == "max_iterations"
+    assert _phase_status(state["phase_state"], "promotion_proposal") == "pending"
 
 
 def test_structured_direction_hpo_plan_is_bounded_by_iterations():

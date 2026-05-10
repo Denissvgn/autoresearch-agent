@@ -23,15 +23,23 @@ export default function ResearchStatePanel({ state }: Props) {
           <div className="text-xs text-gray-500">Current Phase</div>
           <div className="font-mono text-gray-100">{state.current_phase ?? '—'}</div>
         </div>
-        <div className="bg-gray-800 border border-gray-700 rounded px-3 py-2 md:col-span-2">
-          <div className="text-xs text-gray-500">Next Action</div>
-          <div className="text-gray-100">{state.next_action ?? '—'}</div>
+        <div className="bg-gray-800 border border-gray-700 rounded px-3 py-2">
+          <div className="text-xs text-gray-500">Outcome</div>
+          <div className="font-mono text-gray-100">{state.research_outcome ?? state.status ?? '—'}</div>
+        </div>
+        <div className="bg-gray-800 border border-gray-700 rounded px-3 py-2">
+          <div className="text-xs text-gray-500">Terminal Reason</div>
+          <div className="font-mono text-gray-100">{state.terminal_reason ?? '—'}</div>
         </div>
         <div className="bg-gray-800 border border-gray-700 rounded px-3 py-2">
           <div className="text-xs text-gray-500">Budget</div>
           <div className="font-mono text-gray-100">
             ${valueText(state.budget_usage.api_cost_usd)} / ${valueText(state.budget_usage.max_budget_usd)}
           </div>
+        </div>
+        <div className="bg-gray-800 border border-gray-700 rounded px-3 py-2 md:col-span-4">
+          <div className="text-xs text-gray-500">Next Action</div>
+          <div className="text-gray-100">{state.next_action ?? '—'}</div>
         </div>
       </div>
 
@@ -117,4 +125,3 @@ export default function ResearchStatePanel({ state }: Props) {
     </div>
   );
 }
-

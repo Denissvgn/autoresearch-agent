@@ -228,6 +228,8 @@ export interface ResearchState {
   research_id: string;
   model_type: string;
   status: string;
+  research_outcome?: string | null;
+  terminal_reason?: string | null;
   current_phase: string | null;
   next_action: string | null;
   phase_state: {
