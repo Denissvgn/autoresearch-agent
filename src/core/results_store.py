@@ -1598,6 +1598,29 @@ class ResultsStore:
             row = await cursor.fetchone()
             return dict(row) if row else None
 
+    async def get_latest_iteration_with_config_snapshot(
+        self, research_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Return the most recent iteration row whose config_snapshot is non-null.
+
+        Used by AR-3 inheritance logic in ``_record_iteration`` to propagate
+        the last known config_snapshot into promotion-family phases that do not
+        run a fresh training command, preventing ``missing_config_snapshot``
+        consistency blockers on those phases.
+        """
+        async with self.connection() as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "SELECT iteration, config_snapshot FROM iterations "
+                "WHERE research_id = ? AND config_snapshot IS NOT NULL "
+                "ORDER BY iteration DESC LIMIT 1",
+                (research_id,),
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            return {"iteration": row[0], "config_snapshot": row[1]}
+
     # ------------------------------------------------------------------
     # HPO Studies (ML-59)
     # ------------------------------------------------------------------

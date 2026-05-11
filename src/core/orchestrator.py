@@ -67,6 +67,18 @@ _CLAUDE_MAX_OUTPUT_TOKENS = 8192
 # the agent loop aborts as ``failed`` and waits for operator review.
 _MAX_CONSECUTIVE_POLICY_REJECTIONS = 5
 
+# AR-3: Phases that legitimately emit no config_snapshot because they do NOT
+# run a fresh training command — they validate, replay, or promote an already-
+# trained artefact.  _record_iteration inherits the most recent non-null
+# config_snapshot from the DB for these phases so that consistency reports
+# don't flag ``missing_config_snapshot`` as a blocker.
+_PROMOTION_FAMILY: frozenset[str] = frozenset({
+    "multi_seed_robustness",
+    "inference_parity_replay",
+    "calibration_replay_gates",
+    "promotion_proposal",
+})
+
 # ---------------------------------------------------------------------------
 # Research config dataclass
 # ---------------------------------------------------------------------------
@@ -2867,6 +2879,36 @@ class AgentOrchestrator:
         training_time = marker.get("training_time_s")
 
         session = await self._store.get_session(research_id)
+
+        # AR-3: For promotion-family phases the agent does not run a fresh
+        # training command and legitimately emits no config_snapshot.  Inherit
+        # from the most recent iteration that recorded one so consistency
+        # reports don't fire ``missing_config_snapshot`` as a blocker.
+        if not marker.get("config_snapshot"):
+            # Determine the active phase early, mirroring the later derivation
+            # that populates ``active_phase`` / ``search_phase``.
+            _early_phase: str = marker.get("search_phase") or ""
+            if not _early_phase and session:
+                _ps_raw = session.get("phase_state_json")
+                if isinstance(_ps_raw, str) and _ps_raw.strip():
+                    try:
+                        _early_phase = (
+                            json.loads(_ps_raw).get("current_phase") or ""
+                        )
+                    except (json.JSONDecodeError, AttributeError):
+                        _early_phase = ""
+            if _early_phase in _PROMOTION_FAMILY:
+                _inherited = (
+                    await self._store.get_latest_iteration_with_config_snapshot(
+                        research_id
+                    )
+                )
+                if _inherited and _inherited.get("config_snapshot"):
+                    marker["config_snapshot"] = _inherited["config_snapshot"]
+                    marker["config_snapshot_inherited_from_iteration"] = (
+                        _inherited["iteration"]
+                    )
+
         if session:
             identity = marker.get("trial_identity")
             if not identity:
