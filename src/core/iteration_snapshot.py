@@ -23,7 +23,7 @@ def build_iteration_attempt_snapshot(
     iteration: int,
     turn: int,
     command: str,
-    config_snapshot: Optional[str],
+    config_snapshot: Any,
     workspace: str,
     marker: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -90,7 +90,7 @@ def build_iteration_attempt_snapshot(
     return snapshot
 
 
-def canonical_config_hash(config_snapshot: Optional[str]) -> Optional[str]:
+def canonical_config_hash(config_snapshot: Any) -> Optional[str]:
     """Hash config content after semantic YAML/JSON canonicalization."""
 
     canonical = canonical_config_payload(config_snapshot)
@@ -100,11 +100,24 @@ def canonical_config_hash(config_snapshot: Optional[str]) -> Optional[str]:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
-def canonical_config_payload(config_snapshot: Optional[str]) -> Any:
-    """Return a stable representation of a config snapshot."""
+def canonical_config_payload(config_snapshot: Any) -> Any:
+    """Return a stable representation of a config snapshot.
 
+    Accepts:
+      - None              -> None
+      - str               -> YAML/JSON-loaded then canonicalised
+      - Mapping           -> canonicalised directly (e.g. LLM-emitted dict)
+      - list / tuple      -> canonicalised directly
+      - anything else     -> canonicalised directly (numbers, bools, …)
+    """
     if config_snapshot is None:
         return None
+    if isinstance(config_snapshot, Mapping):
+        return _canonicalize(dict(config_snapshot))
+    if isinstance(config_snapshot, (list, tuple)):
+        return _canonicalize(list(config_snapshot))
+    if not isinstance(config_snapshot, str):
+        return _canonicalize(config_snapshot)
     try:
         loaded = yaml.safe_load(config_snapshot)
     except yaml.YAMLError:
@@ -121,7 +134,7 @@ def build_trial_identity(
     timeframe: str,
     model_type: str,
     command: Optional[str],
-    config_snapshot: Optional[str],
+    config_snapshot: Any,
     quick_mode: bool,
     marker: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -186,9 +199,13 @@ def _environment_metadata() -> Dict[str, Any]:
     }
 
 
-def _sha256_text(value: Optional[str]) -> Optional[str]:
+def _sha256_text(value: Any) -> Optional[str]:
     if value is None:
         return None
+    if not isinstance(value, str):
+        # Deterministic JSON serialisation for non-string inputs (e.g. dicts
+        # emitted by the LLM instead of YAML text).
+        value = json.dumps(value, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 

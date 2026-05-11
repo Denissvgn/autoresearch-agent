@@ -365,9 +365,13 @@ def _first_present(
     return None
 
 
-def _sha256_text(value: Optional[str]) -> Optional[str]:
+def _sha256_text(value: Any) -> Optional[str]:
     if value is None:
         return None
+    if not isinstance(value, str):
+        # Deterministic JSON serialisation for non-string inputs (e.g. dicts
+        # emitted by the LLM instead of YAML text).
+        value = json.dumps(value, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 

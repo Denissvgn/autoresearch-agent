@@ -2850,6 +2850,13 @@ class AgentOrchestrator:
     ) -> None:
         """Record an iteration and broadcast the event."""
         marker = dict(marker)
+        # AR-1: coerce dict/list config_snapshot to a JSON string so all
+        # downstream consumers that declare config_snapshot: Optional[str]
+        # receive a valid string.  The LLM may emit a JSON object instead of
+        # YAML text when self-reporting a config_snapshot on ITERATION_RESULT.
+        _cs = marker.get("config_snapshot")
+        if isinstance(_cs, (dict, list)):
+            marker["config_snapshot"] = json.dumps(_cs, sort_keys=True)
         primary_metric = marker.get("primary_metric")
         all_gates = marker.get("all_gates_passed", False)
         decision = marker.get("decision", "unknown")
