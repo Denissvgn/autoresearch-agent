@@ -211,6 +211,91 @@ async def test_global_stagnation_window_configurable(
 
 
 @pytest.mark.asyncio
+async def test_global_stagnation_epsilon_prevents_tiny_best_reset(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Improvements <= epsilon must not reset best_iteration."""
+    import src.core.orchestrator as orch_module
+
+    monkeypatch.setattr(orch_module.settings, "global_stagnation_epsilon", 0.0001)
+
+    store = ResultsStore(str(tmp_path / "ar7_epsilon_tiny.sqlite"))
+    await store.initialize()
+    rid = "res_ar7_epsilon_tiny"
+    await _seed_session(store, rid)
+
+    await store.add_iteration(
+        research_id=rid, iteration=1, primary_metric=0.6000,
+        metric_name="auc", all_gates_passed=True, decision="keep",
+        description="best", config_snapshot="a: 1\n", metrics_json="{}",
+        training_time_s=1.0,
+        metric_improvement_epsilon=orch_module.settings.global_stagnation_epsilon,
+    )
+    await store.add_iteration(
+        research_id=rid, iteration=2, primary_metric=0.60005,
+        metric_name="auc", all_gates_passed=True, decision="keep",
+        description="noise", config_snapshot="a: 2\n", metrics_json="{}",
+        training_time_s=1.0,
+        metric_improvement_epsilon=orch_module.settings.global_stagnation_epsilon,
+    )
+
+    session = await store.get_session(rid)
+    assert session["best_iteration"] == 1
+    assert session["best_metric"] == pytest.approx(0.6000)
+
+    orch = AgentOrchestrator(store)
+    result = await orch._maybe_global_stagnation_terminate(
+        research_id=rid,
+        iteration_count=13,
+    )
+    assert result is not None
+    assert "GLOBAL_STAGNATION" in result
+
+
+@pytest.mark.asyncio
+async def test_global_stagnation_epsilon_allows_real_best_reset(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Improvements > epsilon reset best_iteration and delay the nudge."""
+    import src.core.orchestrator as orch_module
+
+    monkeypatch.setattr(orch_module.settings, "global_stagnation_epsilon", 0.0001)
+
+    store = ResultsStore(str(tmp_path / "ar7_epsilon_real.sqlite"))
+    await store.initialize()
+    rid = "res_ar7_epsilon_real"
+    await _seed_session(store, rid)
+
+    await store.add_iteration(
+        research_id=rid, iteration=1, primary_metric=0.6000,
+        metric_name="auc", all_gates_passed=True, decision="keep",
+        description="best", config_snapshot="a: 1\n", metrics_json="{}",
+        training_time_s=1.0,
+        metric_improvement_epsilon=orch_module.settings.global_stagnation_epsilon,
+    )
+    await store.add_iteration(
+        research_id=rid, iteration=2, primary_metric=0.6002,
+        metric_name="auc", all_gates_passed=True, decision="keep",
+        description="real improvement", config_snapshot="a: 2\n", metrics_json="{}",
+        training_time_s=1.0,
+        metric_improvement_epsilon=orch_module.settings.global_stagnation_epsilon,
+    )
+
+    session = await store.get_session(rid)
+    assert session["best_iteration"] == 2
+    assert session["best_metric"] == pytest.approx(0.6002)
+
+    orch = AgentOrchestrator(store)
+    result = await orch._maybe_global_stagnation_terminate(
+        research_id=rid,
+        iteration_count=13,
+    )
+    assert result is None
+
+
+@pytest.mark.asyncio
 async def test_global_stagnation_no_fire_when_no_best_iteration(
     tmp_path: Path,
 ) -> None:

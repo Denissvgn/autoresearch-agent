@@ -511,3 +511,155 @@ async def test_phase_from_session_phase_state_json_also_triggers_inheritance(
     assert row["config_snapshot"] == snap
     metrics = json.loads(row["metrics_json"])
     assert metrics.get("config_snapshot_inherited_from_iteration") == 1
+
+
+@pytest.mark.asyncio
+async def test_attach_consistency_report_persists_resolved_search_phase(
+    tmp_path: Path,
+) -> None:
+    """Explicit iteration overwrites keep the phase column in sync.
+
+    When the marker omits ``search_phase``, _attach_consistency_report resolves
+    the active phase from ``session.phase_state_json``.  update_iteration must
+    persist that resolved phase to both metrics_json and the search_phase
+    column, otherwise later phase-state derivation loses the attribution.
+    """
+    store = ResultsStore(str(tmp_path / "db_update_phase.sqlite"))
+    await store.initialize()
+    await _create_session(store, session_id="res_update_phase")
+
+    await store.add_iteration(
+        research_id="res_update_phase",
+        iteration=1,
+        primary_metric=0.65,
+        metric_name="auc",
+        all_gates_passed=True,
+        decision="keep",
+        description="",
+        config_snapshot="agent_strategy: BALA\nhorizon: 15\n",
+        metrics_json="{}",
+        training_time_s=42.0,
+    )
+    await store.update_session(
+        "res_update_phase",
+        phase_state_json=json.dumps({"current_phase": "multi_seed_robustness"}),
+    )
+
+    marker: Dict[str, Any] = {
+        "primary_metric": 0.65,
+        "metric_name": "auc",
+        "all_gates_passed": True,
+        "decision": "keep",
+        "description": "explicit multi-seed overwrite",
+        "seed_trials": [{"mlflow_run_id": "run-SAME"} for _ in range(5)],
+        "n_seed_trials": 5,
+    }
+
+    orchestrator = AgentOrchestrator(store)
+    await orchestrator._attach_consistency_report("res_update_phase", 1, marker)
+    await store.update_iteration("res_update_phase", 1, marker)
+
+    row = await store.get_iteration("res_update_phase", 1)
+    assert row["search_phase"] == "multi_seed_robustness"
+
+    metrics = json.loads(row["metrics_json"])
+    assert metrics["search_phase"] == "multi_seed_robustness"
+
+    report = json.loads(row["consistency_report_json"])
+    assert "evidence_artifact_missing_for_multi_seed_robustness" in report.get(
+        "blockers", []
+    )
+
+
+@pytest.mark.asyncio
+async def test_record_iteration_stores_evidence_artifact_blocker_for_seed_trials(
+    tmp_path: Path,
+) -> None:
+    """_record_iteration passes search_phase into consistency reports.
+
+    Duplicate seed trial run IDs must appear as an operator-visible blocker in
+    consistency_report_json, not only as hidden phase-state gating logic.
+    """
+    store = ResultsStore(str(tmp_path / "db_seed_blocker.sqlite"))
+    await store.initialize()
+    await _create_session(store, session_id="res_seed_blocker")
+
+    snap = "agent_strategy: BALA\nhorizon: 15\n"
+    await store.add_iteration(
+        research_id="res_seed_blocker", iteration=1, primary_metric=0.65,
+        metric_name="auc", all_gates_passed=True, decision="keep",
+        description="", config_snapshot=snap, metrics_json="{}",
+        training_time_s=42.0,
+    )
+
+    marker2: Dict[str, Any] = {
+        "primary_metric": 0.65,
+        "metric_name": "auc",
+        "all_gates_passed": True,
+        "decision": "keep",
+        "description": "synthetic multi-seed evidence",
+        "search_phase": "multi_seed_robustness",
+        "training_time_s": None,
+        "seed_trials": [{"mlflow_run_id": "run-SAME"} for _ in range(5)],
+        "n_seed_trials": 5,
+        "seeds_passed_gates": True,
+    }
+    await AgentOrchestrator(store)._record_iteration(
+        "res_seed_blocker", 2, marker2, 0.05,
+    )
+
+    row = await store.get_iteration("res_seed_blocker", 2)
+    report = json.loads(row["consistency_report_json"])
+    assert "missing_config_snapshot" not in report.get("blockers", [])
+    assert "evidence_artifact_missing_for_multi_seed_robustness" in report.get(
+        "blockers", []
+    )
+
+    session = await store.get_session("res_seed_blocker")
+    phase_state = json.loads(session["phase_state_json"])
+    assert phase_state["blocked"] is True
+    assert "evidence_artifact_missing_for_multi_seed_robustness" in (
+        phase_state["block_reason"] or ""
+    )
+
+
+@pytest.mark.asyncio
+async def test_record_iteration_stores_evidence_artifact_blocker_for_calibration(
+    tmp_path: Path,
+) -> None:
+    """Invalid calibration evidence is persisted in consistency_report_json."""
+    store = ResultsStore(str(tmp_path / "db_cal_blocker.sqlite"))
+    await store.initialize()
+    await _create_session(store, session_id="res_cal_blocker")
+
+    snap = "agent_strategy: BALA\nhorizon: 15\n"
+    await store.add_iteration(
+        research_id="res_cal_blocker", iteration=1, primary_metric=0.65,
+        metric_name="auc", all_gates_passed=True, decision="keep",
+        description="", config_snapshot=snap, metrics_json="{}",
+        training_time_s=42.0,
+    )
+
+    marker2: Dict[str, Any] = {
+        "primary_metric": 0.65,
+        "metric_name": "auc",
+        "all_gates_passed": True,
+        "decision": "keep",
+        "description": "calibration evidence missing selected run",
+        "search_phase": "calibration_replay_gates",
+        "training_time_s": None,
+        "calibration_full_validation": {
+            "selected": {"run_id": None, "metrics": {"ece": 0.02}},
+        },
+        "economic_replay": {"gates": {"all_gates_passed": True}},
+    }
+    await AgentOrchestrator(store)._record_iteration(
+        "res_cal_blocker", 2, marker2, 0.05,
+    )
+
+    row = await store.get_iteration("res_cal_blocker", 2)
+    report = json.loads(row["consistency_report_json"])
+    assert "missing_config_snapshot" not in report.get("blockers", [])
+    assert "evidence_artifact_missing_for_calibration_replay_gates" in report.get(
+        "blockers", []
+    )

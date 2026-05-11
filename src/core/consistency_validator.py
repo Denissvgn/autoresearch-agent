@@ -458,7 +458,7 @@ def _is_synthetic_promotion_iteration(
     Returns ``"synthetic_phase_iteration_<phase_id>"`` on synthetic detection,
     or ``None`` when the iteration is genuine.
 
-    ``prior_best_metrics`` should be the metrics dict of the most recent
+    ``prior_best_metrics`` should be the metrics dict of the best
     non-promotion-family iteration with a ``primary_metric`` value.  An empty
     dict disables the check conservatively (no block).
     """

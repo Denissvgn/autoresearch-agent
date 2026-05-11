@@ -615,8 +615,8 @@ def test_synthetic_check_promotion_proposal_blocked_without_promotion_metadata()
 # ---------------------------------------------------------------------------
 
 
-def test_prior_best_metrics_returns_most_recent_non_promotion_family() -> None:
-    """_prior_best_metrics returns the last training-phase iteration's metrics."""
+def test_prior_best_metrics_returns_best_non_promotion_family() -> None:
+    """_prior_best_metrics returns the highest training-phase metric."""
     iters = [
         _iteration_row(
             iteration=i,
@@ -634,8 +634,65 @@ def test_prior_best_metrics_returns_most_recent_non_promotion_family() -> None:
         )
     )
     result = _prior_best_metrics(iters)
-    # Should return iter 3's metrics (most recent non-promotion, i=3 → 0.60 + 3*0.01 = 0.63)
+    # Should return iter 3's metrics (highest non-promotion, i=3 → 0.60 + 3*0.01 = 0.63)
     assert result["primary_metric"] == pytest.approx(0.63)
+
+
+def test_prior_best_metrics_ignores_later_worse_non_promotion_family() -> None:
+    """A later worse row must not hide the true prior best."""
+    iters = [
+        _iteration_row(
+            iteration=1,
+            metrics={"primary_metric": 0.61, "training_time_s": 10.0},
+            search_phase="tabular_sweeps",
+        ),
+        _iteration_row(
+            iteration=2,
+            metrics={"primary_metric": 0.72, "training_time_s": 12.0},
+            search_phase="tabular_sweeps",
+        ),
+        _iteration_row(
+            iteration=3,
+            metrics={"primary_metric": 0.66, "training_time_s": 11.0},
+            search_phase="adaptive_feature_sweeps",
+        ),
+    ]
+
+    result = _prior_best_metrics(iters)
+
+    assert result["primary_metric"] == pytest.approx(0.72)
+
+
+def test_synthetic_check_blocks_copy_of_true_best_after_later_worse_row() -> None:
+    """Synthetic detection compares against the true prior best, not latest row."""
+    iters = [
+        _iteration_row(
+            iteration=1,
+            metrics={"primary_metric": 0.6394, "training_time_s": 123.0},
+            search_phase="tabular_sweeps",
+        ),
+        _iteration_row(
+            iteration=2,
+            metrics={"primary_metric": 0.6100, "training_time_s": 99.0},
+            search_phase="adaptive_feature_sweeps",
+        ),
+    ]
+    prior_best = _prior_best_metrics(iters)
+    synthetic_metrics = {
+        "training_time_s": None,
+        "primary_metric": 0.6394,
+        "mlflow_run_id": None,
+        "seed_trials": [{"mlflow_run_id": "run-SAME"} for _ in range(5)],
+        "n_seed_trials": 5,
+    }
+
+    result = _is_synthetic_promotion_iteration(
+        synthetic_metrics,
+        prior_best,
+        "multi_seed_robustness",
+    )
+
+    assert result == "synthetic_phase_iteration_multi_seed_robustness"
 
 
 def test_prior_best_metrics_returns_empty_when_no_qualifying_iteration() -> None:

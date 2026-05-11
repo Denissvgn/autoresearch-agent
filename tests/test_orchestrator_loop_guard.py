@@ -26,7 +26,7 @@ import sys
 import types
 from pathlib import Path
 from typing import Any, Dict
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -149,9 +149,78 @@ def _incomplete_normal_state() -> Dict[str, Any]:
     }
 
 
+def _fake_text_response(text: str) -> Any:
+    return types.SimpleNamespace(
+        content=[types.SimpleNamespace(type="text", text=text)],
+        usage=types.SimpleNamespace(input_tokens=1, output_tokens=1),
+        stop_reason="end_turn",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
+
+def test_extract_terminate_request_detects_assistant_line() -> None:
+    text = (
+        "I am done.\n"
+        "  TERMINATE_REQUEST: no viable phase remains\n"
+        "phase=multi_seed_robustness"
+    )
+
+    result = AgentOrchestrator._extract_terminate_request(text)
+
+    assert result == (
+        "TERMINATE_REQUEST: no viable phase remains\n"
+        "phase=multi_seed_robustness"
+    )
+
+
+def test_extract_terminate_request_ignores_instruction_mentions() -> None:
+    text = "The system says to use `TERMINATE_REQUEST:` when stopping."
+
+    assert AgentOrchestrator._extract_terminate_request(text) is None
+
+
+@pytest.mark.asyncio
+async def test_run_honors_terminate_request_without_phase_kick(
+    tmp_path: Path,
+) -> None:
+    """Assistant TERMINATE_REQUEST is accepted even with incomplete phases."""
+    store = ResultsStore(str(tmp_path / "ar4_terminate_request.sqlite"))
+    await store.initialize()
+    rid = "res_ar4_terminate_request"
+    await _seed_session(store, rid)
+
+    config = _make_config(rid)
+    config.workspace_path = str(tmp_path / "ws")
+
+    orch = AgentOrchestrator(store)
+    phase_kick = AsyncMock(return_value={"reason": "should_not_call", "text": "no"})
+
+    with (
+        patch.object(orch, "_load_skill_async", new=AsyncMock(return_value="# skill")),
+        patch.object(orch, "_load_claude_md_async", new=AsyncMock(return_value="")),
+        patch.object(
+            orch,
+            "_call_claude_with_retry",
+            new=AsyncMock(return_value=_fake_text_response(
+                "TERMINATE_REQUEST: stagnation window exhausted"
+            )),
+        ),
+        patch.object(orch, "_build_phase_continuation_kick", new=phase_kick),
+        patch.object(orch, "_extract_session_insights", new=AsyncMock()),
+        patch.object(orch, "_update_research_resume", new=AsyncMock()),
+    ):
+        await orch.run(config)
+
+    phase_kick.assert_not_awaited()
+    session = await store.get_session(rid)
+    assert session["status"] == "completed"
+    assert session["terminal_reason"] == (
+        "agent_self_terminated_during_phase:baseline_capture"
+    )
 
 
 @pytest.mark.asyncio

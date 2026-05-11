@@ -2577,6 +2577,19 @@ class AgentOrchestrator:
 
                 # If the model stopped (end_turn) and no tool calls → done
                 if response.stop_reason == "end_turn" and not tool_results:
+                    terminate_request = self._extract_terminate_request(agent_text)
+                    if terminate_request:
+                        logger.info(
+                            "Research %s turn %d: honoring TERMINATE_REQUEST",
+                            research_id, turn,
+                        )
+                        await agent_log.append(
+                            "system",
+                            f"Terminate request accepted: {terminate_request[:1800]}",
+                            turn=turn,
+                        )
+                        break
+
                     # F1: refuse to terminate while the phase plan has
                     # incomplete phases AND the run still has both budget and
                     # iteration headroom. The agent self-terminated run
@@ -2862,7 +2875,9 @@ class AgentOrchestrator:
         session = await self._store.get_session(research_id)
         best = session.get("best_metric") if session else None
 
-        metric_improved = (best is None) or (primary_metric > best)
+        metric_improved = (best is None) or (
+            primary_metric > best + settings.global_stagnation_epsilon
+        )
 
         if all_gates_passed and metric_improved:
             return "keep"
@@ -2899,25 +2914,16 @@ class AgentOrchestrator:
         training_time = marker.get("training_time_s")
 
         session = await self._store.get_session(research_id)
+        active_phase = self._active_phase_from_marker_or_session(marker, session)
+        if active_phase and not marker.get("search_phase"):
+            marker["search_phase"] = active_phase
 
         # AR-3: For promotion-family phases the agent does not run a fresh
         # training command and legitimately emits no config_snapshot.  Inherit
         # from the most recent iteration that recorded one so consistency
         # reports don't fire ``missing_config_snapshot`` as a blocker.
         if not marker.get("config_snapshot"):
-            # Determine the active phase early, mirroring the later derivation
-            # that populates ``active_phase`` / ``search_phase``.
-            _early_phase: str = marker.get("search_phase") or ""
-            if not _early_phase and session:
-                _ps_raw = session.get("phase_state_json")
-                if isinstance(_ps_raw, str) and _ps_raw.strip():
-                    try:
-                        _early_phase = (
-                            json.loads(_ps_raw).get("current_phase") or ""
-                        )
-                    except (json.JSONDecodeError, AttributeError):
-                        _early_phase = ""
-            if _early_phase in _PROMOTION_FAMILY:
+            if active_phase in _PROMOTION_FAMILY:
                 _inherited = (
                     await self._store.get_latest_iteration_with_config_snapshot(
                         research_id
@@ -2996,28 +3002,9 @@ class AgentOrchestrator:
             config_snapshot=marker.get("config_snapshot"),
             metrics_payload=marker,
             attempt_snapshot=attempt_snapshot,
+            search_phase=active_phase,
         )
         marker["consistency_report"] = consistency_report
-
-        # F2: determine which phase this iteration belongs to so the
-        # `iterations.search_phase` column gets populated. Precedence:
-        #   1. marker payload (LLM may explicitly set search_phase)
-        #   2. session's last-computed phase_state_json.current_phase
-        # `_refresh_phase_state` runs AFTER the insert, so we look at the
-        # session state that was current BEFORE this iteration ran.
-        active_phase = marker.get("search_phase")
-        if not active_phase:
-            phase_state_raw = (session or {}).get("phase_state_json")
-            if isinstance(phase_state_raw, str) and phase_state_raw.strip():
-                try:
-                    phase_state_obj = json.loads(phase_state_raw)
-                    candidate = phase_state_obj.get("current_phase")
-                    if isinstance(candidate, str) and candidate:
-                        active_phase = candidate
-                except (json.JSONDecodeError, AttributeError):
-                    active_phase = None
-        if active_phase and not marker.get("search_phase"):
-            marker["search_phase"] = active_phase
 
         await self._store.add_iteration(
             research_id=research_id,
@@ -3050,6 +3037,7 @@ class AgentOrchestrator:
             attempt_snapshot_hash=attempt_snapshot_hash,
             consistency_report_json=consistency_report_json(consistency_report),
             search_phase=active_phase,
+            metric_improvement_epsilon=settings.global_stagnation_epsilon,
         )
 
         # ML-59: If this is an HPO study result, also persist to hpo_studies
@@ -3122,6 +3110,14 @@ class AgentOrchestrator:
                 attempt_snapshot = json.loads(existing["attempt_snapshot_json"])
             except (json.JSONDecodeError, TypeError):
                 attempt_snapshot = None
+        active_phase = self._active_phase_from_marker_or_session(
+            marker,
+            session,
+            existing,
+        )
+        if active_phase and not marker.get("search_phase"):
+            marker["search_phase"] = active_phase
+
         marker["consistency_report"] = build_consistency_report(
             research_id=research_id,
             iteration=iteration,
@@ -3130,7 +3126,50 @@ class AgentOrchestrator:
             or (existing or {}).get("config_snapshot"),
             metrics_payload=marker,
             attempt_snapshot=attempt_snapshot,
+            search_phase=active_phase,
         )
+
+    @staticmethod
+    def _active_phase_from_marker_or_session(
+        marker: Dict[str, Any],
+        session: Optional[Dict[str, Any]],
+        existing: Optional[Dict[str, Any]] = None,
+    ) -> Optional[str]:
+        """Resolve the phase used for iteration storage and validation."""
+        for candidate in (
+            marker.get("search_phase"),
+            (existing or {}).get("search_phase"),
+        ):
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate
+
+        phase_state_raw = (session or {}).get("phase_state_json")
+        if isinstance(phase_state_raw, str) and phase_state_raw.strip():
+            try:
+                phase_state_obj = json.loads(phase_state_raw)
+            except (json.JSONDecodeError, TypeError, AttributeError):
+                return None
+            if isinstance(phase_state_obj, dict):
+                candidate = phase_state_obj.get("current_phase")
+                if isinstance(candidate, str) and candidate.strip():
+                    return candidate
+        if isinstance(phase_state_raw, dict):
+            candidate = phase_state_raw.get("current_phase")
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate
+        return None
+
+    @staticmethod
+    def _extract_terminate_request(agent_text: str) -> Optional[str]:
+        """Return the assistant's TERMINATE_REQUEST line/body, if present."""
+        if not agent_text:
+            return None
+        lines = agent_text.splitlines()
+        for index, line in enumerate(lines):
+            stripped = line.lstrip()
+            if stripped.upper().startswith("TERMINATE_REQUEST:"):
+                return "\n".join([stripped, *lines[index + 1 :]]).strip()
+        return None
 
     async def _refresh_phase_state(self, research_id: str) -> None:
         session = await self._store.get_session(research_id)

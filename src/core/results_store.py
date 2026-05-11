@@ -1356,6 +1356,7 @@ class ResultsStore:
         attempt_snapshot_hash: Optional[str] = None,
         consistency_report_json: Optional[str] = None,
         search_phase: Optional[str] = None,
+        metric_improvement_epsilon: float = 0.0,
     ) -> Dict[str, Any]:
         # F2: persist the phase id the orchestrator believed was active when
         # this iteration ran. The `iterations.search_phase` column has existed
@@ -1393,9 +1394,10 @@ class ResultsStore:
             # ML-53: Update session best for keep OR improve (research progress)
             if decision in ("keep", "improve"):
                 session = await self.get_session(research_id)
-                if session and (
-                    session["best_metric"] is None
-                    or (primary_metric is not None and primary_metric > session["best_metric"])
+                best_metric = session["best_metric"] if session else None
+                if session and primary_metric is not None and (
+                    best_metric is None
+                    or primary_metric > best_metric + metric_improvement_epsilon
                 ):
                     await self.update_session(
                         research_id,
@@ -1514,6 +1516,8 @@ class ResultsStore:
             )
         if "consistency_report_json" in marker:
             fields["consistency_report_json"] = marker["consistency_report_json"]
+        if "search_phase" in marker:
+            fields["search_phase"] = marker["search_phase"]
         if marker:
             fields["metrics_json"] = json.dumps(marker)
 

@@ -47,7 +47,7 @@ except ModuleNotFoundError:
     )
     sys.modules["anthropic"] = _stub
 
-from src.core.orchestrator import AgentOrchestrator
+from src.core.orchestrator import AgentOrchestrator, ResearchConfig
 from src.core.research_phase_plan import build_phase_state
 from src.core.results_store import ResultsStore
 
@@ -370,6 +370,36 @@ async def test_stagnation_forces_terminate_after_window(
     )
     assert "90" in result, (
         "Nudge message must reference the best iteration number"
+    )
+
+    # The assistant's next compliant TERMINATE_REQUEST should end as a normal
+    # completion whose terminal_reason points at the incomplete phase.
+    phase_state = build_phase_state(
+        session={"id": ctx.session_id, "model_type": "direction"},
+        iterations=ctx.iterations,
+    )
+    await ctx.store.update_session(
+        ctx.session_id,
+        phase_state_json=json.dumps(phase_state),
+    )
+    terminal_reason = await orch._derive_terminal_reason(
+        research_id=ctx.session_id,
+        final_status="completed",
+        iteration_count=103,
+        total_cost=0.12,
+        config=ResearchConfig(
+            id=ctx.session_id,
+            instrument="DOGE_USDT",
+            timeframe="15m",
+            model_type="direction",
+            max_iterations=110,
+            max_budget_usd=50.0,
+        ),
+        timed_out=False,
+        policy_aborted=False,
+    )
+    assert terminal_reason == (
+        "agent_self_terminated_during_phase:multi_seed_robustness"
     )
 
     # Sanity: gap of 11 (102-91=11 < 12) must NOT fire.

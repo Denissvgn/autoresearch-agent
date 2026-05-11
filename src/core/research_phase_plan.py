@@ -646,20 +646,36 @@ def _prior_run_ids_for_phase(
 
 
 def _prior_best_metrics(iterations: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Return metrics of the most recent non-promotion-family iteration with primary_metric.
+    """Return metrics of the best non-promotion-family iteration.
 
-    Iterates in reverse so the most recent qualifying iteration is returned
-    first.  Excludes ``EVIDENCE_ARTIFACT_PHASES`` iterations so the prior best
-    reflects real training work, not phase-family reporting iterations.
+    Excludes ``EVIDENCE_ARTIFACT_PHASES`` iterations so the prior best reflects
+    real training work, not phase-family reporting iterations.  Autoresearch
+    phase metrics are treated as higher-is-better here; lower-is-better metric
+    families need an explicit metric-direction contract before sharing this
+    helper.
 
     Returns ``{}`` when no qualifying iteration is found (conservative — callers
     must treat an empty dict as "unable to compare" and avoid blocking).
     """
-    for it in reversed(iterations):
+    best_metrics: Dict[str, Any] = {}
+    best_value: Optional[float] = None
+
+    for it in iterations:
         phase = it.get("search_phase") or ""
         if phase in EVIDENCE_ARTIFACT_PHASES:
             continue
+        decision = it.get("decision")
+        if decision is not None and decision not in {"keep", "improve"}:
+            continue
         m = _metrics_of(it)
-        if m.get("primary_metric") is not None:
-            return m
-    return {}
+        raw_metric = m.get("primary_metric")
+        if raw_metric is None:
+            continue
+        try:
+            metric = float(raw_metric)
+        except (TypeError, ValueError):
+            continue
+        if best_value is None or metric > best_value:
+            best_value = metric
+            best_metrics = m
+    return best_metrics
