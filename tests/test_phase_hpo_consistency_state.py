@@ -545,3 +545,44 @@ def test_research_state_exposes_planned_trials_and_manual_review():
     assert state["search_plan"]["search_spaces"][0]["search_space"][
         "direction_pct_threshold"
     ] == [0.020, 0.025]
+
+
+def test_volatility_phase_state_advances_past_atr_sweep():
+    """Volatility sessions use VOLATILITY_PHASES. atr_sweep completes when
+    ``volatility_atr_mult`` is present in a metrics_json config, regardless of
+    iteration count."""
+    session = {"id": "res_vol_atr", "model_type": "volatility"}
+    metrics_with_atr = {
+        "all_gates_passed": True,
+        "auc": 0.61,
+        "config": {"volatility_atr_mult": 3.0},
+    }
+    iterations = [
+        {"iteration": 1, "metrics_json": json.dumps({"config": {}}), "all_gates_passed": 0},
+        {"iteration": 2, "metrics_json": json.dumps(metrics_with_atr), "all_gates_passed": 1},
+    ]
+
+    state = build_phase_state(session=session, iterations=iterations)
+
+    assert state["schema_version"] == "autoresearch_phase_state.v1"
+    assert _phase_status(state, "baseline_capture") == "completed"
+    assert _phase_status(state, "atr_sweep") == "completed"
+    # threshold_calibration is the next phase that hasn't been worked on yet.
+    assert state["current_phase"] == "threshold_calibration"
+    assert _phase_status(state, "promotion_proposal") == "pending"
+
+
+def test_volatility_atr_sweep_does_not_complete_without_evidence():
+    """Regression guard: two iterations without volatility_atr_mult evidence
+    must not advance past atr_sweep (prevents the same cardinality-heuristic
+    stall that F3 fixed for direction tabular_sweeps)."""
+    session = {"id": "res_vol_nosweep", "model_type": "volatility"}
+    iterations = [
+        {"iteration": 1, "metrics_json": json.dumps({"config": {}}), "all_gates_passed": 0},
+        {"iteration": 2, "metrics_json": json.dumps({"auc": 0.55, "config": {}}), "all_gates_passed": 0},
+    ]
+
+    state = build_phase_state(session=session, iterations=iterations)
+
+    assert state["current_phase"] == "atr_sweep"
+    assert _phase_status(state, "atr_sweep") == "in_progress"

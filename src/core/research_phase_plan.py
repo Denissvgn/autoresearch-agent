@@ -111,6 +111,91 @@ FALLBACK_PHASES: List[Dict[str, Any]] = [
 ]
 
 
+# Volatility-research phase plan.
+#
+# Mirrors the VOLATILITY_PHASES playbook in volatility-autotuner/SKILL.md:
+#   Phase 1: ATR multiplier discovery (highest-impact knob)
+#   Phase 2: Decision boundary & calibration
+#   Phase 3: Temporal stability & ensemble pruning
+#   Phases 4-7: Shared final gates with direction (calibration/replay, seeds,
+#               inference parity, promotion proposal)
+#
+# Evidence-key completion (same contract as F3 for direction): each phase
+# requires the LLM to emit at least one of the listed keys in metrics_json
+# before the phase is marked complete.  Pure cardinality is only the fallback
+# for `atr_sweep` (4+ phase-tagged iterations) when the evidence key is absent.
+VOLATILITY_PHASES: List[Dict[str, Any]] = [
+    {
+        "id": "baseline_capture",
+        "label": "Baseline Capture",
+        "next_action": "Run the immutable baseline config and record the first server-owned attempt.",
+        "min_iterations": 1,
+        "max_iterations": 3,
+    },
+    {
+        "id": "atr_sweep",
+        "label": "ATR Multiplier Sweep",
+        "next_action": (
+            "Sweep `volatility_atr_mult` from low (1.5–2.5) to high (4.0–6.0) to find the "
+            "multiplier that achieves 10–40% positive_rate AND highest AUC. "
+            "Emit metrics.volatility_atr_mult or atr_multiplier on each attempt so the phase advances."
+        ),
+        "min_iterations": 4,
+        "max_iterations": 20,
+    },
+    {
+        "id": "threshold_calibration",
+        "label": "Threshold & Calibration",
+        "next_action": (
+            "Sweep threshold_strategy (f1/f_beta/youden_j/gmean), threshold_beta, and "
+            "calibration_method (isotonic/sigmoid). "
+            "Emit metrics.threshold_strategy or calibration_method so the phase advances."
+        ),
+        "min_iterations": 2,
+        "max_iterations": 12,
+    },
+    {
+        "id": "temporal_ensemble",
+        "label": "Temporal Stability & Ensemble",
+        "next_action": (
+            "Tune sample_weight_halflife for recency weighting, sweep prediction_horizon, "
+            "and prune noisy learners (lgb_dart/lgb_goss). "
+            "Emit metrics.sample_weight_halflife or prediction_horizon so the phase advances."
+        ),
+        "min_iterations": 2,
+        "max_iterations": 10,
+    },
+    {
+        "id": "calibration_replay_gates",
+        "label": "Calibration/Replay Gates",
+        "next_action": "Run full calibration diagnostics and post-cost replay gates on finalists. Emit metrics.calibration_full_validation and metrics.economic_replay.",
+        "min_iterations": 1,
+        "max_iterations": 8,
+    },
+    {
+        "id": "multi_seed_robustness",
+        "label": "Multi-Seed Robustness",
+        "next_action": "Confirm finalist stability across configured seed trials. Emit metrics.seed_trials or seeds_passed_gates.",
+        "min_iterations": 1,
+        "max_iterations": 6,
+    },
+    {
+        "id": "inference_parity_replay",
+        "label": "Inference Parity Replay",
+        "next_action": "Validate feature parity, adapter loading, composite reload, latency, and rollback readiness. Emit metrics.inference_parity or inference_reload_validation.",
+        "min_iterations": 1,
+        "max_iterations": 4,
+    },
+    {
+        "id": "promotion_proposal",
+        "label": "Promotion Proposal",
+        "next_action": "Prepare a development-scoped promotion proposal with ownership and rollback metadata.",
+        "min_iterations": 0,
+        "max_iterations": 4,
+    },
+]
+
+
 def build_phase_state(
     *,
     session: Dict[str, Any],
@@ -124,7 +209,7 @@ def build_phase_state(
     studies = list(hpo_studies or [])
     promotion_rows = list(promotions or [])
     model_type = session.get("model_type")
-    phases = DIRECTION_PHASES if model_type == "direction" else FALLBACK_PHASES
+    phases = phases_for_model(model_type)
 
     completed = _completed_phase_ids(rows, studies, promotion_rows, model_type)
     blocked = _blocked_reason(rows)
@@ -158,7 +243,11 @@ def phase_state_json(state: Dict[str, Any]) -> str:
 
 def phases_for_model(model_type: Optional[str]) -> List[Dict[str, Any]]:
     """Return the canonical phase list for the given model_type."""
-    return DIRECTION_PHASES if model_type == "direction" else FALLBACK_PHASES
+    if model_type == "direction":
+        return DIRECTION_PHASES
+    if model_type == "volatility":
+        return VOLATILITY_PHASES
+    return FALLBACK_PHASES
 
 
 def incomplete_phase_ids(state: Dict[str, Any]) -> List[str]:
@@ -205,6 +294,10 @@ def phase_cap_exceeded(
 # `direction_pct_threshold`, `deadzone_width`, `calibration_method`) in the
 # config or metrics payload, so the phase only completes when the LLM has
 # actually explored the sweep space.
+#
+# Volatility phases (atr_sweep, threshold_calibration, temporal_ensemble)
+# follow the same contract: emit the listed key or fall back to phase-tagged
+# cardinality (4+ for atr_sweep, 2+ for others).
 _PHASE_ADVANCEMENT_KEYS: Dict[str, tuple] = {
     "baseline_capture": (),
     "tabular_sweeps": (
@@ -216,6 +309,24 @@ _PHASE_ADVANCEMENT_KEYS: Dict[str, tuple] = {
     ),
     "hpo_screening": (),
     "validation": (),
+    # --- Volatility-specific phases ---
+    "atr_sweep": (
+        "volatility_atr_mult",
+        "atr_multiplier",
+        "atr_mult_sweep_enabled",
+    ),
+    "threshold_calibration": (
+        "threshold_strategy",
+        "threshold_beta",
+        "calibration_method",
+    ),
+    "temporal_ensemble": (
+        "sample_weight_halflife",
+        "prediction_horizon",
+        "ensemble_pruning",
+        "base_model_keys",
+    ),
+    # --- Shared late phases ---
     "adaptive_feature_sweeps": ("adaptive_features", "adaptive_feature_version"),
     "tsfm_sweeps": ("tsfm", "tsfm_adapter", "tsfm_fallback_validation"),
     "calibration_replay_gates": ("calibration_full_validation", "economic_replay"),
@@ -269,6 +380,25 @@ def _completed_phase_ids(
         completed.add("tabular_sweeps")
     elif len(tabular_iters) >= 6:
         completed.add("tabular_sweeps")
+
+    # Volatility phases: evidence key OR phase-tagged minimum effort.
+    atr_iters = _iterations_in_phase(iterations, "atr_sweep")
+    if any(_has_metric(it, *_PHASE_ADVANCEMENT_KEYS["atr_sweep"]) for it in iterations):
+        completed.add("atr_sweep")
+    elif len(atr_iters) >= 4:
+        completed.add("atr_sweep")
+
+    threshold_iters = _iterations_in_phase(iterations, "threshold_calibration")
+    if any(_has_metric(it, *_PHASE_ADVANCEMENT_KEYS["threshold_calibration"]) for it in iterations):
+        completed.add("threshold_calibration")
+    elif len(threshold_iters) >= 2:
+        completed.add("threshold_calibration")
+
+    temporal_iters = _iterations_in_phase(iterations, "temporal_ensemble")
+    if any(_has_metric(it, *_PHASE_ADVANCEMENT_KEYS["temporal_ensemble"]) for it in iterations):
+        completed.add("temporal_ensemble")
+    elif len(temporal_iters) >= 2:
+        completed.add("temporal_ensemble")
 
     if any(_has_metric(it, *_PHASE_ADVANCEMENT_KEYS["adaptive_feature_sweeps"]) for it in iterations):
         completed.add("adaptive_feature_sweeps")
