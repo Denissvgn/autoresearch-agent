@@ -262,6 +262,31 @@ class Settings(BaseSettings):
         ),
         description="Number of messages before old tool results are compacted.",
     )
+    global_stagnation_window: int = Field(
+        default=12,
+        ge=1,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_GLOBAL_STAGNATION_WINDOW",
+            "GLOBAL_STAGNATION_WINDOW",
+        ),
+        description=(
+            "AR-7: Number of consecutive iterations with no metric improvement "
+            "that triggers a GLOBAL_STAGNATION nudge demanding TERMINATE_REQUEST."
+        ),
+    )
+    global_stagnation_epsilon: float = Field(
+        default=1e-4,
+        ge=0.0,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_GLOBAL_STAGNATION_EPSILON",
+            "GLOBAL_STAGNATION_EPSILON",
+        ),
+        description=(
+            "AR-7: Minimum metric improvement above the session best required to "
+            "reset the stagnation window. Improvements <= epsilon are treated as "
+            "stagnant."
+        ),
+    )
     iteration_context_enabled: bool = Field(
         default=True,
         validation_alias=AliasChoices(

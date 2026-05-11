@@ -2642,6 +2642,19 @@ class AgentOrchestrator:
                             "type": "text",
                             "text": phase_cap_message,
                         })
+                    # AR-7: warn the LLM when no metric improvement has been
+                    # recorded for global_stagnation_window consecutive
+                    # iterations. Forces a TERMINATE_REQUEST instead of burning
+                    # the rest of the budget on stagnant experiments.
+                    stagnation_message = await self._maybe_global_stagnation_terminate(
+                        research_id=research_id,
+                        iteration_count=iteration_count,
+                    )
+                    if stagnation_message:
+                        tool_results.append({
+                            "type": "text",
+                            "text": stagnation_message,
+                        })
                     messages.append({"role": "user", "content": tool_results})
                     messages = self._compact_messages(
                         messages,
@@ -3305,6 +3318,52 @@ class AgentOrchestrator:
             f"inside this phase. Emit the phase's evidence key (see SKILL.md "
             f"\"Phase Advancement\") to advance, or proceed to the next phase. "
             f"Next phase guidance: {next_action}"
+        )
+
+    async def _maybe_global_stagnation_terminate(
+        self,
+        *,
+        research_id: str,
+        iteration_count: int,
+    ) -> Optional[str]:
+        """AR-7: return a system-message text when global metric stagnation is
+        detected.
+
+        The check fires when the session's ``best_iteration`` recorded in the
+        DB is more than ``settings.global_stagnation_window`` iterations ago,
+        meaning no metric improvement has occurred across that many consecutive
+        iterations.  When that condition holds the LLM is instructed to reply
+        with a ``TERMINATE_REQUEST:`` line.
+
+        Returns a warning string to be injected into the tool-results block, or
+        ``None`` when the session has not stagnated.
+        """
+        session = await self._store.get_session(research_id)
+        if not session:
+            return None
+        best_iteration = session.get("best_iteration")
+        best_metric = session.get("best_metric")
+        # No qualifying iteration yet — skip (conservative).
+        if best_iteration is None or best_metric is None:
+            return None
+        gap = iteration_count - best_iteration
+        window = settings.global_stagnation_window
+        epsilon = settings.global_stagnation_epsilon
+        if gap < window:
+            return None
+        logger.warning(
+            "Research %s: global stagnation detected — %d iterations since "
+            "best metric %.4f at iteration %d (window=%d, epsilon=%.1e)",
+            research_id, gap, best_metric, best_iteration, window, epsilon,
+        )
+        return (
+            f"GLOBAL_STAGNATION: {gap} iterations have produced no metric "
+            f"improvement >{epsilon:.0e} above the session best of {best_metric:.4f} "
+            f"(achieved at iteration {best_iteration}). "
+            "Reply on the next turn with a single line beginning "
+            "`TERMINATE_REQUEST:` and structured justification listing each "
+            "phase still incomplete and why further training is unlikely to "
+            "improve. Do NOT continue running experiments."
         )
 
     async def _derive_terminal_reason(
