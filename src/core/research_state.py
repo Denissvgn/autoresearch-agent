@@ -53,6 +53,8 @@ def build_research_state(
         production_operations=production_operations,
     )
 
+    latest_known = _latest_known_artifacts(iteration_rows)
+
     return {
         "schema_version": "autoresearch_state.v1",
         "research_id": session.get("id"),
@@ -88,6 +90,10 @@ def build_research_state(
         "smoke_status": _metadata_field(latest_promotion, "smoke_validation"),
         "paper_status": _paper_status(latest_promotion),
         "production_operations": production_operations,
+        # AR-8: last-known artifact values from iteration metrics_json, used by
+        # the UI as fallback panel content when the primary source (a confirmed
+        # promotions record) has not yet been written.
+        "latest_known_artifacts": latest_known,
     }
 
 
@@ -1260,6 +1266,47 @@ def _truthy_status(container: Dict[str, Any]) -> bool:
 
 def _truthy(*values: Any) -> bool:
     return any(value is True for value in values)
+
+
+def _latest_known_artifacts(iterations: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """AR-8: Walk iterations DESC to find last-known non-null promotion artifact values.
+
+    When the most recent iterations are metadata-only events (promotion-family
+    phases with no training run), the top-level ``rollback_target`` and
+    ``smoke_status`` fields — which derive exclusively from a confirmed
+    ``promotions`` DB record — are null even though the LLM may have embedded
+    the values in an earlier iteration's ``metrics_json``.
+
+    Returns a ``{field: {value, iteration}}`` dict for each field where a
+    non-null value was found.  The UI renders these as fallback panel values
+    with a ``last known from iter N`` footnote.
+    """
+    result: Dict[str, Any] = {}
+    fields_needed = {"rollback_target", "smoke_status"}
+
+    for row in reversed(iterations):
+        if not fields_needed:
+            break
+        metrics = _parse_json(row.get("metrics_json")) or {}
+        iteration = row.get("iteration")
+
+        if "rollback_target" in fields_needed:
+            dev_meta = metrics.get("development_promotion_metadata")
+            rt = (
+                (dev_meta.get("rollback_target") if isinstance(dev_meta, dict) else None)
+                or metrics.get("rollback_target")
+            )
+            if rt is not None:
+                result["rollback_target"] = {"value": rt, "iteration": iteration}
+                fields_needed.discard("rollback_target")
+
+        if "smoke_status" in fields_needed:
+            ss = metrics.get("smoke_validation") or metrics.get("smoke_status")
+            if ss is not None:
+                result["smoke_status"] = {"value": ss, "iteration": iteration}
+                fields_needed.discard("smoke_status")
+
+    return result
 
 
 def _parse_json(raw: Any) -> Any:

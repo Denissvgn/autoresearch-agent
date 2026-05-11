@@ -586,3 +586,158 @@ def test_volatility_atr_sweep_does_not_complete_without_evidence():
 
     assert state["current_phase"] == "atr_sweep"
     assert _phase_status(state, "atr_sweep") == "in_progress"
+
+
+# ---------------------------------------------------------------------------
+# AR-8: latest_known_artifacts fallback tests
+# ---------------------------------------------------------------------------
+
+
+def _iter_row(iteration: int, metrics: dict) -> dict:
+    """Minimal iteration row for latest_known_artifacts tests."""
+    return {
+        "iteration": iteration,
+        "metrics_json": json.dumps(metrics),
+        "all_gates_passed": 0,
+    }
+
+
+def _base_session() -> dict:
+    return {
+        "id": "res_ar8",
+        "model_type": "direction",
+        "status": "running",
+        "max_budget_usd": 10.0,
+        "total_api_cost_usd": 0.0,
+        "max_iterations": 20,
+    }
+
+
+def test_latest_known_artifacts_picks_most_recent_rollback_target() -> None:
+    """AR-8: latest_known_artifacts surfaces rollback_target from metrics_json.
+
+    When no confirmed promotion record exists, build_research_state must still
+    populate latest_known_artifacts.rollback_target from the most recent
+    iteration that embedded the value in development_promotion_metadata or
+    directly in metrics_json.
+    """
+    iterations = [
+        _iter_row(1, {"primary_metric": 0.60, "rollback_target": "old_model_v1"}),
+        _iter_row(2, {"primary_metric": 0.65}),  # no rollback_target
+        _iter_row(3, {
+            "primary_metric": 0.63,
+            "development_promotion_metadata": {
+                "rollback_target": "direction_model_v2.1.0",
+                "promotion_decision": None,
+            },
+        }),
+        _iter_row(4, {"primary_metric": 0.63}),  # metadata-only, no rollback
+    ]
+
+    state = build_research_state(
+        session=_base_session(),
+        iterations=iterations,
+        hpo_studies=[],
+        promotions=[],
+    )
+
+    # Primary rollback_target is null (no confirmed promotion).
+    assert state["rollback_target"] is None, (
+        "No confirmed promotion → primary rollback_target must be None"
+    )
+
+    lka = state.get("latest_known_artifacts", {})
+    assert "rollback_target" in lka, (
+        "latest_known_artifacts must include rollback_target"
+    )
+    assert lka["rollback_target"]["value"] == "direction_model_v2.1.0", (
+        "Must return the most recent (iter 3) rollback_target"
+    )
+    assert lka["rollback_target"]["iteration"] == 3
+
+
+def test_latest_known_artifacts_picks_most_recent_smoke_status() -> None:
+    """AR-8: latest_known_artifacts surfaces smoke_status from metrics_json.
+
+    When no confirmed promotion exists, the smoke_validation embedded in an
+    earlier iteration's metrics_json must be surfaced.
+    """
+    smoke_payload = {"passed": True, "environment": "paper"}
+    iterations = [
+        _iter_row(1, {"primary_metric": 0.60}),
+        _iter_row(2, {"primary_metric": 0.68, "smoke_validation": smoke_payload}),
+        _iter_row(3, {"primary_metric": 0.68}),  # follow-up, no smoke
+    ]
+
+    state = build_research_state(
+        session=_base_session(),
+        iterations=iterations,
+        hpo_studies=[],
+        promotions=[],
+    )
+
+    assert state["smoke_status"] is None
+    lka = state.get("latest_known_artifacts", {})
+    assert "smoke_status" in lka
+    assert lka["smoke_status"]["value"] == smoke_payload
+    assert lka["smoke_status"]["iteration"] == 2
+
+
+def test_latest_known_artifacts_empty_when_no_values_found() -> None:
+    """AR-8: latest_known_artifacts is an empty dict when iterations have no artifacts."""
+    iterations = [
+        _iter_row(1, {"primary_metric": 0.55}),
+        _iter_row(2, {"primary_metric": 0.58}),
+    ]
+
+    state = build_research_state(
+        session=_base_session(),
+        iterations=iterations,
+        hpo_studies=[],
+        promotions=[],
+    )
+
+    lka = state.get("latest_known_artifacts", {})
+    assert lka == {}, "No artifact values in iterations → latest_known_artifacts must be {}"
+
+
+def test_latest_known_artifacts_not_populated_when_confirmed_promotion_present() -> None:
+    """AR-8: primary rollback_target from a confirmed promotion takes precedence.
+
+    latest_known_artifacts may still contain iteration-derived values, but the
+    primary top-level rollback_target is non-null because a promotion record exists.
+    The UI should render the primary value, not the fallback.
+    """
+    from src.core.research_state import _latest_known_artifacts  # noqa: PLC0415
+
+    iterations = [
+        _iter_row(1, {
+            "primary_metric": 0.71,
+            "rollback_target": "direction_model_v1.9.0",
+        }),
+    ]
+    # Simulate a confirmed promotion row with rollback_target in metadata.
+    promotion = {
+        "id": 1,
+        "research_id": "res_ar8",
+        "scope": "development",
+        "promoted_at": "2026-05-11T12:00:00Z",
+        "promotion_metadata": {
+            "rollback_target": "direction_model_v1.9.0",
+        },
+    }
+
+    state = build_research_state(
+        session=_base_session(),
+        iterations=iterations,
+        hpo_studies=[],
+        promotions=[promotion],
+    )
+
+    # Primary rollback_target is populated from the confirmed promotion record.
+    assert state["rollback_target"] == "direction_model_v1.9.0", (
+        "Confirmed promotion must populate primary rollback_target"
+    )
+    # latest_known_artifacts still returns iteration-derived values (they coexist).
+    lka = _latest_known_artifacts(iterations)
+    assert lka.get("rollback_target", {}).get("value") == "direction_model_v1.9.0"

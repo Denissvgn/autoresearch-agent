@@ -115,11 +115,29 @@ export default function ResearchStatePanel({ state }: Props) {
         </div>
         <div className="bg-gray-800 border border-gray-700 rounded px-3 py-2">
           <div className="text-gray-500">Rollback Target</div>
-          <div className="font-mono text-gray-100 break-all">{state.rollback_target ?? '—'}</div>
+          {state.rollback_target != null ? (
+            <div className="font-mono text-gray-100 break-all">{state.rollback_target}</div>
+          ) : state.latest_known_artifacts?.rollback_target != null ? (
+            <>
+              <div className="font-mono text-gray-100 break-all">{state.latest_known_artifacts.rollback_target.value}</div>
+              <div className="text-gray-500 mt-0.5">last known from iter {state.latest_known_artifacts.rollback_target.iteration}</div>
+            </>
+          ) : (
+            <div className="font-mono text-gray-100">—</div>
+          )}
         </div>
         <div className="bg-gray-800 border border-gray-700 rounded px-3 py-2">
           <div className="text-gray-500">Smoke Status</div>
-          <div className="font-mono text-gray-100">{valueText(state.smoke_status && 'recorded')}</div>
+          {state.smoke_status != null ? (
+            <div className="font-mono text-gray-100">{valueText('recorded')}</div>
+          ) : state.latest_known_artifacts?.smoke_status != null ? (
+            <>
+              <div className="font-mono text-gray-100">{valueText('recorded')}</div>
+              <div className="text-gray-500 mt-0.5">last known from iter {state.latest_known_artifacts.smoke_status.iteration}</div>
+            </>
+          ) : (
+            <div className="font-mono text-gray-100">—</div>
+          )}
         </div>
       </div>
     </div>

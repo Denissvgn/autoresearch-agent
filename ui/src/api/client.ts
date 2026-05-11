@@ -257,6 +257,13 @@ export interface ResearchState {
   smoke_status: Record<string, unknown> | null;
   paper_status: unknown;
   production_operations?: ProductionOperations | null;
+  /** AR-8: last-known artifact values from iteration metrics_json.
+   *  Used as fallback panel content when the primary source (a confirmed
+   *  promotions record) is null. Each entry is {value, iteration}. */
+  latest_known_artifacts?: {
+    rollback_target?: { value: string; iteration: number };
+    smoke_status?: { value: Record<string, unknown>; iteration: number };
+  } | null;
 }
 
 export interface ProductionOperations {
