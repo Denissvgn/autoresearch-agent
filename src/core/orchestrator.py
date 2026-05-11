@@ -2721,12 +2721,14 @@ class AgentOrchestrator:
 
         except Exception as exc:
             logger.exception("Research %s failed: %s", research_id, exc)
+            terminal_reason = f"error_unrecoverable:{type(exc).__name__}"
             await self._store.update_session(
                 research_id,
                 status="failed",
                 completed_at=datetime.now(timezone.utc).isoformat(),
                 total_api_cost_usd=round(total_cost, 4),
                 error_message=str(exc)[:2000],
+                terminal_reason=terminal_reason,
             )
             await broadcaster.broadcast({
                 "event": "research_failed",
@@ -3210,6 +3212,22 @@ class AgentOrchestrator:
         ended. Postmortems and the UI can group runs by this value without
         re-deriving heuristics. Values are ASCII, snake_case, optionally
         suffixed with ``:<phase_id>`` when the cause is phase-scoped.
+
+        Vocabulary (success path — called when the loop exits normally):
+          policy_aborted                  — policy rejected commands too many times
+          wallclock_timeout               — session reached its time limit
+          operator_stopped                — user sent stop request
+          error_unrecoverable             — used only by _derive_terminal_reason
+                                           for legacy completions marked failed
+          max_iterations_reached          — hit config.max_iterations
+          budget_exhausted                — spent >=99% of max_budget_usd
+          phase_plan_completed            — all phases done
+          agent_self_terminated_during_phase:<phase_id>  — agent quit early
+
+        Exception path (written directly in the except Exception handler):
+          error_unrecoverable:<ExcClass>  — unhandled exception, ExcClass is
+                                           the Python exception class name
+                                           (e.g. error_unrecoverable:AttributeError)
         """
         if policy_aborted:
             return "policy_aborted"
