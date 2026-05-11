@@ -442,6 +442,12 @@ class AgentOrchestrator:
         )
         self._stop_flags: Dict[str, bool] = {}
         self._pause_flags: Dict[str, bool] = {}
+        # AR-4: per-session counter tracking how many consecutive kick attempts
+        # have been made for each distinct block_reason.  When the counter
+        # reaches 3, the kick escalates to a forced TERMINATE_REQUEST instead
+        # of re-injecting the same remediation nudge, preventing infinite
+        # re-asking on an unresolvable blocker.
+        self._blocker_attempt_counters: Dict[str, Dict[str, int]] = {}
 
     def request_stop(self, research_id: str) -> None:
         self._stop_flags[research_id] = True
@@ -2752,6 +2758,7 @@ class AgentOrchestrator:
         finally:
             self._stop_flags.pop(research_id, None)
             self._pause_flags.pop(research_id, None)
+            self._blocker_attempt_counters.pop(research_id, None)
 
     # ── ML-53 Fix 2.4 helper ─────────────────────────────────────────────
     async def _try_auto_promote(
@@ -3149,6 +3156,14 @@ class AgentOrchestrator:
         or no headroom in budget/iterations). Returns a dict with ``reason``
         (for logs) and ``text`` (a user-turn message that re-engages the LLM
         with the outstanding phase work) when the loop should continue.
+
+        AR-4 blocker escalation:
+        When ``state["blocked"]`` is True the LLM is stuck on an unresolvable
+        consistency gate.  We count how many consecutive kick attempts have
+        been made for the same ``block_reason``.  On the 3rd attempt we return
+        a ``blocker_unresolved_terminate`` kick that demands a
+        ``TERMINATE_REQUEST`` instead of another experiment nudge, preventing
+        the loop from spinning 7+ times on the same broken promotion.
         """
         # Refresh phase state so this decision uses the latest evidence.
         await self._refresh_phase_state(research_id)
@@ -3163,9 +3178,12 @@ class AgentOrchestrator:
         except (json.JSONDecodeError, TypeError):
             return None
 
+        blocked = bool(state.get("blocked"))
         incomplete = incomplete_phase_ids(state)
-        if not incomplete:
-            # Phase plan finished — honor end_turn.
+
+        # When every phase is "completed" AND there is no active blocker, the
+        # phase plan is genuinely done — honour end_turn.
+        if not incomplete and not blocked:
             return None
 
         budget_remaining = max(0.0, config.max_budget_usd - total_cost)
@@ -3174,6 +3192,56 @@ class AgentOrchestrator:
         if budget_remaining <= 0.10 or iterations_remaining <= 0:
             return None
 
+        # AR-4: blocker-attempt counting + escalation.
+        if blocked:
+            key = str(state.get("block_reason") or "")
+            session_counters = self._blocker_attempt_counters.setdefault(
+                research_id, {}
+            )
+            session_counters[key] = session_counters.get(key, 0) + 1
+            attempt_count = session_counters[key]
+            if attempt_count >= 3:
+                logger.warning(
+                    "Research %s: blocker '%s' unresolved after %d attempts — "
+                    "escalating to forced TERMINATE_REQUEST",
+                    research_id, key, attempt_count,
+                )
+                return {
+                    "reason": "blocker_unresolved_terminate",
+                    "text": (
+                        f"BLOCKER_PERSISTED: '{key}' has not been resolved "
+                        f"after {attempt_count} attempts. "
+                        "Reply with a single line beginning `TERMINATE_REQUEST:` "
+                        "followed by structured justification referencing each "
+                        "incomplete phase id. "
+                        "Do NOT silently end_turn and do NOT run another experiment."
+                    ),
+                }
+            # First or second attempt: emit a targeted blocker-remediation nudge
+            # so the LLM knows it is blocked, not just incomplete.
+            current_phase = state.get("current_phase") or (incomplete[0] if incomplete else "")
+            next_action = state.get("next_action") or "Resolve the consistency blocker."
+            return {
+                "reason": "blocker_remediation",
+                "text": (
+                    "[system] You issued an end_turn but the phase plan is "
+                    f"blocked on phase '{current_phase}'. "
+                    f"Active blocker: {key}. "
+                    f"Incomplete phases remaining: "
+                    f"{', '.join(incomplete) if incomplete else current_phase}. "
+                    f"Budget remaining: "
+                    f"${budget_remaining:.2f} of ${config.max_budget_usd:.2f}. "
+                    f"Iterations remaining: "
+                    f"{iterations_remaining}/{config.max_iterations}. "
+                    f"Required next action: {next_action} "
+                    "Resolve the consistency blocker before advancing. If the "
+                    "blocker cannot be resolved, reply with a single line "
+                    "beginning `TERMINATE_REQUEST:` followed by structured "
+                    "justification referencing each incomplete phase id."
+                ),
+            }
+
+        # No active blocker — standard phase-continuation nudge.
         current_phase = state.get("current_phase") or incomplete[0]
         next_action = state.get("next_action") or "Continue the phase plan."
         text = (
