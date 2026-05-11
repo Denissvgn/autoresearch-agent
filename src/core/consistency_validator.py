@@ -4,8 +4,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Optional, Set
+
+logger = logging.getLogger(__name__)
+
+# AR-5: phases that require artifact-presence validation before marking complete.
+EVIDENCE_ARTIFACT_PHASES: frozenset = frozenset(
+    {
+        "multi_seed_robustness",
+        "inference_parity_replay",
+        "calibration_replay_gates",
+        "promotion_proposal",
+    }
+)
 
 
 def build_consistency_report(
@@ -17,6 +30,7 @@ def build_consistency_report(
     metrics_payload: Optional[Dict[str, Any]] = None,
     attempt_snapshot: Optional[Dict[str, Any]] = None,
     preflight: Optional[Dict[str, Any]] = None,
+    search_phase: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build a readable cross-service candidate consistency report."""
 
@@ -294,6 +308,15 @@ def build_consistency_report(
         "passed" if docs_status else "warning",
     )
 
+    # AR-5: artifact-bound evidence-key validation for promotion-family phases.
+    if search_phase and search_phase in EVIDENCE_ARTIFACT_PHASES:
+        artifact_blocker = check_evidence_artifact(metrics, search_phase)
+        add(
+            "evidence_artifact_present",
+            "passed" if artifact_blocker is None else "failed",
+            blocker=artifact_blocker,
+        )
+
     return {
         "schema_version": "cross_service_consistency_report.v1",
         "research_id": research_id,
@@ -323,6 +346,95 @@ def parse_consistency_report(raw: Any) -> Optional[Dict[str, Any]]:
         except json.JSONDecodeError:
             return None
         return parsed if isinstance(parsed, dict) else None
+    return None
+
+
+def check_evidence_artifact(
+    metrics: Dict[str, Any],
+    phase_id: str,
+    *,
+    prior_run_ids: Optional[Set[str]] = None,
+) -> Optional[str]:
+    """Return None on pass or a blocker string on failure.
+
+    Validates that phase evidence keys point to real, distinct artifacts rather
+    than synthetic/recycled placeholders emitted by the LLM.
+
+    force_evidence_acceptance: True in ``metrics`` skips all checks (escape hatch
+    for legitimate pipeline reuse where artifacts are truly shared).
+    """
+    if metrics.get("force_evidence_acceptance") is True:
+        logger.warning(
+            "check_evidence_artifact: force_evidence_acceptance=True for phase %s — skipping artifact validation",
+            phase_id,
+        )
+        return None
+
+    if phase_id == "multi_seed_robustness":
+        trials = metrics.get("seed_trials")
+        if not isinstance(trials, list) or not trials:
+            return "evidence_artifact_missing_for_multi_seed_robustness"
+        n_required = metrics.get("n_seed_trials", 2)
+        if not isinstance(n_required, int) or n_required < 1:
+            n_required = 2
+        unique_ids: set[str] = set()
+        for t in trials:
+            if not isinstance(t, dict):
+                continue
+            run_id = t.get("mlflow_run_id") or t.get("artifact_hash")
+            if run_id and isinstance(run_id, str) and run_id.strip():
+                unique_ids.add(run_id.strip())
+        if len(unique_ids) < n_required:
+            return "evidence_artifact_missing_for_multi_seed_robustness"
+        return None
+
+    if phase_id == "inference_parity_replay":
+        parity = metrics.get("inference_parity")
+        if not isinstance(parity, dict):
+            return "evidence_artifact_missing_for_inference_parity_replay"
+        if not parity.get("feature_count_alignment_passed"):
+            return "evidence_artifact_missing_for_inference_parity_replay"
+        if prior_run_ids is not None:
+            run_id = parity.get("mlflow_run_id") or metrics.get("mlflow_run_id")
+            if not run_id or run_id in prior_run_ids:
+                return "evidence_artifact_missing_for_inference_parity_replay"
+        return None
+
+    if phase_id == "calibration_replay_gates":
+        cal = (
+            metrics.get("calibration_full_validation")
+            or (
+                metrics.get("config", {}).get("calibration_full_validation")
+                if isinstance(metrics.get("config"), dict)
+                else None
+            )
+        )
+        if not isinstance(cal, dict):
+            return "evidence_artifact_missing_for_calibration_replay_gates"
+        selected = cal.get("selected")
+        if not isinstance(selected, dict) or not selected.get("run_id"):
+            return "evidence_artifact_missing_for_calibration_replay_gates"
+        # economic_replay.gates may be nested inside calibration_full_validation
+        # or at the top level of metrics (both layouts are valid).
+        economic = cal.get("economic_replay") or metrics.get("economic_replay")
+        if not isinstance(economic, dict) or not isinstance(
+            economic.get("gates"), dict
+        ):
+            return "evidence_artifact_missing_for_calibration_replay_gates"
+        return None
+
+    if phase_id == "promotion_proposal":
+        dev_meta = metrics.get("development_promotion_metadata")
+        if dev_meta is None:
+            # Key absent — conservative: don't block, not enough info.
+            return None
+        if not isinstance(dev_meta, dict):
+            return "evidence_artifact_missing_for_promotion_proposal"
+        if not dev_meta.get("rollback_target"):
+            return "evidence_artifact_missing_for_promotion_proposal"
+        return None
+
+    # Phase not in scope — no artifact check required.
     return None
 
 

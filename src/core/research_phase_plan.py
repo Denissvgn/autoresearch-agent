@@ -6,6 +6,8 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
+from src.core.consistency_validator import check_evidence_artifact  # AR-5
+
 
 # Direction-research phase plan.
 #
@@ -404,11 +406,29 @@ def _completed_phase_ids(
         completed.add("adaptive_feature_sweeps")
     if any(_has_metric(it, *_PHASE_ADVANCEMENT_KEYS["tsfm_sweeps"]) for it in iterations):
         completed.add("tsfm_sweeps")
-    if any(_has_metric(it, *_PHASE_ADVANCEMENT_KEYS["calibration_replay_gates"]) for it in iterations):
+    # AR-5: gate promotion-family phases behind artifact validation.
+    if any(
+        _has_metric(it, *_PHASE_ADVANCEMENT_KEYS["calibration_replay_gates"])
+        and not check_evidence_artifact(_metrics_of(it), "calibration_replay_gates")
+        for it in iterations
+    ):
         completed.add("calibration_replay_gates")
-    if any(_has_metric(it, *_PHASE_ADVANCEMENT_KEYS["multi_seed_robustness"]) for it in iterations):
+    if any(
+        _has_metric(it, *_PHASE_ADVANCEMENT_KEYS["multi_seed_robustness"])
+        and not check_evidence_artifact(_metrics_of(it), "multi_seed_robustness")
+        for it in iterations
+    ):
         completed.add("multi_seed_robustness")
-    if any(_has_metric(it, *_PHASE_ADVANCEMENT_KEYS["inference_parity_replay"]) for it in iterations):
+    _inference_prior_run_ids = _prior_run_ids_for_phase(iterations, "inference_parity_replay")
+    if any(
+        _has_metric(it, *_PHASE_ADVANCEMENT_KEYS["inference_parity_replay"])
+        and not check_evidence_artifact(
+            _metrics_of(it),
+            "inference_parity_replay",
+            prior_run_ids=_inference_prior_run_ids,
+        )
+        for it in iterations
+    ):
         completed.add("inference_parity_replay")
     if _has_promotion_evidence(iterations, promotions):
         completed.add("promotion_proposal")
@@ -433,7 +453,7 @@ def _has_promotion_evidence(
     promotions: List[Dict[str, Any]],
 ) -> bool:
     if promotions:
-        return True
+        return True  # actual promotion record — artifact is real
     evidence_keys = (
         "development_promotion_metadata",
         "promotion_allowed",
@@ -444,7 +464,12 @@ def _has_promotion_evidence(
         "promotion_scope",
         "scoped_promotion_metadata",
     )
-    return any(_has_metric(row, *evidence_keys) for row in iterations)
+    # AR-5: gate evidence-key path behind artifact validation.
+    return any(
+        _has_metric(row, *evidence_keys)
+        and not check_evidence_artifact(_metrics_of(row), "promotion_proposal")
+        for row in iterations
+    )
 
 
 def _select_current_phase(
@@ -568,3 +593,33 @@ def _parse_json(raw: Any) -> Any:
         except json.JSONDecodeError:
             return None
     return raw
+
+
+# AR-5 helpers ------------------------------------------------------------------
+
+
+def _metrics_of(it: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the parsed metrics_json dict for an iteration row, or {}."""
+    parsed = _parse_json(it.get("metrics_json"))
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _prior_run_ids_for_phase(
+    iterations: List[Dict[str, Any]],
+    phase_id: str,
+) -> frozenset:
+    """Collect mlflow_run_ids from iterations that do NOT carry phase evidence.
+
+    Used by _completed_phase_ids to detect recycled run_ids in
+    inference_parity_replay (where the LLM re-emits a prior training run's
+    run_id as the parity run_id). Computed once per call for O(n) performance.
+    """
+    evidence_keys = _PHASE_ADVANCEMENT_KEYS.get(phase_id, ())
+    ids: set[str] = set()
+    for it in iterations:
+        if evidence_keys and _has_metric(it, *evidence_keys):
+            continue
+        run_id = _metrics_of(it).get("mlflow_run_id")
+        if run_id and isinstance(run_id, str):
+            ids.add(run_id)
+    return frozenset(ids)
