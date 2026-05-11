@@ -1,0 +1,301 @@
+{
+  "_description": "Minimal anonymised replay of session res_a1ba6cbd520f. Contains the minimum iterations to (a) fully advance the direction phase plan to multi_seed_robustness and beyond, and (b) reproduce defects D1–D7. Key iterations: 85-90 complete prior phases; 95/97 are synthetic multi_seed_robustness (D3); 99 is synthetic inference_parity_replay (D3); 101 is synthetic promotion_proposal without config_snapshot (D4); 102 is the D1 crash iteration where config_snapshot arrived as a dict. Used by the replay_iterations fixture (AR-9) and end-to-end replay tests (AR-10).",
+
+  "session": {
+    "id": "res_a1ba6cbd520f_minimal",
+    "instrument": "DOGE_USDT",
+    "timeframe": "15m",
+    "model_type": "direction",
+    "tag": "res_a1ba6cbd520f_fixture",
+    "max_iterations": 110,
+    "max_budget_usd": 50.0
+  },
+
+  "iterations": [
+    {
+      "_note": "Iter 85: baseline_capture. Any iteration completes this phase.",
+      "iteration": 85,
+      "search_phase": "baseline_capture",
+      "primary_metric": 0.5800,
+      "metric_name": "auc",
+      "all_gates_passed": true,
+      "decision": "keep",
+      "training_time_s": 95.2,
+      "config_snapshot": "agent_strategy: BALA\ndirection_pct_threshold: 0.022\n",
+      "mlflow_run_id": "run-baseline-85-ab1c",
+      "description": "Baseline capture — immutable config, first server-owned attempt.",
+      "metrics": {
+        "search_phase": "baseline_capture",
+        "primary_metric": 0.5800,
+        "all_gates_passed": true,
+        "training_time_s": 95.2,
+        "mlflow_run_id": "run-baseline-85-ab1c",
+        "config": {
+          "agent_strategy": "BALA",
+          "direction_pct_threshold": 0.022
+        }
+      }
+    },
+    {
+      "_note": "Iter 86: tabular_sweeps — evidence key tabular_sweep_variant marks phase complete.",
+      "iteration": 86,
+      "search_phase": "tabular_sweeps",
+      "primary_metric": 0.6200,
+      "metric_name": "auc",
+      "all_gates_passed": true,
+      "decision": "keep",
+      "training_time_s": 120.1,
+      "config_snapshot": "agent_strategy: BALA\ndirection_pct_threshold: 0.022\ntabular_sweep_variant: v1\n",
+      "mlflow_run_id": "run-tabular-86-cd2e",
+      "description": "Tabular sweep v1 — evidence key marks tabular_sweeps complete.",
+      "metrics": {
+        "search_phase": "tabular_sweeps",
+        "primary_metric": 0.6200,
+        "all_gates_passed": true,
+        "training_time_s": 120.1,
+        "mlflow_run_id": "run-tabular-86-cd2e",
+        "tabular_sweep_variant": "v1",
+        "config": {
+          "agent_strategy": "BALA",
+          "direction_pct_threshold": 0.022,
+          "tabular_sweep_variant": "v1"
+        }
+      }
+    },
+    {
+      "_note": "Iter 87: adaptive_feature_sweeps — evidence key adaptive_features marks phase complete.",
+      "iteration": 87,
+      "search_phase": "adaptive_feature_sweeps",
+      "primary_metric": 0.6280,
+      "metric_name": "auc",
+      "all_gates_passed": true,
+      "decision": "keep",
+      "training_time_s": 140.5,
+      "config_snapshot": "agent_strategy: BALA\ndirection_pct_threshold: 0.022\nadaptive_features: support_resistance_v2\n",
+      "mlflow_run_id": "run-adaptive-87-ef3g",
+      "description": "Adaptive feature sweep — support_resistance_v2 variant.",
+      "metrics": {
+        "search_phase": "adaptive_feature_sweeps",
+        "primary_metric": 0.6280,
+        "all_gates_passed": true,
+        "training_time_s": 140.5,
+        "mlflow_run_id": "run-adaptive-87-ef3g",
+        "adaptive_features": "support_resistance_v2"
+      }
+    },
+    {
+      "_note": "Iter 88: tsfm_sweeps — evidence key tsfm_adapter marks phase complete.",
+      "iteration": 88,
+      "search_phase": "tsfm_sweeps",
+      "primary_metric": 0.6310,
+      "metric_name": "auc",
+      "all_gates_passed": true,
+      "decision": "keep",
+      "training_time_s": 155.8,
+      "config_snapshot": "agent_strategy: BALA\ndirection_pct_threshold: 0.022\ntsfm_adapter: chronos_v1\n",
+      "mlflow_run_id": "run-tsfm-88-gh4h",
+      "description": "TS-FM sweep — Chronos v1 adapter.",
+      "metrics": {
+        "search_phase": "tsfm_sweeps",
+        "primary_metric": 0.6310,
+        "all_gates_passed": true,
+        "training_time_s": 155.8,
+        "mlflow_run_id": "run-tsfm-88-gh4h",
+        "tsfm_adapter": "chronos_v1"
+      }
+    },
+    {
+      "_note": "Iter 89: calibration_replay_gates — real calibration + economic_replay evidence. Phase completes on first real evidence key.",
+      "iteration": 89,
+      "search_phase": "calibration_replay_gates",
+      "primary_metric": 0.6350,
+      "metric_name": "auc",
+      "all_gates_passed": true,
+      "decision": "keep",
+      "training_time_s": 162.3,
+      "config_snapshot": "agent_strategy: BALA\ndirection_pct_threshold: 0.023\n",
+      "mlflow_run_id": "run-cal-89-ij5k",
+      "description": "Calibration / replay gates — full calibration with selected run and economic replay evidence.",
+      "metrics": {
+        "search_phase": "calibration_replay_gates",
+        "primary_metric": 0.6350,
+        "all_gates_passed": true,
+        "training_time_s": 162.3,
+        "mlflow_run_id": "run-cal-89-ij5k",
+        "calibration_full_validation": {
+          "selected": {
+            "run_id": "run-cal-89-ij5k",
+            "metrics": {"ece": 0.018, "brier": 0.210}
+          }
+        },
+        "economic_replay": {
+          "gates": {
+            "all_gates_passed": true,
+            "replay_sharpe": 1.35,
+            "max_drawdown_pct": 12.4
+          }
+        }
+      }
+    },
+    {
+      "_note": "Iter 90: best training iteration from the actual broken session. primary_metric=0.6394 is the value all synthetic iters copy without training. This is the 'prior best' that triggers stagnation detection.",
+      "iteration": 90,
+      "search_phase": "tabular_sweeps",
+      "primary_metric": 0.6394,
+      "metric_name": "auc",
+      "all_gates_passed": true,
+      "decision": "keep",
+      "training_time_s": 185.3,
+      "config_snapshot": "agent_strategy: BALA\ndirection_pct_threshold: 0.023\ntabular_sweep_variant: v4\n",
+      "mlflow_run_id": "run-tabular-90-de4f",
+      "description": "Best training iteration — iter 90 from res_a1ba6cbd520f. primary_metric 0.6394. All subsequent synthetic iterations copy this metric without running a training command.",
+      "metrics": {
+        "search_phase": "tabular_sweeps",
+        "primary_metric": 0.6394,
+        "all_gates_passed": true,
+        "training_time_s": 185.3,
+        "mlflow_run_id": "run-tabular-90-de4f",
+        "tabular_sweep_variant": "v4",
+        "config": {
+          "agent_strategy": "BALA",
+          "direction_pct_threshold": 0.023,
+          "tabular_sweep_variant": "v4"
+        }
+      }
+    },
+    {
+      "_note": "Iter 95: D3 defect — synthetic multi_seed_robustness. training_time_s=null (no training ran). primary_metric matches iter-90 exactly. All seed_trials share the same mlflow_run_id. AR-5 artifact check blocks this from advancing the phase.",
+      "iteration": 95,
+      "search_phase": "multi_seed_robustness",
+      "primary_metric": 0.6394,
+      "metric_name": "auc",
+      "all_gates_passed": true,
+      "decision": "keep",
+      "training_time_s": null,
+      "config_snapshot": null,
+      "mlflow_run_id": null,
+      "description": "SYNTHETIC: multi_seed_robustness with duplicate run_ids (D3 defect). training_time_s=null, metric matches iter-90 prior best.",
+      "metrics": {
+        "search_phase": "multi_seed_robustness",
+        "primary_metric": 0.6394,
+        "all_gates_passed": true,
+        "training_time_s": null,
+        "mlflow_run_id": null,
+        "seed_trials": [
+          {"mlflow_run_id": "run-SAME-seed", "seed": 0},
+          {"mlflow_run_id": "run-SAME-seed", "seed": 1},
+          {"mlflow_run_id": "run-SAME-seed", "seed": 2},
+          {"mlflow_run_id": "run-SAME-seed", "seed": 3},
+          {"mlflow_run_id": "run-SAME-seed", "seed": 4}
+        ],
+        "n_seed_trials": 5,
+        "seeds_passed_gates": true
+      }
+    },
+    {
+      "_note": "Iter 97: D3 defect — second synthetic multi_seed_robustness attempt. Same pattern as iter 95. AR-6 stagnation guard also fires here (no improvement, no training_time_s).",
+      "iteration": 97,
+      "search_phase": "multi_seed_robustness",
+      "primary_metric": 0.6394,
+      "metric_name": "auc",
+      "all_gates_passed": true,
+      "decision": "keep",
+      "training_time_s": null,
+      "config_snapshot": null,
+      "mlflow_run_id": null,
+      "description": "SYNTHETIC: second multi_seed_robustness attempt — still duplicate run_ids, still no training.",
+      "metrics": {
+        "search_phase": "multi_seed_robustness",
+        "primary_metric": 0.6394,
+        "all_gates_passed": true,
+        "training_time_s": null,
+        "mlflow_run_id": null,
+        "seed_trials": [
+          {"mlflow_run_id": "run-SAME-seed", "seed": 0},
+          {"mlflow_run_id": "run-SAME-seed", "seed": 1},
+          {"mlflow_run_id": "run-SAME-seed", "seed": 2},
+          {"mlflow_run_id": "run-SAME-seed", "seed": 3},
+          {"mlflow_run_id": "run-SAME-seed", "seed": 4}
+        ],
+        "n_seed_trials": 5,
+        "seeds_passed_gates": true
+      }
+    },
+    {
+      "_note": "Iter 99: D3 defect — synthetic inference_parity_replay. Reuses mlflow_run_id from iter-90 tabular training. AR-5 artifact check blocks this because run_id is in prior_run_ids.",
+      "iteration": 99,
+      "search_phase": "inference_parity_replay",
+      "primary_metric": 0.6394,
+      "metric_name": "auc",
+      "all_gates_passed": true,
+      "decision": "keep",
+      "training_time_s": null,
+      "config_snapshot": null,
+      "mlflow_run_id": "run-tabular-90-de4f",
+      "description": "SYNTHETIC: inference_parity_replay reusing iter-90 run_id (D3 defect).",
+      "metrics": {
+        "search_phase": "inference_parity_replay",
+        "primary_metric": 0.6394,
+        "all_gates_passed": true,
+        "training_time_s": null,
+        "mlflow_run_id": "run-tabular-90-de4f",
+        "inference_parity": {
+          "feature_name_alignment_passed": true,
+          "feature_count_alignment_passed": true,
+          "model_roster_parity_passed": true,
+          "mlflow_run_id": "run-tabular-90-de4f"
+        }
+      }
+    },
+    {
+      "_note": "Iter 101: D4 defect — synthetic promotion_proposal without config_snapshot. Causes missing_config_snapshot blocker. AR-3 fix auto-inherits config_snapshot from iter-90. Also illustrates D3: no training_time_s, metric unchanged.",
+      "iteration": 101,
+      "search_phase": "promotion_proposal",
+      "primary_metric": 0.6394,
+      "metric_name": "auc",
+      "all_gates_passed": true,
+      "decision": "keep",
+      "training_time_s": null,
+      "config_snapshot": null,
+      "mlflow_run_id": null,
+      "description": "SYNTHETIC: promotion_proposal without config_snapshot (D4 defect). Also no rollback_target, so promotion_proposal phase is not complete.",
+      "metrics": {
+        "search_phase": "promotion_proposal",
+        "primary_metric": 0.6394,
+        "all_gates_passed": true,
+        "training_time_s": null,
+        "mlflow_run_id": null
+      }
+    },
+    {
+      "_note": "Iter 102: D1 defect — config_snapshot was a dict object in the original session (JSON object, not a string). AR-1 fix handles this. In the DB this is stored as null because the original crash prevented the write; config_snapshot_as_dict records the dict value for AR-10 tests to feed into _record_iteration.",
+      "iteration": 102,
+      "search_phase": "promotion_proposal",
+      "primary_metric": 0.6394,
+      "metric_name": "auc",
+      "all_gates_passed": true,
+      "decision": "keep",
+      "training_time_s": null,
+      "config_snapshot": null,
+      "mlflow_run_id": null,
+      "description": "D1 crash iteration: LLM emitted config_snapshot as a dict. Stored as null in DB because crash preceded write in original session.",
+      "config_snapshot_as_dict": {
+        "agent_strategy": "BALA",
+        "direction_pct_threshold": 0.023,
+        "tabular_sweep_variant": "v4"
+      },
+      "metrics": {
+        "search_phase": "promotion_proposal",
+        "primary_metric": 0.6394,
+        "all_gates_passed": true,
+        "training_time_s": null,
+        "mlflow_run_id": null,
+        "config_snapshot": {
+          "agent_strategy": "BALA",
+          "direction_pct_threshold": 0.023,
+          "tabular_sweep_variant": "v4"
+        }
+      }
+    }
+  ]
+}
