@@ -42,7 +42,14 @@ from src.core.iteration_context import (
     build_iteration_context_digest,
 )
 from src.core.log_writer import AgentLogWriter
-from src.core.research_phase_plan import build_phase_state, phase_state_json
+from src.core.research_phase_plan import (
+    build_phase_state,
+    incomplete_phase_ids,
+    phase_cap_exceeded,
+    phase_state_json,
+    phases_for_model,
+)
+from src.core.research_phase_plan import _PHASE_ADVANCEMENT_KEYS
 from src.core.results_store import ResultsStore
 from src.core.structured_hpo import materialize_planned_trials
 from src.ws.events import broadcaster
@@ -946,6 +953,12 @@ class AgentOrchestrator:
                 f"check metrics → keep or revert."
             )
 
+        # F5: phase contract — the agent previously had no awareness of the
+        # 9-phase plan and self-terminated mid-phase. We now describe the
+        # active phase list and the evidence keys it must emit on
+        # ITERATION_RESULT markers to advance.
+        phase_contract_block = self._build_phase_contract_block(config)
+
         return (
             f"Tune {config.model_type} model for {config.instrument} "
             f"{config.timeframe} (tag: {config.tag}). "
@@ -966,7 +979,66 @@ class AgentOrchestrator:
             f"{focus}"
             f"{resume_block}"
             f"{hpo_block}"
+            f"{phase_contract_block}"
         )
+
+    def _build_phase_contract_block(self, config: ResearchConfig) -> str:
+        """F5: render the canonical phase plan for the active model_type as a
+        prompt section. The block tells the LLM:
+
+        * which phase ids exist in order
+        * the metrics-evidence key(s) each phase requires for advancement
+        * the min/max iteration envelope per phase
+        * how to flag a phase on an ITERATION_RESULT marker (search_phase)
+
+        Without this, the agent was blind to the phase plan and would
+        terminate after a few thousand `tabular_sweeps` iterations declaring
+        the task done.
+        """
+        phases = phases_for_model(config.model_type)
+        if not phases:
+            return ""
+        lines = [
+            "",
+            "",
+            "## Phase Contract (server-tracked)",
+            "",
+            "Your research session is tracked against a phase plan. The "
+            "orchestrator will refuse to let you terminate while phases "
+            "remain incomplete and budget is available. Advance through "
+            "phases by emitting the listed evidence key(s) in the "
+            "`metrics_json` (or `config`) of an ITERATION_RESULT marker. "
+            "Tag every ITERATION_RESULT with `search_phase: <phase_id>` "
+            "so the server can attribute work correctly.",
+            "",
+            "| Order | Phase ID | Min iters | Max iters | Evidence key(s) | Next action |",
+            "|---|---|---|---|---|---|",
+        ]
+        for idx, phase in enumerate(phases, start=1):
+            pid = phase.get("id", "")
+            keys = _PHASE_ADVANCEMENT_KEYS.get(pid, ()) or ()
+            keys_str = ", ".join(keys) if keys else "—"
+            lines.append(
+                f"| {idx} | `{pid}` | "
+                f"{phase.get('min_iterations', 0)} | "
+                f"{phase.get('max_iterations', '—')} | "
+                f"{keys_str} | "
+                f"{phase.get('next_action', '')} |"
+            )
+        lines.extend([
+            "",
+            "**Termination rules:**",
+            "* Do not emit `end_turn` while any phase is `pending` or "
+            "`in_progress` and budget remains. The loop guard will reject "
+            "it and inject a continuation message.",
+            "* If you believe the entire plan should terminate early, "
+            "reply with a single line starting `TERMINATE_REQUEST:` and a "
+            "structured justification per incomplete phase.",
+            "* Reaching a phase's `max_iters` ceiling triggers a system "
+            "nudge to advance. Treat it as a hard signal to either emit "
+            "the evidence key or move on.",
+        ])
+        return "\n".join(lines)
 
     async def _build_resume_prompt(self, config: ResearchConfig) -> str:
         """ML-62: Build a prompt for resuming a timed-out session.
@@ -2487,8 +2559,38 @@ class AgentOrchestrator:
 
                 # If the model stopped (end_turn) and no tool calls → done
                 if response.stop_reason == "end_turn" and not tool_results:
-                    logger.info("Research %s: agent ended conversation", research_id)
-                    break
+                    # F1: refuse to terminate while the phase plan has
+                    # incomplete phases AND the run still has both budget and
+                    # iteration headroom. The agent self-terminated run
+                    # res_0efe45aaa28f at turn 305 having spent only $16.49
+                    # of $100 with 158 iterations remaining and the phase
+                    # plan still on tabular_sweeps. Inject a continuation
+                    # nudge instead of breaking.
+                    continuation_kick = await self._build_phase_continuation_kick(
+                        research_id=research_id,
+                        iteration_count=iteration_count,
+                        total_cost=total_cost,
+                        config=config,
+                    )
+                    if continuation_kick is None:
+                        logger.info(
+                            "Research %s: agent ended conversation",
+                            research_id,
+                        )
+                        break
+                    logger.info(
+                        "Research %s turn %d: rejecting end_turn — %s",
+                        research_id, turn, continuation_kick["reason"],
+                    )
+                    messages.append({
+                        "role": "assistant",
+                        "content": assistant_content,
+                    })
+                    messages.append({
+                        "role": "user",
+                        "content": [{"type": "text", "text": continuation_kick["text"]}],
+                    })
+                    continue
 
                 # Append assistant message and tool results
                 messages.append({"role": "assistant", "content": assistant_content})
@@ -2511,6 +2613,17 @@ class AgentOrchestrator:
                             f"next experiment."
                         ),
                     })
+                    # F7: warn the LLM when the active phase has saturated its
+                    # iteration cap. Forces the agent to advance instead of
+                    # grinding the same phase with duplicate configs.
+                    phase_cap_message = await self._maybe_phase_cap_nudge(
+                        research_id=research_id,
+                    )
+                    if phase_cap_message:
+                        tool_results.append({
+                            "type": "text",
+                            "text": phase_cap_message,
+                        })
                     messages.append({"role": "user", "content": tool_results})
                     messages = self._compact_messages(
                         messages,
@@ -2535,11 +2648,24 @@ class AgentOrchestrator:
             else:
                 final_status = "completed"
             elapsed_total = time.monotonic() - start_time
+            # F9: derive a structured terminal_reason so postmortems can tell
+            # apart "phase plan finished" from "agent quit at turn 305 with
+            # phases still open and $83 of budget left".
+            terminal_reason = await self._derive_terminal_reason(
+                research_id=research_id,
+                final_status=final_status,
+                iteration_count=iteration_count,
+                total_cost=total_cost,
+                config=config,
+                timed_out=_timed_out,
+                policy_aborted=_policy_aborted,
+            )
             await self._store.update_session(
                 research_id,
                 status=final_status,
                 completed_at=datetime.now(timezone.utc).isoformat(),
                 total_api_cost_usd=round(total_cost, 4),
+                terminal_reason=terminal_reason,
             )
             await broadcaster.broadcast({
                 "event": "research_completed",
@@ -2802,6 +2928,26 @@ class AgentOrchestrator:
         )
         marker["consistency_report"] = consistency_report
 
+        # F2: determine which phase this iteration belongs to so the
+        # `iterations.search_phase` column gets populated. Precedence:
+        #   1. marker payload (LLM may explicitly set search_phase)
+        #   2. session's last-computed phase_state_json.current_phase
+        # `_refresh_phase_state` runs AFTER the insert, so we look at the
+        # session state that was current BEFORE this iteration ran.
+        active_phase = marker.get("search_phase")
+        if not active_phase:
+            phase_state_raw = (session or {}).get("phase_state_json")
+            if isinstance(phase_state_raw, str) and phase_state_raw.strip():
+                try:
+                    phase_state_obj = json.loads(phase_state_raw)
+                    candidate = phase_state_obj.get("current_phase")
+                    if isinstance(candidate, str) and candidate:
+                        active_phase = candidate
+                except (json.JSONDecodeError, AttributeError):
+                    active_phase = None
+        if active_phase and not marker.get("search_phase"):
+            marker["search_phase"] = active_phase
+
         await self._store.add_iteration(
             research_id=research_id,
             iteration=iteration,
@@ -2832,6 +2978,7 @@ class AgentOrchestrator:
             attempt_snapshot_path=attempt_snapshot_path,
             attempt_snapshot_hash=attempt_snapshot_hash,
             consistency_report_json=consistency_report_json(consistency_report),
+            search_phase=active_phase,
         )
 
         # ML-59: If this is an HPO study result, also persist to hpo_studies
@@ -2936,6 +3083,159 @@ class AgentOrchestrator:
             next_action=state.get("next_action"),
             phase_state_json=phase_state_json(state),
         )
+
+    async def _build_phase_continuation_kick(
+        self,
+        *,
+        research_id: str,
+        iteration_count: int,
+        total_cost: float,
+        config: ResearchConfig,
+    ) -> Optional[Dict[str, str]]:
+        """F1: decide whether an `end_turn` should be honored.
+
+        Returns ``None`` when termination is acceptable (phase plan complete,
+        or no headroom in budget/iterations). Returns a dict with ``reason``
+        (for logs) and ``text`` (a user-turn message that re-engages the LLM
+        with the outstanding phase work) when the loop should continue.
+        """
+        # Refresh phase state so this decision uses the latest evidence.
+        await self._refresh_phase_state(research_id)
+        session = await self._store.get_session(research_id)
+        if not session:
+            return None
+        phase_state_raw = session.get("phase_state_json")
+        if not isinstance(phase_state_raw, str) or not phase_state_raw.strip():
+            return None
+        try:
+            state = json.loads(phase_state_raw)
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+        incomplete = incomplete_phase_ids(state)
+        if not incomplete:
+            # Phase plan finished — honor end_turn.
+            return None
+
+        budget_remaining = max(0.0, config.max_budget_usd - total_cost)
+        iterations_remaining = max(0, config.max_iterations - iteration_count)
+        # If neither budget nor iteration headroom is left, allow exit.
+        if budget_remaining <= 0.10 or iterations_remaining <= 0:
+            return None
+
+        current_phase = state.get("current_phase") or incomplete[0]
+        next_action = state.get("next_action") or "Continue the phase plan."
+        text = (
+            "[system] You issued an end_turn but the phase plan is incomplete. "
+            f"Current phase: {current_phase}. Incomplete phases remaining: "
+            f"{', '.join(incomplete)}. Budget remaining: "
+            f"${budget_remaining:.2f} of ${config.max_budget_usd:.2f}. "
+            f"Iterations remaining: {iterations_remaining}/{config.max_iterations}. "
+            f"Required next action: {next_action} "
+            "Do NOT terminate. Run the next experiment for the current phase, "
+            "or — if your evidence shows the phase is genuinely complete — "
+            "emit the metrics evidence key (see SKILL.md \"Phase Advancement\") "
+            "so the phase plan can advance. If you believe the entire phase "
+            "plan should terminate early, reply with a single line beginning "
+            "TERMINATE_REQUEST: followed by a structured justification "
+            "referencing each incomplete phase id."
+        )
+        return {
+            "reason": (
+                f"phase plan incomplete ({len(incomplete)} phases, current "
+                f"{current_phase}); ${budget_remaining:.2f} budget and "
+                f"{iterations_remaining} iterations remaining"
+            ),
+            "text": text,
+        }
+
+    async def _maybe_phase_cap_nudge(
+        self,
+        *,
+        research_id: str,
+    ) -> Optional[str]:
+        """F7: return a system-message text when the current phase's
+        ``max_iterations`` cap has been hit without producing the phase's
+        evidence key. The orchestrator injects this into the next user turn
+        so the LLM moves on instead of grinding inside the same phase.
+        """
+        session = await self._store.get_session(research_id)
+        if not session:
+            return None
+        phase_state_raw = session.get("phase_state_json")
+        if not isinstance(phase_state_raw, str) or not phase_state_raw.strip():
+            return None
+        try:
+            state = json.loads(phase_state_raw)
+        except (json.JSONDecodeError, TypeError):
+            return None
+        current_id = state.get("current_phase")
+        if not current_id:
+            return None
+        iterations = await self._store.get_iterations(research_id)
+        in_phase = sum(
+            1 for it in iterations
+            if (it.get("search_phase") or "") == current_id
+        )
+        if not phase_cap_exceeded(state, in_phase):
+            return None
+        next_action = state.get("next_action") or "Advance the phase plan."
+        return (
+            f"[system] Phase '{current_id}' has reached its iteration cap "
+            f"({in_phase} iterations recorded for this phase). Stop tuning "
+            f"inside this phase. Emit the phase's evidence key (see SKILL.md "
+            f"\"Phase Advancement\") to advance, or proceed to the next phase. "
+            f"Next phase guidance: {next_action}"
+        )
+
+    async def _derive_terminal_reason(
+        self,
+        *,
+        research_id: str,
+        final_status: str,
+        iteration_count: int,
+        total_cost: float,
+        config: ResearchConfig,
+        timed_out: bool,
+        policy_aborted: bool,
+    ) -> str:
+        """F9: produce a single structured token explaining why a session
+        ended. Postmortems and the UI can group runs by this value without
+        re-deriving heuristics. Values are ASCII, snake_case, optionally
+        suffixed with ``:<phase_id>`` when the cause is phase-scoped.
+        """
+        if policy_aborted:
+            return "policy_aborted"
+        if timed_out:
+            return "wallclock_timeout"
+        if final_status == "stopped":
+            return "operator_stopped"
+        if final_status == "failed":
+            return "error_unrecoverable"
+        # final_status == "completed": refine.
+        if iteration_count >= config.max_iterations:
+            return "max_iterations_reached"
+        # Compare against the *budget cap*: a run that ate >=99% of its
+        # budget terminated because it ran out of money.
+        if total_cost >= 0.99 * config.max_budget_usd:
+            return "budget_exhausted"
+        # Look at the phase state to decide between "phase plan finished"
+        # and "agent self-terminated early".
+        session = await self._store.get_session(research_id)
+        if session:
+            raw = session.get("phase_state_json")
+            if isinstance(raw, str) and raw.strip():
+                try:
+                    state = json.loads(raw)
+                except (json.JSONDecodeError, TypeError):
+                    state = None
+                if isinstance(state, dict):
+                    incomplete = incomplete_phase_ids(state)
+                    if not incomplete:
+                        return "phase_plan_completed"
+                    current = state.get("current_phase") or incomplete[0]
+                    return f"agent_self_terminated_during_phase:{current}"
+        return "phase_plan_completed"
 
     @staticmethod
     def _infer_failed_attempt_status(tool_result: str) -> Optional[str]:

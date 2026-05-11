@@ -45,10 +45,21 @@ def _passing_metrics() -> dict:
 
 
 def test_direction_phase_state_advances_past_tabular_sweeps():
+    """F3: tabular_sweeps now advances on evidence key, not cardinality.
+
+    Previously a session with just two iterations would mark tabular_sweeps
+    complete by virtue of `len(iterations) >= 2`. With the evidence-key
+    contract, we require either an explicit sweep variant key in the config
+    OR 6+ iterations tagged with `search_phase=tabular_sweeps`. We exercise
+    the evidence-key path here by adding `direction_pct_threshold` to one
+    iteration's config.
+    """
     session = {
         "id": "res_phase",
         "model_type": "direction",
     }
+    metrics_with_sweep = _passing_metrics()
+    metrics_with_sweep["config"]["direction_pct_threshold"] = 0.55
     iterations = [
         {
             "iteration": 1,
@@ -57,7 +68,7 @@ def test_direction_phase_state_advances_past_tabular_sweeps():
         },
         {
             "iteration": 2,
-            "metrics_json": json.dumps(_passing_metrics()),
+            "metrics_json": json.dumps(metrics_with_sweep),
             "all_gates_passed": 1,
         },
     ]
@@ -65,10 +76,34 @@ def test_direction_phase_state_advances_past_tabular_sweeps():
     state = build_phase_state(session=session, iterations=iterations)
 
     assert state["schema_version"] == "autoresearch_phase_state.v1"
+    # adaptive_feature_sweeps comes next because tsfm/etc still pending and
+    # the iterations have no adaptive_features key yet.
     assert state["current_phase"] == "adaptive_feature_sweeps"
     assert state["phases"][0]["status"] == "completed"
     assert state["phases"][1]["status"] == "completed"
     assert _phase_status(state, "promotion_proposal") == "pending"
+
+
+def test_direction_phase_tabular_sweeps_does_not_complete_without_evidence():
+    """F3 regression guard: two unrelated iterations no longer auto-advance.
+
+    Before F3, ``_completed_phase_ids`` marked tabular_sweeps complete on the
+    second iteration regardless of content. With evidence-key + min-effort
+    semantics, an iteration without sweep evidence keys (and no
+    search_phase tag matching tabular_sweeps) must keep the session parked
+    in tabular_sweeps.
+    """
+    session = {"id": "res_phase_nosweep", "model_type": "direction"}
+    iterations = [
+        {"iteration": 1, "metrics_json": json.dumps({"config": {}}), "all_gates_passed": 0},
+        {"iteration": 2, "metrics_json": json.dumps({"config": {}}), "all_gates_passed": 0},
+    ]
+
+    state = build_phase_state(session=session, iterations=iterations)
+
+    # Phase plan must NOT race ahead.
+    assert state["current_phase"] == "tabular_sweeps"
+    assert _phase_status(state, "tabular_sweeps") == "in_progress"
 
 
 def test_promotion_proposal_requires_preview_or_promotion_evidence():

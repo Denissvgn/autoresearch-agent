@@ -517,9 +517,25 @@ async def _migrate_to_v2(db: aiosqlite.Connection) -> None:
         await db.execute(statement)
 
 
+async def _migrate_to_v3(db: aiosqlite.Connection) -> None:
+    """F9: structured ``terminal_reason`` on ``research_sessions``.
+
+    Replaces ad-hoc derivation of why a session ended (which previously
+    required reading logs). Postmortems and the UI can now group runs by
+    ``budget_exhausted`` / ``phase_plan_completed`` /
+    ``agent_self_terminated_during_phase:<phase_id>`` etc.
+    """
+    await _add_column_if_missing(
+        db,
+        "research_sessions",
+        "terminal_reason TEXT",
+    )
+
+
 _MIGRATIONS = (
     (1, _migrate_to_v1),
     (2, _migrate_to_v2),
+    (3, _migrate_to_v3),
 )
 _LATEST_SCHEMA_VERSION = _MIGRATIONS[-1][0]
 
@@ -1339,7 +1355,12 @@ class ResultsStore:
         attempt_snapshot_path: Optional[str] = None,
         attempt_snapshot_hash: Optional[str] = None,
         consistency_report_json: Optional[str] = None,
+        search_phase: Optional[str] = None,
     ) -> Dict[str, Any]:
+        # F2: persist the phase id the orchestrator believed was active when
+        # this iteration ran. The `iterations.search_phase` column has existed
+        # since v1 but was never written, which left phase-state derivation
+        # blind to actual exploration coverage.
         now = datetime.now(timezone.utc).isoformat()
         async with self.connection() as db:
             await db.execute(
@@ -1351,8 +1372,9 @@ class ResultsStore:
                     duplicate_of_iteration, duplicate_reason, metrics_json,
                     attempt_snapshot_json, attempt_snapshot_path,
                     attempt_snapshot_hash, consistency_report_json,
-                    training_time_s, api_cost_usd, created_at, mlflow_run_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    training_time_s, api_cost_usd, created_at, mlflow_run_id,
+                    search_phase)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     research_id, iteration, primary_metric, metric_name,
                     int(all_gates_passed) if all_gates_passed is not None else None,
@@ -1363,6 +1385,7 @@ class ResultsStore:
                     attempt_snapshot_json, attempt_snapshot_path,
                     attempt_snapshot_hash, consistency_report_json,
                     training_time_s, api_cost_usd, now, mlflow_run_id,
+                    search_phase,
                 ),
             )
             await db.commit()

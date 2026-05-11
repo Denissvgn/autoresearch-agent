@@ -205,7 +205,9 @@ async def test_list_sessions_status_in_filters_at_sql_level(store: ResultsStore)
 
 @pytest.mark.asyncio
 async def test_results_store_records_schema_version(store: ResultsStore) -> None:
-    assert await store.get_schema_version() == 2
+    # Schema bumped to v3 by F9 migration (terminal_reason column on
+    # research_sessions). Mirrors _LATEST_SCHEMA_VERSION in results_store.
+    assert await store.get_schema_version() == 3
     assert await store.ping() is True
 
 

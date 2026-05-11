@@ -291,6 +291,11 @@ async def test_research_state_endpoint_reconstructs_session_without_workspace():
                 {
                     "mlflow_run_id": "run-1",
                     "artifact_hash": "artifact-sha",
+                    # F3: tabular_sweeps now requires an explicit evidence
+                    # key. Include the sweep variant so the phase plan
+                    # advances past tabular_sweeps as the assertion below
+                    # expects.
+                    "direction_pct_threshold": 0.55,
                     "calibration_full_validation": {"selected": {}},
                     "economic_replay": {"gates": {"all_gates_passed": True}},
                     "inference_parity": {
