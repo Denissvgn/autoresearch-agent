@@ -438,6 +438,71 @@ def check_evidence_artifact(
     return None
 
 
+def _is_synthetic_promotion_iteration(
+    metrics: Dict[str, Any],
+    prior_best_metrics: Dict[str, Any],
+    phase_id: str,
+) -> Optional[str]:
+    """Return a blocker string when an iteration appears synthetic (no real work ran).
+
+    A promotion-family iteration is **synthetic** when ALL of:
+    1. ``training_time_s`` is ``None`` — no training command was actually executed.
+    2. ``primary_metric`` rounded to 4 d.p. equals the prior-best iteration's
+       ``primary_metric`` — the metric value was copied rather than computed.
+    3. No new ``mlflow_run_id`` — either absent or identical to the prior-best run.
+
+    **Exception:** not synthetic when ``development_promotion_metadata`` carries
+    both a ``promotion_decision`` and a ``rollback_target`` — this is a legitimate
+    server-owned promotion finalisation that intentionally omits a training run.
+
+    Returns ``"synthetic_phase_iteration_<phase_id>"`` on synthetic detection,
+    or ``None`` when the iteration is genuine.
+
+    ``prior_best_metrics`` should be the metrics dict of the most recent
+    non-promotion-family iteration with a ``primary_metric`` value.  An empty
+    dict disables the check conservatively (no block).
+    """
+    # Exception: real promotion finalisation has no training run but carries
+    # decision + rollback metadata — never treat this as synthetic.
+    dev_meta = metrics.get("development_promotion_metadata")
+    if (
+        isinstance(dev_meta, dict)
+        and dev_meta.get("promotion_decision")
+        and dev_meta.get("rollback_target")
+    ):
+        return None
+
+    # Condition 1: no training ran.
+    if metrics.get("training_time_s") is not None:
+        return None
+
+    # Condition 2: primary_metric unchanged from prior best.
+    current_raw = metrics.get("primary_metric")
+    prior_raw = prior_best_metrics.get("primary_metric")
+    if current_raw is None or prior_raw is None:
+        # Cannot compare — conservative: do not block.
+        return None
+    try:
+        if round(float(current_raw), 4) != round(float(prior_raw), 4):
+            return None
+    except (TypeError, ValueError):
+        return None
+
+    # Condition 3: no new mlflow_run_id.
+    current_run_id = metrics.get("mlflow_run_id")
+    prior_run_id = prior_best_metrics.get("mlflow_run_id")
+    if current_run_id and current_run_id != prior_run_id:
+        return None
+
+    logger.warning(
+        "_is_synthetic_promotion_iteration: phase %s iteration appears synthetic "
+        "(training_time_s=None, metric=%s unchanged from prior, no new run_id)",
+        phase_id,
+        current_raw,
+    )
+    return f"synthetic_phase_iteration_{phase_id}"
+
+
 def _calibration_payload(metrics: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     config = metrics.get("config")
     if isinstance(config, dict) and isinstance(

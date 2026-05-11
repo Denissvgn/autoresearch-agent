@@ -6,7 +6,11 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
-from src.core.consistency_validator import check_evidence_artifact  # AR-5
+from src.core.consistency_validator import (  # AR-5/AR-6
+    EVIDENCE_ARTIFACT_PHASES,
+    _is_synthetic_promotion_iteration,
+    check_evidence_artifact,
+)
 
 
 # Direction-research phase plan.
@@ -407,15 +411,23 @@ def _completed_phase_ids(
     if any(_has_metric(it, *_PHASE_ADVANCEMENT_KEYS["tsfm_sweeps"]) for it in iterations):
         completed.add("tsfm_sweeps")
     # AR-5: gate promotion-family phases behind artifact validation.
+    # AR-6: also gate behind synthetic-iteration detection.
+    _prior_best = _prior_best_metrics(iterations)
     if any(
         _has_metric(it, *_PHASE_ADVANCEMENT_KEYS["calibration_replay_gates"])
         and not check_evidence_artifact(_metrics_of(it), "calibration_replay_gates")
+        and not _is_synthetic_promotion_iteration(
+            _metrics_of(it), _prior_best, "calibration_replay_gates"
+        )
         for it in iterations
     ):
         completed.add("calibration_replay_gates")
     if any(
         _has_metric(it, *_PHASE_ADVANCEMENT_KEYS["multi_seed_robustness"])
         and not check_evidence_artifact(_metrics_of(it), "multi_seed_robustness")
+        and not _is_synthetic_promotion_iteration(
+            _metrics_of(it), _prior_best, "multi_seed_robustness"
+        )
         for it in iterations
     ):
         completed.add("multi_seed_robustness")
@@ -427,10 +439,13 @@ def _completed_phase_ids(
             "inference_parity_replay",
             prior_run_ids=_inference_prior_run_ids,
         )
+        and not _is_synthetic_promotion_iteration(
+            _metrics_of(it), _prior_best, "inference_parity_replay"
+        )
         for it in iterations
     ):
         completed.add("inference_parity_replay")
-    if _has_promotion_evidence(iterations, promotions):
+    if _has_promotion_evidence(iterations, promotions, prior_best=_prior_best):
         completed.add("promotion_proposal")
     return completed
 
@@ -451,6 +466,8 @@ def _iterations_in_phase(
 def _has_promotion_evidence(
     iterations: List[Dict[str, Any]],
     promotions: List[Dict[str, Any]],
+    *,
+    prior_best: Optional[Dict[str, Any]] = None,
 ) -> bool:
     if promotions:
         return True  # actual promotion record — artifact is real
@@ -464,10 +481,13 @@ def _has_promotion_evidence(
         "promotion_scope",
         "scoped_promotion_metadata",
     )
+    _pb = prior_best if prior_best is not None else {}
     # AR-5: gate evidence-key path behind artifact validation.
+    # AR-6: also gate behind synthetic-iteration detection.
     return any(
         _has_metric(row, *evidence_keys)
         and not check_evidence_artifact(_metrics_of(row), "promotion_proposal")
+        and not _is_synthetic_promotion_iteration(_metrics_of(row), _pb, "promotion_proposal")
         for row in iterations
     )
 
@@ -623,3 +643,23 @@ def _prior_run_ids_for_phase(
         if run_id and isinstance(run_id, str):
             ids.add(run_id)
     return frozenset(ids)
+
+
+def _prior_best_metrics(iterations: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Return metrics of the most recent non-promotion-family iteration with primary_metric.
+
+    Iterates in reverse so the most recent qualifying iteration is returned
+    first.  Excludes ``EVIDENCE_ARTIFACT_PHASES`` iterations so the prior best
+    reflects real training work, not phase-family reporting iterations.
+
+    Returns ``{}`` when no qualifying iteration is found (conservative — callers
+    must treat an empty dict as "unable to compare" and avoid blocking).
+    """
+    for it in reversed(iterations):
+        phase = it.get("search_phase") or ""
+        if phase in EVIDENCE_ARTIFACT_PHASES:
+            continue
+        m = _metrics_of(it)
+        if m.get("primary_metric") is not None:
+            return m
+    return {}

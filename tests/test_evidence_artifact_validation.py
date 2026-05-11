@@ -474,3 +474,258 @@ def test_inference_parity_not_completed_when_run_id_from_prior_phase() -> None:
     assert phase_statuses["inference_parity_replay"] != "completed", (
         "Inference parity reusing a prior run_id must NOT advance the phase"
     )
+
+
+# ---------------------------------------------------------------------------
+# AR-6: _is_synthetic_promotion_iteration unit tests
+# ---------------------------------------------------------------------------
+
+from src.core.consistency_validator import _is_synthetic_promotion_iteration  # noqa: E402
+from src.core.research_phase_plan import _prior_best_metrics  # noqa: E402
+
+
+# Shared prior-best fixture for AR-6 unit tests.
+_PRIOR_BEST = {
+    "primary_metric": 0.6394,
+    "mlflow_run_id": "run-train-prior-001",
+    "training_time_s": 123.4,
+}
+
+
+def test_synthetic_promotion_iteration_blocked() -> None:
+    """AR-6: training_time_s=None + metric matches prior + no new run_id → blocker.
+
+    The LLM emits a multi_seed_robustness evidence payload without running
+    any training.  All three synthetic conditions hold, so the blocker must be
+    returned.
+    """
+    metrics = {
+        "training_time_s": None,
+        "primary_metric": 0.6394,          # exact match (4dp) to prior
+        "mlflow_run_id": None,             # no new run recorded
+        "seed_trials": [{"mlflow_run_id": f"run-s-{i}"} for i in range(5)],
+        "n_seed_trials": 5,
+        "seeds_passed_gates": True,
+    }
+    result = _is_synthetic_promotion_iteration(metrics, _PRIOR_BEST, "multi_seed_robustness")
+    assert result == "synthetic_phase_iteration_multi_seed_robustness", (
+        "All three synthetic conditions met → blocker must be emitted"
+    )
+
+
+def test_synthetic_check_allows_real_promotion_metadata() -> None:
+    """AR-6: server-owned promotion finalisation is NOT synthetic.
+
+    development_promotion_metadata with promotion_decision + rollback_target is
+    legitimate — the promotion review process intentionally emits no training run.
+    The exception clause must fire and return None regardless of metric/run state.
+    """
+    metrics = {
+        "training_time_s": None,
+        "primary_metric": 0.6394,          # same as prior
+        "mlflow_run_id": None,
+        "development_promotion_metadata": {
+            "promotion_decision": "approved",
+            "rollback_target": "direction_model_v2.1.0",
+            "approved_by": "server",
+        },
+    }
+    result = _is_synthetic_promotion_iteration(metrics, _PRIOR_BEST, "promotion_proposal")
+    assert result is None, (
+        "Real promotion finalisation with decision+rollback_target must NOT be flagged"
+    )
+
+
+def test_synthetic_check_not_triggered_when_training_time_present() -> None:
+    """AR-6: when training_time_s is non-None, never synthetic (condition 1 fails)."""
+    metrics = {
+        "training_time_s": 0.001,          # tiny but non-None — real training ran
+        "primary_metric": 0.6394,
+        "mlflow_run_id": None,
+    }
+    result = _is_synthetic_promotion_iteration(metrics, _PRIOR_BEST, "multi_seed_robustness")
+    assert result is None
+
+
+def test_synthetic_check_not_triggered_when_metric_changed() -> None:
+    """AR-6: improved metric breaks condition 2 → not synthetic."""
+    metrics = {
+        "training_time_s": None,
+        "primary_metric": 0.6500,          # differs at 4dp from 0.6394
+        "mlflow_run_id": None,
+    }
+    result = _is_synthetic_promotion_iteration(metrics, _PRIOR_BEST, "multi_seed_robustness")
+    assert result is None
+
+
+def test_synthetic_check_not_triggered_when_metric_within_4dp_tolerance() -> None:
+    """AR-6: 0.63940001 rounds to same 4dp as 0.6394 → still synthetic."""
+    metrics = {
+        "training_time_s": None,
+        "primary_metric": 0.63940001,
+        "mlflow_run_id": None,
+    }
+    result = _is_synthetic_promotion_iteration(metrics, _PRIOR_BEST, "multi_seed_robustness")
+    assert result == "synthetic_phase_iteration_multi_seed_robustness"
+
+
+def test_synthetic_check_not_triggered_when_new_run_id() -> None:
+    """AR-6: a distinct mlflow_run_id breaks condition 3 → not synthetic."""
+    metrics = {
+        "training_time_s": None,
+        "primary_metric": 0.6394,
+        "mlflow_run_id": "run-brand-new-999",
+    }
+    result = _is_synthetic_promotion_iteration(metrics, _PRIOR_BEST, "multi_seed_robustness")
+    assert result is None
+
+
+def test_synthetic_check_not_triggered_when_prior_best_empty() -> None:
+    """AR-6: empty prior_best dict disables comparison conservatively (no block)."""
+    metrics = {
+        "training_time_s": None,
+        "primary_metric": 0.6394,
+        "mlflow_run_id": None,
+    }
+    result = _is_synthetic_promotion_iteration(metrics, {}, "multi_seed_robustness")
+    assert result is None, (
+        "No prior context → conservative: must not block (avoids false positives)"
+    )
+
+
+def test_synthetic_check_promotion_proposal_blocked_without_promotion_metadata() -> None:
+    """AR-6: promotion_proposal iteration without decision/rollback_target is synthetic."""
+    metrics = {
+        "training_time_s": None,
+        "primary_metric": 0.6394,
+        "mlflow_run_id": None,
+        # development_promotion_metadata present but incomplete — no rollback_target
+        "development_promotion_metadata": {
+            "promotion_decision": None,
+            "rollback_target": None,
+        },
+        "promotion_allowed": True,
+    }
+    result = _is_synthetic_promotion_iteration(metrics, _PRIOR_BEST, "promotion_proposal")
+    assert result == "synthetic_phase_iteration_promotion_proposal"
+
+
+# ---------------------------------------------------------------------------
+# AR-6: _prior_best_metrics helper unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_prior_best_metrics_returns_most_recent_non_promotion_family() -> None:
+    """_prior_best_metrics returns the last training-phase iteration's metrics."""
+    iters = [
+        _iteration_row(
+            iteration=i,
+            metrics={"primary_metric": 0.60 + i * 0.01, "training_time_s": 10.0},
+            search_phase="tabular_sweeps",
+        )
+        for i in range(1, 4)
+    ]
+    # Add a promotion-family iteration — must be excluded.
+    iters.append(
+        _iteration_row(
+            iteration=4,
+            metrics={"primary_metric": 0.99, "training_time_s": None},
+            search_phase="multi_seed_robustness",
+        )
+    )
+    result = _prior_best_metrics(iters)
+    # Should return iter 3's metrics (most recent non-promotion, i=3 → 0.60 + 3*0.01 = 0.63)
+    assert result["primary_metric"] == pytest.approx(0.63)
+
+
+def test_prior_best_metrics_returns_empty_when_no_qualifying_iteration() -> None:
+    """_prior_best_metrics returns {} when all iterations are promotion-family."""
+    iters = [
+        _iteration_row(
+            iteration=i,
+            metrics={"primary_metric": 0.70, "training_time_s": None},
+            search_phase="multi_seed_robustness",
+        )
+        for i in range(1, 4)
+    ]
+    result = _prior_best_metrics(iters)
+    assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# AR-6: integration via build_phase_state — synthetic phase gating
+# ---------------------------------------------------------------------------
+
+
+def test_multi_seed_phase_not_advanced_when_all_iterations_are_synthetic() -> None:
+    """AR-6 core: multi_seed_robustness stays incomplete when all seed iters are synthetic.
+
+    A session where every multi_seed_robustness iteration has training_time_s=None
+    and the same primary_metric as the best prior training iteration must NOT
+    advance multi_seed_robustness to 'completed'.
+    """
+    session = _session_row()
+    prior_iters = _all_prior_phases_completed_iters()
+    # Prior best metric comes from _all_prior_phases_completed_iters — last one is ~0.68
+    prior_metric = max(
+        json.loads(it["metrics_json"]).get("primary_metric", 0)
+        for it in prior_iters
+    )
+
+    # All seed iterations are synthetic: no training, metric copied from prior best.
+    synthetic_seed_iters = [
+        _iteration_row(
+            iteration=7 + i,
+            metrics={
+                "training_time_s": None,
+                "primary_metric": prior_metric,
+                "mlflow_run_id": None,
+                "seed_trials": [{"mlflow_run_id": f"run-s-{j}"} for j in range(5)],
+                "n_seed_trials": 5,
+                "seeds_passed_gates": True,
+            },
+            search_phase="multi_seed_robustness",
+        )
+        for i in range(3)
+    ]
+    all_iters = prior_iters + synthetic_seed_iters
+
+    state = build_phase_state(session=session, iterations=all_iters)
+    phase_statuses = {p["id"]: p["status"] for p in state["phases"]}
+
+    assert phase_statuses.get("multi_seed_robustness") != "completed", (
+        "Synthetic seed iterations (no training, copied metric) must NOT advance "
+        "multi_seed_robustness to 'completed'"
+    )
+
+
+def test_multi_seed_phase_advances_when_iteration_has_training_time() -> None:
+    """AR-6: multi_seed_robustness advances when training_time_s is present (not synthetic)."""
+    session = _session_row()
+    prior_iters = _all_prior_phases_completed_iters()
+    prior_metric = max(
+        json.loads(it["metrics_json"]).get("primary_metric", 0)
+        for it in prior_iters
+    )
+
+    real_seed_iter = _iteration_row(
+        iteration=7,
+        metrics={
+            "training_time_s": 45.7,   # real training ran
+            "primary_metric": prior_metric,  # metric may be same — but training ran
+            "mlflow_run_id": None,
+            "seed_trials": [{"mlflow_run_id": f"run-s-{i}"} for i in range(5)],
+            "n_seed_trials": 5,
+            "seeds_passed_gates": True,
+        },
+        search_phase="multi_seed_robustness",
+    )
+
+    state = build_phase_state(
+        session=session, iterations=prior_iters + [real_seed_iter]
+    )
+    phase_statuses = {p["id"]: p["status"] for p in state["phases"]}
+
+    assert phase_statuses.get("multi_seed_robustness") == "completed", (
+        "Non-synthetic seed iteration (training_time_s present) must advance the phase"
+    )
