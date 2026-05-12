@@ -94,6 +94,72 @@ def test_direction_prepare_maps_platt_alias_to_sigmoid_for_stacking_schema():
     assert cfg["stacking_calibration_fallback_method"] == "sigmoid"
 
 
+def test_direction_prepare_passes_adaptive_and_spectral_keys_to_phase1c():
+    direction = _load_module(
+        "autoresearch_direction_prepare_adaptive_contract",
+        REPO_ROOT / "scripts" / "autotuner" / "direction" / "prepare.py",
+    )
+
+    cfg = direction.build_phase1c_config(
+        {
+            "instrument": "DOGE_USDT",
+            "timeframe": "15m",
+            "adaptive_levels_enabled": True,
+            "adaptive_levels_version": "adaptive_levels.v1",
+            "spectral_features_enabled": True,
+            "spectral_features_version": "spectral_features.v1",
+            "spectral_evidence_report_path": "reports/spectral.md",
+        }
+    )
+
+    assert cfg["adaptive_levels_enabled"] is True
+    assert cfg["adaptive_levels_version"] == "adaptive_levels.v1"
+    assert cfg["spectral_features_enabled"] is True
+    assert cfg["spectral_features_version"] == "spectral_features.v1"
+    assert cfg["spectral_evidence_report_path"] == "reports/spectral.md"
+
+
+def test_direction_prepare_extracts_and_marks_adaptive_feature_evidence(tmp_path):
+    direction = _load_module(
+        "autoresearch_direction_prepare_adaptive_metrics_contract",
+        REPO_ROOT / "scripts" / "autotuner" / "direction" / "prepare.py",
+    )
+
+    extracted = direction.extract_metrics(
+        {
+            "metrics": {"auc": 0.64, "precision": 0.6, "recall": 0.7, "f1": 0.65},
+            "walkforward": {"walkforward_mean_auc": 0.61, "walkforward_auc_cv": 0.08},
+            "gate_results": {"all_supported_gates_passed": True},
+            "config": {
+                "adaptive_levels_version": "adaptive_levels.v1",
+                "operating_signal_rate": 0.42,
+            },
+            "feature_schema": {
+                "n_features": 97,
+                "feature_schema_hash": "schema-adaptive",
+                "adaptive_levels": {
+                    "requested": True,
+                    "enabled": True,
+                    "version": "adaptive_levels.v1",
+                    "selected_count": 7,
+                    "selected_feature_names": ["dist_to_support_24"],
+                },
+            },
+        }
+    )
+
+    assert extracted["n_features"] == 97
+    assert extracted["feature_schema_hash"] == "schema-adaptive"
+    assert extracted["adaptive_feature_version"] == "adaptive_levels.v1"
+    assert extracted["adaptive_features"]["selected_count"] == 7
+
+    direction.print_summary(extracted, 12.3, marker_dir=tmp_path)
+    marker = (tmp_path / "last_metrics.txt").read_text()
+    assert "adaptive_feature_version: adaptive_levels.v1" in marker
+    assert '"selected_count": 7' in marker
+    assert "feature_schema_hash: schema-adaptive" in marker
+
+
 def test_rl_trainer_requests_include_service_auth(monkeypatch):
     rl_prepare = _load_module(
         "autoresearch_rl_prepare_contract",

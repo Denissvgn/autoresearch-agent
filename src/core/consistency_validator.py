@@ -27,6 +27,22 @@ EVIDENCE_ARTIFACT_PHASES: frozenset = frozenset(
     }
 )
 
+ADAPTIVE_FEATURE_PHASE_ID = "adaptive_feature_sweeps"
+ACCEPTED_ADAPTIVE_NOOP_REASONS: frozenset[str] = frozenset(
+    {
+        "adaptive_features_unavailable",
+        "adaptive_feature_schema_unchanged",
+        "adaptive_not_applicable",
+    }
+)
+REJECTED_ADAPTIVE_NOOP_REASONS: frozenset[str] = frozenset(
+    {
+        "adaptive_flag_not_applied",
+        "adaptive_feature_requested_but_inactive",
+        "adaptive_enabled_no_selected_features",
+    }
+)
+
 
 def build_consistency_report(
     *,
@@ -345,6 +361,14 @@ def build_consistency_report(
         "passed" if docs_status else "warning",
     )
 
+    if search_phase == ADAPTIVE_FEATURE_PHASE_ID:
+        adaptive_blocker = check_adaptive_feature_sweep(metrics)
+        add(
+            "adaptive_feature_sweep_effective",
+            "passed" if adaptive_blocker is None else "failed",
+            blocker=adaptive_blocker,
+        )
+
     # AR-5: artifact-bound evidence-key validation for promotion-family phases.
     if search_phase and search_phase in EVIDENCE_ARTIFACT_PHASES:
         artifact_blocker = check_evidence_artifact(metrics, search_phase)
@@ -368,6 +392,31 @@ def build_consistency_report(
         "feature_schema_hash": feature_hash,
         "mlflow_run_id": mlflow_run_id,
     }
+
+
+def check_adaptive_feature_sweep(metrics: Dict[str, Any]) -> Optional[str]:
+    """Return None when adaptive feature evidence proves a real or accepted sweep."""
+
+    evidence = _adaptive_feature_evidence(metrics)
+    noop_reason = str(evidence.get("noop_reason") or "").strip()
+    if noop_reason:
+        if noop_reason in ACCEPTED_ADAPTIVE_NOOP_REASONS:
+            return None
+        if noop_reason == "adaptive_enabled_no_selected_features":
+            return "adaptive_feature_requested_but_no_selected_features"
+        if noop_reason in REJECTED_ADAPTIVE_NOOP_REASONS:
+            return "adaptive_feature_requested_but_inactive"
+        return "adaptive_feature_noop_reason_unrecognized"
+
+    if not evidence.get("present"):
+        return "adaptive_feature_evidence_missing"
+    if evidence.get("requested") and not evidence.get("enabled"):
+        return "adaptive_feature_requested_but_inactive"
+    if evidence.get("enabled") and int(evidence.get("selected_count") or 0) <= 0:
+        return "adaptive_feature_requested_but_no_selected_features"
+    if not evidence.get("enabled"):
+        return "adaptive_feature_not_enabled"
+    return None
 
 
 def consistency_report_json(report: Dict[str, Any]) -> str:
@@ -567,6 +616,42 @@ def _calibration_payload(metrics: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return calibration if isinstance(calibration, dict) else None
 
 
+def _adaptive_feature_evidence(metrics: Dict[str, Any]) -> Dict[str, Any]:
+    config = _dict_at(metrics, "config")
+    feature_schema = _dict_at(metrics, "feature_schema")
+    schema_adaptive = _dict_at(feature_schema, "adaptive_levels")
+    adaptive = _dict_at(metrics, "adaptive_features")
+
+    requested = _first_non_none(
+        adaptive.get("requested"),
+        schema_adaptive.get("requested"),
+        config.get("adaptive_levels_enabled"),
+        metrics.get("adaptive_levels_enabled"),
+    )
+    enabled = _first_non_none(
+        adaptive.get("enabled"),
+        schema_adaptive.get("enabled"),
+        config.get("adaptive_levels_enabled"),
+        metrics.get("adaptive_levels_enabled"),
+    )
+    selected_count = _first_non_none(
+        adaptive.get("selected_count"),
+        schema_adaptive.get("selected_count"),
+    )
+    noop_reason = _first_non_none(
+        metrics.get("adaptive_feature_noop_reason"),
+        adaptive.get("noop_reason"),
+        schema_adaptive.get("noop_reason"),
+    )
+    return {
+        "present": bool(adaptive or schema_adaptive),
+        "requested": _truthy(requested),
+        "enabled": _truthy(enabled),
+        "selected_count": _int_value(selected_count, default=0),
+        "noop_reason": noop_reason,
+    }
+
+
 def _nested_bool(container: Any, path: Iterable[str]) -> Optional[bool]:
     current = container
     for key in path:
@@ -594,6 +679,20 @@ def _first_present(
             if value is not None:
                 return value
     return None
+
+
+def _first_non_none(*values: Any) -> Any:
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
+def _int_value(value: Any, *, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _sha256_text(value: Any) -> Optional[str]:

@@ -8,8 +8,10 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from src.core.artifact_reference import normalize_optional_artifact_ref
 from src.core.consistency_validator import (  # AR-5/AR-6
+    ACCEPTED_ADAPTIVE_NOOP_REASONS,
     EVIDENCE_ARTIFACT_PHASES,
     _is_synthetic_promotion_iteration,
+    check_adaptive_feature_sweep,
     check_evidence_artifact,
 )
 
@@ -44,7 +46,7 @@ DIRECTION_PHASES: List[Dict[str, Any]] = [
     {
         "id": "adaptive_feature_sweeps",
         "label": "Adaptive Feature Sweeps",
-        "next_action": "Compare adaptive support/resistance and cycle feature variants against the tabular baseline. Emit metrics.adaptive_features or adaptive_feature_version so the phase advances.",
+        "next_action": "Compare adaptive support/resistance and cycle feature variants against the tabular baseline. Emit metrics.adaptive_features with active selected features and a changed schema/count, or an accepted adaptive_feature_noop_reason.",
         "min_iterations": 4,
         "max_iterations": 30,
     },
@@ -334,7 +336,7 @@ _PHASE_ADVANCEMENT_KEYS: Dict[str, tuple] = {
         "base_model_keys",
     ),
     # --- Shared late phases ---
-    "adaptive_feature_sweeps": ("adaptive_features", "adaptive_feature_version"),
+    "adaptive_feature_sweeps": ("adaptive_features", "adaptive_feature_noop_reason"),
     "tsfm_sweeps": ("tsfm", "tsfm_adapter", "tsfm_fallback_validation"),
     "calibration_replay_gates": ("calibration_full_validation", "economic_replay"),
     "multi_seed_robustness": ("seed_trials", "n_seed_trials", "seeds_passed_gates"),
@@ -407,7 +409,7 @@ def _completed_phase_ids(
     elif len(temporal_iters) >= 2:
         completed.add("temporal_ensemble")
 
-    if any(_has_metric(it, *_PHASE_ADVANCEMENT_KEYS["adaptive_feature_sweeps"]) for it in iterations):
+    if _adaptive_phase_completed(iterations):
         completed.add("adaptive_feature_sweeps")
     if any(_has_metric(it, *_PHASE_ADVANCEMENT_KEYS["tsfm_sweeps"]) for it in iterations):
         completed.add("tsfm_sweeps")
@@ -462,6 +464,115 @@ def _iterations_in_phase(
     return empty lists here and fall through to evidence-key checks.
     """
     return [it for it in iterations if (it.get("search_phase") or "") == phase_id]
+
+
+def _adaptive_phase_completed(iterations: List[Dict[str, Any]]) -> bool:
+    for idx, row in enumerate(iterations):
+        if (row.get("search_phase") or "") != "adaptive_feature_sweeps" and not _has_metric(
+            row,
+            *_PHASE_ADVANCEMENT_KEYS["adaptive_feature_sweeps"],
+        ):
+            continue
+
+        metrics = _metrics_of(row)
+        if check_adaptive_feature_sweep(metrics) is not None:
+            continue
+
+        noop_reason = str(
+            _first_non_none(
+                metrics.get("adaptive_feature_noop_reason"),
+                _dict_at(metrics, "adaptive_features").get("noop_reason"),
+                _dict_at(_dict_at(metrics, "feature_schema"), "adaptive_levels").get(
+                    "noop_reason"
+                ),
+            )
+            or ""
+        ).strip()
+        if noop_reason in ACCEPTED_ADAPTIVE_NOOP_REASONS:
+            return True
+
+        evidence = _feature_schema_evidence(metrics)
+        if not (
+            _adaptive_enabled(metrics)
+            and _int_value(evidence.get("adaptive_selected_count")) > 0
+        ):
+            continue
+
+        baseline = _latest_feature_schema_baseline(iterations[:idx])
+        if _feature_schema_changed(evidence, baseline):
+            return True
+
+    return False
+
+
+def _latest_feature_schema_baseline(
+    iterations: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    for row in reversed(iterations):
+        if (row.get("search_phase") or "") == "adaptive_feature_sweeps":
+            continue
+        evidence = _feature_schema_evidence(_metrics_of(row))
+        if evidence.get("feature_schema_hash") or evidence.get("n_features") is not None:
+            return evidence
+    return {}
+
+
+def _feature_schema_changed(
+    evidence: Dict[str, Any],
+    baseline: Dict[str, Any],
+) -> bool:
+    current_hash = evidence.get("feature_schema_hash")
+    baseline_hash = baseline.get("feature_schema_hash")
+    if current_hash and baseline_hash and current_hash != baseline_hash:
+        return True
+    current_count = evidence.get("n_features")
+    baseline_count = baseline.get("n_features")
+    return (
+        current_count is not None
+        and baseline_count is not None
+        and int(current_count) != int(baseline_count)
+    )
+
+
+def _feature_schema_evidence(metrics: Dict[str, Any]) -> Dict[str, Any]:
+    feature_schema = _dict_at(metrics, "feature_schema")
+    adaptive = _dict_at(metrics, "adaptive_features")
+    schema_adaptive = _dict_at(feature_schema, "adaptive_levels")
+    return {
+        "feature_schema_hash": _first_non_none(
+            metrics.get("feature_schema_hash"),
+            feature_schema.get("feature_schema_hash"),
+            adaptive.get("feature_schema_hash"),
+        ),
+        "n_features": _int_or_none(
+            _first_non_none(
+                metrics.get("n_features"),
+                feature_schema.get("n_features"),
+                adaptive.get("n_features"),
+            )
+        ),
+        "adaptive_selected_count": _int_value(
+            _first_non_none(
+                adaptive.get("selected_count"),
+                schema_adaptive.get("selected_count"),
+            )
+        ),
+    }
+
+
+def _adaptive_enabled(metrics: Dict[str, Any]) -> bool:
+    config = _dict_at(metrics, "config")
+    feature_schema = _dict_at(metrics, "feature_schema")
+    adaptive = _dict_at(metrics, "adaptive_features")
+    schema_adaptive = _dict_at(feature_schema, "adaptive_levels")
+    return _truthy(
+        _first_non_none(
+            adaptive.get("enabled"),
+            schema_adaptive.get("enabled"),
+            config.get("adaptive_levels_enabled"),
+            metrics.get("adaptive_levels_enabled"),
+        )
+    )
 
 
 def _has_promotion_evidence(
@@ -605,6 +716,40 @@ def _has_metric(iteration: Dict[str, Any], *keys: str) -> bool:
     if isinstance(config, dict):
         containers.append(config)
     return any(any(key in container for key in keys) for container in containers)
+
+
+def _dict_at(root: Dict[str, Any], key: str) -> Dict[str, Any]:
+    value = root.get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def _first_non_none(*values: Any) -> Any:
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
+def _int_or_none(value: Any) -> Optional[int]:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _int_value(value: Any, *, default: int = 0) -> int:
+    parsed = _int_or_none(value)
+    return default if parsed is None else parsed
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on", "used"}
+    return bool(value)
 
 
 def _parse_json(raw: Any) -> Any:

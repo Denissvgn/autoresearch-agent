@@ -33,6 +33,7 @@ import pytest
 
 from src.core.consistency_validator import (
     EVIDENCE_ARTIFACT_PHASES,
+    check_adaptive_feature_sweep,
     check_evidence_artifact,
 )
 from src.core.research_phase_plan import build_phase_state
@@ -425,6 +426,170 @@ def test_phase_marked_complete_when_real_seed_trials_present() -> None:
     assert phase_statuses["multi_seed_robustness"] == "completed", (
         "Distinct run_ids must advance multi_seed_robustness to 'completed'"
     )
+
+
+def _adaptive_prior_iters() -> list:
+    """Prior direction iterations that stop at the adaptive sweep phase."""
+    return [
+        _iteration_row(
+            iteration=1,
+            metrics={
+                "primary_metric": 0.62,
+                "all_gates_passed": True,
+                "feature_schema": {
+                    "n_features": 90,
+                    "feature_schema_hash": "schema-tabular",
+                },
+                "config": {
+                    "direction_pct_threshold": 0.05,
+                    "tabular_sweep_variant": "baseline",
+                },
+            },
+            search_phase="tabular_sweeps",
+        ),
+        _iteration_row(
+            iteration=2,
+            metrics={
+                "primary_metric": 0.63,
+                "all_gates_passed": True,
+                "n_features": 90,
+                "feature_schema_hash": "schema-tabular",
+                "config": {"direction_pct_threshold": 0.06},
+            },
+            search_phase="tabular_sweeps",
+        ),
+    ]
+
+
+def test_adaptive_phase_not_completed_when_requested_flag_not_active() -> None:
+    session = _session_row()
+    iterations = _adaptive_prior_iters()
+    iterations.append(
+        _iteration_row(
+            iteration=3,
+            metrics={
+                "primary_metric": 0.64,
+                "all_gates_passed": True,
+                "adaptive_features": {
+                    "requested": True,
+                    "enabled": False,
+                    "version": "adaptive_levels.v1",
+                    "selected_count": 0,
+                    "n_features": 90,
+                    "feature_schema_hash": "schema-tabular",
+                    "noop_reason": "adaptive_flag_not_applied",
+                },
+                "adaptive_feature_noop_reason": "adaptive_flag_not_applied",
+            },
+            search_phase="adaptive_feature_sweeps",
+        )
+    )
+
+    state = build_phase_state(session=session, iterations=iterations)
+    phase_statuses = {p["id"]: p["status"] for p in state["phases"]}
+
+    assert phase_statuses["adaptive_feature_sweeps"] == "in_progress"
+    assert state["current_phase"] == "adaptive_feature_sweeps"
+
+
+def test_adaptive_feature_sweep_check_blocks_requested_but_inactive() -> None:
+    blocker = check_adaptive_feature_sweep(
+        {
+            "config": {"adaptive_levels_enabled": True},
+            "adaptive_features": {
+                "requested": True,
+                "enabled": False,
+                "version": "adaptive_levels.v1",
+                "selected_count": 0,
+            },
+        }
+    )
+
+    assert blocker == "adaptive_feature_requested_but_inactive"
+
+
+def test_adaptive_phase_completed_when_active_features_change_schema() -> None:
+    session = _session_row()
+    iterations = _adaptive_prior_iters()
+    iterations.append(
+        _iteration_row(
+            iteration=3,
+            metrics={
+                "primary_metric": 0.65,
+                "all_gates_passed": True,
+                "n_features": 97,
+                "feature_schema_hash": "schema-adaptive",
+                "adaptive_features": {
+                    "requested": True,
+                    "enabled": True,
+                    "version": "adaptive_levels.v1",
+                    "selected_count": 7,
+                    "n_features": 97,
+                    "feature_schema_hash": "schema-adaptive",
+                },
+            },
+            search_phase="adaptive_feature_sweeps",
+        )
+    )
+
+    state = build_phase_state(session=session, iterations=iterations)
+    phase_statuses = {p["id"]: p["status"] for p in state["phases"]}
+
+    assert phase_statuses["adaptive_feature_sweeps"] == "completed"
+    assert state["current_phase"] == "tsfm_sweeps"
+
+
+def test_adaptive_phase_accepts_explicit_non_bug_noop_reason() -> None:
+    session = _session_row()
+    iterations = _adaptive_prior_iters()
+    iterations.append(
+        _iteration_row(
+            iteration=3,
+            metrics={
+                "primary_metric": 0.64,
+                "all_gates_passed": True,
+                "adaptive_feature_noop_reason": "adaptive_feature_schema_unchanged",
+                "adaptive_features": {
+                    "requested": True,
+                    "enabled": True,
+                    "version": "adaptive_levels.v1",
+                    "selected_count": 0,
+                    "n_features": 90,
+                    "feature_schema_hash": "schema-tabular",
+                    "noop_reason": "adaptive_feature_schema_unchanged",
+                },
+            },
+            search_phase="adaptive_feature_sweeps",
+        )
+    )
+
+    state = build_phase_state(session=session, iterations=iterations)
+    phase_statuses = {p["id"]: p["status"] for p in state["phases"]}
+
+    assert phase_statuses["adaptive_feature_sweeps"] == "completed"
+    assert state["current_phase"] == "tsfm_sweeps"
+
+
+def test_adaptive_phase_not_completed_on_version_only_evidence() -> None:
+    session = _session_row()
+    iterations = _adaptive_prior_iters()
+    iterations.append(
+        _iteration_row(
+            iteration=3,
+            metrics={
+                "primary_metric": 0.64,
+                "all_gates_passed": True,
+                "adaptive_feature_version": "adaptive_levels.v1",
+            },
+            search_phase="adaptive_feature_sweeps",
+        )
+    )
+
+    state = build_phase_state(session=session, iterations=iterations)
+    phase_statuses = {p["id"]: p["status"] for p in state["phases"]}
+
+    assert phase_statuses["adaptive_feature_sweeps"] == "in_progress"
+    assert state["current_phase"] == "adaptive_feature_sweeps"
 
 
 def test_inference_parity_not_completed_when_run_id_from_prior_phase() -> None:

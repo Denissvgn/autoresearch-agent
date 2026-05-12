@@ -41,6 +41,7 @@ _NESTED_RESULT_KEYS = (
     "model_roster",
     "feature_schema",
     "feature_provenance",
+    "adaptive_features",
 )
 
 _TOP_LEVEL_RESULT_KEYS = (
@@ -60,6 +61,8 @@ _TOP_LEVEL_RESULT_KEYS = (
     "dataset_hash",
     "adaptive_levels_enabled",
     "adaptive_levels_version",
+    "adaptive_feature_version",
+    "adaptive_feature_noop_reason",
     "mlflow_logging_status",
     "mlflow_setup_error",
 )
