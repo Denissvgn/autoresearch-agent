@@ -23,6 +23,10 @@ function formatValue(v: unknown): string {
   return String(v);
 }
 
+function trainingGatesPassed(iteration: Iteration): boolean {
+  return iteration.training_gates_passed ?? iteration.all_gates_passed;
+}
+
 export default function IterationsTable({ iterations, bestIteration }: Props) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
@@ -47,7 +51,7 @@ export default function IterationsTable({ iterations, bestIteration }: Props) {
             <th className="py-2 px-3">#</th>
             <th className="py-2 px-3">Metric</th>
             <th className="py-2 px-3">Value</th>
-            <th className="py-2 px-3">Gates</th>
+            <th className="py-2 px-3">Training Gates</th>
             <th className="py-2 px-3">Decision</th>
             <th className="py-2 px-3">Duration</th>
             <th className="py-2 px-3">Time</th>
@@ -79,7 +83,7 @@ export default function IterationsTable({ iterations, bestIteration }: Props) {
                     {it.primary_metric != null ? it.primary_metric.toFixed(4) : '—'}
                   </td>
                   <td className="py-2 px-3">
-                    {it.all_gates_passed ? (
+                    {trainingGatesPassed(it) ? (
                       <span className="text-green-400">✓</span>
                     ) : (
                       <span className="text-red-400">✗</span>

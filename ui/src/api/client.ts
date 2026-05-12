@@ -48,7 +48,9 @@ export interface Iteration {
   iteration: number;
   primary_metric: number | null;
   metric_name: string;
+  training_gates_passed?: boolean;
   all_gates_passed: boolean;
+  consistency_report_passed?: boolean;
   decision: string;
   config_snapshot: string | null;
   metrics_json: string | null;
@@ -136,7 +138,10 @@ export interface PromotionPreview {
   new_config: string;
   current_config: string | null;
   best_metric?: number | null;
+  training_gates_passed?: boolean;
   gates_passed?: boolean;
+  development_gate_bundle_passed?: boolean;
+  consistency_report_passed?: boolean;
   gate_bundle_evaluation?: PromotionGateEvaluation | null;
   consistency_report?: ConsistencyReport | null;
   development_promotion_metadata?: Record<string, unknown> | null;
@@ -292,6 +297,7 @@ export interface ProductionCandidate {
   iteration: number;
   primary_metric: number | null;
   metric_name: string | null;
+  training_gates_passed?: boolean;
   all_gates_passed: boolean;
   decision?: string | null;
   search_phase?: string | null;

@@ -6,6 +6,7 @@ import json
 from typing import Any, Iterable, List, Mapping, Optional
 
 from src.core.consistency_validator import parse_consistency_report
+from src.core.gate_status import training_gates_passed_from_iteration
 
 ITERATION_CONTEXT_DIGEST_MARKER = "[system] Iteration context digest"
 
@@ -92,7 +93,7 @@ def _best_line(iterations: List[Mapping[str, Any]]) -> str:
     return (
         f"iteration {best.get('iteration', '?')} "
         f"{best.get('metric_name') or 'metric'}={_fmt(_number(best.get('primary_metric')))} "
-        f"gates={_yes_no(best.get('all_gates_passed'))} "
+        f"training_gates={_yes_no(training_gates_passed_from_iteration(best))} "
         f"decision={best.get('decision') or '?'}"
     )
 
@@ -103,7 +104,7 @@ def _attempt_line(row: Mapping[str, Any]) -> str:
     parts = [
         f"#{row.get('iteration', '?')}",
         f"metric={_fmt(_number(row.get('primary_metric')))}",
-        f"gates={_yes_no(row.get('all_gates_passed'))}",
+        f"training_gates={_yes_no(training_gates_passed_from_iteration(row))}",
         f"decision={row.get('decision') or '?'}",
         f"status={status}",
     ]
@@ -191,7 +192,7 @@ def _next_guidance(iterations: List[Mapping[str, Any]]) -> str:
     blockers = _row_blockers(latest)
     if blockers:
         return "address the latest blockers before treating the candidate as promotable."
-    if latest.get("all_gates_passed"):
+    if training_gates_passed_from_iteration(latest):
         return "compare against best metric and collect promotion evidence instead of repeating the same trial."
     return "adjust one bounded tuning dimension and explain the expected metric impact."
 

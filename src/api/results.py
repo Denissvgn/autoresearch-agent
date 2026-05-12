@@ -15,6 +15,7 @@ from src.core.consistency_validator import (
     build_consistency_report,
     parse_consistency_report,
 )
+from src.core.gate_status import training_gates_passed_from
 from src.core.log_writer import AgentLogWriter, _format_entry
 from src.core.research_state import build_research_state
 
@@ -110,6 +111,12 @@ def _enrich_iteration(row: Dict[str, Any], model_type: str) -> Dict[str, Any]:
         except (json.JSONDecodeError, TypeError):
             pass
     enriched["metrics"] = metrics
+    training_gates_passed = training_gates_passed_from(
+        metrics,
+        default=bool(row.get("all_gates_passed")),
+    )
+    enriched["training_gates_passed"] = training_gates_passed
+    enriched["all_gates_passed"] = training_gates_passed
 
     raw_snapshot = row.get("attempt_snapshot_json")
     attempt_snapshot: Dict[str, Any] = {}
@@ -188,6 +195,9 @@ def _enrich_iteration(row: Dict[str, Any], model_type: str) -> Dict[str, Any]:
             attempt_snapshot=attempt_snapshot,
         )
     enriched["consistency_report"] = consistency_report
+    enriched["consistency_report_passed"] = bool(
+        consistency_report.get("passed")
+    )
 
     # Resolve mlflow_run_id: column first, then metrics_json
     run_id = row.get("mlflow_run_id") or metrics.get("mlflow_run_id") or ""
@@ -492,7 +502,7 @@ async def get_iteration(research_id: str, iteration_num: int):
 
 @router.get("/research/{research_id}/best")
 async def get_best_iteration(research_id: str):
-    """Best iteration (highest primary metric with gates passed)."""
+    """Best iteration (highest primary metric with training gates passed)."""
     _, session, _ = await _resolve_result_context(research_id)
     if not session:
         raise HTTPException(status_code=404, detail="Phase session not found yet")
@@ -500,7 +510,10 @@ async def get_best_iteration(research_id: str):
     if not best:
         raise HTTPException(
             status_code=404,
-            detail="No winning iteration found (no iteration with all gates passed)",
+            detail=(
+                "No winning iteration found "
+                "(no iteration with training gates passed)"
+            ),
         )
     return _enrich_iteration(best, session.get("model_type", ""))
 

@@ -8,6 +8,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Optional, Set
 
+from src.core.gate_status import training_gates_passed_from
+
 logger = logging.getLogger(__name__)
 
 # AR-5: phases that require artifact-presence validation before marking complete.
@@ -53,7 +55,7 @@ def build_consistency_report(
 
     # A candidate is "promotable" (eligible for hard consistency blockers) only
     # when the agent has explicitly nominated it as a finalist or promotion
-    # candidate, OR when all_gates_passed is set AND late-phase evidence is
+    # candidate, OR when training gates passed AND late-phase evidence is
     # already present (calibration/replay/inference data from later research
     # phases).  Early tabular sweeps that pass primary gates alone must NOT
     # trigger hard blockers — those checks are meaningful only for finalists
@@ -71,7 +73,7 @@ def build_consistency_report(
     promotable = bool(
         metrics.get("finalist")
         or metrics.get("promotion_candidate")
-        or (metrics.get("all_gates_passed") and _has_late_phase_evidence)
+        or (training_gates_passed_from(metrics) and _has_late_phase_evidence)
     )
 
     add(

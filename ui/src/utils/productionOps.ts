@@ -29,7 +29,9 @@ interface ProductionOperationsShape {
 }
 
 const BLOCKER_MESSAGES: Record<string, string> = {
-  candidate_gates_not_passed: 'Candidate gates have not passed.',
+  candidate_gates_not_passed: 'Candidate training gates have not passed.',
+  candidate_training_gates_not_passed: 'Candidate training gates have not passed.',
+  best_iteration_failed_training_gates: 'Best iteration training gates have not passed.',
   development_promotion_not_allowed: 'Development promotion gates have not passed.',
   inference_reload_failed: 'Inference reload or parity validation failed.',
   missing_canary_duration: 'Canary validation duration is missing or too short.',

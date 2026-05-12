@@ -42,7 +42,10 @@ function blockerText(preview: PromotionPreview): string[] {
     ?? preview.gate_bundle_evaluation?.blockers
     ?? preview.scoped_promotion_metadata?.blockers
     ?? [];
-  return blockerLabels(gateBlockers);
+  const blockers = preview.training_gates_passed === false
+    ? ['best_iteration_failed_training_gates', ...gateBlockers]
+    : gateBlockers;
+  return blockerLabels(blockers);
 }
 
 export default function PromotionModal({ researchId, operations, onClose }: Props) {

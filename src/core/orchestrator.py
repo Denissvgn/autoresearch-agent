@@ -30,6 +30,10 @@ from src.core.experiment_parser import (
     parse_iteration_marker,
     parse_prepare_output,
 )
+from src.core.gate_status import (
+    normalize_training_gate_aliases,
+    training_gates_passed_from_iteration,
+)
 from src.core.iteration_snapshot import (
     build_iteration_attempt_snapshot,
     build_trial_identity,
@@ -755,6 +759,7 @@ class AgentOrchestrator:
                     f"primary_metric:     {primary:.6f}",
                     f"metric_name:        {metric_name}",
                     f"direction:          higher_is_better",
+                    f"training_gates_passed: {str(passed).lower()}",
                     f"all_gates_passed:   {str(passed).lower()}",
                     "---",
                 ]
@@ -1088,11 +1093,11 @@ class AgentOrchestrator:
             num = it.get("iteration", "?")
             pm = it.get("primary_metric")
             metric_s = f"{pm:.4f}" if pm is not None else "—"
-            gates = "✅" if it.get("all_gates_passed") else "❌"
+            gates = "✅" if training_gates_passed_from_iteration(it) else "❌"
             decision = it.get("decision", "?")
             desc = (it.get("description") or "")[:150]
             iter_summary_lines.append(
-                f"  {num}. metric={metric_s} gates={gates} "
+                f"  {num}. metric={metric_s} training_gates={gates} "
                 f"decision={decision} — {desc}"
             )
         iter_summary = (
@@ -1232,7 +1237,7 @@ class AgentOrchestrator:
             f"scripts/autotuner/rl/prepare.py "
             f"--config {workspace}/train.yaml{quick_flag}\n"
             f"```\n"
-            f"   c. If `all_gates_passed` and composite is best so far, copy to "
+            f"   c. If `training_gates_passed` and composite is best so far, copy to "
             f"`best_train.yaml`\n\n"
             f"6. Take the best validated config. Then refine using the RL "
             f"diagnostic playbook:\n"
@@ -1719,6 +1724,7 @@ class AgentOrchestrator:
             "status": "rejected_duplicate",
             "primary_metric": None,
             "metric_name": None,
+            "training_gates_passed": False,
             "all_gates_passed": False,
             "decision": "discard",
             "description": f"{duplicate_reason} (turn {turn})",
@@ -2273,7 +2279,7 @@ class AgentOrchestrator:
                                 decision = await self._infer_decision(
                                     research_id,
                                     metrics.primary_metric,
-                                    metrics.all_gates_passed,
+                                    metrics.training_gates_passed,
                                 )
                                 marker_from_tool["decision"] = decision
                                 # Attach the pre-captured snapshot so the DB
@@ -2304,11 +2310,11 @@ class AgentOrchestrator:
                                 logger.info(
                                     "Research %s turn %d: auto-detected "
                                     "iteration %d from bash output "
-                                    "(%s=%.4f, gates=%s)",
+                                    "(%s=%.4f, training_gates=%s)",
                                     research_id, turn, iteration_count,
                                     metrics.metric_name,
                                     metrics.primary_metric,
-                                    metrics.all_gates_passed,
+                                    metrics.training_gates_passed,
                                 )
                             elif (
                                 metrics.status in (
@@ -2387,7 +2393,7 @@ class AgentOrchestrator:
                                     decision = await self._infer_decision(
                                         research_id,
                                         metrics.primary_metric,
-                                        metrics.all_gates_passed,
+                                        metrics.training_gates_passed,
                                     )
                                     marker_from_file["decision"] = decision
                                     # Attach snapshot for marker-file path too.
@@ -2415,13 +2421,13 @@ class AgentOrchestrator:
                                     )
                                     turn_recorded_iteration = True
                                     logger.info(
-                                        "Research %s turn %d: auto-detected "
-                                        "iteration %d from marker file "
-                                        "(%s=%.4f, gates=%s)",
+                                    "Research %s turn %d: auto-detected "
+                                    "iteration %d from marker file "
+                                    "(%s=%.4f, training_gates=%s)",
                                         research_id, turn, iteration_count,
                                         metrics.metric_name,
                                         metrics.primary_metric,
-                                        metrics.all_gates_passed,
+                                        metrics.training_gates_passed,
                                     )
                                 elif metrics.status in (
                                     "crash", "timeout", "failed", "error",
@@ -2482,6 +2488,7 @@ class AgentOrchestrator:
                                     "status": failed_status,
                                     "primary_metric": None,
                                     "metric_name": None,
+                                    "training_gates_passed": False,
                                     "all_gates_passed": False,
                                     "decision": "discard",
                                     "description": (
@@ -2739,10 +2746,11 @@ class AgentOrchestrator:
 
             # ── ML-53 Fix 2.4: Auto-promote standalone sessions ──────────
             # When a standalone (non-pipeline) session completes with a
-            # best iteration that passed all gates, automatically call
-            # config_promoter.confirm() to write the winning config and
-            # PATCH the composite in mlflow-service.  This closes the gap
-            # where winning models were "orphaned" after standalone tuning.
+            # best iteration that passed training gates and promotion preview
+            # readiness, call config_promoter.confirm() to write the winning
+            # config and PATCH the composite in mlflow-service. This closes
+            # the gap where promotion-ready models were "orphaned" after
+            # standalone tuning.
             if (
                 final_status == "completed"
                 and not getattr(config, "pipeline_id", None)
@@ -2793,7 +2801,7 @@ class AgentOrchestrator:
         config: ResearchConfig,
         agent_log: AgentLogWriter,
     ) -> None:
-        """Auto-promote the best iteration if it passed all gates.
+        """Auto-promote the best iteration if it is promotion-ready.
 
         Instantiates ConfigPromoter on-demand (not injected into __init__
         to avoid circular dependencies or changing the constructor).
@@ -2817,9 +2825,9 @@ class AgentOrchestrator:
             if not best_record:
                 return
 
-            if not best_record.get("all_gates_passed", False):
+            if not training_gates_passed_from_iteration(best_record):
                 logger.info(
-                    "ML-53: Auto-promote skipped for %s - best iteration %d did not pass all gates",
+                    "ML-53: Auto-promote skipped for %s - best iteration %d did not pass training gates",
                     research_id, best_iter,
                 )
                 return
@@ -3037,13 +3045,13 @@ class AgentOrchestrator:
         self,
         research_id: str,
         primary_metric: Optional[float],
-        all_gates_passed: bool,
+        training_gates_passed: bool,
     ) -> str:
         """Determine keep/improve/discard by comparing against session best.
 
         ML-53: Three-way decision taxonomy:
-        - 'keep'    — gates passed AND metric improved (production-worthy)
-        - 'improve' — gates NOT passed but metric improved (research progress)
+        - 'keep'    — training gates passed AND metric improved
+        - 'improve' — training gates NOT passed but metric improved
         - 'discard' — metric did not improve or is None
         """
         if primary_metric is None:
@@ -3056,7 +3064,7 @@ class AgentOrchestrator:
             primary_metric > best + settings.global_stagnation_epsilon
         )
 
-        if all_gates_passed and metric_improved:
+        if training_gates_passed and metric_improved:
             return "keep"
         elif metric_improved:
             return "improve"
@@ -3083,8 +3091,12 @@ class AgentOrchestrator:
         _cs = marker.get("config_snapshot")
         if isinstance(_cs, (dict, list)):
             marker["config_snapshot"] = json.dumps(_cs, sort_keys=True)
+        training_gates = normalize_training_gate_aliases(
+            marker,
+            logger=logger,
+            context=f"{research_id} iteration {iteration}",
+        )
         primary_metric = marker.get("primary_metric")
-        all_gates = marker.get("all_gates_passed", False)
         decision = marker.get("decision", "unknown")
         description = marker.get("description", "")
         metric_name = marker.get("metric_name", "")
@@ -3182,13 +3194,16 @@ class AgentOrchestrator:
             search_phase=active_phase,
         )
         marker["consistency_report"] = consistency_report
+        marker["consistency_report_passed"] = bool(
+            consistency_report.get("passed")
+        )
 
         await self._store.add_iteration(
             research_id=research_id,
             iteration=iteration,
             primary_metric=primary_metric,
             metric_name=metric_name,
-            all_gates_passed=all_gates,
+            all_gates_passed=training_gates,
             decision=decision,
             description=description,
             config_snapshot=marker.get("config_snapshot"),
@@ -3247,7 +3262,9 @@ class AgentOrchestrator:
             "iteration": iteration,
             "primary_metric": primary_metric,
             "metric_name": metric_name,
-            "all_gates_passed": all_gates,
+            "training_gates_passed": training_gates,
+            "all_gates_passed": training_gates,
+            "consistency_report_passed": bool(consistency_report.get("passed")),
             "decision": decision,
             "description": description,
             "training_time_s": training_time,
@@ -3263,11 +3280,11 @@ class AgentOrchestrator:
             else "None"
         )
         logger.info(
-            "Research %s iteration %d: metric=%s gates=%s decision=%s — %s",
+            "Research %s iteration %d: metric=%s training_gates=%s decision=%s — %s",
             research_id,
             iteration,
             metric_display,
-            all_gates,
+            training_gates,
             decision,
             description,
         )

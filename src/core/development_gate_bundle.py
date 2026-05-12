@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterable
 
 import yaml
 
+from src.core.gate_status import training_gates_passed_from_iteration
 
 DEFAULT_GATE_BUNDLE_RELATIVE_PATH = (
     "reports/direction-tuning/promotion/development_gate_bundle_v1.yaml"
@@ -130,8 +131,7 @@ def evaluate_development_gate_bundle(
         "direction_quality_supported_gates",
         bool(
             gates.get("all_supported_gates_passed")
-            or best_iteration.get("all_gates_passed")
-            or payload.get("all_gates_passed")
+            or training_gates_passed_from_iteration(best_iteration)
         ),
         "direction_quality_gates_failed_or_missing",
         gates,

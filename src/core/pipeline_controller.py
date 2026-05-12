@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from src.config import settings
 from src.core.config_promoter import ConfigPromoter
+from src.core.gate_status import training_gates_passed_from_iteration
 from src.core.results_store import ResultsStore
 from src.ws.events import broadcaster
 
@@ -43,8 +44,11 @@ def _promotion_blockers(
         add((preview.get("gate_bundle_evaluation") or {}).get("blockers"))
         add((preview.get("consistency_report") or {}).get("blockers"))
         add((preview.get("candidate_pool_record") or {}).get("blockers"))
-        if preview.get("gates_passed") is False:
-            add("best_iteration_failed_gates")
+        if (
+            preview.get("training_gates_passed", preview.get("gates_passed"))
+            is False
+        ):
+            add("best_iteration_failed_training_gates")
         if preview.get("promotion_allowed") is False and not blockers:
             add("promotion_not_allowed")
     if error:
@@ -66,7 +70,12 @@ def _promotion_preview_summary(
         "timeframe": preview.get("timeframe"),
         "target_path": preview.get("target_path"),
         "best_metric": preview.get("best_metric"),
+        "training_gates_passed": preview.get("training_gates_passed"),
         "gates_passed": preview.get("gates_passed"),
+        "development_gate_bundle_passed": preview.get(
+            "development_gate_bundle_passed"
+        ),
+        "consistency_report_passed": preview.get("consistency_report_passed"),
         "promotion_allowed": preview.get("promotion_allowed"),
         "config_snapshot_sha256": preview.get("config_snapshot_sha256"),
         "gate_bundle_evaluation": preview.get("gate_bundle_evaluation"),
@@ -267,7 +276,7 @@ class PipelineController:
                 # Wait for sub-session to finish
                 await self._wait_for_session(session_id)
 
-                # Evaluate phase: did any iteration pass all gates?
+                # Evaluate phase: did any iteration pass training gates?
                 phase_passed = await self._evaluate_phase(session_id)
 
                 if phase_passed:
@@ -318,7 +327,7 @@ class PipelineController:
                         completed_phases=json.dumps(completed_phases),
                         completed_at=datetime.now(timezone.utc).isoformat(),
                         error_message=(
-                            f"{phase} phase: no iteration passed all gates"
+                            f"{phase} phase: no iteration passed training gates"
                         ),
                     )
                     await broadcaster.broadcast({
@@ -407,9 +416,9 @@ class PipelineController:
             await asyncio.sleep(10)
 
     async def _evaluate_phase(self, session_id: str) -> bool:
-        """Check if any iteration of a phase passed all gates."""
+        """Check if any iteration of a phase passed training gates."""
         iterations = await self._store.get_iterations(session_id)
-        return any(it.get("all_gates_passed") for it in iterations)
+        return any(training_gates_passed_from_iteration(it) for it in iterations)
 
     async def _promote_phase(
         self, session_id: str, phase: str,

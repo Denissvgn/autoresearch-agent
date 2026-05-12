@@ -27,6 +27,7 @@ from src.core.development_inference_validation import (
     build_development_inference_validation,
 )
 from src.core.development_signal_health import build_development_signal_health
+from src.core.gate_status import training_gates_passed_from_iteration
 from src.core.results_store import ResultsStore
 
 logger = logging.getLogger(__name__)
@@ -133,6 +134,9 @@ class ConfigPromoter:
             previous_yaml = Path(target_path).read_text(encoding="utf-8")
 
         metrics_payload = self._best_iteration_payload(best)
+        training_gates_passed = training_gates_passed_from_iteration(best)
+        metrics_payload["training_gates_passed"] = training_gates_passed
+        metrics_payload["all_gates_passed"] = training_gates_passed
         attempt_snapshot = self._attempt_snapshot_payload(best, metrics_payload)
         artifact_hash = (
             attempt_snapshot.get("artifact_hash")
@@ -165,10 +169,7 @@ class ConfigPromoter:
             iteration=best["iteration"],
             model_type=model_type,
             config_snapshot=best_yaml,
-            metrics_payload={
-                **metrics_payload,
-                "all_gates_passed": bool(best.get("all_gates_passed")),
-            },
+            metrics_payload=metrics_payload,
             attempt_snapshot=attempt_snapshot,
             preflight={
                 "rollback_readiness": rollback_readiness,
@@ -196,10 +197,14 @@ class ConfigPromoter:
                 consistency_report=consistency_report,
             )
         )
+        development_gate_bundle_passed = bool(
+            gate_bundle_evaluation.get("passed", False)
+        )
+        consistency_report_passed = bool(consistency_report.get("passed", False))
         promotion_allowed = (
-            bool(best["all_gates_passed"])
-            and gate_bundle_evaluation.get("passed", False)
-            and consistency_report.get("passed", False)
+            training_gates_passed
+            and development_gate_bundle_passed
+            and consistency_report_passed
         )
         candidate_pool_record = {
             "source": "autoresearch.iterations",
@@ -229,7 +234,10 @@ class ConfigPromoter:
             target_path=target_path,
             best_iteration=best,
             metrics_payload=metrics_payload,
-            gates_passed=bool(best["all_gates_passed"]),
+            gates_passed=training_gates_passed,
+            training_gates_passed=training_gates_passed,
+            development_gate_bundle_passed=development_gate_bundle_passed,
+            consistency_report_passed=consistency_report_passed,
             gate_bundle_evaluation=gate_bundle_evaluation,
             candidate_pool_record=candidate_pool_record,
             promotion_allowed=promotion_allowed,
@@ -253,7 +261,10 @@ class ConfigPromoter:
             "config_snapshot_sha256": config_snapshot_sha256,
             "current_config": previous_yaml,
             "best_metric": best["primary_metric"],
-            "gates_passed": bool(best["all_gates_passed"]),
+            "training_gates_passed": training_gates_passed,
+            "gates_passed": training_gates_passed,
+            "development_gate_bundle_passed": development_gate_bundle_passed,
+            "consistency_report_passed": consistency_report_passed,
             "gate_bundle_evaluation": gate_bundle_evaluation,
             "candidate_pool_record": candidate_pool_record,
             "best_candidate_ownership": development_promotion_metadata[
@@ -311,9 +322,9 @@ class ConfigPromoter:
 
         preview = await self.preview(research_id)
 
-        if not preview["gates_passed"]:
+        if not preview["training_gates_passed"]:
             raise ValueError(
-                "Cannot promote: best iteration did not pass all gates"
+                "Cannot promote: best iteration did not pass training gates"
             )
         gate_eval = preview.get("gate_bundle_evaluation") or {}
         if not gate_eval.get("passed", False):
@@ -535,9 +546,9 @@ class ConfigPromoter:
             scope=scope,
             approval=approval,
         )
-        if not preview["gates_passed"]:
+        if not preview["training_gates_passed"]:
             raise ValueError(
-                "Cannot promote: best iteration did not pass all gates"
+                "Cannot promote: best iteration did not pass training gates"
             )
         gate_eval = preview.get("gate_bundle_evaluation") or {}
         if not gate_eval.get("passed", False):
@@ -1092,6 +1103,9 @@ class ConfigPromoter:
         best_iteration: Dict[str, Any],
         metrics_payload: Dict[str, Any],
         gates_passed: bool,
+        training_gates_passed: bool,
+        development_gate_bundle_passed: bool,
+        consistency_report_passed: bool,
         gate_bundle_evaluation: Dict[str, Any],
         candidate_pool_record: Dict[str, Any],
         promotion_allowed: bool,
@@ -1147,7 +1161,10 @@ class ConfigPromoter:
             "target_path": target_path,
             "best_metric": best_iteration.get("primary_metric"),
             "metric_name": best_iteration.get("metric_name"),
+            "training_gates_passed": training_gates_passed,
             "gates_passed": gates_passed,
+            "development_gate_bundle_passed": development_gate_bundle_passed,
+            "consistency_report_passed": consistency_report_passed,
             "promotion_allowed": promotion_allowed,
             "live_production_promotion_allowed": False,
             "live_production_promotion_requested": self._live_production_requested(
@@ -2068,6 +2085,9 @@ class ConfigPromoter:
         inference_reload_validation: Dict[str, Any],
     ) -> Dict[str, Any]:
         payload = self._best_iteration_payload(best_iteration)
+        training_gates_passed = training_gates_passed_from_iteration(best_iteration)
+        payload["training_gates_passed"] = training_gates_passed
+        payload["all_gates_passed"] = training_gates_passed
         payload["rollback_readiness"] = rollback_readiness
         payload["smoke_validation"] = smoke_validation
         payload["signal_health"] = signal_health

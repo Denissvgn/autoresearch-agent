@@ -236,6 +236,31 @@ async def test_auto_promote_uses_preview_before_confirm(
 
 
 @pytest.mark.asyncio
+async def test_auto_promote_uses_training_gate_alias_before_preview(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = FakeStore(phase_state=_complete_until_promotion_state())
+    store.iterations[0]["all_gates_passed"] = True
+    store.iterations[0]["metrics_json"] = json.dumps(
+        {"training_gates_passed": False, "all_gates_passed": True}
+    )
+    calls = _install_promoter(
+        monkeypatch,
+        preview_payload={"promotion_allowed": True},
+    )
+    _install_broadcaster(monkeypatch)
+    agent_log = FakeAgentLog()
+
+    orchestrator = AgentOrchestrator(store)  # type: ignore[arg-type]
+    await orchestrator._try_auto_promote("res_auto", _config(), agent_log)  # noqa: SLF001
+
+    assert calls["preview"] == []
+    assert calls["confirm"] == []
+    assert store.audit_events == []
+    assert agent_log.entries == []
+
+
+@pytest.mark.asyncio
 async def test_auto_promote_confirms_only_when_preview_allowed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

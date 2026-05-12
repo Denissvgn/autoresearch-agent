@@ -15,6 +15,10 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Sequence
 
 import aiosqlite
 
+from src.core.gate_status import (
+    consistency_report_passed,
+    normalize_training_gate_aliases,
+)
 from src.core.observability import (
     OBSERVABILITY_SCHEMA_VERSION,
     alert_suggestions,
@@ -277,7 +281,14 @@ def _json_list(raw: Any) -> List[Any]:
 def _truthy_status(payload: Dict[str, Any]) -> bool:
     if not payload:
         return False
-    for key in ("passed", "pass", "valid", "complete", "all_gates_passed"):
+    for key in (
+        "passed",
+        "pass",
+        "valid",
+        "complete",
+        "training_gates_passed",
+        "all_gates_passed",
+    ):
         value = payload.get(key)
         if value is True:
             return True
@@ -349,6 +360,44 @@ def _value_rows(values: Dict[str, float], key: str) -> List[Dict[str, Any]]:
         {key: label, "value": value}
         for label, value in sorted(values.items())
     ]
+
+
+def _normalized_iteration_metrics_json(
+    *,
+    metrics_json: Optional[str],
+    all_gates_passed: Optional[bool],
+    consistency_report_json: Optional[str],
+    context: str,
+) -> tuple[Optional[str], Optional[bool]]:
+    """Normalize additive gate aliases inside an iteration metrics payload."""
+    metrics_payload = _json_object(metrics_json)
+    should_write_metrics = bool(metrics_payload)
+
+    if (
+        all_gates_passed is not None
+        or "training_gates_passed" in metrics_payload
+        or "all_gates_passed" in metrics_payload
+    ):
+        all_gates_passed = normalize_training_gate_aliases(
+            metrics_payload,
+            legacy_value=all_gates_passed,
+            logger=logger,
+            context=context,
+        )
+        should_write_metrics = True
+
+    report_passed = consistency_report_passed(consistency_report_json)
+    if report_passed is None:
+        report_passed = consistency_report_passed(
+            metrics_payload.get("consistency_report")
+        )
+    if report_passed is not None:
+        metrics_payload["consistency_report_passed"] = report_passed
+        should_write_metrics = True
+
+    if should_write_metrics:
+        return json.dumps(metrics_payload, sort_keys=True), all_gates_passed
+    return metrics_json, all_gates_passed
 
 
 async def _add_column_if_missing(
@@ -1362,6 +1411,12 @@ class ResultsStore:
         # this iteration ran. The `iterations.search_phase` column has existed
         # since v1 but was never written, which left phase-state derivation
         # blind to actual exploration coverage.
+        metrics_json, all_gates_passed = _normalized_iteration_metrics_json(
+            metrics_json=metrics_json,
+            all_gates_passed=all_gates_passed,
+            consistency_report_json=consistency_report_json,
+            context=f"{research_id} iteration {iteration}",
+        )
         now = datetime.now(timezone.utc).isoformat()
         async with self.connection() as db:
             await db.execute(
@@ -1470,12 +1525,19 @@ class ResultsStore:
     ) -> None:
         """Overwrite an existing iteration with richer data from an explicit
         ITERATION_RESULT marker.  Only updates non-None fields from marker."""
+        marker = dict(marker)
+        if "training_gates_passed" in marker or "all_gates_passed" in marker:
+            normalize_training_gate_aliases(
+                marker,
+                logger=logger,
+                context=f"{research_id} iteration {iteration} update",
+            )
         fields: Dict[str, Any] = {}
         if "primary_metric" in marker:
             fields["primary_metric"] = marker["primary_metric"]
         if "metric_name" in marker:
             fields["metric_name"] = marker["metric_name"]
-        if "all_gates_passed" in marker:
+        if "training_gates_passed" in marker or "all_gates_passed" in marker:
             v = marker["all_gates_passed"]
             fields["all_gates_passed"] = int(v) if isinstance(v, bool) else v
         if "decision" in marker:
@@ -1514,8 +1576,14 @@ class ResultsStore:
             fields["consistency_report_json"] = json.dumps(
                 marker["consistency_report"], sort_keys=True,
             )
+            report_passed = consistency_report_passed(marker["consistency_report"])
+            if report_passed is not None:
+                marker["consistency_report_passed"] = report_passed
         if "consistency_report_json" in marker:
             fields["consistency_report_json"] = marker["consistency_report_json"]
+            report_passed = consistency_report_passed(marker["consistency_report_json"])
+            if report_passed is not None:
+                marker["consistency_report_passed"] = report_passed
         if "search_phase" in marker:
             fields["search_phase"] = marker["search_phase"]
         if marker:

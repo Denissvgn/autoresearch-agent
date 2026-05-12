@@ -40,6 +40,10 @@ function detectModelType(iterations: Iteration[]): string {
   return '';
 }
 
+function trainingGatesPassed(iteration: Iteration): boolean {
+  return iteration.training_gates_passed ?? iteration.all_gates_passed;
+}
+
 export default function MetricsChart({ iterations }: Props) {
   const modelType = detectModelType(iterations);
   const secondaryDefs = CHART_METRICS[modelType] || [];
@@ -50,7 +54,7 @@ export default function MetricsChart({ iterations }: Props) {
       iteration: it.iteration,
       metric: it.primary_metric,
       name: it.metric_name,
-      passed: it.all_gates_passed,
+      passed: trainingGatesPassed(it),
     };
     for (const def of secondaryDefs) {
       const sm = it.secondary_metrics?.[def.key];

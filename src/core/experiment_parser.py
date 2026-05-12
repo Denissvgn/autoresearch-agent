@@ -8,6 +8,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from src.core.gate_status import coerce_bool, normalize_training_gate_aliases
+
 logger = logging.getLogger(__name__)
 
 # prepare.py outputs a --- delimited block of key: value pairs
@@ -23,6 +25,7 @@ class IterationMetrics:
     primary_metric: Optional[float] = None
     metric_name: Optional[str] = None
     direction: str = "higher_is_better"
+    training_gates_passed: bool = False
     all_gates_passed: bool = False
     training_time_s: Optional[float] = None
     extra: Dict[str, Any] = field(default_factory=dict)
@@ -33,6 +36,7 @@ class IterationMetrics:
             "primary_metric": self.primary_metric,
             "metric_name": self.metric_name,
             "direction": self.direction,
+            "training_gates_passed": self.training_gates_passed,
             "all_gates_passed": self.all_gates_passed,
             "training_time_s": self.training_time_s,
             **self.extra,
@@ -93,11 +97,14 @@ def parse_prepare_output(stdout: str) -> IterationMetrics:
         primary_metric:     0.586800
         metric_name:        walkforward_mean_auc
         direction:          higher_is_better
+        training_gates_passed: true
         all_gates_passed:   true
         training_time_s:    342.1
         ...
     """
     metrics = IterationMetrics()
+    saw_training_gates = False
+    saw_legacy_gates = False
 
     # Find the --- delimited section
     in_block = False
@@ -128,8 +135,12 @@ def parse_prepare_output(stdout: str) -> IterationMetrics:
             metrics.metric_name = value
         elif key == "direction":
             metrics.direction = value
+        elif key == "training_gates_passed":
+            metrics.training_gates_passed = coerce_bool(value)
+            saw_training_gates = True
         elif key == "all_gates_passed":
-            metrics.all_gates_passed = value.lower() in ("true", "1", "yes")
+            metrics.all_gates_passed = coerce_bool(value)
+            saw_legacy_gates = True
         elif key == "training_time_s":
             try:
                 metrics.training_time_s = float(value)
@@ -155,6 +166,19 @@ def parse_prepare_output(stdout: str) -> IterationMetrics:
             except ValueError:
                 metrics.extra[key] = value
 
+    if saw_training_gates:
+        if saw_legacy_gates and metrics.all_gates_passed != metrics.training_gates_passed:
+            logger.warning(
+                "Conflicting prepare.py gate aliases: "
+                "training_gates_passed=%s all_gates_passed=%s; "
+                "using training_gates_passed",
+                metrics.training_gates_passed,
+                metrics.all_gates_passed,
+            )
+        metrics.all_gates_passed = metrics.training_gates_passed
+    elif saw_legacy_gates:
+        metrics.training_gates_passed = metrics.all_gates_passed
+
     return metrics
 
 
@@ -169,9 +193,22 @@ def parse_iteration_marker(text: str) -> Optional[Dict[str, Any]]:
         if stripped.startswith(_ITERATION_MARKER):
             json_str = stripped[len(_ITERATION_MARKER) :].strip()
             try:
-                return json.loads(json_str)
+                payload = json.loads(json_str)
             except json.JSONDecodeError:
                 logger.warning("Failed to parse iteration marker JSON: %s", json_str)
+                continue
+            if isinstance(payload, dict):
+                if (
+                    "training_gates_passed" in payload
+                    or "all_gates_passed" in payload
+                ):
+                    normalize_training_gate_aliases(
+                        payload,
+                        logger=logger,
+                        context="ITERATION_RESULT",
+                    )
+                return payload
+            logger.warning("Iteration marker JSON was not an object: %s", json_str)
     return None
 
 

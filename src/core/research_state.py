@@ -6,6 +6,10 @@ import json
 from typing import Any, Dict, Iterable, List, Optional
 
 from src.core.consistency_validator import parse_consistency_report
+from src.core.gate_status import (
+    training_gates_passed_from,
+    training_gates_passed_from_iteration,
+)
 from src.core.observability import alert_suggestions
 from src.core.research_phase_plan import build_phase_state
 
@@ -134,6 +138,10 @@ def _candidate_summary(row: Dict[str, Any]) -> Dict[str, Any]:
     metrics = _parse_json(row.get("metrics_json")) or {}
     snapshot = _parse_json(row.get("attempt_snapshot_json")) or metrics.get("attempt_snapshot") or {}
     report = parse_consistency_report(row.get("consistency_report_json"))
+    training_gates_passed = training_gates_passed_from(
+        metrics,
+        default=bool(row.get("all_gates_passed")),
+    )
     return {
         "iteration": row.get("iteration"),
         "iteration_row_id": row.get("id"),
@@ -141,7 +149,8 @@ def _candidate_summary(row: Dict[str, Any]) -> Dict[str, Any]:
         "metric_name": row.get("metric_name"),
         "decision": row.get("decision"),
         "status": metrics.get("status"),
-        "all_gates_passed": bool(row.get("all_gates_passed")),
+        "training_gates_passed": training_gates_passed,
+        "all_gates_passed": training_gates_passed,
         "mlflow_run_id": row.get("mlflow_run_id") or metrics.get("mlflow_run_id"),
         "artifact_hash": snapshot.get("artifact_hash") or metrics.get("artifact_hash"),
         "rl_profit_score": _rl_profit_score(metrics),
@@ -164,6 +173,7 @@ def _candidate_summary(row: Dict[str, Any]) -> Dict[str, Any]:
         ),
         "duplicate_of": _duplicate_of(row, metrics),
         "consistency_passed": report.get("passed") if report else None,
+        "consistency_report_passed": report.get("passed") if report else None,
         "gate_failure_reasons": (report.get("blockers") if report else []),
         "search_phase": row.get("search_phase") or metrics.get("search_phase"),
     }
@@ -616,7 +626,10 @@ def _best_candidate_row(iterations: List[Dict[str, Any]]) -> Optional[Dict[str, 
     if not iterations:
         return None
     candidates = [row for row in iterations if row.get("primary_metric") is not None]
-    passing = [row for row in candidates if row.get("all_gates_passed")]
+    passing = [
+        row for row in candidates
+        if training_gates_passed_from_iteration(row)
+    ]
     pool = passing or candidates
     if pool:
         return max(pool, key=lambda row: row.get("primary_metric") or float("-inf"))
@@ -630,11 +643,16 @@ def _operations_candidate(
 ) -> Optional[Dict[str, Any]]:
     if not row:
         return None
+    training_gates_passed = training_gates_passed_from(
+        metrics,
+        default=bool(row.get("all_gates_passed")),
+    )
     return {
         "iteration": row.get("iteration"),
         "primary_metric": row.get("primary_metric"),
         "metric_name": row.get("metric_name"),
-        "all_gates_passed": bool(row.get("all_gates_passed")),
+        "training_gates_passed": training_gates_passed,
+        "all_gates_passed": training_gates_passed,
         "decision": row.get("decision"),
         "search_phase": row.get("search_phase") or metrics.get("search_phase"),
         "config_snapshot_sha256": snapshot.get("config_snapshot_sha256"),
@@ -721,12 +739,12 @@ def _promotion_scope_status(
             if promotion_blockers:
                 status = "blocked"
                 blockers = list(promotion_blockers)
-            elif best_row and best_row.get("all_gates_passed"):
+            elif best_row and training_gates_passed_from_iteration(best_row):
                 status = "ready"
                 ready = True
             elif best_row:
                 status = "blocked"
-                blockers = ["candidate_gates_not_passed"]
+                blockers = ["candidate_training_gates_not_passed"]
             else:
                 status = "pending"
         else:
