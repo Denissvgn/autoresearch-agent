@@ -2819,7 +2819,7 @@ class AgentOrchestrator:
 
             if not best_record.get("all_gates_passed", False):
                 logger.info(
-                    "ML-53: Auto-promote skipped for %s — best iteration %d did not pass all gates",
+                    "ML-53: Auto-promote skipped for %s - best iteration %d did not pass all gates",
                     research_id, best_iter,
                 )
                 return
@@ -2828,6 +2828,62 @@ class AgentOrchestrator:
             from src.core.config_promoter import ConfigPromoter
 
             promoter = ConfigPromoter(self._store)
+            phase_state = await self._auto_promotion_phase_state(
+                research_id=research_id,
+                session=session,
+                iterations=iterations,
+            )
+            incomplete_phases = [
+                phase
+                for phase in incomplete_phase_ids(phase_state)
+                if phase != "promotion_proposal"
+            ]
+            if incomplete_phases:
+                await self._emit_auto_promotion_skipped(
+                    research_id=research_id,
+                    config=config,
+                    agent_log=agent_log,
+                    reason="incomplete_research_phases",
+                    iteration=best_iter,
+                    terminal_reason=session.get("terminal_reason"),
+                    incomplete_phases=incomplete_phases,
+                    promotion_allowed=False,
+                    blockers=[],
+                )
+                return
+
+            try:
+                preview = await promoter.preview(research_id)
+            except ValueError as exc:
+                await self._emit_auto_promotion_skipped(
+                    research_id=research_id,
+                    config=config,
+                    agent_log=agent_log,
+                    reason="promotion_preview_failed",
+                    iteration=best_iter,
+                    terminal_reason=session.get("terminal_reason"),
+                    incomplete_phases=[],
+                    promotion_allowed=False,
+                    blockers=[str(exc)],
+                )
+                return
+
+            promotion_allowed = bool(preview.get("promotion_allowed"))
+            if not promotion_allowed:
+                blockers = self._auto_promotion_preview_blockers(preview)
+                await self._emit_auto_promotion_skipped(
+                    research_id=research_id,
+                    config=config,
+                    agent_log=agent_log,
+                    reason="promotion_preview_blocked",
+                    iteration=best_iter,
+                    terminal_reason=session.get("terminal_reason"),
+                    incomplete_phases=[],
+                    promotion_allowed=False,
+                    blockers=blockers,
+                )
+                return
+
             result = await promoter.confirm(research_id)
             logger.info(
                 "ML-53: Auto-promoted development session %s (iter=%d): %s",
@@ -2855,6 +2911,127 @@ class AgentOrchestrator:
                 f"Auto-promotion failed: {exc}",
             )
     # ── end ML-53 Fix 2.4 helper ─────────────────────────────────────────
+
+    async def _auto_promotion_phase_state(
+        self,
+        *,
+        research_id: str,
+        session: Dict[str, Any],
+        iterations: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Return phase state for auto-promotion without mutating the session."""
+        raw_state = session.get("phase_state_json")
+        if isinstance(raw_state, str) and raw_state.strip():
+            try:
+                parsed = json.loads(raw_state)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, dict) and isinstance(parsed.get("phases"), list):
+                return parsed
+
+        get_hpo_studies = getattr(self._store, "get_hpo_studies", None)
+        hpo_studies = (
+            await get_hpo_studies(research_id)
+            if callable(get_hpo_studies)
+            else []
+        )
+        list_promotions = getattr(self._store, "list_promotions", None)
+        promotions = await list_promotions() if callable(list_promotions) else []
+        return build_phase_state(
+            session=session,
+            iterations=iterations,
+            hpo_studies=hpo_studies,
+            promotions=[
+                row for row in promotions
+                if row.get("research_id") == research_id
+            ],
+        )
+
+    async def _emit_auto_promotion_skipped(
+        self,
+        *,
+        research_id: str,
+        config: ResearchConfig,
+        agent_log: AgentLogWriter,
+        reason: str,
+        iteration: Optional[int],
+        terminal_reason: Optional[str],
+        incomplete_phases: List[str],
+        promotion_allowed: bool,
+        blockers: List[str],
+    ) -> None:
+        """Emit structured observability for expected auto-promotion skips."""
+        payload = {
+            "event": "auto_promotion_skipped",
+            "research_id": research_id,
+            "iteration": iteration,
+            "instrument": config.instrument,
+            "timeframe": config.timeframe,
+            "model_type": config.model_type,
+            "reason": reason,
+            "terminal_reason": terminal_reason,
+            "incomplete_phases": incomplete_phases,
+            "promotion_allowed": promotion_allowed,
+            "blockers": blockers,
+        }
+        logger.info(
+            "ML-53: Auto-promotion skipped for %s: reason=%s iteration=%s blockers=%s",
+            research_id,
+            reason,
+            iteration,
+            blockers,
+        )
+        record_audit_event = getattr(self._store, "record_audit_event", None)
+        if callable(record_audit_event):
+            try:
+                await record_audit_event(
+                    actor_id="autoresearch-agent",
+                    action="promotion.auto_skip",
+                    outcome="success",
+                    research_id=research_id,
+                    request_metadata={
+                        key: value for key, value in payload.items()
+                        if key != "event"
+                    },
+                )
+            except Exception:
+                logger.debug(
+                    "Failed to record auto-promotion skip audit event for %s",
+                    research_id,
+                    exc_info=True,
+                )
+        try:
+            await agent_log.append(
+                "system",
+                f"Auto-promotion skipped: {reason}",
+            )
+        except Exception:
+            logger.debug(
+                "Failed to append auto-promotion skip to agent log for %s",
+                research_id,
+                exc_info=True,
+            )
+        try:
+            await broadcaster.broadcast(payload)
+        except Exception:
+            logger.debug(
+                "Failed to broadcast auto-promotion skip for %s",
+                research_id,
+                exc_info=True,
+            )
+
+    @staticmethod
+    def _auto_promotion_preview_blockers(preview: Dict[str, Any]) -> List[str]:
+        blockers: List[str] = []
+        for key in ("gate_bundle_evaluation", "consistency_report"):
+            container = preview.get(key)
+            if not isinstance(container, dict):
+                continue
+            for blocker in container.get("blockers") or []:
+                blocker_s = str(blocker)
+                if blocker_s not in blockers:
+                    blockers.append(blocker_s)
+        return blockers
 
     async def _infer_decision(
         self,
