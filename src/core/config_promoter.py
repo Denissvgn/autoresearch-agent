@@ -384,20 +384,21 @@ class ConfigPromoter:
         model_registry_name: Optional[str] = None
         metric_name: Optional[str] = None
         metric_value: Optional[float] = None
+        best_metrics_payload: Dict[str, Any] = {}
+        best_attempt_snapshot: Dict[str, Any] = {}
         if best:
             mlflow_run_id = best.get("mlflow_run_id")
             metric_name = best.get("metric_name")
             metric_value = best.get("primary_metric")
-            metrics_raw = best.get("metrics_json")
-            if metrics_raw:
-                try:
-                    metrics = json.loads(metrics_raw) if isinstance(metrics_raw, str) else metrics_raw
-                    mlflow_run_id = mlflow_run_id or metrics.get("mlflow_run_id")
-                    model_registry_name, model_version = self._model_version_components(
-                        metrics
-                    )
-                except (json.JSONDecodeError, TypeError):
-                    pass
+            best_metrics_payload = self._best_iteration_payload(best)
+            best_attempt_snapshot = self._attempt_snapshot_payload(
+                best,
+                best_metrics_payload,
+            )
+            mlflow_run_id = mlflow_run_id or best_metrics_payload.get("mlflow_run_id")
+            model_registry_name, model_version = self._model_version_components(
+                best_metrics_payload
+            )
 
         rollback_readiness = dict(metadata.get("rollback_readiness") or {})
         previous_yaml = preview.get("current_config")
@@ -456,7 +457,12 @@ class ConfigPromoter:
                 cmd.extend(["--metric-value", str(metric_value)])
             # ML-64: Pass model artifacts dir for stable model persistence
             artifacts_dir = self._resolve_artifacts_dir(
-                workspace_path, model_type, instrument, timeframe,
+                workspace_path,
+                model_type,
+                instrument,
+                timeframe,
+                metrics_payload=best_metrics_payload,
+                attempt_snapshot=best_attempt_snapshot,
             )
             if artifacts_dir:
                 cmd.extend(["--model-artifacts-dir", artifacts_dir])
@@ -2288,11 +2294,33 @@ class ConfigPromoter:
         model_type: str,
         instrument: str,
         timeframe: str,
+        *,
+        metrics_payload: Optional[Dict[str, Any]] = None,
+        attempt_snapshot: Optional[Dict[str, Any]] = None,
     ) -> Optional[str]:
         """Find the directory containing trained model .pkl files."""
         inst_under = instrument.replace("-", "_")
 
-        # Check results.json for explicit model_path
+        for container in (metrics_payload or {}, attempt_snapshot or {}):
+            resolved = self._artifacts_dir_from_payload(container)
+            if resolved:
+                return resolved
+
+        # Check immutable result artifact for explicit model_path.
+        for container in (metrics_payload or {}, attempt_snapshot or {}):
+            artifact_path = container.get("result_artifact_path")
+            if not artifact_path:
+                continue
+            try:
+                with open(artifact_path, encoding="utf-8") as f:
+                    data = json.load(f)
+                resolved = self._artifacts_dir_from_payload(data)
+                if resolved:
+                    return resolved
+            except Exception:
+                pass
+
+        # Backward-compatible fallback: check live results.json for model_path.
         results_json = os.path.join(
             settings.workspace_root, "runs", "autotuner",
             f"{inst_under}_{timeframe}", model_type, "results.json",
@@ -2317,6 +2345,28 @@ class ConfigPromoter:
         if os.path.isdir(direct):
             return direct
 
+        return None
+
+    @staticmethod
+    def _artifacts_dir_from_payload(payload: Dict[str, Any]) -> Optional[str]:
+        if not isinstance(payload, dict):
+            return None
+        model_rel = payload.get("model_path")
+        if not model_rel:
+            model_info = payload.get("model")
+            if isinstance(model_info, dict):
+                model_rel = model_info.get("path")
+        if not isinstance(model_rel, str) or not model_rel.strip():
+            return None
+        model_abs = (
+            model_rel
+            if os.path.isabs(model_rel)
+            else os.path.join(settings.workspace_root, model_rel)
+        )
+        if os.path.isfile(model_abs):
+            return os.path.dirname(model_abs)
+        if os.path.isdir(model_abs):
+            return model_abs
         return None
 
     async def _update_composite_versions(

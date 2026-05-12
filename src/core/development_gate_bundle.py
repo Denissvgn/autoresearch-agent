@@ -141,7 +141,13 @@ def evaluate_development_gate_bundle(
         blockers=blockers,
         waivers=waivers,
         name="min_direction_auc",
-        value=_first_number(gates.get("direction_auc"), metrics.get("auc")),
+        value=_first_number(
+            gates.get("direction_auc"),
+            metrics.get("auc"),
+            payload.get("direction_auc"),
+            payload.get("auc"),
+            payload.get("walkforward_auc"),
+        ),
         threshold=direction_checks.get("min_direction_auc"),
         comparator=">=",
         reason="direction_auc_below_gate_or_missing",
@@ -155,6 +161,8 @@ def evaluate_development_gate_bundle(
             gates.get("operating_signal_rate"),
             config.get("operating_signal_rate"),
             metrics.get("signal_rate"),
+            payload.get("operating_signal_rate"),
+            payload.get("signal_rate"),
         ),
         threshold=direction_checks.get("max_signal_rate"),
         comparator="<=",
@@ -169,6 +177,9 @@ def evaluate_development_gate_bundle(
         selected_metrics.get("ece"),
         cal_full.get("ece_calibrated"),
         metrics.get("ece_calibrated"),
+        metrics.get("ece"),
+        payload.get("ece_calibrated"),
+        payload.get("ece"),
         cal_diag.get("cal_ece_after"),
     )
     _numeric_gate(
@@ -183,7 +194,13 @@ def evaluate_development_gate_bundle(
     )
     add_check(
         "brier_score_required",
-        _first_number(selected_metrics.get("brier_score"), metrics.get("brier_score_calibrated"))
+        _first_number(
+            selected_metrics.get("brier_score"),
+            metrics.get("brier_score_calibrated"),
+            metrics.get("brier_score"),
+            payload.get("brier_score_calibrated"),
+            payload.get("brier_score"),
+        )
         is not None,
         "missing_brier_score",
         selected_metrics,
@@ -208,6 +225,7 @@ def evaluate_development_gate_bundle(
             threshold_stability.get("threshold_cv"),
             metrics.get("threshold_cv"),
             gates.get("threshold_cv"),
+            payload.get("threshold_cv"),
         ),
         threshold=_first_number(
             calibration_checks.get("max_threshold_cv"),
@@ -226,6 +244,7 @@ def evaluate_development_gate_bundle(
         signal_rate_distribution.get("max"),
         signal_rate_distribution.get("mean"),
         metrics.get("signal_rate_distribution_max"),
+        payload.get("signal_rate_distribution_max"),
     )
     if signal_distribution_value is not None:
         _numeric_gate(

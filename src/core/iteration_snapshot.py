@@ -82,6 +82,12 @@ def build_iteration_attempt_snapshot(
             "artifact_hash",
             "model_artifact_hash",
         ),
+        "result_artifact_path": marker.get("result_artifact_path"),
+        "result_artifact_sha256": marker.get("result_artifact_sha256"),
+        "result_artifact_source_path": marker.get("result_artifact_source_path"),
+        "result_artifact_schema_version": marker.get(
+            "result_artifact_schema_version"
+        ),
         "mlflow_run_id": marker.get("mlflow_run_id"),
         "runtime_command": marker.get("runtime_command"),
         "environment": _environment_metadata(),
