@@ -40,6 +40,8 @@ _NESTED_RESULT_KEYS = (
     "pruned_base_models",
     "model_roster",
     "feature_schema",
+    "feature_schema_flags",
+    "parity_metadata",
     "feature_provenance",
     "adaptive_features",
 )
@@ -57,6 +59,7 @@ _TOP_LEVEL_RESULT_KEYS = (
     "artifact_hash",
     "model_artifact_hash",
     "feature_schema_hash",
+    "selected_feature_names_hash",
     "data_hash",
     "dataset_hash",
     "adaptive_levels_enabled",

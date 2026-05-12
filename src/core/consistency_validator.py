@@ -199,16 +199,37 @@ def build_consistency_report(
             blocker="missing_inference_parity" if promotable else None,
         )
 
+    parity_metadata = _dict_at(metrics, "parity_metadata")
+    feature_schema = _dict_at(metrics, "feature_schema")
     feature_hash = first_valid_artifact_ref(
-        attempt.get("feature_schema_hash"),
-        attempt.get("schema_hash"),
+        parity_metadata.get("feature_schema_hash"),
+        feature_schema.get("feature_schema_hash"),
         metrics.get("feature_schema_hash"),
         metrics.get("schema_hash"),
+        attempt.get("feature_schema_hash"),
+        attempt.get("schema_hash"),
     )
     add(
         "feature_schema_hash_recorded",
         "passed" if feature_hash else "warning",
     )
+    adaptive_schema_blocker = _adaptive_schema_flags_blocker(metrics)
+    if adaptive_schema_blocker:
+        adaptive_schema_status = (
+            "failed" if promotable or search_phase == ADAPTIVE_FEATURE_PHASE_ID else "warning"
+        )
+        add(
+            "adaptive_feature_schema_flags_recorded",
+            adaptive_schema_status,
+            blocker=adaptive_schema_blocker
+            if adaptive_schema_status == "failed"
+            else None,
+        )
+    else:
+        add(
+            "adaptive_feature_schema_flags_recorded",
+            "passed",
+        )
 
     if model_type == "rl":
         obs_hash = _first_present(attempt, metrics, "obs_spec_hash", "observation_spec_hash")
@@ -638,6 +659,10 @@ def _adaptive_feature_evidence(metrics: Dict[str, Any]) -> Dict[str, Any]:
         adaptive.get("selected_count"),
         schema_adaptive.get("selected_count"),
     )
+    selected_names = _first_non_none(
+        adaptive.get("selected_feature_names"),
+        schema_adaptive.get("selected_feature_names"),
+    )
     noop_reason = _first_non_none(
         metrics.get("adaptive_feature_noop_reason"),
         adaptive.get("noop_reason"),
@@ -648,8 +673,42 @@ def _adaptive_feature_evidence(metrics: Dict[str, Any]) -> Dict[str, Any]:
         "requested": _truthy(requested),
         "enabled": _truthy(enabled),
         "selected_count": _int_value(selected_count, default=0),
+        "selected_feature_names": _string_list(selected_names),
         "noop_reason": noop_reason,
     }
+
+
+def _adaptive_schema_flags_blocker(metrics: Dict[str, Any]) -> Optional[str]:
+    evidence = _adaptive_feature_evidence(metrics)
+    adaptive_names = evidence.get("selected_feature_names") or []
+    if not (
+        evidence.get("enabled")
+        or evidence.get("requested")
+        or _int_value(evidence.get("selected_count"), default=0) > 0
+        or adaptive_names
+    ):
+        return None
+
+    flags = _feature_schema_flags(metrics)
+    adaptive_flags = _dict_at(flags, "adaptive_levels")
+    if not adaptive_flags.get("enabled"):
+        return "missing_adaptive_feature_schema_flags"
+    flagged_names = _string_list(adaptive_flags.get("selected_feature_names"))
+    if not flagged_names:
+        return "missing_adaptive_selected_feature_names"
+    if adaptive_names and not set(adaptive_names).issubset(set(flagged_names)):
+        return "adaptive_feature_schema_flags_mismatch"
+    return None
+
+
+def _feature_schema_flags(metrics: Dict[str, Any]) -> Dict[str, Any]:
+    feature_schema = _dict_at(metrics, "feature_schema")
+    parity_metadata = _dict_at(metrics, "parity_metadata")
+    return _first_dict(
+        parity_metadata.get("feature_schema_flags"),
+        feature_schema.get("feature_schema_flags"),
+        metrics.get("feature_schema_flags"),
+    )
 
 
 def _nested_bool(container: Any, path: Iterable[str]) -> Optional[bool]:

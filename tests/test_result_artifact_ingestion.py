@@ -67,6 +67,18 @@ async def _create_session(
 
 
 def _rich_results_payload(model_path: str = "runs/model.pkl") -> Dict[str, Any]:
+    feature_names = ["return_1", "close_fib_bucket_24"] + [
+        f"feature_{idx:02d}" for idx in range(40)
+    ]
+    feature_schema_flags = {
+        "adaptive_levels": {
+            "enabled": True,
+            "version": "adaptive_levels.v1",
+            "selected_feature_names": feature_names,
+        }
+    }
+    feature_schema_hash = "schema-rich"
+    selected_feature_names_hash = "selected-rich"
     return {
         "metrics": {
             "auc": 0.64,
@@ -109,7 +121,41 @@ def _rich_results_payload(model_path: str = "runs/model.pkl") -> Dict[str, Any]:
         "pruned_base_models": [],
         "model_path": model_path,
         "mlflow_run_id": "run-rich",
-        "n_features": 42,
+        "feature_schema_hash": feature_schema_hash,
+        "selected_feature_names_hash": selected_feature_names_hash,
+        "feature_schema_flags": feature_schema_flags,
+        "parity_metadata": {
+            "feature_schema_hash": feature_schema_hash,
+            "selected_feature_names_hash": selected_feature_names_hash,
+            "feature_schema_flags": feature_schema_flags,
+            "feature_count": len(feature_names),
+        },
+        "feature_schema": {
+            "n_features": len(feature_names),
+            "feature_schema_hash": feature_schema_hash,
+            "selected_feature_names_hash": selected_feature_names_hash,
+            "feature_schema_flags": feature_schema_flags,
+            "adaptive_levels": {
+                "requested": True,
+                "enabled": True,
+                "version": "adaptive_levels.v1",
+                "selected_count": 1,
+                "selected_feature_names": ["close_fib_bucket_24"],
+                "feature_schema_hash": feature_schema_hash,
+                "selected_feature_names_hash": selected_feature_names_hash,
+            },
+        },
+        "adaptive_features": {
+            "requested": True,
+            "enabled": True,
+            "version": "adaptive_levels.v1",
+            "selected_count": 1,
+            "selected_feature_names": ["close_fib_bucket_24"],
+            "n_features": len(feature_names),
+            "feature_schema_hash": feature_schema_hash,
+            "selected_feature_names_hash": selected_feature_names_hash,
+        },
+        "n_features": len(feature_names),
     }
 
 
@@ -243,6 +289,20 @@ async def test_record_iteration_copies_results_and_merges_nested_evidence(
         == 0.18
     )
     assert metrics["requested_base_models"] == ["lgbm", "xgb"]
+    assert metrics["feature_schema_hash"] == "schema-rich"
+    assert metrics["feature_schema_flags"]["adaptive_levels"][
+        "selected_feature_names"
+    ][1] == "close_fib_bucket_24"
+    assert metrics["feature_schema"]["selected_feature_names_hash"] == "selected-rich"
+    assert metrics["parity_metadata"]["feature_schema_hash"] == "schema-rich"
+    assert metrics["parity_metadata"]["feature_count"] == 42
+    assert metrics["adaptive_features"]["selected_feature_names"] == [
+        "close_fib_bucket_24"
+    ]
+    assert snapshot["feature_schema_hash"] == "schema-rich"
+    assert snapshot["selected_feature_names_hash"] == "selected-rich"
+    assert snapshot["feature_schema_flags"] == metrics["feature_schema_flags"]
+    assert snapshot["n_features"] == 42
     assert metrics["auc"] == 0.64
     assert metrics["walkforward_auc"] == 0.62
     assert metrics["signal_rate"] == 0.12
@@ -305,6 +365,7 @@ async def test_fallback_results_json_is_claimed_preserved_and_consumed(
     assert metrics["config"]["calibration_full_validation"]["signal_rate_distribution"][
         "max"
     ] == 0.18
+    assert metrics["feature_schema_flags"]["adaptive_levels"]["enabled"] is True
 
 
 @pytest.mark.asyncio
@@ -334,6 +395,29 @@ async def test_invalid_result_artifact_path_is_ignored(tmp_path: Path) -> None:
     assert "result_artifact_path" not in metrics
     assert "results_json_path" not in metrics
     assert outside.exists()
+
+
+def test_prepare_output_parses_feature_schema_flags_json() -> None:
+    marker = parse_prepare_output(
+        """
+---
+status: completed
+primary_metric: 0.63
+metric_name: composite_direction_score
+training_gates_passed: true
+all_gates_passed: true
+feature_schema_hash: schema-rich
+selected_feature_names_hash: selected-rich
+feature_schema_flags_json: {"adaptive_levels":{"enabled":true,"selected_feature_names":["return_1","close_fib_bucket_24"]}}
+n_features: 42
+---
+"""
+    ).to_dict()
+
+    assert marker["feature_schema_hash"] == "schema-rich"
+    assert marker["selected_feature_names_hash"] == "selected-rich"
+    assert marker["feature_schema_flags"]["adaptive_levels"]["enabled"] is True
+    assert marker["feature_schema_flags_json"] == marker["feature_schema_flags"]
 
 
 def test_development_gate_bundle_uses_nested_result_evidence() -> None:

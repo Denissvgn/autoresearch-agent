@@ -17,6 +17,7 @@ ARTIFACT_REFERENCE_KEYS = frozenset(
         "result_artifact_path",
         "result_artifact_sha256",
         "feature_schema_hash",
+        "selected_feature_names_hash",
         "schema_hash",
         "data_hash",
         "dataset_hash",

@@ -878,6 +878,41 @@ async def test_confirm_requires_cross_service_consistency(tmp_path, monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_preview_blocks_adaptive_finalist_missing_schema_flags(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(
+        config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
+    )
+    metrics = _passing_metrics()
+    metrics.update(
+        {
+            "finalist": True,
+            "feature_schema_hash": "schema-adaptive",
+            "adaptive_features": {
+                "requested": True,
+                "enabled": True,
+                "version": "adaptive_levels.v1",
+                "selected_count": 1,
+                "selected_feature_names": ["close_fib_bucket_24"],
+                "feature_schema_hash": "schema-adaptive",
+            },
+        }
+    )
+    store = FakePromotionStore(_best_iteration(metrics))
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    assert preview["promotion_allowed"] is False
+    assert "missing_adaptive_feature_schema_flags" in preview["consistency_report"][
+        "blockers"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_confirm_records_promotion_when_bundle_passes(tmp_path, monkeypatch):
     _write_gate_bundle(tmp_path)
     monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))

@@ -24,6 +24,15 @@ def test_iteration_attempt_snapshot_hashes_config_and_writes_file(tmp_path: Path
             "status": "failed",
             "artifact_hash": "artifact-sha",
             "feature_schema_hash": "feature-sha",
+            "selected_feature_names_hash": "selected-sha",
+            "feature_schema_flags": {
+                "adaptive_levels": {
+                    "enabled": True,
+                    "version": "adaptive_levels.v1",
+                    "selected_feature_names": ["return_1", "close_fib_bucket_24"],
+                }
+            },
+            "n_features": 2,
             "rl_economic_replay_artifact_path": "/tmp/rl_economic_replay.json",
             "rl_economic_replay_artifact_hash": "rl-replay-sha",
         },
@@ -33,6 +42,9 @@ def test_iteration_attempt_snapshot_hashes_config_and_writes_file(tmp_path: Path
     assert snapshot["status"] == "failed"
     assert snapshot["artifact_hash"] == "artifact-sha"
     assert snapshot["feature_schema_hash"] == "feature-sha"
+    assert snapshot["selected_feature_names_hash"] == "selected-sha"
+    assert snapshot["feature_schema_flags"]["adaptive_levels"]["enabled"] is True
+    assert snapshot["n_features"] == 2
     assert snapshot["rl_economic_replay_artifact_path"] == (
         "/tmp/rl_economic_replay.json"
     )

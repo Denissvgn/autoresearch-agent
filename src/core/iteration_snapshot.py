@@ -68,6 +68,21 @@ def build_iteration_attempt_snapshot(
                 "schema_hash",
             )
         ),
+        "feature_schema_flags": _first_present(
+            marker,
+            "feature_schema_flags",
+        )
+        or _dict_at(marker, "feature_schema").get("feature_schema_flags")
+        or {},
+        "selected_feature_names_hash": normalize_optional_artifact_ref(
+            _first_present(
+                marker,
+                "selected_feature_names_hash",
+            )
+            or _dict_at(marker, "feature_schema").get("selected_feature_names_hash")
+        ),
+        "n_features": _first_present(marker, "n_features")
+        or _dict_at(marker, "feature_schema").get("n_features"),
         "obs_spec_hash": _first_present(
             marker,
             "obs_spec_hash",
@@ -244,6 +259,11 @@ def _first_present(container: Dict[str, Any], *keys: str) -> Any:
         if value is not None:
             return value
     return None
+
+
+def _dict_at(container: Mapping[str, Any], key: str) -> Dict[str, Any]:
+    value = container.get(key)
+    return dict(value) if isinstance(value, Mapping) else {}
 
 
 def _canonicalize(value: Any) -> Any:
