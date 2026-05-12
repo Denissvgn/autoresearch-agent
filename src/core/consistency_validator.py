@@ -8,6 +8,11 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Optional, Set
 
+from src.core.artifact_reference import (
+    first_valid_artifact_ref,
+    is_sentinel_artifact_ref,
+    normalize_optional_artifact_ref,
+)
 from src.core.gate_status import training_gates_passed_from
 
 logger = logging.getLogger(__name__)
@@ -82,13 +87,43 @@ def build_consistency_report(
         blocker="missing_config_snapshot",
     )
     config_sha = _sha256_text(config_snapshot)
-    artifact_hash = _first_present(
-        attempt,
-        metrics,
-        "artifact_hash",
-        "model_artifact_hash",
+    invalid_mlflow_run_id = any(
+        is_sentinel_artifact_ref(container.get("mlflow_run_id"))
+        for container in (metrics, attempt)
+        if isinstance(container, dict) and "mlflow_run_id" in container
     )
-    artifact_ref = artifact_hash or metrics.get("artifact_uri") or metrics.get("mlflow_run_id")
+    add(
+        "mlflow_run_id_valid",
+        "failed" if invalid_mlflow_run_id else "passed",
+        blocker="invalid_mlflow_run_id_sentinel",
+    )
+    artifact_hash = first_valid_artifact_ref(
+        attempt.get("artifact_hash"),
+        attempt.get("model_artifact_hash"),
+        metrics.get("artifact_hash"),
+        metrics.get("model_artifact_hash"),
+    )
+    result_artifact_ref = None
+    result_artifact_path = first_valid_artifact_ref(
+        attempt.get("result_artifact_path"),
+        metrics.get("result_artifact_path"),
+    )
+    result_artifact_sha = first_valid_artifact_ref(
+        attempt.get("result_artifact_sha256"),
+        metrics.get("result_artifact_sha256"),
+    )
+    if result_artifact_path and result_artifact_sha:
+        result_artifact_ref = result_artifact_path
+    mlflow_run_id = first_valid_artifact_ref(
+        metrics.get("mlflow_run_id"),
+        attempt.get("mlflow_run_id"),
+    )
+    artifact_ref = (
+        artifact_hash
+        or first_valid_artifact_ref(metrics.get("artifact_uri"), attempt.get("artifact_uri"))
+        or mlflow_run_id
+        or result_artifact_ref
+    )
     add(
         "artifact_reference_present",
         "passed" if artifact_ref else ("failed" if promotable else "warning"),
@@ -148,11 +183,11 @@ def build_consistency_report(
             blocker="missing_inference_parity" if promotable else None,
         )
 
-    feature_hash = _first_present(
-        attempt,
-        metrics,
-        "feature_schema_hash",
-        "schema_hash",
+    feature_hash = first_valid_artifact_ref(
+        attempt.get("feature_schema_hash"),
+        attempt.get("schema_hash"),
+        metrics.get("feature_schema_hash"),
+        metrics.get("schema_hash"),
     )
     add(
         "feature_schema_hash_recorded",
@@ -240,10 +275,10 @@ def build_consistency_report(
                 else None,
             )
         if isinstance(replay, dict):
-            replay_hash = (
-                replay.get("artifact_hash")
-                or replay.get("replay_artifact_hash")
-                or metrics.get("rl_economic_replay_artifact_hash")
+            replay_hash = first_valid_artifact_ref(
+                replay.get("artifact_hash"),
+                replay.get("replay_artifact_hash"),
+                metrics.get("rl_economic_replay_artifact_hash"),
             )
             add(
                 "rl_economic_replay_artifact_hash_recorded",
@@ -331,7 +366,7 @@ def build_consistency_report(
         "config_snapshot_sha256": config_sha,
         "artifact_hash": artifact_hash,
         "feature_schema_hash": feature_hash,
-        "mlflow_run_id": metrics.get("mlflow_run_id") or attempt.get("mlflow_run_id"),
+        "mlflow_run_id": mlflow_run_id,
     }
 
 
@@ -383,9 +418,12 @@ def check_evidence_artifact(
         for t in trials:
             if not isinstance(t, dict):
                 continue
-            run_id = t.get("mlflow_run_id") or t.get("artifact_hash")
-            if run_id and isinstance(run_id, str) and run_id.strip():
-                unique_ids.add(run_id.strip())
+            run_id = first_valid_artifact_ref(
+                t.get("mlflow_run_id"),
+                t.get("artifact_hash"),
+            )
+            if run_id:
+                unique_ids.add(run_id)
         if len(unique_ids) < n_required:
             return "evidence_artifact_missing_for_multi_seed_robustness"
         return None
@@ -397,8 +435,16 @@ def check_evidence_artifact(
         if not parity.get("feature_count_alignment_passed"):
             return "evidence_artifact_missing_for_inference_parity_replay"
         if prior_run_ids is not None:
-            run_id = parity.get("mlflow_run_id") or metrics.get("mlflow_run_id")
-            if not run_id or run_id in prior_run_ids:
+            run_id = first_valid_artifact_ref(
+                parity.get("mlflow_run_id"),
+                metrics.get("mlflow_run_id"),
+            )
+            normalized_prior_ids = {
+                normalized
+                for value in prior_run_ids
+                if (normalized := normalize_optional_artifact_ref(value))
+            }
+            if not run_id or run_id in normalized_prior_ids:
                 return "evidence_artifact_missing_for_inference_parity_replay"
         return None
 
@@ -414,7 +460,11 @@ def check_evidence_artifact(
         if not isinstance(cal, dict):
             return "evidence_artifact_missing_for_calibration_replay_gates"
         selected = cal.get("selected")
-        if not isinstance(selected, dict) or not selected.get("run_id"):
+        if not isinstance(selected, dict) or not first_valid_artifact_ref(
+            selected.get("run_id"),
+            selected.get("mlflow_run_id"),
+            selected.get("artifact_hash"),
+        ):
             return "evidence_artifact_missing_for_calibration_replay_gates"
         # economic_replay.gates may be nested inside calibration_full_validation
         # or at the top level of metrics (both layouts are valid).
@@ -491,8 +541,10 @@ def _is_synthetic_promotion_iteration(
         return None
 
     # Condition 3: no new mlflow_run_id.
-    current_run_id = metrics.get("mlflow_run_id")
-    prior_run_id = prior_best_metrics.get("mlflow_run_id")
+    current_run_id = normalize_optional_artifact_ref(metrics.get("mlflow_run_id"))
+    prior_run_id = normalize_optional_artifact_ref(
+        prior_best_metrics.get("mlflow_run_id")
+    )
     if current_run_id and current_run_id != prior_run_id:
         return None
 
@@ -635,8 +687,9 @@ def _rl_feature_bundle_hash(
         _dict_at(rl_oos, "rl_dataset").get("feature_bundle_hash"),
     )
     for value in candidates:
-        if isinstance(value, str) and value.strip():
-            return value.strip()
+        normalized = normalize_optional_artifact_ref(value)
+        if normalized:
+            return normalized
     return None
 
 

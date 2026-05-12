@@ -10,6 +10,12 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Mapping, MutableMapping, Optional
 
+from src.core.artifact_reference import (
+    ARTIFACT_REFERENCE_KEYS,
+    normalize_artifact_references_in_mapping,
+    normalize_optional_artifact_ref,
+)
+
 
 RESULT_ARTIFACT_SCHEMA_VERSION = "autoresearch_result_artifact.v1"
 
@@ -54,6 +60,8 @@ _TOP_LEVEL_RESULT_KEYS = (
     "dataset_hash",
     "adaptive_levels_enabled",
     "adaptive_levels_version",
+    "mlflow_logging_status",
+    "mlflow_setup_error",
 )
 
 _SERVER_OWNED_KEYS = {
@@ -126,6 +134,7 @@ def enrich_marker_from_result_artifact(
 
     if isinstance(payload, dict):
         merge_result_payload(marker, payload)
+        normalize_artifact_references_in_mapping(marker)
 
     metadata = {
         "result_artifact_schema_version": RESULT_ARTIFACT_SCHEMA_VERSION,
@@ -164,7 +173,10 @@ def merge_result_payload(
 
     for key in _TOP_LEVEL_RESULT_KEYS:
         if key in payload and key not in _SERVER_OWNED_KEYS:
-            marker[key] = deepcopy(payload[key])
+            value = deepcopy(payload[key])
+            if key in ARTIFACT_REFERENCE_KEYS:
+                value = normalize_optional_artifact_ref(value)
+            marker[key] = value
 
     _add_flat_aliases(marker, payload)
 

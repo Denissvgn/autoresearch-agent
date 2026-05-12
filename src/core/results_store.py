@@ -15,6 +15,10 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Sequence
 
 import aiosqlite
 
+from src.core.artifact_reference import (
+    normalize_artifact_references_in_mapping,
+    normalize_optional_artifact_ref,
+)
 from src.core.gate_status import (
     consistency_report_passed,
     normalize_training_gate_aliases,
@@ -396,6 +400,9 @@ def _normalized_iteration_metrics_json(
         should_write_metrics = True
 
     if should_write_metrics:
+        normalize_artifact_references_in_mapping(metrics_payload)
+        return json.dumps(metrics_payload, sort_keys=True), all_gates_passed
+    if normalize_artifact_references_in_mapping(metrics_payload):
         return json.dumps(metrics_payload, sort_keys=True), all_gates_passed
     return metrics_json, all_gates_passed
 
@@ -1417,6 +1424,7 @@ class ResultsStore:
             consistency_report_json=consistency_report_json,
             context=f"{research_id} iteration {iteration}",
         )
+        mlflow_run_id = normalize_optional_artifact_ref(mlflow_run_id)
         now = datetime.now(timezone.utc).isoformat()
         async with self.connection() as db:
             await db.execute(
@@ -1526,6 +1534,7 @@ class ResultsStore:
         """Overwrite an existing iteration with richer data from an explicit
         ITERATION_RESULT marker.  Only updates non-None fields from marker."""
         marker = dict(marker)
+        normalize_artifact_references_in_mapping(marker)
         if "training_gates_passed" in marker or "all_gates_passed" in marker:
             normalize_training_gate_aliases(
                 marker,
@@ -1572,6 +1581,10 @@ class ResultsStore:
             fields["attempt_snapshot_path"] = marker["attempt_snapshot_path"]
         if "attempt_snapshot_hash" in marker:
             fields["attempt_snapshot_hash"] = marker["attempt_snapshot_hash"]
+        if "mlflow_run_id" in marker:
+            fields["mlflow_run_id"] = normalize_optional_artifact_ref(
+                marker["mlflow_run_id"]
+            )
         if "consistency_report" in marker:
             fields["consistency_report_json"] = json.dumps(
                 marker["consistency_report"], sort_keys=True,
@@ -1831,7 +1844,7 @@ class ResultsStore:
                         trial["expected_command"],
                         trial.get("status") or "planned",
                         trial.get("result_path"),
-                        trial.get("mlflow_run_id"),
+                        normalize_optional_artifact_ref(trial.get("mlflow_run_id")),
                         trial.get("train_config_path"),
                         trial.get("manual_review_reason"),
                         now,
@@ -1999,7 +2012,7 @@ class ResultsStore:
         if result_path is not None:
             fields["result_path"] = result_path
         if mlflow_run_id is not None:
-            fields["mlflow_run_id"] = mlflow_run_id
+            fields["mlflow_run_id"] = normalize_optional_artifact_ref(mlflow_run_id)
         if manual_review_reason is not None:
             fields["manual_review_reason"] = manual_review_reason
         if train_config_path is not None:

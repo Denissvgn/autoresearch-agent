@@ -6,6 +6,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
+from src.core.artifact_reference import normalize_optional_artifact_ref
 from src.core.consistency_validator import (  # AR-5/AR-6
     EVIDENCE_ARTIFACT_PHASES,
     _is_synthetic_promotion_iteration,
@@ -639,8 +640,8 @@ def _prior_run_ids_for_phase(
     for it in iterations:
         if evidence_keys and _has_metric(it, *evidence_keys):
             continue
-        run_id = _metrics_of(it).get("mlflow_run_id")
-        if run_id and isinstance(run_id, str):
+        run_id = normalize_optional_artifact_ref(_metrics_of(it).get("mlflow_run_id"))
+        if run_id:
             ids.add(run_id)
     return frozenset(ids)
 

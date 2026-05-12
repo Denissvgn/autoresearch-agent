@@ -16,6 +16,11 @@ from typing import Any, Dict, Optional
 import httpx
 import yaml
 
+from src.core.artifact_reference import (
+    first_valid_artifact_ref,
+    normalize_artifact_references_in_mapping,
+    normalize_optional_artifact_ref,
+)
 from src.config import secret_value, settings
 from src.core.consistency_validator import build_consistency_report
 from src.core.development_gate_bundle import (
@@ -138,10 +143,10 @@ class ConfigPromoter:
         metrics_payload["training_gates_passed"] = training_gates_passed
         metrics_payload["all_gates_passed"] = training_gates_passed
         attempt_snapshot = self._attempt_snapshot_payload(best, metrics_payload)
-        artifact_hash = (
-            attempt_snapshot.get("artifact_hash")
-            or metrics_payload.get("artifact_hash")
-            or metrics_payload.get("model_artifact_hash")
+        artifact_hash = first_valid_artifact_ref(
+            attempt_snapshot.get("artifact_hash"),
+            metrics_payload.get("artifact_hash"),
+            metrics_payload.get("model_artifact_hash"),
         )
         rollback_readiness = self._build_rollback_readiness(
             research_id=research_id,
@@ -387,7 +392,9 @@ class ConfigPromoter:
         best_metrics_payload: Dict[str, Any] = {}
         best_attempt_snapshot: Dict[str, Any] = {}
         if best:
-            mlflow_run_id = best.get("mlflow_run_id")
+            mlflow_run_id = normalize_optional_artifact_ref(
+                best.get("mlflow_run_id")
+            )
             metric_name = best.get("metric_name")
             metric_value = best.get("primary_metric")
             best_metrics_payload = self._best_iteration_payload(best)
@@ -395,7 +402,9 @@ class ConfigPromoter:
                 best,
                 best_metrics_payload,
             )
-            mlflow_run_id = mlflow_run_id or best_metrics_payload.get("mlflow_run_id")
+            mlflow_run_id = mlflow_run_id or normalize_optional_artifact_ref(
+                best_metrics_payload.get("mlflow_run_id")
+            )
             model_registry_name, model_version = self._model_version_components(
                 best_metrics_payload
             )
@@ -1145,14 +1154,14 @@ class ConfigPromoter:
                 or attempt_snapshot.get("snapshot_hash")
             ),
             "attempt_snapshot_path": best_iteration.get("attempt_snapshot_path"),
-            "artifact_hash": (
-                attempt_snapshot.get("artifact_hash")
-                or metrics_payload.get("artifact_hash")
-                or metrics_payload.get("model_artifact_hash")
+            "artifact_hash": first_valid_artifact_ref(
+                attempt_snapshot.get("artifact_hash"),
+                metrics_payload.get("artifact_hash"),
+                metrics_payload.get("model_artifact_hash"),
             ),
-            "mlflow_run_id": (
-                best_iteration.get("mlflow_run_id")
-                or metrics_payload.get("mlflow_run_id")
+            "mlflow_run_id": first_valid_artifact_ref(
+                best_iteration.get("mlflow_run_id"),
+                metrics_payload.get("mlflow_run_id"),
             ),
         }
         return {
@@ -1781,8 +1790,10 @@ class ConfigPromoter:
                 or metrics_payload.get("rl_profit_score") is not None
             )
             and (
-                replay.get("artifact_hash")
-                or metrics_payload.get("rl_economic_replay_artifact_hash")
+                first_valid_artifact_ref(
+                    replay.get("artifact_hash"),
+                    metrics_payload.get("rl_economic_replay_artifact_hash"),
+                )
             )
         )
         return {"passed": passed, "details": replay}
@@ -1807,8 +1818,15 @@ class ConfigPromoter:
                 parsed = json.loads(raw)
             except json.JSONDecodeError:
                 return {}
-            return parsed if isinstance(parsed, dict) else {}
-        return raw if isinstance(raw, dict) else {}
+            if isinstance(parsed, dict):
+                normalize_artifact_references_in_mapping(parsed)
+                return parsed
+            return {}
+        if isinstance(raw, dict):
+            payload = dict(raw)
+            normalize_artifact_references_in_mapping(payload)
+            return payload
+        return {}
 
     @staticmethod
     def _attempt_snapshot_payload(
@@ -1822,11 +1840,18 @@ class ConfigPromoter:
             except json.JSONDecodeError:
                 parsed = {}
             if isinstance(parsed, dict):
+                normalize_artifact_references_in_mapping(parsed)
                 return parsed
         if isinstance(raw, dict):
-            return raw
+            payload = dict(raw)
+            normalize_artifact_references_in_mapping(payload)
+            return payload
         embedded = metrics_payload.get("attempt_snapshot")
-        return embedded if isinstance(embedded, dict) else {}
+        if isinstance(embedded, dict):
+            payload = dict(embedded)
+            normalize_artifact_references_in_mapping(payload)
+            return payload
+        return {}
 
     @staticmethod
     def _live_production_requested(payload: Dict[str, Any]) -> bool:
@@ -1881,9 +1906,9 @@ class ConfigPromoter:
             metrics_payload
         )
         return {
-            "mlflow_run_id": (
-                best_iteration.get("mlflow_run_id")
-                or metrics_payload.get("mlflow_run_id")
+            "mlflow_run_id": first_valid_artifact_ref(
+                best_iteration.get("mlflow_run_id"),
+                metrics_payload.get("mlflow_run_id"),
             ),
             "model_registry_name": metrics_payload.get("model_registry_name"),
             "model_version": metrics_payload.get("model_version"),
@@ -2356,7 +2381,8 @@ class ConfigPromoter:
             model_info = payload.get("model")
             if isinstance(model_info, dict):
                 model_rel = model_info.get("path")
-        if not isinstance(model_rel, str) or not model_rel.strip():
+        model_rel = normalize_optional_artifact_ref(model_rel)
+        if not model_rel:
             return None
         model_abs = (
             model_rel

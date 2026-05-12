@@ -13,6 +13,8 @@ from typing import Any, Dict, Mapping, Optional
 
 import yaml
 
+from src.core.artifact_reference import normalize_optional_artifact_ref
+
 
 TRIAL_IDENTITY_SCHEMA_VERSION = "autoresearch_trial_identity.v1"
 
@@ -51,16 +53,20 @@ def build_iteration_attempt_snapshot(
         "trial_identity": marker.get("trial_identity"),
         "trial_identity_hash": marker.get("trial_identity_hash"),
         "workspace": workspace,
-        "data_hash": _first_present(
-            marker,
-            "data_hash",
-            "dataset_hash",
-            "data_artifact_hash",
+        "data_hash": normalize_optional_artifact_ref(
+            _first_present(
+                marker,
+                "data_hash",
+                "dataset_hash",
+                "data_artifact_hash",
+            )
         ),
-        "feature_schema_hash": _first_present(
-            marker,
-            "feature_schema_hash",
-            "schema_hash",
+        "feature_schema_hash": normalize_optional_artifact_ref(
+            _first_present(
+                marker,
+                "feature_schema_hash",
+                "schema_hash",
+            )
         ),
         "obs_spec_hash": _first_present(
             marker,
@@ -72,23 +78,33 @@ def build_iteration_attempt_snapshot(
             "rl_economic_replay_artifact_path",
             "economic_replay_artifact_path",
         ),
-        "rl_economic_replay_artifact_hash": _first_present(
-            marker,
-            "rl_economic_replay_artifact_hash",
-            "economic_replay_artifact_hash",
+        "rl_economic_replay_artifact_hash": normalize_optional_artifact_ref(
+            _first_present(
+                marker,
+                "rl_economic_replay_artifact_hash",
+                "economic_replay_artifact_hash",
+            )
         ),
-        "artifact_hash": _first_present(
-            marker,
-            "artifact_hash",
-            "model_artifact_hash",
+        "artifact_hash": normalize_optional_artifact_ref(
+            _first_present(
+                marker,
+                "artifact_hash",
+                "model_artifact_hash",
+            )
         ),
-        "result_artifact_path": marker.get("result_artifact_path"),
-        "result_artifact_sha256": marker.get("result_artifact_sha256"),
+        "result_artifact_path": normalize_optional_artifact_ref(
+            marker.get("result_artifact_path")
+        ),
+        "result_artifact_sha256": normalize_optional_artifact_ref(
+            marker.get("result_artifact_sha256")
+        ),
         "result_artifact_source_path": marker.get("result_artifact_source_path"),
         "result_artifact_schema_version": marker.get(
             "result_artifact_schema_version"
         ),
-        "mlflow_run_id": marker.get("mlflow_run_id"),
+        "mlflow_run_id": normalize_optional_artifact_ref(
+            marker.get("mlflow_run_id")
+        ),
         "runtime_command": marker.get("runtime_command"),
         "environment": _environment_metadata(),
     }

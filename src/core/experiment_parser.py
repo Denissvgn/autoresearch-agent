@@ -8,12 +8,16 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from src.core.artifact_reference import (
+    ARTIFACT_REFERENCE_KEYS,
+    normalize_optional_artifact_ref,
+)
 from src.core.gate_status import coerce_bool, normalize_training_gate_aliases
 
 logger = logging.getLogger(__name__)
 
 # prepare.py outputs a --- delimited block of key: value pairs
-_KV_PATTERN = re.compile(r"^\s*(\w[\w_]*)\s*:\s*(.+?)\s*$")
+_KV_PATTERN = re.compile(r"^\s*(\w[\w_]*)\s*:\s*(.*?)\s*$")
 _ITERATION_MARKER = "ITERATION_RESULT:"
 
 
@@ -151,6 +155,8 @@ def parse_prepare_output(stdout: str) -> IterationMetrics:
             metrics.extra[key] = [
                 s.strip() for s in value.split(";") if s.strip()
             ]
+        elif key in ARTIFACT_REFERENCE_KEYS:
+            metrics.extra[key] = normalize_optional_artifact_ref(value)
         elif key.endswith("_json"):
             try:
                 parsed = json.loads(value)

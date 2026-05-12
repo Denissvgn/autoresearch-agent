@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, Iterable, List, Optional
 
+from src.core.artifact_reference import (
+    first_valid_artifact_ref,
+)
 from src.core.consistency_validator import parse_consistency_report
 from src.core.gate_status import (
     training_gates_passed_from,
@@ -151,8 +154,14 @@ def _candidate_summary(row: Dict[str, Any]) -> Dict[str, Any]:
         "status": metrics.get("status"),
         "training_gates_passed": training_gates_passed,
         "all_gates_passed": training_gates_passed,
-        "mlflow_run_id": row.get("mlflow_run_id") or metrics.get("mlflow_run_id"),
-        "artifact_hash": snapshot.get("artifact_hash") or metrics.get("artifact_hash"),
+        "mlflow_run_id": first_valid_artifact_ref(
+            row.get("mlflow_run_id"),
+            metrics.get("mlflow_run_id"),
+        ),
+        "artifact_hash": first_valid_artifact_ref(
+            snapshot.get("artifact_hash"),
+            metrics.get("artifact_hash"),
+        ),
         "rl_profit_score": _rl_profit_score(metrics),
         "rl_economic_replay": _rl_economic_replay_summary(metrics, snapshot),
         "feature_readiness_metrics": _feature_readiness_metrics(metrics),
@@ -271,11 +280,11 @@ def _rl_economic_replay_summary(
             or metrics.get("rl_economic_replay_artifact_path")
             or snapshot.get("rl_economic_replay_artifact_path")
         ),
-        "artifact_hash": (
-            replay.get("artifact_hash")
-            or replay.get("replay_artifact_hash")
-            or metrics.get("rl_economic_replay_artifact_hash")
-            or snapshot.get("rl_economic_replay_artifact_hash")
+        "artifact_hash": first_valid_artifact_ref(
+            replay.get("artifact_hash"),
+            replay.get("replay_artifact_hash"),
+            metrics.get("rl_economic_replay_artifact_hash"),
+            snapshot.get("rl_economic_replay_artifact_hash"),
         ),
     }
 
@@ -322,7 +331,10 @@ def _mlflow_links(iterations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     links = []
     for row in iterations:
         metrics = _parse_json(row.get("metrics_json")) or {}
-        run_id = row.get("mlflow_run_id") or metrics.get("mlflow_run_id")
+        run_id = first_valid_artifact_ref(
+            row.get("mlflow_run_id"),
+            metrics.get("mlflow_run_id"),
+        )
         if run_id:
             links.append({"iteration": row.get("iteration"), "mlflow_run_id": run_id})
     return links
@@ -658,10 +670,15 @@ def _operations_candidate(
         "config_snapshot_sha256": snapshot.get("config_snapshot_sha256"),
         "attempt_snapshot_hash": row.get("attempt_snapshot_hash")
         or snapshot.get("snapshot_hash"),
-        "artifact_hash": snapshot.get("artifact_hash")
-        or metrics.get("artifact_hash")
-        or metrics.get("model_artifact_hash"),
-        "mlflow_run_id": row.get("mlflow_run_id") or metrics.get("mlflow_run_id"),
+        "artifact_hash": first_valid_artifact_ref(
+            snapshot.get("artifact_hash"),
+            metrics.get("artifact_hash"),
+            metrics.get("model_artifact_hash"),
+        ),
+        "mlflow_run_id": first_valid_artifact_ref(
+            row.get("mlflow_run_id"),
+            metrics.get("mlflow_run_id"),
+        ),
     }
 
 

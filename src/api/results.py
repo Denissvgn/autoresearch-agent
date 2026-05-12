@@ -15,6 +15,7 @@ from src.core.consistency_validator import (
     build_consistency_report,
     parse_consistency_report,
 )
+from src.core.artifact_reference import first_valid_artifact_ref
 from src.core.gate_status import training_gates_passed_from
 from src.core.log_writer import AgentLogWriter, _format_entry
 from src.core.research_state import build_research_state
@@ -177,10 +178,10 @@ def _enrich_iteration(row: Dict[str, Any], model_type: str) -> Dict[str, Any]:
     }
     if not any(enriched["duplicate_of"].values()):
         enriched["duplicate_of"] = None
-    enriched["artifact_hash"] = (
-        attempt_snapshot.get("artifact_hash")
-        or metrics.get("artifact_hash")
-        or metrics.get("model_artifact_hash")
+    enriched["artifact_hash"] = first_valid_artifact_ref(
+        attempt_snapshot.get("artifact_hash"),
+        metrics.get("artifact_hash"),
+        metrics.get("model_artifact_hash"),
     )
     consistency_report = parse_consistency_report(
         row.get("consistency_report_json")
@@ -199,8 +200,12 @@ def _enrich_iteration(row: Dict[str, Any], model_type: str) -> Dict[str, Any]:
         consistency_report.get("passed")
     )
 
-    # Resolve mlflow_run_id: column first, then metrics_json
-    run_id = row.get("mlflow_run_id") or metrics.get("mlflow_run_id") or ""
+    # Resolve mlflow_run_id: column first, then metrics_json.
+    run_id = first_valid_artifact_ref(
+        row.get("mlflow_run_id"),
+        metrics.get("mlflow_run_id"),
+        attempt_snapshot.get("mlflow_run_id"),
+    )
     enriched["mlflow_run_id"] = run_id
 
     # MLflow deep-link

@@ -263,6 +263,36 @@ async def test_hpo_studies_decode_structured_plan_fields():
     assert study["top_trials"][0]["value"] == 0.62
 
 
+def test_iteration_enrichment_normalizes_artifact_reference_sentinels():
+    enriched = results._enrich_iteration(
+        {
+            "id": 1,
+            "research_id": "res_api",
+            "iteration": 1,
+            "all_gates_passed": 1,
+            "mlflow_run_id": "None",
+            "metrics_json": json.dumps(
+                {
+                    "mlflow_run_id": "null",
+                    "artifact_hash": "N/A",
+                    "model_artifact_hash": "artifact-sha",
+                }
+            ),
+            "attempt_snapshot_json": json.dumps(
+                {
+                    "mlflow_run_id": "na",
+                    "artifact_hash": "none",
+                }
+            ),
+        },
+        "direction",
+    )
+
+    assert enriched["mlflow_run_id"] is None
+    assert enriched["mlflow_url"] is None
+    assert enriched["artifact_hash"] == "artifact-sha"
+
+
 @pytest.mark.asyncio
 async def test_research_state_endpoint_reconstructs_session_without_workspace():
     store = FakeStore()

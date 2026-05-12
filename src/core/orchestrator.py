@@ -20,6 +20,7 @@ import httpx
 
 from src.config import secret_value, settings
 from src.core.command_runner import GovernedCommandRunner, redact_sensitive_text
+from src.core.artifact_reference import normalize_artifact_references_in_mapping
 from src.core.consistency_validator import (
     build_consistency_report,
     consistency_report_json,
@@ -3097,6 +3098,7 @@ class AgentOrchestrator:
     ) -> None:
         """Record an iteration and broadcast the event."""
         marker = dict(marker)
+        normalize_artifact_references_in_mapping(marker)
         # AR-1: coerce dict/list config_snapshot to a JSON string so all
         # downstream consumers that declare config_snapshot: Optional[str]
         # receive a valid string.  The LLM may emit a JSON object instead of
@@ -3319,6 +3321,7 @@ class AgentOrchestrator:
         marker: Dict[str, Any],
     ) -> None:
         """Attach/update consistency report before overwriting an iteration."""
+        normalize_artifact_references_in_mapping(marker)
         session = await self._store.get_session(research_id)
         existing = await self._store.get_iteration(research_id, iteration)
         attempt_snapshot = None
