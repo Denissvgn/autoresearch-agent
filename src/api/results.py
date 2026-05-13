@@ -53,6 +53,20 @@ def _decode_pipeline_payload(pipeline: Dict[str, Any]) -> Dict[str, Any]:
     return decoded
 
 
+def _decode_session_payload(session: Dict[str, Any]) -> Dict[str, Any]:
+    decoded = dict(session)
+    if "promotion_blockers" not in decoded:
+        raw = decoded.get("promotion_blockers_json")
+        if raw:
+            try:
+                parsed = json.loads(raw) if isinstance(raw, str) else raw
+            except (json.JSONDecodeError, TypeError):
+                parsed = None
+            if isinstance(parsed, list):
+                decoded["promotion_blockers"] = parsed
+    return decoded
+
+
 # ------------------------------------------------------------------
 # Iteration enrichment — parse metrics_json into structured fields
 # ------------------------------------------------------------------
@@ -416,6 +430,7 @@ async def _resolve_result_context(
     session = await _store.get_session(research_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+    session = _decode_session_payload(session)
     return None, session, [session]
 
 

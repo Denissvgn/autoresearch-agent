@@ -1,13 +1,20 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useSessions, useStatus } from '../hooks/useResearch';
+import { useSessions, useSessionsPage, useStatus } from '../hooks/useResearch';
 import StatusBadge from '../components/StatusBadge';
 
+const PAGE = 50;
+
 export default function Dashboard() {
-  const { data: sessions, isLoading } = useSessions();
+  const [offset, setOffset] = useState(0);
+  const { data: allSessions } = useSessions();
+  const { data: page, isLoading } = useSessionsPage(PAGE, offset);
   const { data: status } = useStatus();
 
-  const active = sessions?.filter((s) => s.status === 'running' || s.status === 'paused') ?? [];
-  const recent = sessions?.slice(0, 10) ?? [];
+  const active = allSessions?.filter((s) => s.status === 'running' || s.status === 'paused') ?? [];
+  const recent = page?.items ?? [];
+  const total = page?.total ?? 0;
+  const hasMore = total > offset + PAGE;
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -63,50 +70,73 @@ export default function Dashboard() {
 
       {/* Recent */}
       <section>
-        <h2 className="text-sm font-medium text-gray-400 mb-3">Recent Sessions</h2>
+        <h2 className="text-sm font-medium text-gray-400 mb-3">
+          Recent Sessions
+          {total > 0 && <span className="text-gray-600 ml-2 font-normal">({total})</span>}
+        </h2>
         {isLoading ? (
           <div className="text-gray-500 text-sm">Loading...</div>
         ) : recent.length === 0 ? (
-          <div className="text-gray-500 text-sm">No research sessions yet.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-700 text-gray-400 text-left">
-                  <th className="py-2 px-3">Instrument</th>
-                  <th className="py-2 px-3">Model</th>
-                  <th className="py-2 px-3">Tag</th>
-                  <th className="py-2 px-3">Status</th>
-                  <th className="py-2 px-3">Iterations</th>
-                  <th className="py-2 px-3">Best</th>
-                  <th className="py-2 px-3">Cost</th>
-                  <th className="py-2 px-3">Started</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recent.map((s) => (
-                  <tr key={s.id} className="border-b border-gray-800 hover:bg-gray-800/50">
-                    <td className="py-2 px-3">
-                      <Link to={`/research/${s.id}`} className="text-indigo-400 hover:underline">
-                        {s.instrument}
-                      </Link>
-                    </td>
-                    <td className="py-2 px-3 text-gray-400">{s.model_type}</td>
-                    <td className="py-2 px-3 text-gray-500 text-xs">{s.tag || '—'}</td>
-                    <td className="py-2 px-3"><StatusBadge status={s.status} /></td>
-                    <td className="py-2 px-3 font-mono">{s.best_iteration ?? '—'}</td>
-                    <td className="py-2 px-3 font-mono">
-                      {s.best_metric != null ? s.best_metric.toFixed(4) : '—'}
-                    </td>
-                    <td className="py-2 px-3 font-mono">${(s.total_api_cost_usd ?? 0).toFixed(2)}</td>
-                    <td className="py-2 px-3 text-gray-500 text-xs">
-                      {new Date(s.started_at).toLocaleString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="border border-dashed border-gray-700 rounded-lg px-6 py-10 text-center">
+            <p className="text-gray-500 text-sm">No research sessions yet.</p>
+            <Link
+              to="/research/new"
+              className="mt-3 inline-block px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-medium transition"
+            >
+              Start your first session
+            </Link>
           </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-700 text-gray-400 text-left">
+                    <th className="py-2 px-3">Instrument</th>
+                    <th className="py-2 px-3">Model</th>
+                    <th className="py-2 px-3">Tag</th>
+                    <th className="py-2 px-3">Status</th>
+                    <th className="py-2 px-3">Iterations</th>
+                    <th className="py-2 px-3">Best</th>
+                    <th className="py-2 px-3">Cost</th>
+                    <th className="py-2 px-3">Started</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recent.map((s) => (
+                    <tr key={s.id} className="border-b border-gray-800 hover:bg-gray-800/50">
+                      <td className="py-2 px-3">
+                        <Link to={`/research/${s.id}`} className="text-indigo-400 hover:underline">
+                          {s.instrument}
+                        </Link>
+                      </td>
+                      <td className="py-2 px-3 text-gray-400">{s.model_type}</td>
+                      <td className="py-2 px-3 text-gray-500 text-xs">{s.tag || '—'}</td>
+                      <td className="py-2 px-3"><StatusBadge status={s.status} /></td>
+                      <td className="py-2 px-3 font-mono">{s.best_iteration ?? '—'}</td>
+                      <td className="py-2 px-3 font-mono">
+                        {s.best_metric != null ? s.best_metric.toFixed(4) : '—'}
+                      </td>
+                      <td className="py-2 px-3 font-mono">${(s.total_api_cost_usd ?? 0).toFixed(2)}</td>
+                      <td className="py-2 px-3 text-gray-500 text-xs">
+                        {new Date(s.started_at).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {hasMore && (
+              <div className="mt-3 text-center">
+                <button
+                  onClick={() => setOffset((o) => o + PAGE)}
+                  className="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-sm text-gray-300 transition"
+                >
+                  Load more ({total - offset - PAGE} remaining)
+                </button>
+              </div>
+            )}
+          </>
         )}
       </section>
     </div>

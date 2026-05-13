@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { FeatureReadinessChannel, ProductionOperations, ResearchState } from '../api/client';
 import {
   blockerLabels,
@@ -58,6 +59,8 @@ function OperationsEmpty() {
 
 export default function ProductionOpsPanel({ state }: Props) {
   const ops = state?.production_operations;
+  const [auditOpen, setAuditOpen] = useState(false);
+
   if (!ops) return <OperationsEmpty />;
 
   const blockerText = blockerLabels(ops.promotion.blockers, ops.promotion.blocker_details);
@@ -129,14 +132,22 @@ export default function ProductionOpsPanel({ state }: Props) {
             ))}
           </div>
           <div className="mt-3 space-y-1 text-xs">
-            <div>
-              <span className="text-gray-500">Artifact: </span>
-              <span className="font-mono text-gray-300 break-all">{ops.rl_profit.artifact_path ?? '-'}</span>
-            </div>
-            <div>
-              <span className="text-gray-500">Hash: </span>
-              <span className="font-mono text-gray-300 break-all">{ops.rl_profit.artifact_hash ?? '-'}</span>
-            </div>
+            {ops.rl_profit.artifact_path && (
+              <div className="flex items-start gap-1">
+                <span className="text-gray-500 shrink-0">Artifact:</span>
+                <span className="font-mono text-gray-400 truncate" title={ops.rl_profit.artifact_path}>
+                  …{ops.rl_profit.artifact_path.slice(-32)}
+                </span>
+              </div>
+            )}
+            {ops.rl_profit.artifact_hash && (
+              <div className="flex items-center gap-1">
+                <span className="text-gray-500 shrink-0">Hash:</span>
+                <span className="font-mono text-gray-400" title={ops.rl_profit.artifact_hash}>
+                  {ops.rl_profit.artifact_hash.slice(0, 12)}…
+                </span>
+              </div>
+            )}
           </div>
         </section>
 
@@ -168,10 +179,14 @@ export default function ProductionOpsPanel({ state }: Props) {
                   <div className="font-mono text-gray-200">{formatMetric(ops.oos_provenance.multi_seed)}</div>
                 </div>
               </div>
-              <div>
-                <span className="text-gray-500">Feature bundle: </span>
-                <span className="font-mono text-gray-300 break-all">{ops.oos_provenance.feature_bundle_hash ?? '-'}</span>
-              </div>
+              {ops.oos_provenance.feature_bundle_hash && (
+                <div className="flex items-center gap-1">
+                  <span className="text-gray-500 shrink-0">Bundle:</span>
+                  <span className="font-mono text-gray-400" title={ops.oos_provenance.feature_bundle_hash}>
+                    {ops.oos_provenance.feature_bundle_hash.slice(0, 12)}…
+                  </span>
+                </div>
+              )}
               {ops.oos_provenance.blockers.length > 0 && (
                 <ul className="space-y-1 text-red-200">
                   {blockerLabels(ops.oos_provenance.blockers, ops.oos_provenance.blocker_details).map((blocker) => (
@@ -228,33 +243,49 @@ export default function ProductionOpsPanel({ state }: Props) {
       </div>
 
       <section className="border border-gray-800 bg-gray-900 px-4 py-3">
-        <h3 className="mb-3 text-sm font-semibold">Audit Events</h3>
-        {ops.audit_events.length === 0 ? (
-          <div className="text-xs text-gray-500">No audit events recorded for this session.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-gray-800 text-left text-gray-500">
-                  <th className="py-2 pr-3">Time</th>
-                  <th className="py-2 pr-3">Action</th>
-                  <th className="py-2 pr-3">Scope</th>
-                  <th className="py-2 pr-3">Outcome</th>
-                  <th className="py-2 pr-3">Actor</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ops.audit_events.map((event) => (
-                  <tr key={event.event_id ?? `${event.timestamp}-${event.action}`} className="border-b border-gray-800">
-                    <td className="py-2 pr-3 text-gray-500">{event.timestamp ? new Date(event.timestamp).toLocaleString() : '-'}</td>
-                    <td className="py-2 pr-3 text-gray-300">{event.action ?? '-'}</td>
-                    <td className="py-2 pr-3 font-mono text-gray-400">{event.scope ?? '-'}</td>
-                    <td className="py-2 pr-3"><StatusPill status={event.outcome ?? 'unknown'} /></td>
-                    <td className="py-2 pr-3 font-mono text-gray-500">{event.actor_id ?? '-'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <button
+          type="button"
+          onClick={() => setAuditOpen((v) => !v)}
+          className="flex w-full items-center justify-between text-left"
+        >
+          <h3 className="text-sm font-semibold">Audit Events</h3>
+          <span className="text-xs text-gray-500">
+            {ops.audit_events.length > 0 ? `${ops.audit_events.length} event${ops.audit_events.length === 1 ? '' : 's'}` : 'none'}
+            <span className="ml-1">{auditOpen ? '▲' : '▼'}</span>
+          </span>
+        </button>
+        {auditOpen && (
+          <div className="mt-3">
+            {ops.audit_events.length === 0 ? (
+              <div className="text-xs text-gray-500">No audit events recorded for this session.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-800 text-left text-gray-500">
+                      <th className="py-2 pr-3">Time</th>
+                      <th className="py-2 pr-3">Action</th>
+                      <th className="py-2 pr-3">Scope</th>
+                      <th className="py-2 pr-3">Outcome</th>
+                      <th className="py-2 pr-3">Actor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ops.audit_events.map((event) => (
+                      <tr key={event.event_id ?? `${event.timestamp}-${event.action}`} className="border-b border-gray-800">
+                        <td className="py-2 pr-3 text-gray-500 whitespace-nowrap">
+                          {event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : '-'}
+                        </td>
+                        <td className="py-2 pr-3 text-gray-300">{event.action ?? '-'}</td>
+                        <td className="py-2 pr-3 font-mono text-gray-400">{event.scope ?? '-'}</td>
+                        <td className="py-2 pr-3"><StatusPill status={event.outcome ?? 'unknown'} /></td>
+                        <td className="py-2 pr-3 font-mono text-gray-500">{event.actor_id ?? '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </section>

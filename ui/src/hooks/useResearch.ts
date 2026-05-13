@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { api, PromotionScopeRequest, StartResearchRequest } from '../api/client';
+import { api, PromotionScopeRequest, StartResearchRequest, PaginatedResponse, ResearchSession } from '../api/client';
 import { useWebSocket } from './useWebSocket';
 
 /**
@@ -71,6 +71,7 @@ function isTerminalStatus(status?: string) {
   return status === 'completed'
     || status === 'failed'
     || status === 'stopped'
+    || status === 'timed_out'
     || status === 'phase_failed'
     || status === 'promotion_blocked';
 }
@@ -78,6 +79,15 @@ function isTerminalStatus(status?: string) {
 export function useSessions() {
   useWSInvalidation();
   return useQuery({ queryKey: ['sessions'], queryFn: api.listSessions, refetchInterval: 30_000 });
+}
+
+export function useSessionsPage(limit: number, offset: number) {
+  return useQuery<PaginatedResponse<ResearchSession>>({
+    queryKey: ['sessions-page', limit, offset],
+    queryFn: () => api.listSessionsPage(limit, offset),
+    refetchInterval: 30_000,
+    placeholderData: (prev) => prev,
+  });
 }
 
 export function useSession(id: string) {
@@ -112,7 +122,11 @@ export function useResearchState(id: string) {
   return useQuery({
     queryKey: ['research-state', id],
     queryFn: () => api.getResearchState(id),
-    refetchInterval: 30_000,
+    refetchInterval: (query) => {
+      const status = (query.state.data as any)?.status;
+      if (isTerminalStatus(status)) return false;
+      return 30_000;
+    },
   });
 }
 

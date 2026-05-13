@@ -1239,6 +1239,18 @@ def _operations_warnings(
     return warnings
 
 
+def _redact_actor_id(actor_id: Any) -> Any:
+    """Truncate token_sha256 fingerprints so full digests never leave the service."""
+    prefix = "token_sha256:"
+    if (
+        isinstance(actor_id, str)
+        and actor_id.startswith(prefix)
+        and len(actor_id) > len(prefix) + 12
+    ):
+        return actor_id[: len(prefix) + 8] + "…"
+    return actor_id
+
+
 def _compact_audit_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     compact = []
     for event in events[:12]:
@@ -1248,7 +1260,7 @@ def _compact_audit_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             {
                 "event_id": event.get("event_id"),
                 "timestamp": event.get("timestamp"),
-                "actor_id": event.get("actor_id"),
+                "actor_id": _redact_actor_id(event.get("actor_id")),
                 "action": event.get("action"),
                 "outcome": event.get("outcome"),
                 "research_id": event.get("research_id"),

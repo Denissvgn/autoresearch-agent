@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useSession, useIterations, useResearchState, useStopSession, usePauseSession, useResumeSession, useContinueSession } from '../hooks/useResearch';
 import { api } from '../api/client';
 import StatusBadge from '../components/StatusBadge';
@@ -22,7 +22,7 @@ export default function ResearchDetail() {
   const continueMut = useContinueSession();
   const [showPromotion, setShowPromotion] = useState(false);
   const [showExport, setShowExport] = useState(false);
-  const [tab, setTab] = useState<'ops' | 'state' | 'chart' | 'table' | 'log'>('ops');
+  const [tabOverride, setTabOverride] = useState<'ops' | 'state' | 'chart' | 'table' | 'log' | null>(null);
 
   if (isLoading || !session) {
     return <div className="text-gray-500">Loading...</div>;
@@ -30,7 +30,15 @@ export default function ResearchDetail() {
 
   const isActive = session.status === 'running' || session.status === 'paused';
   const canPromote = session.best_iteration != null && session.best_iteration > 0;
-  const canContinuePipeline = session.status === 'timed_out'
+
+  const smartTab: 'ops' | 'state' | 'chart' | 'table' | 'log' = (() => {
+    if (session.status === 'running' || session.status === 'paused') return 'chart';
+    if (session.status === 'completed' || session.status === 'promotion_blocked') return 'ops';
+    return 'state';
+  })();
+  const tab = tabOverride ?? smartTab;
+  const setTab = (t: 'ops' | 'state' | 'chart' | 'table' | 'log') => setTabOverride(t);
+  const canContinue = session.status === 'timed_out'
     || session.status === 'phase_failed'
     || session.status === 'promotion_blocked';
 
@@ -43,16 +51,25 @@ export default function ResearchDetail() {
             <h1 className="text-xl font-semibold">{session.instrument}</h1>
             <StatusBadge status={session.status} />
           </div>
-          <div className="text-sm text-gray-500 mt-1">
-          {session.model_type} · {session.timeframe}
-          {session.tag && <span> · #{session.tag}</span>}
-          {(session.current_phase || researchState?.current_phase) && (
-            <span> · phase: {session.current_phase || researchState?.current_phase}</span>
-          )}
-          <span className="ml-3 font-mono text-xs">{session.id.slice(0, 8)}</span>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-500">
+            <span>{session.model_type}</span>
+            <span className="text-gray-700">·</span>
+            <span>{session.timeframe}</span>
+            {session.tag && (
+              <>
+                <span className="text-gray-700">·</span>
+                <span>#{session.tag}</span>
+              </>
+            )}
+            {(session.current_phase || researchState?.current_phase) && (
+              <span className="inline-flex items-center rounded bg-gray-800 px-2 py-0.5 text-xs text-gray-400">
+                {session.current_phase || researchState?.current_phase}
+              </span>
+            )}
+            <span className="font-mono text-xs text-gray-600">{session.id.slice(0, 8)}</span>
             {session.resumed_from && (
-              <span className="ml-2 text-blue-400">
-                ← continued from <a href={`/research/${session.resumed_from}`} className="underline font-mono">{session.resumed_from.slice(0, 12)}</a>
+              <span className="text-blue-400 text-xs">
+                ← <Link to={`/research/${session.resumed_from}`} className="underline font-mono hover:text-blue-300">{session.resumed_from.slice(0, 12)}</Link>
               </span>
             )}
           </div>
@@ -90,7 +107,7 @@ export default function ResearchDetail() {
               </button>
             </>
           )}
-          {canContinuePipeline && (
+          {canContinue && (
             <button
               onClick={() => continueMut.mutate(id!)}
               className="px-3 py-1.5 bg-blue-600/20 text-blue-400 rounded text-sm hover:bg-blue-600/30"
@@ -185,29 +202,7 @@ export default function ResearchDetail() {
         })()}
       </div>
 
-      {/* Tabs */}
-      <div className="border-b border-gray-700 flex gap-4">
-        {(['ops', 'state', 'chart', 'table', 'log'] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`pb-2 text-sm capitalize ${tab === t ? 'text-indigo-400 border-b-2 border-indigo-400' : 'text-gray-500 hover:text-gray-300'}`}
-          >
-            {t === 'ops' ? 'Operations' : t === 'state' ? 'State' : t === 'chart' ? 'Metrics Chart' : t === 'table' ? 'Iterations' : 'Agent Log'}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab content */}
-      {tab === 'ops' && <ProductionOpsPanel state={researchState} />}
-      {tab === 'state' && <ResearchStatePanel state={researchState} />}
-      {tab === 'chart' && <MetricsChart iterations={iterations ?? []} />}
-      {tab === 'table' && (
-        <IterationsTable iterations={iterations ?? []} bestIteration={session.best_iteration} />
-      )}
-      {tab === 'log' && <AgentLog researchId={id!} isActive={isActive} />}
-
-      {/* Error */}
+      {/* Error — shown above tabs so it's never buried */}
       {session.error_message && (
         <div className="bg-red-900/20 border border-red-800 rounded p-3 text-sm text-red-300">
           {session.error_message}
@@ -218,6 +213,31 @@ export default function ResearchDetail() {
           )}
         </div>
       )}
+
+      {/* Tabs */}
+      <div className="border-b border-gray-700 flex gap-1">
+        {(['ops', 'state', 'chart', 'table', 'log'] as const).map((t) => {
+          const label = t === 'ops' ? 'Operations' : t === 'state' ? 'State' : t === 'chart' ? 'Chart' : t === 'table' ? 'Iterations' : 'Agent Log';
+          return (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-3 pb-2 pt-0.5 text-sm transition ${tab === t ? 'text-indigo-400 border-b-2 border-indigo-400' : 'text-gray-500 hover:text-gray-300'}`}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Tab content */}
+      {tab === 'ops' && <ProductionOpsPanel state={researchState} />}
+      {tab === 'state' && <ResearchStatePanel state={researchState} />}
+      {tab === 'chart' && <MetricsChart iterations={iterations ?? []} />}
+      {tab === 'table' && (
+        <IterationsTable iterations={iterations ?? []} bestIteration={session.best_iteration} />
+      )}
+      {tab === 'log' && <AgentLog researchId={id!} isActive={isActive} />}
 
       {/* Promotion modal */}
       {showPromotion && (

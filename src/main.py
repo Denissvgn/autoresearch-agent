@@ -69,6 +69,11 @@ def _validate_runtime_configuration() -> None:
         try:
             value = int(raw)
         except ValueError:
+            logger.warning(
+                "Cannot parse %s=%r as an integer — single-instance guard "
+                "skipped. Ensure only one worker is running.",
+                name, raw,
+            )
             continue
         if value > 1:
             raise RuntimeError(

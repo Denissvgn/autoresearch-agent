@@ -14,7 +14,7 @@ from typing import Any, Dict, Optional
 
 from src.config import settings
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig
-from src.core.pipeline_controller import PipelineConfig, PipelineController
+from src.core.pipeline_controller import PHASES, PipelineConfig, PipelineController
 from src.core.research_manifest import build_research_manifest, manifest_pretty_json
 from src.core.results_store import ResultsStore
 from src.core.service_preflight import (
@@ -551,14 +551,15 @@ class SessionManager:
             raise RuntimeError(f"Parent session {parent_id} not found")
         if parent["status"] not in (
             "timed_out",
-            "completed",
+            "phase_failed",
+            "promotion_blocked",
             "failed",
             "resumable",
             "interrupted",
         ):
             raise RuntimeError(
                 "Can only continue sessions with status "
-                "timed_out/completed/failed/resumable/interrupted, "
+                "timed_out/phase_failed/promotion_blocked/failed/resumable/interrupted, "
                 f"got: {parent['status']}"
             )
 
@@ -958,18 +959,20 @@ class SessionManager:
         # Also stop the currently running phase session
         pipe = await self._store.get_pipeline(pipeline_id)
         if pipe:
-            for phase in ("direction", "volatility", "rl"):
+            for phase in PHASES:
                 sid = pipe.get(f"{phase}_session_id")
                 if sid and self.is_running(sid):
                     await self.stop_session(sid)
 
-        await self._store.update_pipeline(pipeline_id, status="stopped")
         await self._drain_or_cancel_task(
             task,
             label=f"pipeline {pipeline_id}",
             active_dict=self._active_pipelines,
             active_key=pipeline_id,
         )
+        # Write stopped only after the task has drained so the task's own
+        # CancelledError handler does not race and overwrite a later status.
+        await self._store.update_pipeline(pipeline_id, status="stopped")
         logger.info("Stop requested for pipeline %s", pipeline_id)
         return True
 

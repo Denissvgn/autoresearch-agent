@@ -30,7 +30,7 @@ export interface ResearchSession {
   promotion_preview?: Record<string, unknown> | null;
 }
 
-interface PaginatedResponse<T> {
+export interface PaginatedResponse<T> {
   items: T[];
   total: number;
   limit: number;
@@ -534,6 +534,9 @@ export const api = {
         '/research',
       ),
     ),
+
+  listSessionsPage: (limit: number, offset: number) =>
+    request<PaginatedResponse<ResearchSession>>(`/research?limit=${limit}&offset=${offset}`),
 
   getSession: (id: string) => request<ResearchSession>(`/research/${id}`),
 

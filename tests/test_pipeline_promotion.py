@@ -255,7 +255,7 @@ async def test_pipeline_rl_phase_missing_replay_is_promotion_blocked(
     )
     monkeypatch.setattr(pipeline_controller, "PHASES", ["rl"])
 
-    async def _skip_enrichment(self, config):
+    async def _skip_enrichment(self, config, *, timeout_s=None):
         return None
 
     monkeypatch.setattr(PipelineController, "_run_enrichment", _skip_enrichment)

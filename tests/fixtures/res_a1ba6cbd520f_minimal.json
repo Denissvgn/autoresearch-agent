@@ -80,7 +80,9 @@
         "all_gates_passed": true,
         "training_time_s": 140.5,
         "mlflow_run_id": "run-adaptive-87-ef3g",
-        "adaptive_features": "support_resistance_v2"
+        "adaptive_features": {
+          "noop_reason": "adaptive_feature_schema_unchanged"
+        }
       }
     },
     {

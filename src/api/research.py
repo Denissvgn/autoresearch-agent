@@ -103,11 +103,11 @@ def _validate_phase_budgets(value: Optional[Dict[str, int]]) -> Optional[Dict[st
     invalid = {
         phase: budget
         for phase, budget in value.items()
-        if not isinstance(budget, int) or budget < 1
+        if not isinstance(budget, (int, float)) or int(budget) < 1
     }
     if invalid:
         raise ValueError("phase_budgets values must be integers >= 1")
-    return value
+    return {phase: int(budget) for phase, budget in value.items()}
 
 
 def _json_hash(payload: Any) -> str:
@@ -665,6 +665,18 @@ async def delete_research(request: Request, research_id: str):
             status_code=409,
             detail="Cannot delete a running session — stop it first",
         )
+    session = await _store.get_session(research_id)
+    if session and session.get("pipeline_id"):
+        pipeline_id = session["pipeline_id"]
+        pipeline = await _store.get_pipeline(pipeline_id)
+        if pipeline and pipeline.get("status") == "running":
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Cannot delete a session that belongs to running pipeline "
+                    f"{pipeline_id} — stop the pipeline first"
+                ),
+            )
     ok = await _store.delete_session(research_id)
     if not ok:
         await _audit(

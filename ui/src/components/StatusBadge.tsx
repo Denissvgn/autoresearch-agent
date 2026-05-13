@@ -10,11 +10,15 @@ const colors: Record<string, string> = {
   pending: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
 };
 
+function formatStatus(status: string) {
+  return status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export default function StatusBadge({ status }: { status: string }) {
   const cls = colors[status] ?? colors.pending;
   return (
     <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded border ${cls}`}>
-      {status}
+      {formatStatus(status)}
     </span>
   );
 }

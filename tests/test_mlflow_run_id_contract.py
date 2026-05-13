@@ -352,6 +352,7 @@ async def test_config_promoter_does_not_pass_sentinel_mlflow_run_id(
             "training_gates_passed": True,
             "gate_bundle_evaluation": {"passed": True, "checks": [], "blockers": []},
             "consistency_report": {"passed": True, "checks": [], "blockers": []},
+            "quality_baseline_evaluation": {"passed": True, "checks": [], "blockers": []},
             "development_promotion_metadata": {
                 "scope": "development",
                 "live_production_promotion_requested": False,

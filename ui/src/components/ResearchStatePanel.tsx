@@ -116,11 +116,11 @@ export default function ResearchStatePanel({ state }: Props) {
         <div className="bg-gray-800 border border-gray-700 rounded px-3 py-2">
           <div className="text-gray-500">Rollback Target</div>
           {state.rollback_target != null ? (
-            <div className="font-mono text-gray-100 break-all">{state.rollback_target}</div>
+            <div className="font-mono text-gray-100 truncate text-xs" title={state.rollback_target}>{state.rollback_target}</div>
           ) : state.latest_known_artifacts?.rollback_target != null ? (
             <>
-              <div className="font-mono text-gray-100 break-all">{state.latest_known_artifacts.rollback_target.value}</div>
-              <div className="text-gray-500 mt-0.5">last known from iter {state.latest_known_artifacts.rollback_target.iteration}</div>
+              <div className="font-mono text-gray-100 truncate text-xs" title={state.latest_known_artifacts.rollback_target.value}>{state.latest_known_artifacts.rollback_target.value}</div>
+              <div className="text-gray-500 mt-0.5">iter {state.latest_known_artifacts.rollback_target.iteration}</div>
             </>
           ) : (
             <div className="font-mono text-gray-100">—</div>

@@ -164,11 +164,11 @@ class PipelineConfig:
         invalid = {
             phase: budget
             for phase, budget in phase_budgets.items()
-            if not isinstance(budget, int) or budget < 1
+            if not isinstance(budget, (int, float)) or int(budget) < 1
         }
         if invalid:
             raise ValueError("phase_budgets values must be integers >= 1")
-        return dict(phase_budgets)
+        return {phase: int(budget) for phase, budget in phase_budgets.items()}
 
 
 class PipelineController:
@@ -194,11 +194,19 @@ class PipelineController:
             for phase, ratio in DEFAULT_BUDGET_RATIOS.items()
         }
 
+    def _compute_phase_budget_usd(self, config: PipelineConfig) -> Dict[str, float]:
+        total = config.max_budget_usd
+        return {
+            phase: total * ratio
+            for phase, ratio in DEFAULT_BUDGET_RATIOS.items()
+        }
+
     async def run(self, config: PipelineConfig) -> None:
         """Run the full pipeline: direction → volatility → enrich → rl."""
         pipeline_id = config.id
         start_time = time.monotonic()
         budgets = self._compute_phase_budgets(config)
+        budget_usd = self._compute_phase_budget_usd(config)
         completed_phases = list(config.completed_phases)
 
         try:
@@ -249,7 +257,10 @@ class PipelineController:
                     await self._store.update_pipeline(
                         pipeline_id, current_phase="enrichment",
                     )
-                    await self._run_enrichment(config)
+                    await self._run_enrichment(
+                        config,
+                        timeout_s=max(60.0, _timeout - elapsed),
+                    )
                     await self._store.update_pipeline(
                         pipeline_id, current_phase="rl",
                     )
@@ -266,6 +277,7 @@ class PipelineController:
                 # Spawn sub-session for this phase
                 session_dict = await self._start_phase(
                     config, phase, budgets.get(phase, 10), phase_timeout_m,
+                    phase_budget_usd=budget_usd.get(phase, config.max_budget_usd / 3),
                 )
                 session_id = session_dict["id"]
 
@@ -276,7 +288,9 @@ class PipelineController:
                 )
 
                 # Wait for sub-session to finish
-                await self._wait_for_session(session_id)
+                await self._wait_for_session(
+                    session_id, deadline=start_time + _timeout,
+                )
 
                 # Evaluate phase: did any iteration pass training gates?
                 phase_passed = await self._evaluate_phase(session_id)
@@ -388,6 +402,8 @@ class PipelineController:
         phase: str,
         phase_budget: int,
         phase_timeout_m: int,
+        *,
+        phase_budget_usd: float,
     ) -> Dict[str, Any]:
         """Start a single phase as a research sub-session."""
         is_rl = phase == "rl"
@@ -398,7 +414,7 @@ class PipelineController:
             tag=f"pipe-{config.id[-8:]}-{phase[:3]}",
             quick_mode=config.quick_mode,
             max_iterations=phase_budget,
-            max_budget_usd=config.max_budget_usd / 3,
+            max_budget_usd=phase_budget_usd,
             timeout_minutes=phase_timeout_m,
             focus_hint=config.focus_hint,
             pipeline_id=config.id,
@@ -410,11 +426,15 @@ class PipelineController:
             hpo_timesteps=config.hpo_timesteps if is_rl else None,
         )
 
-    async def _wait_for_session(self, session_id: str) -> None:
-        """Poll until a session is no longer running."""
+    async def _wait_for_session(self, session_id: str, *, deadline: float) -> None:
+        """Poll until a session is no longer running or the deadline is exceeded."""
         while True:
             if not self._sm.is_running(session_id):
                 return
+            if time.monotonic() >= deadline:
+                raise RuntimeError(
+                    f"Timed out waiting for phase session {session_id} to finish"
+                )
             await asyncio.sleep(10)
 
     async def _evaluate_phase(self, session_id: str) -> bool:
@@ -517,17 +537,18 @@ class PipelineController:
             )
         except Exception as persist_exc:
             logger.exception(
-                "Pipeline %s: failed to persist promotion_blocked state",
+                "Pipeline %s: failed to persist promotion_blocked state — "
+                "falling back to promotion_blocked with error detail",
                 pipeline_id,
             )
             await self._store.update_pipeline(
                 pipeline_id,
-                status="phase_promotion_failed",
+                status="promotion_blocked",
                 current_phase=phase,
                 completed_phases=json.dumps(completed_phases),
                 completed_at=datetime.now(timezone.utc).isoformat(),
                 error_message=(
-                    "promotion_blocked persistence failed: "
+                    "promotion_blocked (persistence error): "
                     f"{persist_exc}"
                 )[:2000],
                 promotion_blocked_phase=phase,
@@ -547,7 +568,9 @@ class PipelineController:
                 ),
             )
 
-    async def _run_enrichment(self, config: PipelineConfig) -> None:
+    async def _run_enrichment(
+        self, config: PipelineConfig, *, timeout_s: float
+    ) -> None:
         """Run enrich_rl_dataset.py between volatility and rl phases."""
         instrument = config.instrument.replace("-", "_")
         cmd = [
@@ -566,7 +589,15 @@ class PipelineController:
             stderr=asyncio.subprocess.PIPE,
             cwd=settings.workspace_root,
         )
-        stdout, stderr = await proc.communicate()
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=timeout_s
+            )
+        except asyncio.TimeoutError:
+            proc.kill()
+            raise RuntimeError(
+                f"RL enrichment timed out after {timeout_s:.0f}s"
+            )
         if proc.returncode == 0:
             logger.info(
                 "Pipeline %s: enrichment completed for %s_%s",

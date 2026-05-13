@@ -1,5 +1,5 @@
 import { FormEvent, useState } from 'react';
-import { Routes, Route, Link } from 'react-router-dom';
+import { Routes, Route, Link, NavLink } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import NewResearch from './pages/NewResearch';
 import ResearchDetail from './pages/ResearchDetail';
@@ -62,23 +62,41 @@ export default function App() {
   return (
     <div className="min-h-screen">
       <nav className="border-b border-gray-800 px-6 py-3 flex items-center gap-6">
-        <Link to="/" className="text-lg font-bold text-indigo-400">
-          Autoresearch Agent
+        <Link to="/" className="text-base font-bold text-indigo-400 shrink-0">
+          Autoresearch
         </Link>
-        <Link to="/" className="text-sm text-gray-400 hover:text-gray-200">
-          Dashboard
-        </Link>
-        <Link to="/research/new" className="text-sm text-gray-400 hover:text-gray-200">
-          New Research
-        </Link>
-        <Link to="/history" className="text-sm text-gray-400 hover:text-gray-200">
-          History
-        </Link>
+        <div className="flex items-center gap-1">
+          <NavLink
+            to="/"
+            end
+            className={({ isActive }) =>
+              `px-3 py-1.5 rounded text-sm transition ${isActive ? 'bg-gray-800 text-gray-100' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'}`
+            }
+          >
+            Dashboard
+          </NavLink>
+          <NavLink
+            to="/research/new"
+            className={({ isActive }) =>
+              `px-3 py-1.5 rounded text-sm transition ${isActive ? 'bg-gray-800 text-gray-100' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'}`
+            }
+          >
+            New Research
+          </NavLink>
+          <NavLink
+            to="/history"
+            className={({ isActive }) =>
+              `px-3 py-1.5 rounded text-sm transition ${isActive ? 'bg-gray-800 text-gray-100' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'}`
+            }
+          >
+            History
+          </NavLink>
+        </div>
         {!hasBuildTimeAutoresearchApiToken() && (
           <button
             type="button"
             onClick={handleClearToken}
-            className="ml-auto text-sm text-gray-400 hover:text-gray-200"
+            className="ml-auto text-xs text-gray-500 hover:text-gray-300 transition"
           >
             Change token
           </button>
