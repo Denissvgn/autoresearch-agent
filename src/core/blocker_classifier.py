@@ -6,6 +6,9 @@ from typing import Any, Dict, Iterable, Mapping, Optional
 
 
 _BLOCKER_LABELS = {
+    "best_metric_below_development_baseline": (
+        "Candidate best metric is below the latest eligible development baseline."
+    ),
     "candidate_training_gates_not_passed": "Candidate training gates did not pass.",
     "development_promotion_not_allowed": "Development promotion gates have not passed.",
     "direction_auc_below_gate_or_missing": "Direction AUC is below the required gate or missing.",
@@ -89,6 +92,10 @@ _LIKELY_FIXES = {
         "calibration_full_validation, into metrics_json."
     ),
     "phase_not_run": "Complete the required later research phase and emit its evidence payload.",
+    "quality_regression": (
+        "Keep the existing development baseline or produce a candidate whose "
+        "metric is not worse than the baseline by more than epsilon."
+    ),
     "tsfm_scope_mismatch": (
         "Mark tabular candidates with candidate_family=tabular and "
         "is_tsfm_candidate=false, or run the TSFM fallback checks for TSFM candidates."
@@ -164,6 +171,9 @@ def _category_for(
     metrics_payload: Mapping[str, Any],
     phase_state: Mapping[str, Any],
 ) -> str:
+    if code == "best_metric_below_development_baseline":
+        return "quality_regression"
+
     if code == "tsfm_adapter_load_failure_without_tabular_fallback" and not _is_tsfm_candidate(
         metrics_payload
     ):

@@ -140,6 +140,9 @@ def _supervised_metrics(*, include_replay: bool = True) -> dict[str, Any]:
             "feature_count_alignment_passed": True,
             "model_roster_parity_passed": True,
         },
+        "feature_schema_hash": "schema-supervised-1",
+        "parity_metadata": {"feature_schema_hash": "schema-supervised-1"},
+        "feature_schema": {"feature_schema_hash": "schema-supervised-1"},
         "mlflow_run_id": "run-supervised-1",
         "artifact_uri": "mlflow://runs/run-supervised-1/model",
         "rollback_target": "feature_model:1",
@@ -342,4 +345,17 @@ async def test_pipeline_feature_phase_not_blocked_only_for_missing_economic_repl
     assert preview["promotion_allowed"] is True
     assert "missing_economic_replay" not in preview["candidate_pool_record"][
         "blockers"
+    ]
+
+
+def test_pipeline_promotion_blockers_include_quality_baseline() -> None:
+    preview = {
+        "promotion_allowed": False,
+        "quality_baseline_evaluation": {
+            "blockers": ["best_metric_below_development_baseline"]
+        },
+    }
+
+    assert pipeline_controller._promotion_blockers(preview) == [
+        "best_metric_below_development_baseline"
     ]

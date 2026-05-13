@@ -3045,7 +3045,11 @@ class AgentOrchestrator:
     @staticmethod
     def _auto_promotion_preview_blockers(preview: Dict[str, Any]) -> List[str]:
         blockers: List[str] = []
-        for key in ("gate_bundle_evaluation", "consistency_report"):
+        for key in (
+            "gate_bundle_evaluation",
+            "consistency_report",
+            "quality_baseline_evaluation",
+        ):
             container = preview.get(key)
             if not isinstance(container, dict):
                 continue

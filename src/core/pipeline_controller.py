@@ -43,6 +43,7 @@ def _promotion_blockers(
     if preview:
         add((preview.get("gate_bundle_evaluation") or {}).get("blockers"))
         add((preview.get("consistency_report") or {}).get("blockers"))
+        add((preview.get("quality_baseline_evaluation") or {}).get("blockers"))
         add((preview.get("candidate_pool_record") or {}).get("blockers"))
         if (
             preview.get("training_gates_passed", preview.get("gates_passed"))
@@ -82,6 +83,7 @@ def _promotion_preview_summary(
         "candidate_pool_record": preview.get("candidate_pool_record"),
         "best_candidate_ownership": preview.get("best_candidate_ownership"),
         "consistency_report": preview.get("consistency_report"),
+        "quality_baseline_evaluation": preview.get("quality_baseline_evaluation"),
         "development_promotion_metadata": preview.get(
             "development_promotion_metadata"
         ),

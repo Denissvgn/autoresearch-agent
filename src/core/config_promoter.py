@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import os
 import tempfile
 import subprocess
@@ -85,6 +86,8 @@ PROMOTION_SCOPES = (
     PRODUCTION_PROMOTION_SCOPE,
 )
 MLFLOW_COMPOSITES_API_PREFIX = "/api/v1/composites"
+QUALITY_BASELINE_MODE = "development_quality_baseline"
+QUALITY_BASELINE_BLOCKER = "best_metric_below_development_baseline"
 
 
 class ConfigPromoter:
@@ -221,18 +224,44 @@ class ConfigPromoter:
             phase_state=phase_state,
             source="cross_service_consistency",
         )
+        quality_baseline_evaluation = await self._build_quality_baseline_evaluation(
+            research_id=research_id,
+            best_iteration=best,
+            model_type=model_type,
+            instrument=instrument,
+            timeframe=timeframe,
+        )
+        quality_baseline_evaluation = self._with_blocker_details(
+            quality_baseline_evaluation,
+            metrics_payload=metrics_payload,
+            phase_state=phase_state,
+            source=QUALITY_BASELINE_MODE,
+        )
         preview_blocker_details = self._merge_blocker_details(
             gate_bundle_evaluation.get("blocker_details", []),
             consistency_report.get("blocker_details", []),
+            quality_baseline_evaluation.get("blocker_details", []),
         )
         development_gate_bundle_passed = bool(
             gate_bundle_evaluation.get("passed", False)
         )
         consistency_report_passed = bool(consistency_report.get("passed", False))
+        quality_baseline_passed = bool(
+            quality_baseline_evaluation.get("passed", False)
+        )
         promotion_allowed = (
             training_gates_passed
             and development_gate_bundle_passed
             and consistency_report_passed
+            and quality_baseline_passed
+        )
+        candidate_pool_blockers = self._merge_blockers(
+            gate_bundle_evaluation.get("blockers", []),
+            quality_baseline_evaluation.get("blockers", []),
+        )
+        candidate_pool_blocker_details = self._merge_blocker_details(
+            gate_bundle_evaluation.get("blocker_details", []),
+            quality_baseline_evaluation.get("blocker_details", []),
         )
         candidate_pool_record = {
             "source": "autoresearch.iterations",
@@ -251,9 +280,17 @@ class ConfigPromoter:
             "consistency_blocker_details": consistency_report.get(
                 "blocker_details", []
             ),
+            "quality_baseline_passed": quality_baseline_passed,
+            "quality_baseline_blockers": quality_baseline_evaluation.get(
+                "blockers", []
+            ),
+            "quality_baseline_blocker_details": quality_baseline_evaluation.get(
+                "blocker_details", []
+            ),
+            "quality_baseline_evaluation": dict(quality_baseline_evaluation),
             "status": "eligible" if promotion_allowed else "blocked",
-            "blockers": gate_bundle_evaluation.get("blockers", []),
-            "blocker_details": gate_bundle_evaluation.get("blocker_details", []),
+            "blockers": candidate_pool_blockers,
+            "blocker_details": candidate_pool_blocker_details,
             "inspectable": True,
             "promotion_record_created": False,
         }
@@ -270,6 +307,7 @@ class ConfigPromoter:
             training_gates_passed=training_gates_passed,
             development_gate_bundle_passed=development_gate_bundle_passed,
             consistency_report_passed=consistency_report_passed,
+            quality_baseline_passed=quality_baseline_passed,
             gate_bundle_evaluation=gate_bundle_evaluation,
             candidate_pool_record=candidate_pool_record,
             promotion_allowed=promotion_allowed,
@@ -278,6 +316,7 @@ class ConfigPromoter:
             signal_health=signal_health,
             inference_reload_validation=inference_reload_validation,
             consistency_report=consistency_report,
+            quality_baseline_evaluation=quality_baseline_evaluation,
         )
 
         preview = {
@@ -297,12 +336,14 @@ class ConfigPromoter:
             "gates_passed": training_gates_passed,
             "development_gate_bundle_passed": development_gate_bundle_passed,
             "consistency_report_passed": consistency_report_passed,
+            "quality_baseline_passed": quality_baseline_passed,
             "gate_bundle_evaluation": gate_bundle_evaluation,
             "candidate_pool_record": candidate_pool_record,
             "best_candidate_ownership": development_promotion_metadata[
                 "best_candidate_ownership"
             ],
             "consistency_report": consistency_report,
+            "quality_baseline_evaluation": quality_baseline_evaluation,
             "development_promotion_metadata": development_promotion_metadata,
             "promotion_allowed": promotion_allowed,
             "blocker_details": preview_blocker_details,
@@ -380,6 +421,15 @@ class ConfigPromoter:
             )
             raise ValueError(
                 "Cannot promote: cross-service consistency failed "
+                f"({blockers})"
+            )
+        quality_baseline = preview.get("quality_baseline_evaluation") or {}
+        if not quality_baseline.get("passed", False):
+            blockers = ", ".join(
+                quality_baseline.get("blockers") or ["unknown"]
+            )
+            raise ValueError(
+                "Cannot promote: development quality baseline failed "
                 f"({blockers})"
             )
         metadata = dict(preview.get("development_promotion_metadata") or {})
@@ -614,6 +664,15 @@ class ConfigPromoter:
             )
             raise ValueError(
                 "Cannot promote: cross-service consistency failed "
+                f"({blockers})"
+            )
+        quality_baseline = preview.get("quality_baseline_evaluation") or {}
+        if not quality_baseline.get("passed", False):
+            blockers = ", ".join(
+                quality_baseline.get("blockers") or ["unknown"]
+            )
+            raise ValueError(
+                "Cannot promote: development quality baseline failed "
                 f"({blockers})"
             )
 
@@ -916,6 +975,9 @@ class ConfigPromoter:
                 "consistency_passed": (
                     preview.get("consistency_report") or {}
                 ).get("passed"),
+                "quality_baseline_passed": (
+                    preview.get("quality_baseline_evaluation") or {}
+                ).get("passed"),
             },
         )
         for prior_scope, promotion in prior_promotions.items():
@@ -1039,6 +1101,9 @@ class ConfigPromoter:
                 "best_candidate_ownership"
             ),
             "cross_service_consistency": preview.get("consistency_report"),
+            "quality_baseline_evaluation": preview.get(
+                "quality_baseline_evaluation"
+            ),
             "rollback_target": rollback_target,
             "rollback_targets": self._rollback_targets(
                 prior_promotions=prior_promotions,
@@ -1156,6 +1221,7 @@ class ConfigPromoter:
         training_gates_passed: bool,
         development_gate_bundle_passed: bool,
         consistency_report_passed: bool,
+        quality_baseline_passed: bool,
         gate_bundle_evaluation: Dict[str, Any],
         candidate_pool_record: Dict[str, Any],
         promotion_allowed: bool,
@@ -1164,6 +1230,7 @@ class ConfigPromoter:
         signal_health: Dict[str, Any],
         inference_reload_validation: Dict[str, Any],
         consistency_report: Dict[str, Any],
+        quality_baseline_evaluation: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Create the auditable development promotion decision artifact."""
         rollback_target = (
@@ -1202,6 +1269,7 @@ class ConfigPromoter:
         blocker_details = self._merge_blocker_details(
             gate_bundle_evaluation.get("blocker_details", []),
             consistency_report.get("blocker_details", []),
+            quality_baseline_evaluation.get("blocker_details", []),
         )
         return {
             "schema_version": DEVELOPMENT_PROMOTION_METADATA_VERSION,
@@ -1219,6 +1287,8 @@ class ConfigPromoter:
             "gates_passed": gates_passed,
             "development_gate_bundle_passed": development_gate_bundle_passed,
             "consistency_report_passed": consistency_report_passed,
+            "quality_baseline_passed": quality_baseline_passed,
+            "quality_baseline_usable": True,
             "promotion_allowed": promotion_allowed,
             "blocker_details": blocker_details,
             "live_production_promotion_allowed": False,
@@ -1240,6 +1310,7 @@ class ConfigPromoter:
             "best_candidate_ownership": best_candidate_ownership,
             "candidate_pool_record": dict(candidate_pool_record),
             "cross_service_consistency": dict(consistency_report),
+            "quality_baseline_evaluation": dict(quality_baseline_evaluation),
             "decision_record": {
                 "model_quality": self._check_statuses(
                     gate_bundle_evaluation,
@@ -1276,6 +1347,10 @@ class ConfigPromoter:
                 ),
                 "inference_reload": self._check_statuses(
                     gate_bundle_evaluation, "inference_reload"
+                ),
+                "quality_baseline": self._check_statuses(
+                    quality_baseline_evaluation,
+                    "best_metric_not_below_development_baseline",
                 ),
             },
             "registry_metadata": self._registry_metadata(
@@ -2230,6 +2305,325 @@ class ConfigPromoter:
             },
         }
 
+    async def _build_quality_baseline_evaluation(
+        self,
+        *,
+        research_id: str,
+        best_iteration: Dict[str, Any],
+        model_type: str,
+        instrument: str,
+        timeframe: str,
+    ) -> Dict[str, Any]:
+        current_metric = self._number(best_iteration.get("primary_metric"))
+        current_metric_name = self._clean_metric_name(
+            best_iteration.get("metric_name")
+        )
+        epsilon = float(settings.global_stagnation_epsilon)
+        comparison: Dict[str, Any] = {
+            "current_research_id": research_id,
+            "current_iteration": best_iteration.get("iteration"),
+            "current_metric": current_metric,
+            "current_metric_name": current_metric_name,
+            "baseline_promotion_id": None,
+            "baseline_research_id": None,
+            "baseline_iteration": None,
+            "baseline_metric": None,
+            "baseline_metric_name": None,
+            "epsilon": epsilon,
+            "delta": None,
+        }
+        checks: list[Dict[str, Any]] = []
+
+        def add_check(
+            name: str,
+            status: str,
+            *,
+            reason: str | None = None,
+            details: Dict[str, Any] | None = None,
+        ) -> None:
+            checks.append(
+                {
+                    "name": name,
+                    "status": status,
+                    "reason": reason,
+                    "details": details or {},
+                }
+            )
+
+        if current_metric is None:
+            add_check(
+                "current_best_metric_recorded",
+                "warning",
+                details={"current_metric": best_iteration.get("primary_metric")},
+            )
+            return {
+                "passed": True,
+                "status": "not_comparable_missing_current_metric",
+                "mode": QUALITY_BASELINE_MODE,
+                "blockers": [],
+                "checks": checks,
+                "comparison": comparison,
+            }
+
+        add_check(
+            "current_best_metric_recorded",
+            "passed",
+            details={
+                "current_metric": current_metric,
+                "current_metric_name": current_metric_name,
+            },
+        )
+        baseline = await self._latest_eligible_development_baseline(
+            model_type=model_type,
+            instrument=instrument,
+            timeframe=timeframe,
+        )
+        if baseline is None:
+            add_check(
+                "eligible_development_baseline_present",
+                "warning",
+                details={
+                    "model_type": model_type,
+                    "instrument": instrument,
+                    "timeframe": timeframe,
+                },
+            )
+            return {
+                "passed": True,
+                "status": "no_eligible_development_baseline",
+                "mode": QUALITY_BASELINE_MODE,
+                "blockers": [],
+                "checks": checks,
+                "comparison": comparison,
+            }
+
+        baseline_metric = self._promotion_best_metric(baseline)
+        baseline_metric_name = self._promotion_metric_name(baseline)
+        if baseline_metric is None:
+            add_check(
+                "eligible_development_baseline_present",
+                "warning",
+                details={"baseline_promotion_id": baseline.get("id")},
+            )
+            return {
+                "passed": True,
+                "status": "no_eligible_development_baseline",
+                "mode": QUALITY_BASELINE_MODE,
+                "blockers": [],
+                "checks": checks,
+                "comparison": comparison,
+            }
+        comparison.update(
+            {
+                "baseline_promotion_id": baseline.get("id"),
+                "baseline_research_id": baseline.get("research_id"),
+                "baseline_iteration": baseline.get("iteration"),
+                "baseline_metric": baseline_metric,
+                "baseline_metric_name": baseline_metric_name,
+            }
+        )
+        add_check(
+            "eligible_development_baseline_present",
+            "passed",
+            details={
+                "baseline_promotion_id": baseline.get("id"),
+                "baseline_research_id": baseline.get("research_id"),
+                "baseline_iteration": baseline.get("iteration"),
+            },
+        )
+
+        if (
+            current_metric_name
+            and baseline_metric_name
+            and current_metric_name != baseline_metric_name
+        ):
+            add_check(
+                "quality_metric_comparable",
+                "warning",
+                details={
+                    "current_metric_name": current_metric_name,
+                    "baseline_metric_name": baseline_metric_name,
+                },
+            )
+            return {
+                "passed": True,
+                "status": "not_comparable_metric_name_mismatch",
+                "mode": QUALITY_BASELINE_MODE,
+                "blockers": [],
+                "checks": checks,
+                "comparison": comparison,
+            }
+
+        add_check(
+            "quality_metric_comparable",
+            "passed",
+            details={
+                "current_metric_name": current_metric_name,
+                "baseline_metric_name": baseline_metric_name,
+            },
+        )
+        delta = current_metric - baseline_metric
+        threshold = baseline_metric - epsilon
+        comparison["delta"] = delta
+        passed = current_metric >= threshold
+        blockers = [] if passed else [QUALITY_BASELINE_BLOCKER]
+        add_check(
+            "best_metric_not_below_development_baseline",
+            "passed" if passed else "failed",
+            reason=None if passed else QUALITY_BASELINE_BLOCKER,
+            details={
+                "current_metric": current_metric,
+                "baseline_metric": baseline_metric,
+                "delta": delta,
+                "epsilon": epsilon,
+                "minimum_allowed_metric": threshold,
+            },
+        )
+        return {
+            "passed": passed,
+            "status": "passed" if passed else "blocked",
+            "mode": QUALITY_BASELINE_MODE,
+            "blockers": blockers,
+            "checks": checks,
+            "comparison": comparison,
+        }
+
+    async def _latest_eligible_development_baseline(
+        self,
+        *,
+        model_type: str,
+        instrument: str,
+        timeframe: str,
+    ) -> Optional[Dict[str, Any]]:
+        list_promotions = getattr(self._store, "list_promotions", None)
+        if callable(list_promotions):
+            rows = await list_promotions()
+            ordered = sorted(
+                [row for row in rows if isinstance(row, dict)],
+                key=lambda row: (
+                    str(row.get("promoted_at") or ""),
+                    int(row.get("id") or 0),
+                ),
+                reverse=True,
+            )
+            for row in ordered:
+                if self._development_baseline_matches(
+                    row,
+                    model_type=model_type,
+                    instrument=instrument,
+                    timeframe=timeframe,
+                ) and self._development_baseline_eligible(row):
+                    return row
+            return None
+
+        get_latest = getattr(
+            self._store, "get_latest_development_promotion", None
+        )
+        if not callable(get_latest):
+            return None
+        row = await get_latest(
+            model_type=model_type,
+            instrument=instrument,
+            timeframe=timeframe,
+        )
+        if not isinstance(row, dict):
+            return None
+        if not self._development_baseline_matches(
+            row,
+            model_type=model_type,
+            instrument=instrument,
+            timeframe=timeframe,
+        ):
+            return None
+        if not self._development_baseline_eligible(row):
+            return None
+        return row
+
+    @classmethod
+    def _development_baseline_matches(
+        cls,
+        promotion: Dict[str, Any],
+        *,
+        model_type: str,
+        instrument: str,
+        timeframe: str,
+    ) -> bool:
+        metadata = cls._promotion_metadata(promotion)
+        scope = (
+            promotion.get("scope")
+            or metadata.get("scope")
+            or DEVELOPMENT_PROMOTION_SCOPE
+        )
+        return bool(
+            scope == DEVELOPMENT_PROMOTION_SCOPE
+            and promotion.get("model_type") == model_type
+            and promotion.get("instrument") == instrument
+            and promotion.get("timeframe") == timeframe
+        )
+
+    @classmethod
+    def _development_baseline_eligible(
+        cls,
+        promotion: Dict[str, Any],
+    ) -> bool:
+        metadata = cls._promotion_metadata(promotion)
+        if promotion.get("rolled_back_at") or metadata.get("rolled_back_at"):
+            return False
+        if metadata.get("promotion_allowed") is not True:
+            return False
+        if cls._baseline_explicitly_unusable(metadata):
+            return False
+        return cls._promotion_best_metric(promotion) is not None
+
+    @staticmethod
+    def _promotion_metadata(promotion: Dict[str, Any]) -> Dict[str, Any]:
+        metadata = promotion.get("promotion_metadata")
+        return metadata if isinstance(metadata, dict) else {}
+
+    @classmethod
+    def _promotion_best_metric(cls, promotion: Dict[str, Any]) -> Optional[float]:
+        metadata = cls._promotion_metadata(promotion)
+        return cls._number(
+            metadata.get("best_metric"),
+            promotion.get("best_metric"),
+            promotion.get("metric_value"),
+            promotion.get("primary_metric"),
+        )
+
+    @classmethod
+    def _promotion_metric_name(cls, promotion: Dict[str, Any]) -> Optional[str]:
+        metadata = cls._promotion_metadata(promotion)
+        return cls._clean_metric_name(
+            metadata.get("metric_name") or promotion.get("metric_name")
+        )
+
+    @staticmethod
+    def _baseline_explicitly_unusable(metadata: Dict[str, Any]) -> bool:
+        return (
+            metadata.get("quality_baseline_usable") is False
+            or metadata.get("quality_baseline_unusable") is True
+        )
+
+    @staticmethod
+    def _number(*values: Any) -> Optional[float]:
+        for value in values:
+            if value is None or isinstance(value, bool):
+                continue
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(number):
+                return number
+        return None
+
+    @staticmethod
+    def _clean_metric_name(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
     async def _promotion_iterations(
         self,
         research_id: str,
@@ -2279,6 +2673,23 @@ class ConfigPromoter:
                     continue
                 seen.add(key)
                 merged.append(dict(detail))
+        return merged
+
+    @staticmethod
+    def _merge_blockers(*blocker_groups: Any) -> list[str]:
+        merged: list[str] = []
+        seen: set[str] = set()
+        for group in blocker_groups:
+            if isinstance(group, str):
+                group = [group]
+            if not isinstance(group, list):
+                continue
+            for blocker in group:
+                text = str(blocker).strip()
+                if not text or text in seen:
+                    continue
+                seen.add(text)
+                merged.append(text)
         return merged
 
     def _evaluate_gate_bundle(

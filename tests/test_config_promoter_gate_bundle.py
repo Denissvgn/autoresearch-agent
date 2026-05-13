@@ -635,6 +635,37 @@ def _promotion_row(scope: str, promotion_id: int = 1) -> dict:
     }
 
 
+def _development_baseline_promotion(
+    *,
+    best_metric: float | None = 0.6476,
+    metric_name: str | None = None,
+    promotion_id: int = 1,
+    promotion_allowed: bool = True,
+    quality_baseline_usable: bool | None = None,
+    quality_baseline_unusable: bool | None = None,
+    rolled_back_at: str | None = None,
+) -> dict:
+    row = _promotion_row("development", promotion_id=promotion_id)
+    row["promotion_metadata"].update(
+        {
+            "promotion_allowed": promotion_allowed,
+            "best_metric": best_metric,
+            "metric_name": metric_name,
+        }
+    )
+    if quality_baseline_usable is not None:
+        row["promotion_metadata"][
+            "quality_baseline_usable"
+        ] = quality_baseline_usable
+    if quality_baseline_unusable is not None:
+        row["promotion_metadata"][
+            "quality_baseline_unusable"
+        ] = quality_baseline_unusable
+    if rolled_back_at:
+        row["rolled_back_at"] = rolled_back_at
+    return row
+
+
 class FakeMlflowResponse:
     def __init__(self, status_code: int, payload: object) -> None:
         self.status_code = status_code
@@ -700,10 +731,16 @@ def _install_fake_mlflow_client(
     return client
 
 
-def _best_iteration(metrics: dict) -> dict:
+def _best_iteration(
+    metrics: dict,
+    *,
+    primary_metric: float | None = 0.61,
+    metric_name: str | None = None,
+) -> dict:
     return {
         "iteration": 3,
-        "primary_metric": 0.61,
+        "primary_metric": primary_metric,
+        "metric_name": metric_name,
         "all_gates_passed": 1,
         "config_snapshot": "agent_strategy: BALA\n",
         "metrics_json": json.dumps(metrics),
@@ -885,6 +922,182 @@ async def test_preview_allows_feature_candidate_without_economic_replay(
     assert "missing_economic_replay" not in preview["consistency_report"][
         "blockers"
     ]
+
+
+@pytest.mark.asyncio
+async def test_preview_blocks_metric_below_development_baseline(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+    monkeypatch.setattr(config_promoter.settings, "global_stagnation_epsilon", 0.0001)
+    store = FakePromotionStore(
+        _best_iteration(_passing_metrics(), primary_metric=0.635563),
+        promotions=[
+            _development_baseline_promotion(
+                best_metric=0.6476,
+                promotion_id=7,
+            )
+        ],
+    )
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    assert preview["promotion_allowed"] is False
+    assert preview["quality_baseline_passed"] is False
+    quality_eval = preview["quality_baseline_evaluation"]
+    assert quality_eval["mode"] == "development_quality_baseline"
+    assert quality_eval["status"] == "blocked"
+    assert quality_eval["blockers"] == ["best_metric_below_development_baseline"]
+    assert quality_eval["comparison"]["baseline_promotion_id"] == 7
+    assert quality_eval["comparison"]["baseline_metric"] == 0.6476
+    assert quality_eval["comparison"]["current_metric"] == 0.635563
+    assert "best_metric_below_development_baseline" in preview[
+        "candidate_pool_record"
+    ]["blockers"]
+    assert preview["gate_bundle_evaluation"]["blockers"] == []
+    assert preview["consistency_report"]["blockers"] == []
+    detail = preview["quality_baseline_evaluation"]["blocker_details"][0]
+    assert detail["code"] == "best_metric_below_development_baseline"
+    assert detail["category"] == "quality_regression"
+    assert detail["likely_fix"]
+    assert detail in preview["blocker_details"]
+    assert detail in preview["development_promotion_metadata"]["blocker_details"]
+    assert preview["development_promotion_metadata"][
+        "quality_baseline_passed"
+    ] is False
+    assert preview["development_promotion_metadata"][
+        "quality_baseline_usable"
+    ] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("current_metric", "baseline_metric"),
+    [
+        (0.61, 0.61005),
+        (0.62, 0.61),
+    ],
+)
+async def test_preview_allows_metric_within_or_above_development_baseline(
+    tmp_path,
+    monkeypatch,
+    current_metric,
+    baseline_metric,
+):
+    _write_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+    monkeypatch.setattr(config_promoter.settings, "global_stagnation_epsilon", 0.0001)
+    store = FakePromotionStore(
+        _best_iteration(_passing_metrics(), primary_metric=current_metric),
+        promotions=[
+            _development_baseline_promotion(best_metric=baseline_metric)
+        ],
+    )
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    assert preview["promotion_allowed"] is True
+    assert preview["quality_baseline_evaluation"]["passed"] is True
+    assert preview["quality_baseline_evaluation"]["blockers"] == []
+    assert preview["candidate_pool_record"]["quality_baseline_passed"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "baseline",
+    [
+        _development_baseline_promotion(
+            best_metric=0.6476,
+            quality_baseline_usable=False,
+        ),
+        _development_baseline_promotion(
+            best_metric=0.6476,
+            quality_baseline_unusable=True,
+        ),
+        _development_baseline_promotion(
+            best_metric=0.6476,
+            promotion_allowed=False,
+        ),
+        _development_baseline_promotion(
+            best_metric=0.6476,
+            rolled_back_at="2026-05-01T00:00:00+00:00",
+        ),
+        _development_baseline_promotion(best_metric=None),
+    ],
+)
+async def test_preview_skips_ineligible_development_quality_baselines(
+    tmp_path,
+    monkeypatch,
+    baseline,
+):
+    _write_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+    monkeypatch.setattr(config_promoter.settings, "global_stagnation_epsilon", 0.0001)
+    store = FakePromotionStore(
+        _best_iteration(_passing_metrics(), primary_metric=0.635563),
+        promotions=[baseline],
+    )
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    assert preview["promotion_allowed"] is True
+    assert preview["quality_baseline_evaluation"]["status"] == (
+        "no_eligible_development_baseline"
+    )
+    assert preview["quality_baseline_evaluation"]["blockers"] == []
+
+
+@pytest.mark.asyncio
+async def test_preview_skips_quality_baseline_metric_name_mismatch(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+    store = FakePromotionStore(
+        _best_iteration(
+            _passing_metrics(),
+            primary_metric=0.635563,
+            metric_name="composite_direction_score",
+        ),
+        promotions=[
+            _development_baseline_promotion(
+                best_metric=0.6476,
+                metric_name="auc",
+            )
+        ],
+    )
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    assert preview["promotion_allowed"] is True
+    assert preview["quality_baseline_evaluation"]["status"] == (
+        "not_comparable_metric_name_mismatch"
+    )
+    assert preview["quality_baseline_evaluation"]["blockers"] == []
+
+
+@pytest.mark.asyncio
+async def test_confirm_requires_quality_baseline_pass(tmp_path, monkeypatch):
+    _write_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+    monkeypatch.setattr(config_promoter.settings, "global_stagnation_epsilon", 0.0001)
+    store = FakePromotionStore(
+        _best_iteration(_passing_metrics(), primary_metric=0.635563),
+        promotions=[
+            _development_baseline_promotion(best_metric=0.6476)
+        ],
+    )
+
+    with pytest.raises(ValueError, match="development quality baseline failed"):
+        await ConfigPromoter(store).confirm("research_1")
 
 
 @pytest.mark.asyncio

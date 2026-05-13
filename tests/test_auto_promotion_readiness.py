@@ -236,6 +236,34 @@ async def test_auto_promote_uses_preview_before_confirm(
 
 
 @pytest.mark.asyncio
+async def test_auto_promote_reports_quality_baseline_blocker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = FakeStore(phase_state=_complete_until_promotion_state())
+    calls = _install_promoter(
+        monkeypatch,
+        preview_payload={
+            "promotion_allowed": False,
+            "quality_baseline_evaluation": {
+                "blockers": ["best_metric_below_development_baseline"]
+            },
+        },
+    )
+    broadcaster = _install_broadcaster(monkeypatch)
+    agent_log = FakeAgentLog()
+
+    orchestrator = AgentOrchestrator(store)  # type: ignore[arg-type]
+    await orchestrator._try_auto_promote("res_auto", _config(), agent_log)  # noqa: SLF001
+
+    assert calls["preview"] == ["res_auto"]
+    assert calls["confirm"] == []
+    event = broadcaster.events[-1]
+    assert event["reason"] == "promotion_preview_blocked"
+    assert event["blockers"] == ["best_metric_below_development_baseline"]
+    assert store.audit_events[-1]["request_metadata"]["blockers"] == event["blockers"]
+
+
+@pytest.mark.asyncio
 async def test_auto_promote_uses_training_gate_alias_before_preview(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
