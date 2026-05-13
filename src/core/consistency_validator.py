@@ -44,6 +44,15 @@ REJECTED_ADAPTIVE_NOOP_REASONS: frozenset[str] = frozenset(
 )
 
 
+def _normalize_report_mode(mode: Optional[str]) -> Optional[str]:
+    if mode is None:
+        return None
+    normalized = str(mode).strip().lower()
+    if normalized not in {"sweep", "finalist", "promotion"}:
+        raise ValueError(f"Unknown consistency report mode: {mode!r}")
+    return normalized
+
+
 def build_consistency_report(
     *,
     research_id: str,
@@ -54,12 +63,16 @@ def build_consistency_report(
     attempt_snapshot: Optional[Dict[str, Any]] = None,
     preflight: Optional[Dict[str, Any]] = None,
     search_phase: Optional[str] = None,
+    mode: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build a readable cross-service candidate consistency report."""
 
     metrics = metrics_payload or {}
     attempt = attempt_snapshot or {}
     preflight = preflight or {}
+    model_type = str(model_type or "").strip().lower()
+    report_mode = _normalize_report_mode(mode)
+    strict_mode = report_mode in {"finalist", "promotion"}
     checks: list[Dict[str, Any]] = []
     blockers: list[str] = []
 
@@ -96,6 +109,7 @@ def build_consistency_report(
         or metrics.get("promotion_candidate")
         or (training_gates_passed_from(metrics) and _has_late_phase_evidence)
     )
+    hard_consistency = strict_mode or (report_mode is None and promotable)
 
     add(
         "config_snapshot_present",
@@ -142,16 +156,22 @@ def build_consistency_report(
     )
     add(
         "artifact_reference_present",
-        "passed" if artifact_ref else ("failed" if promotable else "warning"),
-        blocker="missing_artifact_reference" if promotable else None,
+        "passed" if artifact_ref else ("failed" if hard_consistency else "warning"),
+        blocker="missing_artifact_reference" if hard_consistency else None,
     )
 
     calibration = _calibration_payload(metrics)
     add(
         "calibration_diagnostics_present",
-        "passed" if calibration else ("failed" if promotable and model_type in {"direction", "volatility"} else "warning"),
+        "passed"
+        if calibration
+        else (
+            "failed"
+            if hard_consistency and model_type in {"direction", "volatility"}
+            else "warning"
+        ),
         blocker="missing_calibration_diagnostics"
-        if promotable and model_type in {"direction", "volatility"}
+        if hard_consistency and model_type in {"direction", "volatility"}
         else None,
     )
     replay = (
@@ -163,16 +183,18 @@ def build_consistency_report(
     if replay is None:
         add(
             "economic_replay_present",
-            "failed" if promotable and model_type == "rl" else "warning",
+            "failed" if hard_consistency and model_type == "rl" else "warning",
             blocker="missing_economic_replay"
-            if promotable and model_type == "rl"
+            if hard_consistency and model_type == "rl"
             else None,
         )
     else:
         add(
             "economic_replay_gates",
-            "passed" if replay_ok is not False else "failed",
-            blocker="failed_economic_replay",
+            "passed"
+            if replay_ok is not False
+            else ("failed" if model_type == "rl" else "warning"),
+            blocker="failed_economic_replay" if model_type == "rl" else None,
         )
 
     parity = metrics.get("inference_parity") or preflight.get("inference_reload_validation")
@@ -195,8 +217,8 @@ def build_consistency_report(
     else:
         add(
             "inference_feature_roster_parity",
-            "failed" if promotable else "warning",
-            blocker="missing_inference_parity" if promotable else None,
+            "failed" if hard_consistency else "warning",
+            blocker="missing_inference_parity" if hard_consistency else None,
         )
 
     parity_metadata = _dict_at(metrics, "parity_metadata")
@@ -211,12 +233,25 @@ def build_consistency_report(
     )
     add(
         "feature_schema_hash_recorded",
-        "passed" if feature_hash else "warning",
+        "passed"
+        if feature_hash
+        else (
+            "failed"
+            if hard_consistency and model_type in {"direction", "volatility"}
+            else "warning"
+        ),
+        blocker="missing_feature_schema_hash"
+        if hard_consistency
+        and model_type in {"direction", "volatility"}
+        and not feature_hash
+        else None,
     )
     adaptive_schema_blocker = _adaptive_schema_flags_blocker(metrics)
     if adaptive_schema_blocker:
         adaptive_schema_status = (
-            "failed" if promotable or search_phase == ADAPTIVE_FEATURE_PHASE_ID else "warning"
+            "failed"
+            if hard_consistency or search_phase == ADAPTIVE_FEATURE_PHASE_ID
+            else "warning"
         )
         add(
             "adaptive_feature_schema_flags_recorded",
@@ -235,14 +270,16 @@ def build_consistency_report(
         obs_hash = _first_present(attempt, metrics, "obs_spec_hash", "observation_spec_hash")
         add(
             "obs_spec_hash_recorded",
-            "passed" if obs_hash else ("failed" if promotable else "warning"),
-            blocker="missing_obs_spec_hash" if promotable else None,
+            "passed" if obs_hash else ("failed" if hard_consistency else "warning"),
+            blocker="missing_obs_spec_hash" if hard_consistency else None,
         )
         rl_oos = metrics.get("rl_oos")
         add(
             "rl_oos_gates_present",
-            "passed" if isinstance(rl_oos, dict) else ("failed" if promotable else "warning"),
-            blocker="missing_rl_oos_gates" if promotable else None,
+            "passed"
+            if isinstance(rl_oos, dict)
+            else ("failed" if hard_consistency else "warning"),
+            blocker="missing_rl_oos_gates" if hard_consistency else None,
         )
         if isinstance(rl_oos, dict):
             direction_provenance = _rl_channel_provenance(metrics, rl_oos, "direction")
@@ -251,64 +288,64 @@ def build_consistency_report(
                 "rl_direction_feature_provenance_present",
                 "passed"
                 if direction_provenance
-                else ("failed" if promotable else "warning"),
+                else ("failed" if hard_consistency else "warning"),
                 blocker="missing_direction_feature_provenance"
-                if promotable
+                if hard_consistency
                 else None,
             )
             add(
                 "rl_volatility_feature_provenance_present",
                 "passed"
                 if volatility_provenance
-                else ("failed" if promotable else "warning"),
+                else ("failed" if hard_consistency else "warning"),
                 blocker="missing_volatility_feature_provenance"
-                if promotable
+                if hard_consistency
                 else None,
             )
             add(
                 "rl_feature_bundle_hash_recorded",
                 "passed"
                 if _rl_feature_bundle_hash(metrics, rl_oos)
-                else ("failed" if promotable else "warning"),
-                blocker="missing_rl_feature_bundle_hash" if promotable else None,
+                else ("failed" if hard_consistency else "warning"),
+                blocker="missing_rl_feature_bundle_hash" if hard_consistency else None,
             )
             add(
                 "rl_nested_or_blocked_validation_present",
                 "passed"
                 if _rl_nested_validation_present(rl_oos)
-                else ("failed" if promotable else "warning"),
-                blocker="missing_nested_validation" if promotable else None,
+                else ("failed" if hard_consistency else "warning"),
+                blocker="missing_nested_validation" if hard_consistency else None,
             )
             add(
                 "rl_multi_seed_validation_present",
                 "passed"
                 if _rl_multi_seed_present(rl_oos)
-                else ("failed" if promotable else "warning"),
-                blocker="missing_multi_seed_rl_validation" if promotable else None,
+                else ("failed" if hard_consistency else "warning"),
+                blocker="missing_multi_seed_rl_validation" if hard_consistency else None,
             )
             add(
                 "rl_oos_metrics_present",
                 "passed"
                 if _rl_required_metrics_present(rl_oos)
-                else ("failed" if promotable else "warning"),
-                blocker="missing_rl_oos_metrics" if promotable else None,
+                else ("failed" if hard_consistency else "warning"),
+                blocker="missing_rl_oos_metrics" if hard_consistency else None,
             )
             add(
                 "rl_no_direction_feature_fallback",
                 "passed"
                 if not _rl_unsafe_feature_provenance(direction_provenance)
-                else ("failed" if promotable else "warning"),
+                else ("failed" if hard_consistency else "warning"),
                 blocker="proxy_or_neutral_direction_proba_fallback"
-                if promotable
+                if hard_consistency
                 else None,
             )
             add(
                 "rl_no_volatility_feature_fallback",
                 "passed"
                 if not _rl_unsafe_feature_provenance(volatility_provenance)
-                else ("failed" if promotable else "warning"),
+                else ("failed" if hard_consistency else "warning"),
                 blocker="proxy_or_neutral_volatility_feature_fallback"
-                if promotable
+                if hard_consistency
                 else None,
             )
         if isinstance(replay, dict):
@@ -321,17 +358,17 @@ def build_consistency_report(
                 "rl_economic_replay_artifact_hash_recorded",
                 "passed"
                 if replay_hash
-                else ("failed" if promotable else "warning"),
+                else ("failed" if hard_consistency else "warning"),
                 blocker="missing_rl_economic_replay_artifact_hash"
-                if promotable
+                if hard_consistency
                 else None,
             )
             add(
                 "rl_economic_replay_assumptions_present",
                 "passed"
                 if _rl_replay_assumptions_present(replay)
-                else ("failed" if promotable else "warning"),
-                blocker="missing_rl_replay_assumptions" if promotable else None,
+                else ("failed" if hard_consistency else "warning"),
+                blocker="missing_rl_replay_assumptions" if hard_consistency else None,
             )
             add(
                 "rl_profit_score_present",
@@ -341,16 +378,16 @@ def build_consistency_report(
                     metrics.get("rl_profit_score"),
                 )
                 is not None
-                else ("failed" if promotable else "warning"),
-                blocker="missing_rl_profit_score" if promotable else None,
+                else ("failed" if hard_consistency else "warning"),
+                blocker="missing_rl_profit_score" if hard_consistency else None,
             )
             replay_worsening = _rl_replay_worse_than_baseline(replay)
             add(
                 "rl_economic_replay_not_worse_than_baseline",
                 "passed"
                 if not replay_worsening
-                else ("failed" if promotable else "warning"),
-                blocker="worsening_post_cost_replay" if promotable else None,
+                else ("failed" if hard_consistency else "warning"),
+                blocker="worsening_post_cost_replay" if hard_consistency else None,
                 detail=json.dumps(replay_worsening, sort_keys=True)
                 if replay_worsening
                 else None,
@@ -364,16 +401,16 @@ def build_consistency_report(
     )
     add(
         "rollback_target_addressable",
-        "passed" if rollback_target else ("failed" if promotable else "warning"),
-        blocker="missing_rollback_target" if promotable else None,
+        "passed" if rollback_target else ("failed" if hard_consistency else "warning"),
+        blocker="missing_rollback_target" if hard_consistency else None,
     )
 
     smoke = preflight.get("smoke_validation") or metrics.get("smoke_validation")
     smoke_passed = smoke.get("passed") if isinstance(smoke, dict) else None
     add(
         "smoke_or_paper_validation",
-        "passed" if smoke_passed is True else ("failed" if promotable else "warning"),
-        blocker="failed_smoke_validation" if promotable else None,
+        "passed" if smoke_passed is True else ("failed" if hard_consistency else "warning"),
+        blocker="failed_smoke_validation" if hard_consistency else None,
     )
 
     docs_status = metrics.get("docs_wiki_status")
@@ -405,6 +442,7 @@ def build_consistency_report(
         "iteration": iteration,
         "model_type": model_type,
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "mode": report_mode or "legacy",
         "passed": not blockers,
         "blockers": _dedupe(blockers),
         "checks": checks,

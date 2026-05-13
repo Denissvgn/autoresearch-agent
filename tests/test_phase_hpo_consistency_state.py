@@ -37,6 +37,8 @@ def _passing_metrics() -> dict:
             "feature_count_alignment_passed": True,
             "model_roster_parity_passed": True,
         },
+        "feature_schema_hash": "schema-sha",
+        "parity_metadata": {"feature_schema_hash": "schema-sha"},
         "artifact_uri": "mlflow://runs/run-1/model",
         "mlflow_run_id": "run-1",
         "rollback_target": "direction_model:1",
@@ -412,6 +414,103 @@ def test_consistency_report_warns_for_missing_artifact_on_non_candidate():
         if check["name"] == "artifact_reference_present"
     )
     assert artifact_check["status"] == "warning"
+
+
+def test_consistency_report_sweep_mode_keeps_late_gaps_advisory():
+    report = build_consistency_report(
+        research_id="res_consistency",
+        iteration=4,
+        model_type="direction",
+        config_snapshot="agent_strategy: BALA\n",
+        metrics_payload={"training_gates_passed": True, "all_gates_passed": True},
+        attempt_snapshot={},
+        mode="sweep",
+    )
+
+    assert report["mode"] == "sweep"
+    assert report["passed"] is True
+    assert report["blockers"] == []
+    checks = {check["name"]: check for check in report["checks"]}
+    for name in (
+        "artifact_reference_present",
+        "calibration_diagnostics_present",
+        "economic_replay_present",
+        "inference_feature_roster_parity",
+        "feature_schema_hash_recorded",
+        "rollback_target_addressable",
+        "smoke_or_paper_validation",
+    ):
+        assert checks[name]["status"] == "warning"
+
+
+def test_consistency_report_promotion_mode_blocks_required_late_gaps():
+    report = build_consistency_report(
+        research_id="res_consistency",
+        iteration=5,
+        model_type="direction",
+        config_snapshot="agent_strategy: BALA\n",
+        metrics_payload={"training_gates_passed": True, "all_gates_passed": True},
+        attempt_snapshot={},
+        mode="promotion",
+    )
+
+    assert report["mode"] == "promotion"
+    assert report["passed"] is False
+    assert {
+        "missing_artifact_reference",
+        "missing_calibration_diagnostics",
+        "missing_inference_parity",
+        "missing_feature_schema_hash",
+        "missing_rollback_target",
+        "failed_smoke_validation",
+    }.issubset(set(report["blockers"]))
+    assert "missing_economic_replay" not in report["blockers"]
+    checks = {check["name"]: check for check in report["checks"]}
+    assert checks["economic_replay_present"]["status"] == "warning"
+
+
+def test_consistency_report_promotion_mode_excludes_supervised_economic_replay():
+    for model_type in ("direction", "volatility"):
+        metrics = _passing_metrics()
+        metrics.pop("economic_replay")
+        report = build_consistency_report(
+            research_id=f"res_{model_type}",
+            iteration=6,
+            model_type=model_type,
+            config_snapshot="agent_strategy: BALA\n",
+            metrics_payload=metrics,
+            attempt_snapshot={"artifact_hash": "artifact-sha"},
+            mode="promotion",
+        )
+
+        assert report["passed"] is True
+        assert "missing_economic_replay" not in report["blockers"]
+        checks = {check["name"]: check for check in report["checks"]}
+        assert checks["economic_replay_present"]["status"] == "warning"
+
+
+def test_consistency_report_promotion_mode_blocks_rl_economic_replay():
+    report = build_consistency_report(
+        research_id="res_rl",
+        iteration=7,
+        model_type="rl",
+        config_snapshot="agent_strategy: BALA\n",
+        metrics_payload={
+            "training_gates_passed": True,
+            "all_gates_passed": True,
+            "artifact_hash": "policy-sha",
+            "obs_spec_hash": "obs-sha",
+            "rollback_target": "rl_policy:1",
+            "smoke_validation": {"passed": True},
+        },
+        attempt_snapshot={"artifact_hash": "policy-sha"},
+        mode="promotion",
+    )
+
+    assert report["passed"] is False
+    assert "missing_economic_replay" in report["blockers"]
+    checks = {check["name"]: check for check in report["checks"]}
+    assert checks["economic_replay_present"]["status"] == "failed"
 
 
 def test_research_state_summarizes_candidates_failures_and_budget():

@@ -189,6 +189,7 @@ class ConfigPromoter:
                 "inference_reload_validation": inference_reload_validation,
                 "rollback_target": rollback_readiness.get("rollback_target"),
             },
+            mode="promotion",
         )
         best_for_gate = self._best_iteration_with_preflight(
             best,

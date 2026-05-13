@@ -404,6 +404,9 @@ def _passing_metrics() -> dict:
             "feature_count_alignment_passed": True,
             "model_roster_parity_passed": True,
         },
+        "feature_schema_hash": "schema-direction-1",
+        "parity_metadata": {"feature_schema_hash": "schema-direction-1"},
+        "feature_schema": {"feature_schema_hash": "schema-direction-1"},
         "model_registry_name": "direction-model",
         "model_version": "12",
         "mlflow_run_id": "run-direction-12",
@@ -878,6 +881,48 @@ async def test_preview_allows_feature_candidate_without_economic_replay(
     assert "missing_economic_replay" not in preview["gate_bundle_evaluation"][
         "blockers"
     ]
+    assert preview["consistency_report"]["mode"] == "promotion"
+    assert "missing_economic_replay" not in preview["consistency_report"][
+        "blockers"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_preview_rebuilds_sweep_consistency_as_promotion_mode(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(
+        config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
+    )
+    metrics = _passing_metrics()
+    metrics.pop("feature_schema_hash")
+    metrics.pop("parity_metadata")
+    metrics.pop("feature_schema")
+    best = _best_iteration(metrics)
+    best["consistency_report_json"] = json.dumps(
+        {"mode": "sweep", "passed": True, "blockers": [], "checks": []}
+    )
+    store = FakePromotionStore(best)
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    assert preview["gate_bundle_evaluation"]["passed"] is True
+    assert preview["consistency_report"]["mode"] == "promotion"
+    assert preview["consistency_report"]["passed"] is False
+    assert "missing_feature_schema_hash" in preview["consistency_report"][
+        "blockers"
+    ]
+    assert preview["promotion_allowed"] is False
+    detail = next(
+        detail
+        for detail in preview["consistency_report"]["blocker_details"]
+        if detail["code"] == "missing_feature_schema_hash"
+    )
+    assert detail["source"] == "cross_service_consistency"
+    assert detail["likely_fix"]
 
 
 @pytest.mark.asyncio
