@@ -21,6 +21,7 @@ from src.core.artifact_reference import (
     normalize_artifact_references_in_mapping,
     normalize_optional_artifact_ref,
 )
+from src.core.blocker_classifier import classify_blockers
 from src.config import secret_value, settings
 from src.core.consistency_validator import build_consistency_report
 from src.core.development_gate_bundle import (
@@ -33,6 +34,7 @@ from src.core.development_inference_validation import (
 )
 from src.core.development_signal_health import build_development_signal_health
 from src.core.gate_status import training_gates_passed_from_iteration
+from src.core.research_phase_plan import build_phase_state
 from src.core.results_store import ResultsStore
 
 logger = logging.getLogger(__name__)
@@ -112,6 +114,10 @@ class ConfigPromoter:
         model_type = session["model_type"]
         instrument = session["instrument"]
         timeframe = session["timeframe"]
+        phase_state = build_phase_state(
+            session=session,
+            iterations=await self._promotion_iterations(research_id, best),
+        )
 
         # Use the immutable config snapshot stored in the DB — not the
         # mutable workspace best_train.yaml which can diverge from the DB
@@ -202,6 +208,22 @@ class ConfigPromoter:
                 consistency_report=consistency_report,
             )
         )
+        gate_bundle_evaluation = self._with_blocker_details(
+            gate_bundle_evaluation,
+            metrics_payload=metrics_payload,
+            phase_state=phase_state,
+            source="development_gate_bundle",
+        )
+        consistency_report = self._with_blocker_details(
+            consistency_report,
+            metrics_payload=metrics_payload,
+            phase_state=phase_state,
+            source="cross_service_consistency",
+        )
+        preview_blocker_details = self._merge_blocker_details(
+            gate_bundle_evaluation.get("blocker_details", []),
+            consistency_report.get("blocker_details", []),
+        )
         development_gate_bundle_passed = bool(
             gate_bundle_evaluation.get("passed", False)
         )
@@ -225,8 +247,12 @@ class ConfigPromoter:
             "artifact_hash": artifact_hash,
             "consistency_passed": consistency_report.get("passed"),
             "consistency_blockers": consistency_report.get("blockers", []),
+            "consistency_blocker_details": consistency_report.get(
+                "blocker_details", []
+            ),
             "status": "eligible" if promotion_allowed else "blocked",
             "blockers": gate_bundle_evaluation.get("blockers", []),
+            "blocker_details": gate_bundle_evaluation.get("blocker_details", []),
             "inspectable": True,
             "promotion_record_created": False,
         }
@@ -278,6 +304,7 @@ class ConfigPromoter:
             "consistency_report": consistency_report,
             "development_promotion_metadata": development_promotion_metadata,
             "promotion_allowed": promotion_allowed,
+            "blocker_details": preview_blocker_details,
         }
         if promotion_scope == DEVELOPMENT_PROMOTION_SCOPE:
             return preview
@@ -303,6 +330,13 @@ class ConfigPromoter:
                     "scope": promotion_scope,
                     "passed": scoped_allowed,
                     "blockers": scoped_metadata.get("blockers", []),
+                    "blocker_details": classify_blockers(
+                        scoped_metadata.get("blockers", []),
+                        checks=scoped_metadata.get("checks", []),
+                        metrics_payload=metrics_payload,
+                        phase_state=phase_state,
+                        source=f"{promotion_scope}_promotion_scope",
+                    ),
                     "checks": scoped_metadata.get("checks", []),
                 },
             }
@@ -1164,6 +1198,10 @@ class ConfigPromoter:
                 metrics_payload.get("mlflow_run_id"),
             ),
         }
+        blocker_details = self._merge_blocker_details(
+            gate_bundle_evaluation.get("blocker_details", []),
+            consistency_report.get("blocker_details", []),
+        )
         return {
             "schema_version": DEVELOPMENT_PROMOTION_METADATA_VERSION,
             "scope": DEVELOPMENT_PROMOTION_SCOPE,
@@ -1181,6 +1219,7 @@ class ConfigPromoter:
             "development_gate_bundle_passed": development_gate_bundle_passed,
             "consistency_report_passed": consistency_report_passed,
             "promotion_allowed": promotion_allowed,
+            "blocker_details": blocker_details,
             "live_production_promotion_allowed": False,
             "live_production_promotion_requested": self._live_production_requested(
                 metrics_payload
@@ -1191,6 +1230,9 @@ class ConfigPromoter:
                 "scope": gate_bundle_evaluation.get("scope") or DEVELOPMENT_PROMOTION_SCOPE,
                 "passed": gate_bundle_evaluation.get("passed"),
                 "blockers": gate_bundle_evaluation.get("blockers", []),
+                "blocker_details": gate_bundle_evaluation.get(
+                    "blocker_details", []
+                ),
                 "checks": gate_bundle_evaluation.get("checks", []),
                 "waivers": gate_bundle_evaluation.get("waivers", []),
             },
@@ -2186,6 +2228,57 @@ class ConfigPromoter:
                 "adapter": adapter,
             },
         }
+
+    async def _promotion_iterations(
+        self,
+        research_id: str,
+        best_iteration: Dict[str, Any],
+    ) -> list[Dict[str, Any]]:
+        getter = getattr(self._store, "get_iterations", None)
+        if getter is None:
+            return [best_iteration]
+        try:
+            rows = await getter(research_id)
+        except TypeError:
+            return [best_iteration]
+        if not rows:
+            return [best_iteration]
+        return list(rows)
+
+    @staticmethod
+    def _with_blocker_details(
+        evaluation: Dict[str, Any],
+        *,
+        metrics_payload: Dict[str, Any],
+        phase_state: Dict[str, Any],
+        source: str,
+    ) -> Dict[str, Any]:
+        annotated = dict(evaluation)
+        annotated["blocker_details"] = classify_blockers(
+            annotated.get("blockers", []),
+            checks=annotated.get("checks", []),
+            metrics_payload=metrics_payload,
+            phase_state=phase_state,
+            source=source,
+        )
+        return annotated
+
+    @staticmethod
+    def _merge_blocker_details(*detail_groups: Any) -> list[Dict[str, Any]]:
+        merged: list[Dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
+        for group in detail_groups:
+            if not isinstance(group, list):
+                continue
+            for detail in group:
+                if not isinstance(detail, dict):
+                    continue
+                key = (str(detail.get("source", "")), str(detail.get("code", "")))
+                if key in seen:
+                    continue
+                seen.add(key)
+                merged.append(dict(detail))
+        return merged
 
     def _evaluate_gate_bundle(
         self,

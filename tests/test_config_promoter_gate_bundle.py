@@ -14,6 +14,7 @@ from src.core.config_promoter import ConfigPromoter
 from src.core.development_gate_bundle import (
     DEFAULT_GATE_BUNDLE_RELATIVE_PATH,
     PRODUCTION_GATE_BUNDLE_RELATIVE_PATH,
+    evaluate_development_gate_bundle,
 )
 from src.core.results_store import ResultsStore
 
@@ -24,10 +25,12 @@ class FakePromotionStore:
         best: dict,
         model_type: str = "direction",
         promotions: list[dict] | None = None,
+        iterations: list[dict] | None = None,
     ) -> None:
         self.best = best
         self.model_type = model_type
         self.promotions: list[dict] = list(promotions or [])
+        self.iterations = list(iterations or [best])
 
     async def get_session(self, research_id: str):
         return {
@@ -40,6 +43,9 @@ class FakePromotionStore:
 
     async def get_best_iteration(self, research_id: str):
         return self.best
+
+    async def get_iterations(self, research_id: str):
+        return self.iterations
 
     async def record_promotion(self, **kwargs):
         record = {
@@ -356,6 +362,7 @@ promotion_blockers:
   - missing_signal_health_metrics
   - inference_reload_validation_missing
   - inference_reload_failed
+  - inference_adapter_load_failure
 """,
         encoding="utf-8",
     )
@@ -748,6 +755,23 @@ async def test_preview_includes_blocking_gate_bundle_result(tmp_path, monkeypatc
     assert pool["iteration"] == 3
     assert pool["status"] == "blocked"
     assert pool["blockers"] == gate_eval["blockers"]
+    detail_by_code = {
+        detail["code"]: detail for detail in gate_eval["blocker_details"]
+    }
+    assert detail_by_code["missing_reliability_diagram"]["category"] == (
+        "missing_nested_result_payload"
+    )
+    assert detail_by_code["missing_reliability_diagram"]["source"] == (
+        "development_gate_bundle"
+    )
+    assert detail_by_code["missing_reliability_diagram"]["likely_fix"]
+    assert pool["blocker_details"] == gate_eval["blocker_details"]
+    for detail in gate_eval["blocker_details"]:
+        assert detail in preview["blocker_details"]
+        assert detail in preview["development_promotion_metadata"]["blocker_details"]
+    assert preview["development_promotion_metadata"]["gate_bundle"][
+        "blocker_details"
+    ] == gate_eval["blocker_details"]
     assert pool["inspectable"] is True
     assert pool["promotion_record_created"] is False
     assert pool["config_snapshot_sha256"] == ConfigPromoter._sha256_text(
@@ -991,6 +1015,13 @@ async def test_preview_blocks_missing_required_inference_parity(
     gate_eval = preview["gate_bundle_evaluation"]
     assert preview["promotion_allowed"] is False
     assert "inference_feature_schema_mismatch" in gate_eval["blockers"]
+    detail = next(
+        detail
+        for detail in gate_eval["blocker_details"]
+        if detail["code"] == "inference_feature_schema_mismatch"
+    )
+    assert detail["category"] == "phase_not_run"
+    assert detail["phase"] == "inference_parity_replay"
     assert any(
         check["name"] == "inference_parity_required"
         and check["status"] == "failed"
@@ -1783,6 +1814,77 @@ async def test_preview_records_inference_reload_validation(
     assert reload_validation["checks"]["feature_name_alignment_passed"] is True
     assert reload_validation["checks"]["composite_reload_passed"] is True
     assert reload_validation["checks"]["rollback_ready"] is True
+
+
+def test_inference_reload_uses_generic_adapter_blocker_for_tabular_candidate():
+    metrics = _passing_m7_remaining_metrics()
+    metrics["candidate_family"] = "tabular"
+    metrics["is_tsfm_candidate"] = False
+    metrics["inference_reload_validation"] = {
+        "checks": {
+            "feature_name_alignment_passed": True,
+            "feature_count_alignment_passed": True,
+            "adapter_loading_passed": False,
+            "fallback_behavior_passed": False,
+            "latency_budget_passed": False,
+            "model_roster_parity_passed": True,
+            "observation_dimension_parity_passed": True,
+            "composite_reload_passed": True,
+            "rollback_ready": True,
+            "prior_version_preserved_on_reload_failure": True,
+        }
+    }
+    bundle = {
+        "version": 1,
+        "gate_bundle_id": "development_direction_prediction_v1",
+        "scope": "development",
+        "promotion_policy": {
+            "auc_only_promotion_allowed": False,
+            "live_production_promotion_allowed": False,
+        },
+        "gate_tiers": {
+            "inference_reload": {
+                "required": True,
+                "checks": {
+                    "feature_alignment_required": True,
+                    "adapter_loading_required": True,
+                    "roster_parity_required": True,
+                    "observation_dimension_parity_required": True,
+                    "fallback_behavior_required": True,
+                    "latency_budget_required": True,
+                    "composite_reload_required": True,
+                    "rollback_ready_required": True,
+                    "prior_version_preserved_on_reload_failure": True,
+                },
+            }
+        },
+    }
+
+    result = evaluate_development_gate_bundle(
+        bundle=bundle,
+        model_type="direction",
+        best_iteration=_best_iteration(metrics),
+    )
+
+    assert "inference_adapter_load_failure" in result["blockers"]
+    assert "tsfm_adapter_load_failure_without_tabular_fallback" not in result[
+        "blockers"
+    ]
+    assert "tsfm_latency_budget_failure" not in result["blockers"]
+    assert {
+        check["name"]
+        for check in result["checks"]
+        if check["name"].startswith("inference_reload")
+    } == {
+        "inference_reload_validation_required",
+        "inference_reload_feature_alignment",
+        "inference_reload_adapter_loading",
+        "inference_reload_roster_parity",
+        "inference_reload_observation_dimension_parity",
+        "inference_reload_composite_reload",
+        "inference_reload_rollback_ready",
+        "inference_reload_prior_version_preserved_on_failure",
+    }
 
 
 @pytest.mark.asyncio

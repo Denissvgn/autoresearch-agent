@@ -119,6 +119,8 @@ def _rich_results_payload(model_path: str = "runs/model.pkl") -> Dict[str, Any]:
         "requested_base_models": ["lgbm", "xgb"],
         "surviving_base_models": ["lgbm", "xgb"],
         "pruned_base_models": [],
+        "candidate_family": "tabular",
+        "is_tsfm_candidate": False,
         "model_path": model_path,
         "mlflow_run_id": "run-rich",
         "feature_schema_hash": feature_schema_hash,
@@ -208,6 +210,8 @@ def test_direction_and_volatility_marker_emit_results_json_path(tmp_path: Path) 
             "signal_rate": 0.12,
             "optimal_threshold": 0.47,
             "prediction_horizon": 3,
+            "candidate_family": "tabular",
+            "is_tsfm_candidate": False,
         },
         12.0,
         marker_dir=marker_dir,
@@ -216,6 +220,9 @@ def test_direction_and_volatility_marker_emit_results_json_path(tmp_path: Path) 
     assert f"results_json_path:  {results_path}" in (
         marker_dir / "last_metrics.txt"
     ).read_text(encoding="utf-8")
+    marker_text = (marker_dir / "last_metrics.txt").read_text(encoding="utf-8")
+    assert "candidate_family:  tabular" in marker_text
+    assert "is_tsfm_candidate: False" in marker_text
 
     volatility_prepare.print_summary(
         {
@@ -289,6 +296,8 @@ async def test_record_iteration_copies_results_and_merges_nested_evidence(
         == 0.18
     )
     assert metrics["requested_base_models"] == ["lgbm", "xgb"]
+    assert metrics["candidate_family"] == "tabular"
+    assert metrics["is_tsfm_candidate"] is False
     assert metrics["feature_schema_hash"] == "schema-rich"
     assert metrics["feature_schema_flags"]["adaptive_levels"][
         "selected_feature_names"
@@ -365,6 +374,8 @@ async def test_fallback_results_json_is_claimed_preserved_and_consumed(
     assert metrics["config"]["calibration_full_validation"]["signal_rate_distribution"][
         "max"
     ] == 0.18
+    assert metrics["candidate_family"] == "tabular"
+    assert metrics["is_tsfm_candidate"] is False
     assert metrics["feature_schema_flags"]["adaptive_levels"]["enabled"] is True
 
 

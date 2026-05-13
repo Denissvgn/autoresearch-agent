@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterable
 
 import yaml
 
+from src.core.blocker_classifier import classify_blockers
 from src.core.gate_status import training_gates_passed_from_iteration
 
 DEFAULT_GATE_BUNDLE_RELATIVE_PATH = (
@@ -65,6 +66,7 @@ def evaluate_development_gate_bundle(
             "passed": True,
             "checks": [],
             "blockers": [],
+            "blocker_details": [],
             "waivers": [],
             "notes": ["development_direction_prediction_v1 applies to direction models"],
         }
@@ -346,6 +348,12 @@ def evaluate_development_gate_bundle(
         "passed": not blockers,
         "checks": checks,
         "blockers": blockers,
+        "blocker_details": classify_blockers(
+            blockers,
+            checks=checks,
+            metrics_payload=payload,
+            source="development_gate_bundle",
+        ),
         "waivers": sorted(waivers),
     }
 
@@ -449,6 +457,12 @@ def _evaluate_rl_development_gate_bundle(
         "passed": not blockers,
         "checks": checks,
         "blockers": blockers,
+        "blocker_details": classify_blockers(
+            blockers,
+            checks=checks,
+            metrics_payload=payload,
+            source="development_gate_bundle",
+        ),
         "waivers": sorted(waivers),
     }
 
@@ -940,6 +954,7 @@ def _evaluate_inference_reload_gates(
         payload.get("reload_validation"),
     )
     checks = _dict_at(validation, "checks")
+    tsfm_candidate = _is_tsfm_candidate(payload, validation)
     add_check(
         "inference_reload_validation_required",
         bool(validation),
@@ -958,10 +973,15 @@ def _evaluate_inference_reload_gates(
             checks,
         )
     if tier_checks.get("adapter_loading_required"):
+        adapter_blocker = (
+            "tsfm_adapter_load_failure_without_tabular_fallback"
+            if tsfm_candidate
+            else "inference_adapter_load_failure"
+        )
         add_check(
             "inference_reload_adapter_loading",
             checks.get("adapter_loading_passed") is True,
-            "tsfm_adapter_load_failure_without_tabular_fallback",
+            adapter_blocker,
             checks,
         )
     if tier_checks.get("roster_parity_required"):
@@ -978,14 +998,14 @@ def _evaluate_inference_reload_gates(
             "inference_feature_schema_mismatch",
             checks,
         )
-    if tier_checks.get("fallback_behavior_required"):
+    if tier_checks.get("fallback_behavior_required") and tsfm_candidate:
         add_check(
             "inference_reload_fallback_behavior",
             checks.get("fallback_behavior_passed") is True,
             "tsfm_adapter_load_failure_without_tabular_fallback",
             checks,
         )
-    if tier_checks.get("latency_budget_required"):
+    if tier_checks.get("latency_budget_required") and tsfm_candidate:
         add_check(
             "inference_reload_latency_budget",
             checks.get("latency_budget_passed") is True,

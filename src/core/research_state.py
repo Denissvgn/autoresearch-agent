@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterable, List, Optional
 from src.core.artifact_reference import (
     first_valid_artifact_ref,
 )
+from src.core.blocker_classifier import blocker_details as classify_blocker_details
 from src.core.consistency_validator import parse_consistency_report
 from src.core.gate_status import (
     training_gates_passed_from,
@@ -52,6 +53,7 @@ def build_research_state(
         promotions=promotion_rows,
         latest_promotion=latest_promotion,
         audit_events=audit_event_rows,
+        phase_state=phase_state,
     )
     research_outcome = _research_outcome(
         session=session,
@@ -557,6 +559,7 @@ def _production_operations_summary(
     promotions: List[Dict[str, Any]],
     latest_promotion: Optional[Dict[str, Any]],
     audit_events: List[Dict[str, Any]],
+    phase_state: Dict[str, Any],
 ) -> Dict[str, Any]:
     best_row = _best_candidate_row(iterations)
     metrics = _parse_json(best_row.get("metrics_json")) if best_row else {}
@@ -572,6 +575,8 @@ def _production_operations_summary(
         promotions=promotions,
         best_row=best_row,
         promotion_blockers=promotion_blockers,
+        metrics=metrics,
+        phase_state=phase_state,
     )
     rl_replay = _rl_replay_status(metrics, snapshot)
     feature_readiness = _supervised_feature_readiness_status(
@@ -596,6 +601,8 @@ def _production_operations_summary(
         rl_oos=rl_oos,
         inference=inference,
         rollback=rollback,
+        metrics=metrics,
+        phase_state=phase_state,
     )
 
     return {
@@ -606,7 +613,11 @@ def _production_operations_summary(
         "promotion": {
             "blocked": bool(promotion_blockers),
             "blockers": promotion_blockers,
-            "blocker_details": _blocker_details(promotion_blockers),
+            "blocker_details": _blocker_details(
+                promotion_blockers,
+                metrics_payload=metrics,
+                phase_state=phase_state,
+            ),
             "latest_scope": (
                 latest_promotion.get("scope") if latest_promotion else None
             ),
@@ -716,6 +727,8 @@ def _promotion_scope_status(
     promotions: List[Dict[str, Any]],
     best_row: Optional[Dict[str, Any]],
     promotion_blockers: List[str],
+    metrics: Dict[str, Any],
+    phase_state: Dict[str, Any],
 ) -> List[Dict[str, Any]]:
     matching = _matching_promotions(session, promotions)
     latest_by_scope: Dict[str, Dict[str, Any]] = {}
@@ -776,7 +789,12 @@ def _promotion_scope_status(
                 "requires_approval": scope != "development",
                 "required_prior_scopes": required,
                 "blockers": blockers,
-                "blocker_details": _blocker_details(blockers),
+                "blocker_details": _blocker_details(
+                    blockers,
+                    metrics_payload=metrics,
+                    phase_state=phase_state,
+                    source=f"research_state_{scope}_scope",
+                ),
                 "promotion": _compact_promotion(promotion),
             }
         )
@@ -1143,6 +1161,8 @@ def _operations_warnings(
     rl_oos: Dict[str, Any],
     inference: Dict[str, Any],
     rollback: Dict[str, Any],
+    metrics: Dict[str, Any],
+    phase_state: Dict[str, Any],
 ) -> List[Dict[str, Any]]:
     warnings: List[Dict[str, Any]] = []
 
@@ -1175,7 +1195,12 @@ def _operations_warnings(
             "blocked_promotion",
             "critical",
             "Promotion is blocked by server-owned gates.",
-            _blocker_details(promotion_blockers),
+            _blocker_details(
+                promotion_blockers,
+                metrics_payload=metrics,
+                phase_state=phase_state,
+                source="research_state_warning",
+            ),
         )
     if session.get("model_type") == "rl" and rl_replay.get("status") != "passed":
         add(
@@ -1235,14 +1260,21 @@ def _compact_audit_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return compact
 
 
-def _blocker_details(blockers: List[str]) -> List[Dict[str, str]]:
-    return [
-        {
-            "code": blocker,
-            "label": _BLOCKER_LABELS.get(blocker, _humanize_code(blocker)),
-        }
-        for blocker in blockers
-    ]
+def _blocker_details(
+    blockers: List[str],
+    *,
+    checks: Optional[Iterable[Dict[str, Any]]] = None,
+    metrics_payload: Optional[Dict[str, Any]] = None,
+    phase_state: Optional[Dict[str, Any]] = None,
+    source: str = "research_state",
+) -> List[Dict[str, Any]]:
+    return classify_blocker_details(
+        blockers,
+        checks=checks,
+        metrics_payload=metrics_payload,
+        phase_state=phase_state,
+        source=source,
+    )
 
 
 def _humanize_code(value: str) -> str:

@@ -68,6 +68,10 @@ _TOP_LEVEL_RESULT_KEYS = (
     "adaptive_feature_noop_reason",
     "mlflow_logging_status",
     "mlflow_setup_error",
+    "candidate_family",
+    "model_family",
+    "is_tsfm_candidate",
+    "tsfm_candidate",
 )
 
 _SERVER_OWNED_KEYS = {
@@ -261,6 +265,21 @@ def _add_flat_aliases(
         "positive_rate": (config.get("label_positive_rate"),),
         "atr_mult": (config.get("atr_mult"),),
         "n_features": (payload.get("n_features"), metrics.get("n_features")),
+        "candidate_family": (
+            payload.get("candidate_family"),
+            config.get("candidate_family"),
+            metrics.get("candidate_family"),
+        ),
+        "model_family": (
+            payload.get("model_family"),
+            config.get("model_family"),
+            metrics.get("model_family"),
+        ),
+        "is_tsfm_candidate": (
+            payload.get("is_tsfm_candidate"),
+            config.get("is_tsfm_candidate"),
+            metrics.get("is_tsfm_candidate"),
+        ),
     }
     for key, candidates in aliases.items():
         if key in marker and marker[key] not in (None, ""):

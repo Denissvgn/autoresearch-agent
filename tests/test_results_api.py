@@ -528,4 +528,58 @@ async def test_research_state_exposes_production_operations_summary():
     assert scopes["development"]["status"] == "promoted"
     assert scopes["production"]["status"] == "blocked"
     assert "missing_paper_promotion" in scopes["production"]["blockers"]
+    assert scopes["production"]["blocker_details"][0]["category"] == (
+        "missing_evidence"
+    )
+    assert scopes["production"]["blocker_details"][0]["likely_fix"]
     assert ops["audit_events"][0]["scope"] == "production"
+
+
+@pytest.mark.asyncio
+async def test_research_state_exposes_structured_promotion_blocker_details():
+    store = FakeStore()
+    results.init(store)
+    store.sessions["res_blocker_details"] = {
+        "id": "res_blocker_details",
+        "instrument": "DOGE_USDT",
+        "timeframe": "15m",
+        "model_type": "direction",
+        "status": "completed",
+        "workspace_path": "/tmp/res_blocker_details",
+        "max_iterations": 3,
+        "promotion_blockers_json": json.dumps(["missing_brier_score"]),
+    }
+    store.iterations["res_blocker_details"] = [
+        {
+            "id": 1,
+            "research_id": "res_blocker_details",
+            "iteration": 1,
+            "primary_metric": 0.61,
+            "metric_name": "auc",
+            "all_gates_passed": 1,
+            "decision": "keep",
+            "metrics_json": json.dumps(
+                {
+                    "training_gates_passed": True,
+                    "all_gates_passed": True,
+                    "metrics": {"auc": 0.61},
+                    "gate_results": {"all_supported_gates_passed": True},
+                }
+            ),
+        }
+    ]
+
+    state = await results.get_research_state("res_blocker_details")
+
+    promotion = state["production_operations"]["promotion"]
+    assert promotion["blockers"] == ["missing_brier_score"]
+    detail = promotion["blocker_details"][0]
+    assert detail["code"] == "missing_brier_score"
+    assert detail["label"] == "Calibration Brier score is missing."
+    assert detail["category"] == "missing_nested_result_payload"
+    assert detail["likely_fix"]
+    scopes = {item["scope"]: item for item in promotion["scopes"]}
+    assert scopes["development"]["blockers"] == ["missing_brier_score"]
+    assert scopes["development"]["blocker_details"][0]["category"] == (
+        "missing_nested_result_payload"
+    )
