@@ -157,7 +157,7 @@ def parse_prepare_output(stdout: str) -> IterationMetrics:
             ]
         elif key in ARTIFACT_REFERENCE_KEYS:
             metrics.extra[key] = normalize_optional_artifact_ref(value)
-        elif key in {"is_tsfm_candidate", "tsfm_candidate"}:
+        elif key in {"is_tsfm_candidate", "tsfm_candidate", "auto_phase_evidence"}:
             metrics.extra[key] = coerce_bool(value)
         elif key.endswith("_json"):
             try:

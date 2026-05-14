@@ -588,10 +588,40 @@ async def _migrate_to_v3(db: aiosqlite.Connection) -> None:
     )
 
 
+async def _migrate_to_v4(db: aiosqlite.Connection) -> None:
+    """Promotion waiver + effective-iteration counter on ``research_sessions``.
+
+    ``terminate_request_received`` records whether the agent emitted an
+    explicit ``TERMINATE_REQUEST:`` line (vs. an end_turn fallthrough or a
+    crash). ``_try_auto_promote`` consults this flag to decide whether
+    incomplete iteration-count phases can be waived.
+
+    ``effective_iteration_count`` tracks real training attempts (excluding
+    duplicate-rejected ones) so that the budget cap is not consumed by audit
+    records.
+    """
+    await _add_column_if_missing(
+        db,
+        "research_sessions",
+        "terminate_request_received INTEGER DEFAULT 0",
+    )
+    await _add_column_if_missing(
+        db,
+        "research_sessions",
+        "terminate_request_body TEXT",
+    )
+    await _add_column_if_missing(
+        db,
+        "research_sessions",
+        "effective_iteration_count INTEGER DEFAULT 0",
+    )
+
+
 _MIGRATIONS = (
     (1, _migrate_to_v1),
     (2, _migrate_to_v2),
     (3, _migrate_to_v3),
+    (4, _migrate_to_v4),
 )
 _LATEST_SCHEMA_VERSION = _MIGRATIONS[-1][0]
 

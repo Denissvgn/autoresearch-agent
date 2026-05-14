@@ -1853,6 +1853,12 @@ class AgentOrchestrator:
         ]
 
         iteration_count = 0
+        # duplicate_rejected_count: audit records for duplicate training
+        # attempts still increment iteration_count (so each record has a
+        # unique number), but they do not consume the budget cap. The
+        # effective count of real training attempts is
+        # (iteration_count - duplicate_rejected_count).
+        duplicate_rejected_count = 0
         total_cost = 0.0
         last_input_tokens = 0  # Phase 2.2: rolling estimate for budget gate
         # Phase 5.4: abort the session if the agent keeps trying to run
@@ -2096,6 +2102,7 @@ class AgentOrchestrator:
                             tool_execution = structured_rejection
                         elif duplicate_rejection is not None:
                             iteration_count += 1
+                            duplicate_rejected_count += 1
                             duplicate_marker = duplicate_marker or {}
                             self._attach_planned_trial_metadata(
                                 duplicate_marker,
@@ -2588,11 +2595,17 @@ class AgentOrchestrator:
                                 turn=turn,
                             )
 
-                # Check if we've hit max iterations
-                if iteration_count >= config.max_iterations:
+                # Check if we've hit max iterations (real attempts only —
+                # duplicate-rejected audit records do not consume budget).
+                effective_iteration_count = iteration_count - duplicate_rejected_count
+                if effective_iteration_count >= config.max_iterations:
                     logger.info(
-                        "Research %s: max iterations (%d) reached",
+                        "Research %s: max iterations (%d) reached "
+                        "(effective=%d, total_records=%d, rejected=%d)",
                         research_id, config.max_iterations,
+                        effective_iteration_count,
+                        iteration_count,
+                        duplicate_rejected_count,
                     )
                     break
 
@@ -2609,6 +2622,25 @@ class AgentOrchestrator:
                             f"Terminate request accepted: {terminate_request[:1800]}",
                             turn=turn,
                         )
+                        # Mark the session so _try_auto_promote knows this
+                        # was an explicit, justified termination (vs. a
+                        # crash, timeout, or end_turn-without-justification).
+                        # Incomplete iteration-count phases are waived for
+                        # promotion when this flag is set AND baseline is
+                        # complete — hard gates (training, calibration,
+                        # parity) still run via promoter.preview().
+                        try:
+                            await self._store.update_session(
+                                research_id,
+                                terminate_request_received=1,
+                                terminate_request_body=terminate_request[:4000],
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                "Research %s: failed to persist "
+                                "terminate_request flag: %s",
+                                research_id, exc,
+                            )
                         break
 
                     # F1: refuse to terminate while the phase plan has
@@ -2620,7 +2652,7 @@ class AgentOrchestrator:
                     # nudge instead of breaking.
                     continuation_kick = await self._build_phase_continuation_kick(
                         research_id=research_id,
-                        iteration_count=iteration_count,
+                        iteration_count=(iteration_count - duplicate_rejected_count),
                         total_cost=total_cost,
                         config=config,
                     )
@@ -2655,12 +2687,17 @@ class AgentOrchestrator:
                         total_cost=total_cost,
                     )
                     # Inject orchestrator iteration count so the agent's
-                    # numbering stays in sync with the DB record.
+                    # numbering stays in sync with the DB record. The budget
+                    # cap uses the effective count (real attempts only) —
+                    # duplicate-rejected records consume a record number but
+                    # not a budget slot.
+                    _effective_for_msg = iteration_count - duplicate_rejected_count
                     tool_results.append({
                         "type": "text",
                         "text": (
                             f"[system] Orchestrator iteration count: "
-                            f"{iteration_count}/{config.max_iterations}. "
+                            f"{_effective_for_msg}/{config.max_iterations} "
+                            f"(real attempts; {duplicate_rejected_count} duplicate-rejected). "
                             f"Use iteration={iteration_count + 1} for your "
                             f"next experiment."
                         ),
@@ -2682,7 +2719,7 @@ class AgentOrchestrator:
                     # the rest of the budget on stagnant experiments.
                     stagnation_message = await self._maybe_global_stagnation_terminate(
                         research_id=research_id,
-                        iteration_count=iteration_count,
+                        iteration_count=(iteration_count - duplicate_rejected_count),
                     )
                     if stagnation_message:
                         tool_results.append({
@@ -2719,7 +2756,7 @@ class AgentOrchestrator:
             terminal_reason = await self._derive_terminal_reason(
                 research_id=research_id,
                 final_status=final_status,
-                iteration_count=iteration_count,
+                iteration_count=(iteration_count - duplicate_rejected_count),
                 total_cost=total_cost,
                 config=config,
                 timed_out=_timed_out,
@@ -2731,6 +2768,7 @@ class AgentOrchestrator:
                 completed_at=datetime.now(timezone.utc).isoformat(),
                 total_api_cost_usd=round(total_cost, 4),
                 terminal_reason=terminal_reason,
+                effective_iteration_count=(iteration_count - duplicate_rejected_count),
             )
             await broadcaster.broadcast({
                 "event": "research_completed",
@@ -2855,11 +2893,33 @@ class AgentOrchestrator:
                 session=session,
                 iterations=iterations,
             )
-            incomplete_phases = [
+            # Fix B: an explicit TERMINATE_REQUEST from the agent (vs. a
+            # crash, timeout, or silent end_turn) signals the agent believes
+            # further exploration cannot improve the baseline. When that
+            # flag is set AND baseline_capture has completed, waive incomplete
+            # iteration-count phases (e.g. tabular_sweeps) so promotion can
+            # proceed to gate evaluation. Hard gates (training, calibration,
+            # parity) still run inside promoter.preview() and can still block.
+            _terminate_received = bool(session.get("terminate_request_received"))
+            _completed_phase_ids = {
+                p.get("id")
+                for p in phase_state.get("phases", [])
+                if p.get("status") == "completed"
+            }
+            _baseline_complete = "baseline_capture" in _completed_phase_ids
+            _waive_incomplete = _terminate_received and _baseline_complete
+            raw_incomplete = [
                 phase
                 for phase in incomplete_phase_ids(phase_state)
                 if phase != "promotion_proposal"
             ]
+            incomplete_phases = [] if _waive_incomplete else raw_incomplete
+            if _waive_incomplete and raw_incomplete:
+                await agent_log.append(
+                    "system",
+                    f"Promotion gates evaluated; incomplete phases waived "
+                    f"by TERMINATE_REQUEST: {', '.join(raw_incomplete)}",
+                )
             if incomplete_phases:
                 await self._emit_auto_promotion_skipped(
                     research_id=research_id,

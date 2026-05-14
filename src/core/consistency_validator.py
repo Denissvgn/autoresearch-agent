@@ -95,14 +95,17 @@ def build_consistency_report(
     # trigger hard blockers — those checks are meaningful only for finalists
     # that have completed the calibration/replay and inference-parity phases.
     _has_late_phase_evidence = bool(
-        metrics.get("calibration_full_validation")
-        or (
-            isinstance(metrics.get("config"), dict)
-            and metrics["config"].get("calibration_full_validation")
+        not metrics.get("auto_phase_evidence")
+        and (
+            metrics.get("calibration_full_validation")
+            or (
+                isinstance(metrics.get("config"), dict)
+                and metrics["config"].get("calibration_full_validation")
+            )
+            or metrics.get("economic_replay")
+            or metrics.get("inference_parity")
+            or metrics.get("inference_reload_validation")
         )
-        or metrics.get("economic_replay")
-        or metrics.get("inference_parity")
-        or metrics.get("inference_reload_validation")
     )
     promotable = bool(
         metrics.get("finalist")
