@@ -3604,6 +3604,17 @@ class AgentOrchestrator:
         session = await self._store.get_session(research_id)
         if not session:
             return None
+        # Suppress stagnation during validation/evidence phases where metric
+        # improvement is not expected (tsfm_sweeps, calibration gates, etc.).
+        _phase_raw = session.get("phase_state_json")
+        if isinstance(_phase_raw, str) and _phase_raw.strip():
+            try:
+                _phase_state = json.loads(_phase_raw)
+                _current_phase = _phase_state.get("current_phase") or ""
+                if _current_phase in settings.stagnation_exempt_phases:
+                    return None
+            except (json.JSONDecodeError, TypeError):
+                pass
         best_iteration = session.get("best_iteration")
         best_metric = session.get("best_metric")
         # No qualifying iteration yet — skip (conservative).

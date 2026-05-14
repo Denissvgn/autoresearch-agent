@@ -287,6 +287,24 @@ class Settings(BaseSettings):
             "stagnant."
         ),
     )
+    stagnation_exempt_phases: List[str] = Field(
+        default=[
+            "tsfm_sweeps",
+            "calibration_replay_gates",
+            "multi_seed_robustness",
+            "inference_parity_replay",
+            "promotion_proposal",
+        ],
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_STAGNATION_EXEMPT_PHASES",
+            "STAGNATION_EXEMPT_PHASES",
+        ),
+        description=(
+            "Phases where metric stagnation is expected (validation/evidence "
+            "work, not hyperparameter tuning). The global stagnation guard is "
+            "suppressed when the session is in one of these phases."
+        ),
+    )
     iteration_context_enabled: bool = Field(
         default=True,
         validation_alias=AliasChoices(

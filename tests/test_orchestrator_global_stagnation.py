@@ -339,3 +339,62 @@ async def test_global_stagnation_fires_exactly_at_window_boundary(
     assert await orch._maybe_global_stagnation_terminate(
         research_id=rid, iteration_count=13
     ) is not None
+
+
+@pytest.mark.asyncio
+async def test_global_stagnation_does_not_fire_in_exempt_phase(
+    tmp_path: Path,
+) -> None:
+    """Phase-aware guard: stagnation must NOT fire when current_phase is exempt.
+
+    tsfm_sweeps is a validation phase — metric improvement is not expected.
+    Even with gap >= window, the method must return None.
+    """
+    import json as _json
+
+    store = ResultsStore(str(tmp_path / "ar7_exempt.sqlite"))
+    await store.initialize()
+    rid = "res_ar7_exempt"
+    await _seed_session(store, rid, best_iteration=1, best_metric=0.6394)
+    await store.update_session(
+        rid,
+        phase_state_json=_json.dumps({"current_phase": "tsfm_sweeps"}),
+    )
+
+    orch = AgentOrchestrator(store)
+
+    result = await orch._maybe_global_stagnation_terminate(
+        research_id=rid,
+        iteration_count=13,  # gap=12 >= default window=12 — would normally fire
+    )
+    assert result is None, (
+        "Stagnation must be suppressed in tsfm_sweeps (validation phase)"
+    )
+
+
+@pytest.mark.asyncio
+async def test_global_stagnation_fires_in_non_exempt_phase(
+    tmp_path: Path,
+) -> None:
+    """Phase-aware guard: stagnation MUST still fire in hyperparameter-tuning phases."""
+    import json as _json
+
+    store = ResultsStore(str(tmp_path / "ar7_nonexempt.sqlite"))
+    await store.initialize()
+    rid = "res_ar7_nonexempt"
+    await _seed_session(store, rid, best_iteration=1, best_metric=0.6394)
+    await store.update_session(
+        rid,
+        phase_state_json=_json.dumps({"current_phase": "tabular_sweeps"}),
+    )
+
+    orch = AgentOrchestrator(store)
+
+    result = await orch._maybe_global_stagnation_terminate(
+        research_id=rid,
+        iteration_count=13,  # gap=12 >= window
+    )
+    assert result is not None, (
+        "Stagnation must still fire in tabular_sweeps (tuning phase)"
+    )
+    assert "GLOBAL_STAGNATION" in result
