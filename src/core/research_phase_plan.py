@@ -411,41 +411,53 @@ def _completed_phase_ids(
 
     if _adaptive_phase_completed(iterations):
         completed.add("adaptive_feature_sweeps")
-    if any(_has_metric(it, *_PHASE_ADVANCEMENT_KEYS["tsfm_sweeps"]) for it in iterations):
+    if (
+        any(_has_metric(it, *_PHASE_ADVANCEMENT_KEYS["tsfm_sweeps"]) for it in iterations)
+        and _phase_has_genuine_dwell(iterations, "tsfm_sweeps", min_iterations=2)
+    ):
         completed.add("tsfm_sweeps")
     # AR-5: gate promotion-family phases behind artifact validation.
     # AR-6: also gate behind synthetic-iteration detection.
     _prior_best = _prior_best_metrics(iterations)
-    if any(
-        _has_metric(it, *_PHASE_ADVANCEMENT_KEYS["calibration_replay_gates"])
-        and not check_evidence_artifact(_metrics_of(it), "calibration_replay_gates")
-        and not _is_synthetic_promotion_iteration(
-            _metrics_of(it), _prior_best, "calibration_replay_gates"
+    if (
+        any(
+            _has_metric(it, *_PHASE_ADVANCEMENT_KEYS["calibration_replay_gates"])
+            and not check_evidence_artifact(_metrics_of(it), "calibration_replay_gates")
+            and not _is_synthetic_promotion_iteration(
+                _metrics_of(it), _prior_best, "calibration_replay_gates"
+            )
+            for it in iterations
         )
-        for it in iterations
+        and _phase_has_genuine_dwell(iterations, "calibration_replay_gates", min_iterations=1)
     ):
         completed.add("calibration_replay_gates")
-    if any(
-        _has_metric(it, *_PHASE_ADVANCEMENT_KEYS["multi_seed_robustness"])
-        and not check_evidence_artifact(_metrics_of(it), "multi_seed_robustness")
-        and not _is_synthetic_promotion_iteration(
-            _metrics_of(it), _prior_best, "multi_seed_robustness"
+    if (
+        any(
+            _has_metric(it, *_PHASE_ADVANCEMENT_KEYS["multi_seed_robustness"])
+            and not check_evidence_artifact(_metrics_of(it), "multi_seed_robustness")
+            and not _is_synthetic_promotion_iteration(
+                _metrics_of(it), _prior_best, "multi_seed_robustness"
+            )
+            for it in iterations
         )
-        for it in iterations
+        and _phase_has_genuine_dwell(iterations, "multi_seed_robustness", min_iterations=1)
     ):
         completed.add("multi_seed_robustness")
     _inference_prior_run_ids = _prior_run_ids_for_phase(iterations, "inference_parity_replay")
-    if any(
-        _has_metric(it, *_PHASE_ADVANCEMENT_KEYS["inference_parity_replay"])
-        and not check_evidence_artifact(
-            _metrics_of(it),
-            "inference_parity_replay",
-            prior_run_ids=_inference_prior_run_ids,
+    if (
+        any(
+            _has_metric(it, *_PHASE_ADVANCEMENT_KEYS["inference_parity_replay"])
+            and not check_evidence_artifact(
+                _metrics_of(it),
+                "inference_parity_replay",
+                prior_run_ids=_inference_prior_run_ids,
+            )
+            and not _is_synthetic_promotion_iteration(
+                _metrics_of(it), _prior_best, "inference_parity_replay"
+            )
+            for it in iterations
         )
-        and not _is_synthetic_promotion_iteration(
-            _metrics_of(it), _prior_best, "inference_parity_replay"
-        )
-        for it in iterations
+        and _phase_has_genuine_dwell(iterations, "inference_parity_replay", min_iterations=1)
     ):
         completed.add("inference_parity_replay")
     if _has_promotion_evidence(iterations, promotions, prior_best=_prior_best):
@@ -464,6 +476,56 @@ def _iterations_in_phase(
     return empty lists here and fall through to evidence-key checks.
     """
     return [it for it in iterations if (it.get("search_phase") or "") == phase_id]
+
+
+def _phase_has_genuine_dwell(
+    iterations: List[Dict[str, Any]],
+    phase_id: str,
+    *,
+    min_iterations: int,
+) -> bool:
+    """Return True when the agent dwelt in ``phase_id`` for ``min_iterations``.
+
+    Fix 8: ``auto_phase_evidence: True`` is set on every prepare.py run, so the
+    presence of a permissive evidence key alone (e.g. ``tsfm_fallback_validation``
+    or ``adaptive_feature_noop_reason``) is not enough to advance a phase. The
+    agent must also produce at least ``min_iterations`` phase-tagged
+    iterations. After Fix 4, only training-derived iterations are recorded,
+    so this counts real prepare.py runs in the phase.
+
+    Iterations that carry an explicit, agent-emitted phase key beyond the
+    permissive fallback (e.g. ``tsfm_adapter``) always count as genuine
+    regardless of phase tag, mirroring the legacy contract for agents that
+    forget to set ``search_phase``.
+    """
+    explicit_keys = _PHASE_EXPLICIT_AGENT_KEYS.get(phase_id, ())
+    if explicit_keys and any(
+        _has_metric(it, *explicit_keys) for it in iterations
+    ):
+        return True
+    return len(_iterations_in_phase(iterations, phase_id)) >= min_iterations
+
+
+# Fix 8 — phase-specific keys whose presence proves the agent did real work
+# in the phase, even when ``auto_phase_evidence: True`` is also set. These
+# are a strict subset of ``_PHASE_ADVANCEMENT_KEYS`` excluding permissive
+# fallback keys.
+_PHASE_EXPLICIT_AGENT_KEYS: Dict[str, tuple] = {
+    "tsfm_sweeps": ("tsfm", "tsfm_adapter"),
+    "calibration_replay_gates": (
+        "calibration_full_validation",
+        "economic_replay",
+    ),
+    "multi_seed_robustness": (
+        "seed_trials",
+        "n_seed_trials",
+        "seeds_passed_gates",
+    ),
+    "inference_parity_replay": (
+        "inference_parity",
+        "inference_reload_validation",
+    ),
+}
 
 
 def _adaptive_phase_completed(iterations: List[Dict[str, Any]]) -> bool:

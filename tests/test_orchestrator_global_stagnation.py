@@ -345,10 +345,13 @@ async def test_global_stagnation_fires_exactly_at_window_boundary(
 async def test_global_stagnation_does_not_fire_in_exempt_phase(
     tmp_path: Path,
 ) -> None:
-    """Phase-aware guard: stagnation must NOT fire when current_phase is exempt.
+    """Phase-aware guard: stagnation must NOT fire when current_phase is exempt
+    AND the agent did genuine work in that phase (Fix 5).
 
     tsfm_sweeps is a validation phase — metric improvement is not expected.
-    Even with gap >= window, the method must return None.
+    To honor the exemption we require at least one in-phase iteration carrying
+    explicit (non-auto) agent evidence; otherwise the phase was advanced via
+    permissive auto-evidence and stagnation should still fire.
     """
     import json as _json
 
@@ -361,6 +364,22 @@ async def test_global_stagnation_does_not_fire_in_exempt_phase(
         phase_state_json=_json.dumps({"current_phase": "tsfm_sweeps"}),
     )
 
+    await store.add_iteration(
+        research_id=rid,
+        iteration=1,
+        primary_metric=0.6394,
+        metric_name="composite_direction_score",
+        all_gates_passed=True,
+        decision="keep",
+        description="genuine tsfm exploration",
+        config_snapshot=None,
+        metrics_json=_json.dumps(
+            {"tsfm_adapter": "moirai", "auto_phase_evidence": True}
+        ),
+        training_time_s=120.0,
+        search_phase="tsfm_sweeps",
+    )
+
     orch = AgentOrchestrator(store)
 
     result = await orch._maybe_global_stagnation_terminate(
@@ -368,8 +387,50 @@ async def test_global_stagnation_does_not_fire_in_exempt_phase(
         iteration_count=13,  # gap=12 >= default window=12 — would normally fire
     )
     assert result is None, (
-        "Stagnation must be suppressed in tsfm_sweeps (validation phase)"
+        "Stagnation must be suppressed in tsfm_sweeps once genuine work exists"
     )
+
+
+@pytest.mark.asyncio
+async def test_global_stagnation_fires_in_auto_evidence_only_exempt_phase(
+    tmp_path: Path,
+) -> None:
+    """Fix 5: when the only iterations in the exempt phase are
+    ``auto_phase_evidence=True`` fallbacks, stagnation must still fire.
+    """
+    import json as _json
+
+    store = ResultsStore(str(tmp_path / "ar7_auto_only.sqlite"))
+    await store.initialize()
+    rid = "res_ar7_auto_only"
+    await _seed_session(store, rid, best_iteration=1, best_metric=0.6394)
+    await store.update_session(
+        rid,
+        phase_state_json=_json.dumps({"current_phase": "promotion_proposal"}),
+    )
+
+    for i in range(1, 14):
+        await store.add_iteration(
+            research_id=rid,
+            iteration=i,
+            primary_metric=0.6394,
+            metric_name="composite_direction_score",
+            all_gates_passed=True,
+            decision="discard",
+            description="auto-evidence only",
+            config_snapshot=None,
+            metrics_json=_json.dumps({"auto_phase_evidence": True}),
+            training_time_s=60.0,
+            search_phase="promotion_proposal",
+        )
+
+    orch = AgentOrchestrator(store)
+    result = await orch._maybe_global_stagnation_terminate(
+        research_id=rid,
+        iteration_count=14,
+    )
+    assert result is not None
+    assert "GLOBAL_STAGNATION" in result
 
 
 @pytest.mark.asyncio

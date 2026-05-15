@@ -366,6 +366,33 @@ class Settings(BaseSettings):
     rl_trainer_url: str = Field(default="http://rl-trainer:8000")
     feature_service_url: str = Field(default="http://feature-service:8000")
     inference_service_url: str = Field(default="http://inference-service:8000")
+    # Fix 3: server-side resolution of infrastructure-side promotion blockers
+    # (inference_adapter_load_failure, inference_reload_failed,
+    # failed_smoke_validation, missing_signal_health_metrics). When True the
+    # orchestrator runs PromotionEvidenceCollector before ConfigPromoter.preview
+    # so the agent's best iteration is enriched with server-owned evidence the
+    # agent itself cannot produce.
+    auto_collect_promotion_evidence: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_AUTO_COLLECT_PROMOTION_EVIDENCE",
+            "AUTO_COLLECT_PROMOTION_EVIDENCE",
+        ),
+        description=(
+            "Run PromotionEvidenceCollector before ConfigPromoter.preview to "
+            "resolve infrastructure-side blockers."
+        ),
+    )
+    promotion_evidence_timeout_s: float = Field(
+        default=120.0,
+        ge=5.0,
+        le=900.0,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_PROMOTION_EVIDENCE_TIMEOUT_S",
+            "PROMOTION_EVIDENCE_TIMEOUT_S",
+        ),
+        description="Per-collector timeout when contacting inference-service.",
+    )
     nats_url: Optional[str] = Field(
         default="nats://nats:4222",
         validation_alias=AliasChoices("NATS_URL", "AUTORESEARCH_NATS_URL"),

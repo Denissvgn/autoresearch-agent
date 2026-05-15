@@ -42,8 +42,9 @@ If `train.yaml` already contains tuned sections such as `reward_curriculum` or `
 
 **Step 3** — Baseline run (1 tool call):
 ```bash
-cd /app/workspace && .venv/bin/python scripts/autotuner/{MODEL_TYPE}/prepare.py --config {WORKSPACE}/train.yaml 2>&1
+cd /app/workspace && .venv/bin/python scripts/autotuner/{MODEL_TYPE}/prepare.py --config {WORKSPACE}/train.yaml
 ```
+Do NOT append `2>&1`, `| tail`, `| head`, or any other shell redirection or pipe — command policy rejects them. `prepare.py` already merges stderr into stdout.
 After this completes, copy `train.yaml` to `best_train.yaml`:
 ```bash
 cp {WORKSPACE}/train.yaml {WORKSPACE}/best_train.yaml
@@ -62,6 +63,8 @@ cp {WORKSPACE}/train.yaml {WORKSPACE}/best_train.yaml
    Sharpe is annualized with √252 (daily convention). Typical good OOS Sharpe: 0.05–0.30. Values >1.0 are exceptional.
    If `primary_metric` improved but `folds_passed` dropped or `sharpe_cv` increased significantly, the improvement is fragile — consider discarding.
 5. Output: `ITERATION_RESULT: {"iteration": N, "primary_metric": X.XXXX, "metric_name": "...", "all_gates_passed": true|false, "decision": "keep|discard", "description": "brief description"}`
+
+   **IMPORTANT:** Emit `ITERATION_RESULT` ONLY immediately after a `prepare.py` (or `run_phase1c_*` / `run_phase1b_*`) run that produced a `---` block in the same turn. Do NOT emit a marker on turns where you only ran `cp`, `read_file`, or `write_file` — the server will discard those markers. Revert/restore turns are bookkeeping, not iterations.
 
 ## Rules
 

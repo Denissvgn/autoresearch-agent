@@ -85,6 +85,33 @@ _PROMOTION_FAMILY: frozenset[str] = frozenset({
     "promotion_proposal",
 })
 
+# Stagnation-genuineness check: phase-specific evidence keys that, when
+# present in an iteration's ``metrics_json``, indicate the agent (or a
+# server-side evidence collector) attempted real work in that phase — not a
+# permissive ``auto_phase_evidence`` fallback. Used by
+# ``_phase_advancement_is_genuine`` to decide whether to honor a phase's
+# stagnation exemption.
+_PHASE_SPECIFIC_AGENT_KEYS: Dict[str, frozenset[str]] = {
+    "tsfm_sweeps": frozenset({"tsfm", "tsfm_adapter"}),
+    "calibration_replay_gates": frozenset(
+        {"calibration_full_validation", "economic_replay"},
+    ),
+    "multi_seed_robustness": frozenset(
+        {"seed_trials", "n_seed_trials", "seeds_passed_gates"},
+    ),
+    "inference_parity_replay": frozenset(
+        {"inference_parity", "inference_reload_validation"},
+    ),
+    "promotion_proposal": frozenset(
+        {
+            "development_promotion_metadata",
+            "promotion_allowed",
+            "smoke_validation",
+            "signal_health",
+        },
+    ),
+}
+
 # ---------------------------------------------------------------------------
 # Research config dataclass
 # ---------------------------------------------------------------------------
@@ -649,8 +676,14 @@ class AgentOrchestrator:
     async def _load_claude_md_async(self) -> str:
         return await asyncio.to_thread(self._load_claude_md)
 
-    async def _read_marker_file_async(self, config: ResearchConfig) -> Optional[str]:
-        return await asyncio.to_thread(self._read_marker_file, config)
+    async def _read_marker_file_async(
+        self,
+        config: ResearchConfig,
+        min_mtime: Optional[float] = None,
+    ) -> Optional[str]:
+        return await asyncio.to_thread(
+            self._read_marker_file, config, min_mtime,
+        )
 
     def _load_skill(self, model_type: str) -> str:
         skill_map = {
@@ -670,13 +703,21 @@ class AgentOrchestrator:
             return Path(claude_md_path).read_text(encoding="utf-8")
         return ""
 
-    def _read_marker_file(self, config: ResearchConfig) -> Optional[str]:
+    def _read_marker_file(
+        self,
+        config: ResearchConfig,
+        min_mtime: Optional[float] = None,
+    ) -> Optional[str]:
         """Read and consume last_metrics.txt marker file if it exists.
 
         prepare.py writes this file on completion so the orchestrator
         can detect iterations even when the bash tool times out.
         Falls back to parsing results.json directly if the marker file
         is missing (e.g. agent bypassed prepare.py).
+
+        When ``min_mtime`` is provided, a marker file older than that
+        timestamp is treated as stale (left over from a prior session
+        on the same instrument/timeframe/model_type) and ignored.
         """
         instrument_underscore = config.instrument.replace("-", "_")
         base_dir = os.path.join(
@@ -687,6 +728,19 @@ class AgentOrchestrator:
         )
         marker_path = os.path.join(base_dir, "last_metrics.txt")
         if os.path.exists(marker_path):
+            if min_mtime is not None:
+                try:
+                    marker_mtime = os.path.getmtime(marker_path)
+                except OSError:
+                    marker_mtime = None
+                if marker_mtime is not None and marker_mtime < min_mtime:
+                    logger.info(
+                        "Ignoring stale marker file %s (mtime=%.3f < "
+                        "min_mtime=%.3f, age=%.1fs)",
+                        marker_path, marker_mtime, min_mtime,
+                        min_mtime - marker_mtime,
+                    )
+                    return None
             # Phase 3.3: rename-then-read so a concurrent prepare.py write
             # cannot have its fresh marker silently deleted by our cleanup.
             # The rename is atomic on POSIX; if it fails because the file
@@ -716,6 +770,19 @@ class AgentOrchestrator:
         # ran the training script directly (bypassing prepare.py).
         results_path = os.path.join(base_dir, "results.json")
         if os.path.exists(results_path):
+            if min_mtime is not None:
+                try:
+                    results_mtime = os.path.getmtime(results_path)
+                except OSError:
+                    results_mtime = None
+                if results_mtime is not None and results_mtime < min_mtime:
+                    logger.info(
+                        "Ignoring stale results.json %s (mtime=%.3f < "
+                        "min_mtime=%.3f, age=%.1fs)",
+                        results_path, results_mtime, min_mtime,
+                        min_mtime - results_mtime,
+                    )
+                    return None
             claim_path = (
                 f"{results_path}.consumed.{os.getpid()}.{int(time.time() * 1000)}"
             )
@@ -1695,8 +1762,17 @@ class AgentOrchestrator:
         command: str,
         config_snapshot: Optional[str],
         planned_trial: Optional[Dict[str, Any]],
+        current_phase: Optional[str] = None,
     ) -> tuple[Optional[ToolExecutionResult], Optional[Dict[str, Any]]]:
-        """Reject an already-attempted config/seed/mode/split identity."""
+        """Reject an already-attempted config/seed/mode/split identity.
+
+        Exception: when the session is in ``baseline_capture`` phase and the
+        duplicate is a cross-session attempt (a prior session's baseline of
+        the same canonical config), inherit the prior baseline rather than
+        rejecting. The agent's contracted next_action for this phase is to
+        run the immutable promoted-config baseline, which is by definition
+        identical across sessions.
+        """
 
         identity = build_trial_identity(
             instrument=config.instrument,
@@ -1726,6 +1802,22 @@ class AgentOrchestrator:
 
         duplicate_research_id = duplicate.get("research_id")
         duplicate_iteration = duplicate.get("iteration")
+
+        if (
+            current_phase == "baseline_capture"
+            and duplicate_research_id
+            and duplicate_research_id != config.id
+            and duplicate.get("duplicate_reason") is None
+        ):
+            return self._build_baseline_link(
+                config=config,
+                turn=turn,
+                identity=identity,
+                identity_hash=identity_hash,
+                config_snapshot=config_snapshot,
+                duplicate=duplicate,
+            )
+
         duplicate_reason = (
             "Duplicate training attempt rejected: the same canonical config, "
             f"seed={identity.get('seed')}, mode={identity.get('validation_mode')}, "
@@ -1762,6 +1854,87 @@ class AgentOrchestrator:
                 "trial_identity_hash": identity_hash,
                 "duplicate_of_research_id": duplicate_research_id,
                 "duplicate_of_iteration": duplicate_iteration,
+            },
+        ), marker
+
+    def _build_baseline_link(
+        self,
+        *,
+        config: ResearchConfig,
+        turn: int,
+        identity: Dict[str, Any],
+        identity_hash: str,
+        config_snapshot: Optional[str],
+        duplicate: Dict[str, Any],
+    ) -> tuple[ToolExecutionResult, Dict[str, Any]]:
+        """Inherit a cross-session baseline instead of rejecting it.
+
+        Builds a synthetic prepare.py-like output block carrying the prior
+        baseline's metric so the orchestrator's normal recording path treats
+        this as a real iteration, plus a marker tagged with
+        ``baseline_linked_from_research_id`` for audit traceability.
+        """
+
+        prior_research_id = duplicate.get("research_id")
+        prior_iteration = duplicate.get("iteration")
+        prior_metric = duplicate.get("primary_metric")
+        prior_metric_name = duplicate.get("metric_name") or (
+            "composite_direction_score"
+            if config.model_type == "direction"
+            else "primary_metric"
+        )
+        prior_training_gates = bool(duplicate.get("training_gates_passed"))
+        prior_all_gates = bool(duplicate.get("all_gates_passed"))
+
+        message = (
+            f"Baseline linked from {prior_research_id} iteration "
+            f"{prior_iteration} (metric={prior_metric_name}={prior_metric})."
+        )
+
+        synthetic_block = "\n".join(
+            [
+                "---",
+                "status:             completed",
+                f"primary_metric:     {prior_metric:.6f}"
+                if isinstance(prior_metric, (int, float))
+                else "primary_metric:     0.0",
+                f"metric_name:        {prior_metric_name}",
+                "direction:          higher_is_better",
+                f"training_gates_passed: {str(prior_training_gates).lower()}",
+                f"all_gates_passed:   {str(prior_all_gates).lower()}",
+                f"baseline_linked_from_research_id: {prior_research_id}",
+                f"baseline_linked_from_iteration: {prior_iteration}",
+                "---",
+            ]
+        )
+
+        marker = {
+            "status": "completed",
+            "primary_metric": prior_metric,
+            "metric_name": prior_metric_name,
+            "training_gates_passed": prior_training_gates,
+            "all_gates_passed": prior_all_gates,
+            "decision": "keep",
+            "search_phase": "baseline_capture",
+            "description": f"{message} (turn {turn})",
+            "config_snapshot": config_snapshot,
+            "canonical_config_hash": identity.get("canonical_config_hash"),
+            "trial_identity": identity,
+            "trial_identity_hash": identity_hash,
+            "baseline_linked_from_research_id": prior_research_id,
+            "baseline_linked_from_iteration": prior_iteration,
+        }
+
+        return ToolExecutionResult(
+            synthetic_block,
+            meta={
+                "policy_allowed": True,
+                "policy_operation": "baseline.linked",
+                "returncode": 0,
+                "timed_out": False,
+                "trial_identity_hash": identity_hash,
+                "baseline_linked_from_research_id": prior_research_id,
+                "baseline_linked_from_iteration": prior_iteration,
             },
         ), marker
 
@@ -1971,6 +2144,7 @@ class AgentOrchestrator:
                 tool_results = []
                 agent_text = ""
                 turn_recorded_iteration = False
+                turn_ran_training_command = False
                 last_planned_trial_for_turn: Optional[Dict[str, Any]] = None
 
                 for block in assistant_content:
@@ -2070,6 +2244,9 @@ class AgentOrchestrator:
                                 )
                             )
                         ):
+                            _phase_for_dedup = self._active_phase_from_marker_or_session(
+                                {}, await self._store.get_session(config.id),
+                            )
                             (
                                 duplicate_rejection,
                                 duplicate_marker,
@@ -2079,9 +2256,11 @@ class AgentOrchestrator:
                                 command=raw_command_for_tool,
                                 config_snapshot=_pending_snapshot,
                                 planned_trial=planned_trial_for_tool,
+                                current_phase=_phase_for_dedup,
                             )
 
                         runtime_command_id: Optional[int] = None
+                        command_started_at: Optional[float] = None
                         if (
                             structured_rejection is None
                             and duplicate_rejection is None
@@ -2101,9 +2280,15 @@ class AgentOrchestrator:
                         if structured_rejection is not None:
                             tool_execution = structured_rejection
                         elif duplicate_rejection is not None:
-                            iteration_count += 1
-                            duplicate_rejected_count += 1
                             duplicate_marker = duplicate_marker or {}
+                            _is_baseline_link = (
+                                duplicate_rejection.meta.get(
+                                    "policy_operation"
+                                ) == "baseline.linked"
+                            )
+                            iteration_count += 1
+                            if not _is_baseline_link:
+                                duplicate_rejected_count += 1
                             self._attach_planned_trial_metadata(
                                 duplicate_marker,
                                 planned_trial_for_tool,
@@ -2119,14 +2304,33 @@ class AgentOrchestrator:
                                 await self._store.update_planned_trial_status(
                                     research_id=config.id,
                                     trial_id=planned_trial_for_tool["trial_id"],
-                                    status="duplicate_rejected",
+                                    status=(
+                                        "completed"
+                                        if _is_baseline_link
+                                        else "duplicate_rejected"
+                                    ),
                                     result_path=planned_trial_for_tool.get("result_path"),
                                     manual_review_reason=(
-                                        duplicate_marker.get("duplicate_reason")
+                                        None
+                                        if _is_baseline_link
+                                        else duplicate_marker.get("duplicate_reason")
                                     ),
                                 )
                             turn_recorded_iteration = True
                             tool_execution = duplicate_rejection
+                            if _is_baseline_link:
+                                logger.info(
+                                    "Research %s turn %d: linked baseline "
+                                    "from %s iteration %s (metric=%s)",
+                                    research_id, turn,
+                                    duplicate_marker.get(
+                                        "baseline_linked_from_research_id"
+                                    ),
+                                    duplicate_marker.get(
+                                        "baseline_linked_from_iteration"
+                                    ),
+                                    duplicate_marker.get("primary_metric"),
+                                )
                         else:
                             if planned_trial_for_tool:
                                 await self._store.update_planned_trial_status(
@@ -2134,6 +2338,7 @@ class AgentOrchestrator:
                                     trial_id=planned_trial_for_tool["trial_id"],
                                     status="running",
                                 )
+                            command_started_at = time.time()
                             tool_execution = await asyncio.to_thread(
                                 _execute_tool,
                                 block.name,
@@ -2218,6 +2423,15 @@ class AgentOrchestrator:
                         _cmd_str = redact_sensitive_text(
                             str(block.input.get("command", ""))
                         )
+                        if block.name == "bash" and any(
+                            token in _cmd_str
+                            for token in (
+                                "prepare.py",
+                                "run_phase1c_",
+                                "run_phase1b_",
+                            )
+                        ):
+                            turn_ran_training_command = True
 
                         # Universal detection: scan bash output for
                         # prepare.py --- delimited metrics blocks.
@@ -2399,11 +2613,22 @@ class AgentOrchestrator:
                                 or "run_phase1b_" in _cmd_str
                             )
                         ):
-                            marker_text = await self._read_marker_file_async(config)
+                            marker_text = await self._read_marker_file_async(
+                                config, min_mtime=command_started_at,
+                            )
+                            _rc_for_marker = tool_meta.get("returncode")
+                            _command_succeeded = (
+                                _rc_for_marker is None
+                                or (
+                                    isinstance(_rc_for_marker, int)
+                                    and _rc_for_marker == 0
+                                )
+                            )
                             if marker_text:
                                 metrics = parse_prepare_output(marker_text)
                                 if (
-                                    metrics.primary_metric is not None
+                                    _command_succeeded
+                                    and metrics.primary_metric is not None
                                     and metrics.status in ("completed", "success")
                                 ):
                                     iteration_count += 1
@@ -2585,6 +2810,29 @@ class AgentOrchestrator:
                                 "Research %s turn %d: overwrote iteration "
                                 "%d with explicit ITERATION_RESULT marker",
                                 research_id, turn, iteration_count,
+                            )
+                        elif not turn_ran_training_command:
+                            # Reject ITERATION_RESULT markers that aren't backed
+                            # by a real training run this turn. The agent
+                            # sometimes emits markers after cp reverts or yaml
+                            # edits, which inflates iteration counts and
+                            # destabilizes phase computation.
+                            logger.info(
+                                "Research %s turn %d: ignoring "
+                                "ITERATION_RESULT marker — no training "
+                                "command was executed this turn",
+                                research_id, turn,
+                            )
+                            await agent_log.append(
+                                "system",
+                                (
+                                    "ITERATION_RESULT marker was ignored: "
+                                    "no prepare.py / run_phase1c_ / "
+                                    "run_phase1b_ command ran this turn. "
+                                    "Emit markers only after a real training "
+                                    "run."
+                                ),
+                                turn=turn,
                             )
                         else:
                             iteration_count += 1
@@ -2933,6 +3181,37 @@ class AgentOrchestrator:
                     blockers=[],
                 )
                 return
+
+            # Fix 3: server-side promotion-evidence collection. Resolves
+            # infrastructure-side blockers (inference_adapter_load_failure,
+            # inference_reload_failed, failed_smoke_validation, missing
+            # signal-health metrics) that the agent itself cannot produce.
+            if settings.auto_collect_promotion_evidence:
+                try:
+                    from src.core.promotion_evidence_collector import (
+                        PromotionEvidenceCollector,
+                    )
+
+                    collector = PromotionEvidenceCollector(self._store)
+                    patch = await collector.collect_and_patch(
+                        research_id, best_iter,
+                    )
+                    if patch:
+                        logger.info(
+                            "ML-53: promotion evidence collected for %s "
+                            "iter %d (keys=%s)",
+                            research_id, best_iter, sorted(patch.keys()),
+                        )
+                        await agent_log.append(
+                            "system",
+                            f"Promotion evidence auto-collected: "
+                            f"{', '.join(sorted(patch.keys()))}",
+                        )
+                except Exception as exc:  # pragma: no cover — fail-open
+                    logger.warning(
+                        "ML-53: promotion evidence collection failed for %s: %s",
+                        research_id, exc, exc_info=True,
+                    )
 
             try:
                 preview = await promoter.preview(research_id)
@@ -3643,6 +3922,65 @@ class AgentOrchestrator:
             f"Next phase guidance: {next_action}"
         )
 
+    async def _phase_advancement_is_genuine(
+        self,
+        research_id: str,
+        current_phase: str,
+        *,
+        sample_size: int = 3,
+    ) -> bool:
+        """Return True when the current phase was reached by real agent
+        exploration (not purely by auto-emitted permissive evidence).
+
+        A phase is considered "genuine" when at least one of the most recent
+        ``sample_size`` iterations whose ``search_phase`` matches the current
+        phase carries an agent-explicit phase key (i.e. not just
+        ``auto_phase_evidence: True``).  When every recent iteration in that
+        phase is auto-evidence-only, the phase was floated up by the
+        infrastructure-unavailable fallback path and stagnation exemption
+        should NOT apply.
+        """
+        if not current_phase:
+            return False
+        try:
+            iterations = await self._store.get_iterations(research_id)
+        except Exception:
+            return True  # Fail open — don't break stagnation on a store error.
+
+        recent_in_phase = [
+            row for row in iterations
+            if row.get("search_phase") == current_phase
+        ][-sample_size:]
+        if not recent_in_phase:
+            return False
+        for row in recent_in_phase:
+            metrics_raw = row.get("metrics_json")
+            metrics: Dict[str, Any] = {}
+            if isinstance(metrics_raw, str) and metrics_raw.strip():
+                try:
+                    parsed = json.loads(metrics_raw)
+                except (json.JSONDecodeError, TypeError):
+                    parsed = None
+                if isinstance(parsed, dict):
+                    metrics = parsed
+            elif isinstance(metrics_raw, dict):
+                metrics = metrics_raw
+
+            # Any explicit (non-auto) evidence key for this phase makes the
+            # iteration genuine.
+            if metrics and not metrics.get("auto_phase_evidence"):
+                return True
+
+            # Even with auto_phase_evidence=True, an agent-explicit phase key
+            # (e.g. tsfm_adapter, calibration_full_validation) confirms real
+            # work was attempted.
+            phase_specific_keys = _PHASE_SPECIFIC_AGENT_KEYS.get(
+                current_phase, set(),
+            )
+            if any(metrics.get(k) for k in phase_specific_keys):
+                return True
+        return False
+
     async def _maybe_global_stagnation_terminate(
         self,
         *,
@@ -3665,14 +4003,21 @@ class AgentOrchestrator:
         if not session:
             return None
         # Suppress stagnation during validation/evidence phases where metric
-        # improvement is not expected (tsfm_sweeps, calibration gates, etc.).
+        # improvement is not expected (tsfm_sweeps, calibration gates, etc.),
+        # but ONLY when the phase advancement was genuine. A phase entered
+        # solely via auto_phase_evidence (permissive fallback keys emitted by
+        # prepare.py when the server-owned infrastructure is unavailable) is
+        # not real exploration and must remain subject to stagnation.
         _phase_raw = session.get("phase_state_json")
         if isinstance(_phase_raw, str) and _phase_raw.strip():
             try:
                 _phase_state = json.loads(_phase_raw)
                 _current_phase = _phase_state.get("current_phase") or ""
                 if _current_phase in settings.stagnation_exempt_phases:
-                    return None
+                    if await self._phase_advancement_is_genuine(
+                        research_id, _current_phase,
+                    ):
+                        return None
             except (json.JSONDecodeError, TypeError):
                 pass
         best_iteration = session.get("best_iteration")
