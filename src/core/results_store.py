@@ -1555,6 +1555,83 @@ class ResultsStore:
             )
             return [dict(r) for r in await cursor.fetchall()]
 
+    async def get_cross_session_iteration_summary(
+        self,
+        *,
+        instrument: str,
+        timeframe: str,
+        model_type: str,
+        exclude_research_id: Optional[str] = None,
+        limit: int = 500,
+    ) -> List[Dict[str, Any]]:
+        """Compact summary of iterations from OTHER sessions for the same
+        (instrument, timeframe, model_type). Used by the iteration-context
+        digest to warn the agent away from already-explored canonical configs
+        and to surface server-side capability gaps observed across runs.
+
+        Each row is keyed by ``canonical_config_hash`` and contains the
+        best ``primary_metric`` observed for that hash, the originating
+        session id, the count of attempts, a representative
+        ``config_snapshot`` (YAML) for parameter-signature projection, and
+        concatenated ``adaptive_feature_noop_reason`` / TSFM signals for
+        the feature-availability observation pass.
+
+        Filter: rows with ``duplicate_reason IS NOT NULL`` are excluded —
+        those are the dedup engine's own collision audit records, not
+        real exploration attempts. Decision (keep/discard) is NOT filtered:
+        the agent collides with every prior canonical hash in the dedup
+        index, not just kept ones, so the digest must surface all of them.
+
+        Returns up to ``limit`` rows, ordered by best metric descending.
+        The digest layer down-samples this population via parameter-space
+        clustering (``_select_representative_clusters``) rather than showing
+        a raw top-N slice, so ``limit`` is intentionally large to give the
+        clustering a representative view of the explored space.
+        """
+        async with self.connection() as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                """
+                SELECT
+                  i.canonical_config_hash AS canonical_config_hash,
+                  MAX(i.primary_metric) AS best_metric,
+                  MIN(i.research_id) AS first_research_id,
+                  COUNT(*) AS attempts,
+                  GROUP_CONCAT(
+                    DISTINCT json_extract(i.metrics_json,
+                                          '$.adaptive_feature_noop_reason')
+                  ) AS noop_reasons,
+                  GROUP_CONCAT(
+                    DISTINCT json_extract(i.metrics_json, '$.tsfm_adapter')
+                  ) AS tsfm_adapters,
+                  GROUP_CONCAT(
+                    DISTINCT json_extract(i.metrics_json,
+                                          '$.tsfm_fallback_validation')
+                  ) AS tsfm_fallback_flags,
+                  GROUP_CONCAT(DISTINCT i.decision) AS decisions,
+                  COUNT(DISTINCT i.research_id) AS session_count,
+                  MIN(i.config_snapshot) AS sample_config_snapshot
+                FROM iterations i
+                JOIN research_sessions s ON s.id = i.research_id
+                WHERE s.instrument = ?
+                  AND s.timeframe = ?
+                  AND s.model_type = ?
+                  AND i.research_id != COALESCE(?, '')
+                  AND i.canonical_config_hash IS NOT NULL
+                  AND i.canonical_config_hash != ''
+                  AND i.duplicate_reason IS NULL
+                GROUP BY i.canonical_config_hash
+                ORDER BY best_metric DESC NULLS LAST,
+                         attempts DESC
+                LIMIT ?
+                """,
+                (
+                    instrument, timeframe, model_type,
+                    exclude_research_id, limit,
+                ),
+            )
+            return [dict(r) for r in await cursor.fetchall()]
+
     async def update_iteration(
         self,
         research_id: str,

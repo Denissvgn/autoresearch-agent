@@ -165,6 +165,173 @@ async def test_baseline_capture_inherits_cross_session_baseline(
 
 
 @pytest.mark.asyncio
+async def test_baseline_link_inherits_passed_gates_from_prior_metrics_json(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Fix A regression: training_gates_passed lives in metrics_json, not as
+    a top-level column on the iteration row. The synthetic baseline-link
+    marker must read it from metrics_json so the canonical/legacy flags
+    agree and no Conflicting gate aliases warning is emitted.
+    """
+    import logging
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir(parents=True)
+    store = ResultsStore(str(tmp_path / "store.db"))
+    await store.initialize()
+
+    prior_id = await _seed_prior_baseline(store, workspace=workspace)
+
+    new_id = "res_new_a"
+    await store.create_session(
+        session_id=new_id,
+        instrument="DOGE_USDT",
+        timeframe="15m",
+        model_type="direction",
+        tag="new-a",
+        workspace_path=str(workspace),
+        max_iterations=20,
+        max_budget_usd=10.0,
+        quick_mode=False,
+        focus_hint=None,
+    )
+
+    orchestrator = AgentOrchestrator(store)
+    config = ResearchConfig(
+        id=new_id,
+        instrument="DOGE_USDT",
+        timeframe="15m",
+        model_type="direction",
+    )
+
+    caplog.set_level(logging.WARNING)
+    _, marker = await orchestrator._guard_duplicate_training_attempt(
+        config=config,
+        turn=1,
+        command=_CMD,
+        config_snapshot=_BASELINE_YAML,
+        planned_trial=None,
+        current_phase="baseline_capture",
+    )
+
+    assert marker is not None
+    assert marker["training_gates_passed"] is True
+    assert marker["all_gates_passed"] is True
+    assert marker["decision"] == "keep"
+
+    conflict_warnings = [
+        rec for rec in caplog.records
+        if "Conflicting gate aliases" in rec.getMessage()
+    ]
+    assert not conflict_warnings, (
+        "expected no conflict warning, got: "
+        + "; ".join(rec.getMessage() for rec in conflict_warnings)
+    )
+
+
+@pytest.mark.asyncio
+async def test_baseline_link_inherits_failed_gates(
+    tmp_path: Path,
+) -> None:
+    """Fix A: when the prior baseline genuinely failed, both flags propagate
+    as False — agent must see the truthful state, not a synthetic pass.
+    """
+    workspace = tmp_path / "ws"
+    workspace.mkdir(parents=True)
+    store = ResultsStore(str(tmp_path / "store.db"))
+    await store.initialize()
+
+    import json as _json
+
+    prior_id = "res_prior_failed"
+    await store.create_session(
+        session_id=prior_id,
+        instrument="DOGE_USDT",
+        timeframe="15m",
+        model_type="direction",
+        tag="prior-failed",
+        workspace_path=str(workspace),
+        max_iterations=20,
+        max_budget_usd=10.0,
+        quick_mode=False,
+        focus_hint=None,
+    )
+
+    from src.core.iteration_snapshot import build_trial_identity, trial_identity_hash
+
+    identity = build_trial_identity(
+        instrument="DOGE_USDT",
+        timeframe="15m",
+        model_type="direction",
+        command=_CMD,
+        config_snapshot=_BASELINE_YAML,
+        quick_mode=False,
+        marker={},
+    )
+    ihash = trial_identity_hash(identity)
+
+    await store.add_iteration(
+        research_id=prior_id,
+        iteration=1,
+        primary_metric=0.4,
+        metric_name="composite_direction_score",
+        all_gates_passed=False,
+        decision="keep",
+        description="failed prior baseline",
+        config_snapshot=_BASELINE_YAML,
+        metrics_json=_json.dumps(
+            {
+                "primary_metric": 0.4,
+                "metric_name": "composite_direction_score",
+                "training_gates_passed": False,
+                "all_gates_passed": False,
+            }
+        ),
+        training_time_s=60.0,
+        canonical_config_hash=identity.get("canonical_config_hash"),
+        trial_identity_hash=ihash,
+        trial_identity_json=_json.dumps(identity),
+        search_phase="baseline_capture",
+    )
+
+    new_id = "res_new_b"
+    await store.create_session(
+        session_id=new_id,
+        instrument="DOGE_USDT",
+        timeframe="15m",
+        model_type="direction",
+        tag="new-b",
+        workspace_path=str(workspace),
+        max_iterations=20,
+        max_budget_usd=10.0,
+        quick_mode=False,
+        focus_hint=None,
+    )
+
+    orchestrator = AgentOrchestrator(store)
+    config = ResearchConfig(
+        id=new_id,
+        instrument="DOGE_USDT",
+        timeframe="15m",
+        model_type="direction",
+    )
+
+    _, marker = await orchestrator._guard_duplicate_training_attempt(
+        config=config,
+        turn=1,
+        command=_CMD,
+        config_snapshot=_BASELINE_YAML,
+        planned_trial=None,
+        current_phase="baseline_capture",
+    )
+
+    assert marker is not None
+    assert marker["training_gates_passed"] is False
+    assert marker["all_gates_passed"] is False
+
+
+@pytest.mark.asyncio
 async def test_baseline_capture_same_session_duplicate_still_rejected(
     tmp_path: Path,
 ) -> None:

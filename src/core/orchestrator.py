@@ -1883,8 +1883,16 @@ class AgentOrchestrator:
             if config.model_type == "direction"
             else "primary_metric"
         )
-        prior_training_gates = bool(duplicate.get("training_gates_passed"))
-        prior_all_gates = bool(duplicate.get("all_gates_passed"))
+        # ``training_gates_passed`` lives inside ``metrics_json`` (not as a row
+        # column), so read both flags through the helper that parses the JSON
+        # blob, falls back to the row's ``all_gates_passed`` column, and
+        # collapses the legacy alias. This prevents the synthetic marker from
+        # emitting a mismatched ``training_gates_passed=False / all_gates_
+        # passed=True`` pair that triggers the gate-alias warning.
+        prior_training_gates = training_gates_passed_from_iteration(
+            duplicate, default=False,
+        )
+        prior_all_gates = prior_training_gates
 
         message = (
             f"Baseline linked from {prior_research_id} iteration "
@@ -1970,12 +1978,34 @@ class AgentOrchestrator:
                     phase_state = json.loads(phase_state_raw)
                 except (json.JSONDecodeError, TypeError):
                     phase_state = None
+            # Fix B/C: cross-session summary surfaces canonical hashes other
+            # sessions already explored AND server-side feature gaps so the
+            # agent does not waste iterations re-discovering known no-ops.
+            get_cross_session = getattr(
+                self._store, "get_cross_session_iteration_summary", None,
+            )
+            prior_session_summary: List[Dict[str, Any]] = []
+            if callable(get_cross_session):
+                try:
+                    prior_session_summary = await get_cross_session(
+                        instrument=config.instrument,
+                        timeframe=config.timeframe,
+                        model_type=config.model_type,
+                        exclude_research_id=config.id,
+                    )
+                except Exception as exc:  # pragma: no cover — fail-open
+                    logger.warning(
+                        "Cross-session summary unavailable for %s: %s",
+                        config.id, exc,
+                    )
+                    prior_session_summary = []
             return build_iteration_context_digest(
                 session=session,
                 iterations=iterations,
                 hpo_studies=hpo_studies,
                 planned_trials=planned_trials,
                 phase_state=phase_state,
+                prior_session_summary=prior_session_summary,
                 max_chars=settings.iteration_context_max_chars,
                 recent_attempts=settings.iteration_context_recent_attempts,
             )

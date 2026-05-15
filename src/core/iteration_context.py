@@ -3,12 +3,100 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Iterable, List, Mapping, Optional
+import logging
+import math
+from typing import Any, Iterable, List, Mapping, Optional, Tuple
+
+try:
+    import yaml
+except ImportError:  # pragma: no cover — pyyaml is a runtime dep
+    yaml = None  # type: ignore[assignment]
 
 from src.core.consistency_validator import parse_consistency_report
 from src.core.gate_status import training_gates_passed_from_iteration
 
+logger = logging.getLogger(__name__)
+
 ITERATION_CONTEXT_DIGEST_MARKER = "[system] Iteration context digest"
+
+# Per-model "salient knobs": YAML keys whose values, when surfaced together,
+# uniquely identify the agent's intent for a given iteration. Used by the
+# "Tried in prior sessions" digest section to render parameter signatures
+# (e.g. ``direction_pct_threshold=0.05, purge_multiplier=4.0``) instead of
+# opaque canonical_config_hash values that the agent cannot map back to its
+# own draft YAML.
+#
+# Order matters: the digest renders keys in the order listed below so two
+# rows with the same salient parameters always produce the same string.
+_SALIENT_PARAMS_BY_MODEL: dict[str, tuple[str, ...]] = {
+    "direction": (
+        "direction_pct_threshold",
+        "purge_multiplier",
+        "horizon",
+        "roster_preset",
+        "calibration_method",
+        "meta_model",
+        "sample_weight_halflife",
+        "threshold_strategy",
+        "threshold_beta",
+        "deadzone_width",
+    ),
+    "volatility": (
+        "volatility_atr_mult",
+        "atr_mult_sweep_enabled",
+        "prediction_horizon",
+        "threshold_strategy",
+        "threshold_beta",
+        "calibration_method",
+        "roster_preset",
+        "sample_weight_halflife",
+        "purge_multiplier",
+    ),
+    "rl": (
+        "net_arch_pi",
+        "net_arch_vf",
+        "n_envs",
+        "n_steps",
+        "learning_rate",
+        "ent_coef",
+        "clip_range",
+        "total_timesteps",
+        "trade_penalty",
+    ),
+}
+
+# Numeric bucket widths for parameter-space clustering. Params NOT listed here
+# (categoricals like roster_preset/calibration_method, list-valued like
+# net_arch_pi) use their exact value as the cluster-key component. The
+# special width ``"log"`` buckets by floor(log10(value)) — order of
+# magnitude — for RL learning_rate / ent_coef where absolute step is
+# meaningless.
+_PARAM_BUCKETS: dict[str, dict[str, "float | str"]] = {
+    "direction": {
+        "direction_pct_threshold": 0.01,
+        "purge_multiplier": 1.0,
+        "horizon": 1,
+        "sample_weight_halflife": 30,
+        "threshold_beta": 0.25,
+        "deadzone_width": 0.01,
+    },
+    "volatility": {
+        "volatility_atr_mult": 0.5,
+        "prediction_horizon": 1,
+        "threshold_beta": 0.25,
+        "sample_weight_halflife": 30,
+        "purge_multiplier": 1.0,
+    },
+    "rl": {
+        "n_envs": 2,
+        "n_steps": 1024,
+        "learning_rate": "log",
+        "ent_coef": "log",
+        "clip_range": 0.1,
+        "total_timesteps": 100000,
+        "trade_penalty": 0.005,
+    },
+}
 
 
 def build_iteration_context_digest(
@@ -18,14 +106,25 @@ def build_iteration_context_digest(
     hpo_studies: Iterable[Mapping[str, Any]] = (),
     planned_trials: Iterable[Mapping[str, Any]] = (),
     phase_state: Optional[Mapping[str, Any]] = None,
+    prior_session_summary: Optional[Iterable[Mapping[str, Any]]] = None,
     max_chars: int = 6000,
     recent_attempts: int = 5,
 ) -> str:
-    """Build a deterministic, bounded digest of persisted iteration state."""
+    """Build a deterministic, bounded digest of persisted iteration state.
+
+    ``prior_session_summary`` (optional) is the aggregated cross-session view
+    produced by ``ResultsStore.get_cross_session_iteration_summary``: one row
+    per ``canonical_config_hash`` already explored by other sessions on the
+    same (instrument, timeframe, model_type). Surfaced to the agent so it
+    can avoid re-trying configs that other sessions already covered, and so
+    it can spot server-side feature gaps (e.g. ``adaptive_features
+    unavailable``) without burning a training cycle to re-confirm them.
+    """
 
     rows = list(iterations)
     studies = list(hpo_studies)
     trials = list(planned_trials)
+    prior_summary = list(prior_session_summary or [])
     max_chars = max(500, int(max_chars or 6000))
     recent_attempts = max(1, int(recent_attempts or 5))
     research_id = session.get("id") or session.get("research_id") or "unknown"
@@ -59,6 +158,24 @@ def build_iteration_context_digest(
     if hpo_line:
         lines.append(f"- HPO/planned trials: {hpo_line}")
     lines.append(f"- Next decision guidance: {_next_guidance(rows)}")
+
+    # Cross-session "tried configs" hint (Fix B) — surfaces canonical config
+    # hashes that other sessions already explored on the same instrument /
+    # timeframe / model_type so the agent does not re-discover them through
+    # duplicate-rejection collisions in tabular_sweeps and later phases.
+    tried_lines = _prior_session_tried_lines(
+        prior_summary, model_type=model_type,
+    )
+    if tried_lines:
+        lines.extend(tried_lines)
+
+    # Server-side feature availability hint (Fix C) — observation-based:
+    # mines the same cross-session summary for known "unavailable" markers
+    # (e.g. adaptive_features_unavailable) so the agent stops re-attempting
+    # features that the server cannot enable regardless of YAML config.
+    availability_lines = _feature_availability_lines(rows, prior_summary)
+    if availability_lines:
+        lines.extend(availability_lines)
 
     # Phase guidance — surfaced every turn so the LLM knows which research
     # phase to advance and is warned immediately when it stalls in one phase.
@@ -195,6 +312,357 @@ def _next_guidance(iterations: List[Mapping[str, Any]]) -> str:
     if training_gates_passed_from_iteration(latest):
         return "compare against best metric and collect promotion evidence instead of repeating the same trial."
     return "adjust one bounded tuning dimension and explain the expected metric impact."
+
+
+# Maximum number of prior-session canonical-config-hash lines to surface in
+# the digest. Each line is short; cap is mostly defensive against truncation
+# of more important sections by ``_cap_text``.
+# Digest shows at most this many explored *regions* (clusters), not raw
+# configs. The hybrid fill takes the top-_CLUSTER_TOP_BEST clusters by metric
+# then stride-samples the remainder for breadth.
+_PRIOR_SESSION_MAX_ENTRIES = 12
+_CLUSTER_TOP_BEST = 5
+_UNSIGNATURED_KEY: Tuple[Any, ...] = ("__nosig__",)
+
+
+def _prior_session_tried_lines(
+    summary: List[Mapping[str, Any]],
+    *,
+    model_type: str = "",
+) -> List[str]:
+    """Render the "Tried in prior sessions" digest block.
+
+    The cross-session population (hundreds of configs) is collapsed into
+    explored *regions* via parameter-space clustering, then a hybrid
+    selection (top performers + a diversity spread across the metric range)
+    fills a bounded number of digest lines. This shows the agent the shape
+    of the already-explored space — not just the single best peak — so it
+    can steer into an unexplored band before submitting instead of after a
+    dedup rejection.
+
+    Returns an empty list when the cross-session summary is empty so the
+    digest stays unchanged for first-ever sessions on an instrument.
+    """
+    if not summary:
+        return []
+    rows = [r for r in summary if r.get("canonical_config_hash")]
+    if not rows:
+        return []
+
+    clusters = _select_representative_clusters(
+        rows, model_type, _PRIOR_SESSION_MAX_ENTRIES,
+    )
+    if not clusters:
+        return []
+
+    total_configs = sum(int(r.get("attempts") or 1) for r in rows)
+    n_clusters = clusters[0]["_total_clusters"]
+    best_metric = max(
+        (c["best_metric"] for c in clusters if c["best_metric"] is not None),
+        default=None,
+    )
+    out: List[str] = [
+        (
+            f"- Tried in prior sessions: {total_configs} configs in "
+            f"{n_clusters} explored regions"
+            f"{' (best=' + _fmt(best_metric) + ')' if best_metric is not None else ''}"
+            ". Each line is one region — any YAML matching a region's "
+            "signature is dedup-rejected. Move a salient knob into an "
+            "unexplored band:"
+        ),
+    ]
+    for c in clusters:
+        chash = _short(str(c["representative_hash"] or ""), 12)
+        metric = _fmt(c["best_metric"])
+        size = c["size"]
+        from_id = c["first_research_id"] or "prior session"
+        if c["signature"]:
+            out.append(
+                f"  - {c['signature']} → best={metric} "
+                f"({size} configs explored here, e.g. {chash} from {from_id})"
+            )
+        else:
+            out.append(
+                f"  - (no config snapshot) {size} configs, "
+                f"e.g. hash={chash} from {from_id}"
+            )
+    shown = len(clusters)
+    if n_clusters > shown:
+        out.append(
+            f"  - …{n_clusters - shown} more regions omitted (lower-metric "
+            "variants of the above). Vary a salient knob into an unexplored "
+            "band to avoid collisions."
+        )
+    return out
+
+
+def _select_representative_clusters(
+    rows: List[Mapping[str, Any]],
+    model_type: str,
+    max_entries: int,
+) -> List[dict]:
+    """Group rows into parameter-space clusters and pick a bounded,
+    deterministic, representative subset (hybrid: top performers + spread).
+
+    Returns a list of dicts in metric-descending order, each with:
+    ``signature`` (str | None), ``best_metric`` (float | None),
+    ``size`` (int), ``representative_hash`` (str), ``first_research_id``
+    (str), and ``_total_clusters`` (int, identical on every element).
+    """
+    grouped: dict[Tuple[Any, ...], List[Mapping[str, Any]]] = {}
+    for row in rows:
+        parsed = _parse_snapshot(row.get("sample_config_snapshot"))
+        key = _cluster_key(parsed, model_type)
+        grouped.setdefault(key if key is not None else _UNSIGNATURED_KEY, []).append(
+            row
+        )
+
+    clusters: List[dict] = []
+    for key, members in grouped.items():
+        # Representative = highest metric, tie-break lexicographic hash.
+        def _rank(r: Mapping[str, Any]) -> Tuple[float, str]:
+            m = _number(r.get("best_metric"))
+            return (
+                m if m is not None else float("-inf"),
+                str(r.get("canonical_config_hash") or ""),
+            )
+
+        rep = max(members, key=_rank)
+        rep_metric = _number(rep.get("best_metric"))
+        if key == _UNSIGNATURED_KEY:
+            signature = None
+        else:
+            parsed_rep = _parse_snapshot(rep.get("sample_config_snapshot"))
+            signature = _signature_from_parsed(parsed_rep, model_type)
+        clusters.append(
+            {
+                "signature": signature,
+                "best_metric": rep_metric,
+                "size": sum(int(m.get("attempts") or 1) for m in members),
+                "representative_hash": rep.get("canonical_config_hash") or "",
+                "first_research_id": rep.get("first_research_id"),
+                "_sort_key": (
+                    -(rep_metric if rep_metric is not None else float("-inf")),
+                    repr(key),
+                ),
+            }
+        )
+
+    clusters.sort(key=lambda c: c["_sort_key"])
+    total = len(clusters)
+
+    if total <= max_entries:
+        selected = clusters
+    else:
+        top = clusters[:_CLUSTER_TOP_BEST]
+        rest = clusters[_CLUSTER_TOP_BEST:]
+        remaining = max_entries - len(top)
+        if rest and remaining > 0:
+            step = max(1, len(rest) // remaining)
+            spread = rest[::step][:remaining]
+        else:
+            spread = []
+        selected = top + spread
+        # Preserve global metric-desc order for display stability.
+        selected.sort(key=lambda c: c["_sort_key"])
+
+    for c in selected:
+        c["_total_clusters"] = total
+        c.pop("_sort_key", None)
+    return selected
+
+
+def _parse_snapshot(config_snapshot: Any) -> Optional[dict]:
+    """Parse a YAML config_snapshot once. Returns the dict or None."""
+    if not config_snapshot or not isinstance(config_snapshot, str):
+        return None
+    if yaml is None:
+        return None
+    try:
+        parsed = yaml.safe_load(config_snapshot)
+    except Exception as exc:  # pragma: no cover — corrupt snapshot
+        logger.debug("Failed to parse config_snapshot: %s", exc)
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _cluster_key(
+    parsed: Optional[dict],
+    model_type: str,
+) -> Optional[Tuple[Any, ...]]:
+    """Build a hashable, bucketed cluster key from a parsed config.
+
+    Numeric salient params are bucketed per ``_PARAM_BUCKETS``; categorical
+    / list params use their exact value. Missing params get a ``None`` slot
+    so configs that omit a knob still cluster consistently. Returns ``None``
+    when there is no parseable config or no salient keys for the model
+    (caller routes those to the unsignatured bucket).
+    """
+    if not parsed:
+        return None
+    salient = _SALIENT_PARAMS_BY_MODEL.get(model_type or "", ())
+    if not salient:
+        return None
+    buckets = _PARAM_BUCKETS.get(model_type or "", {})
+    key_parts: List[Tuple[str, Any]] = []
+    any_present = False
+    for name in salient:
+        if name not in parsed:
+            key_parts.append((name, None))
+            continue
+        any_present = True
+        value = parsed[name]
+        key_parts.append((name, _bucket_value(value, buckets.get(name))))
+    if not any_present:
+        return None
+    return tuple(key_parts)
+
+
+def _bucket_value(value: Any, width: "float | str | None") -> Any:
+    """Bucket a single value for clustering. Lists → tuple, numerics →
+    rounded bucket index (or log10 magnitude for ``"log"``), everything
+    else → the raw value."""
+    if isinstance(value, list):
+        return tuple(value)
+    if width is None:
+        return value
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return value
+    if width == "log":
+        try:
+            return math.floor(math.log10(abs(value))) if value else 0
+        except (ValueError, OverflowError):  # pragma: no cover
+            return 0
+    try:
+        return round(float(value) / float(width))
+    except (TypeError, ValueError, ZeroDivisionError):  # pragma: no cover
+        return value
+
+
+def _signature_from_parsed(
+    parsed: Optional[dict],
+    model_type: str,
+) -> Optional[str]:
+    """Render the ``key=value, …`` signature from an already-parsed config."""
+    if not parsed:
+        return None
+    salient = _SALIENT_PARAMS_BY_MODEL.get(model_type or "", ())
+    if not salient:
+        return None
+    parts: List[str] = []
+    for key in salient:
+        if key in parsed:
+            value = parsed[key]
+            if isinstance(value, list):
+                rendered = "[" + ",".join(str(v) for v in value) + "]"
+            elif isinstance(value, float):
+                rendered = (
+                    f"{value:.4f}".rstrip("0").rstrip(".")
+                    if not value.is_integer()
+                    else str(int(value))
+                )
+            else:
+                rendered = str(value)
+            parts.append(f"{key}={rendered}")
+    if not parts:
+        return None
+    return ", ".join(parts)
+
+
+def _extract_param_signature(
+    config_snapshot: Any,
+    model_type: str,
+) -> Optional[str]:
+    """Back-compat wrapper: parse a raw snapshot then render its signature.
+
+    Retained for any external callers / tests; the clustering path uses
+    ``_parse_snapshot`` + ``_signature_from_parsed`` directly to avoid
+    re-parsing the YAML.
+    """
+    return _signature_from_parsed(
+        _parse_snapshot(config_snapshot), model_type,
+    )
+
+
+# Minimum iteration-count + minimum distinct-session-count for an
+# observation-based feature unavailability claim. Below these thresholds we
+# stay silent to avoid false positives from a single transient failure.
+_FEATURE_OBS_MIN_ITERATIONS = 3
+_FEATURE_OBS_MIN_SESSIONS = 2
+
+
+def _feature_availability_lines(
+    same_session_rows: List[Mapping[str, Any]],
+    prior_summary: List[Mapping[str, Any]],
+) -> List[str]:
+    """Detect persistent server-side feature unavailability across sessions.
+
+    Currently scans for:
+      - ``adaptive_feature_noop_reason: adaptive_features_unavailable``
+      - ``tsfm_fallback_validation: True`` with no explicit ``tsfm_adapter``
+
+    The data sources are:
+      - ``same_session_rows``: parsed ``metrics_json`` of recorded iterations
+        in the current session (covers transient gaps that the agent should
+        not immediately retry).
+      - ``prior_summary``: aggregated cross-session rows (covers persistent
+        capability gaps observed across many sessions).
+    """
+    adaptive_iter_count = 0
+    adaptive_session_count = 0
+    tsfm_fallback_iter_count = 0
+    tsfm_fallback_session_count = 0
+
+    for row in prior_summary:
+        attempts = int(row.get("attempts") or 0)
+        session_count = int(row.get("session_count") or 0)
+        noop_reasons = (row.get("noop_reasons") or "").lower()
+        if "adaptive_features_unavailable" in noop_reasons:
+            adaptive_iter_count += attempts
+            adaptive_session_count += session_count
+        tsfm_adapters = (row.get("tsfm_adapters") or "").strip()
+        tsfm_fallback_flags = (row.get("tsfm_fallback_flags") or "").lower()
+        has_real_adapter = tsfm_adapters and tsfm_adapters not in ("null", "none", "")
+        has_fallback = "true" in tsfm_fallback_flags or "1" in tsfm_fallback_flags
+        if has_fallback and not has_real_adapter:
+            tsfm_fallback_iter_count += attempts
+            tsfm_fallback_session_count += session_count
+
+    same_session_seen_sessions = 1 if same_session_rows else 0
+    for row in same_session_rows:
+        metrics = _parse_mapping(row.get("metrics_json"))
+        if metrics.get("adaptive_feature_noop_reason") == "adaptive_features_unavailable":
+            adaptive_iter_count += 1
+        if metrics.get("tsfm_fallback_validation") and not metrics.get("tsfm_adapter"):
+            tsfm_fallback_iter_count += 1
+    if same_session_seen_sessions and adaptive_iter_count > 0:
+        adaptive_session_count = max(adaptive_session_count, 1)
+    if same_session_seen_sessions and tsfm_fallback_iter_count > 0:
+        tsfm_fallback_session_count = max(tsfm_fallback_session_count, 1)
+
+    findings: List[str] = []
+    if (
+        adaptive_iter_count >= _FEATURE_OBS_MIN_ITERATIONS
+        and adaptive_session_count >= _FEATURE_OBS_MIN_SESSIONS
+    ):
+        findings.append(
+            f"  - adaptive_features: UNAVAILABLE (seen in {adaptive_iter_count} "
+            f"iterations across {adaptive_session_count} sessions — do NOT "
+            f"retry enabling; server cannot satisfy this config)"
+        )
+    if (
+        tsfm_fallback_iter_count >= _FEATURE_OBS_MIN_ITERATIONS
+        and tsfm_fallback_session_count >= _FEATURE_OBS_MIN_SESSIONS
+    ):
+        findings.append(
+            f"  - tsfm: tabular-fallback only (seen in {tsfm_fallback_iter_count} "
+            f"iterations across {tsfm_fallback_session_count} sessions — no "
+            f"adapter candidate available; phase advances on fallback evidence)"
+        )
+
+    if not findings:
+        return []
+    return ["- Server-side feature availability:", *findings]
 
 
 def _row_blockers(row: Mapping[str, Any]) -> List[str]:
