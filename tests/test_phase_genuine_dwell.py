@@ -67,6 +67,31 @@ def test_tsfm_two_auto_evidence_iterations_complete_phase() -> None:
     assert "tsfm_sweeps" in completed
 
 
+def test_ga_tsfm_cardinality_fallback_completes_without_evidence_key() -> None:
+    """G-A: sibling-consistent net (cf. tabular_sweeps >=6, atr_sweep >=4).
+    Two tsfm-tagged iterations carrying NO tsfm evidence key still complete
+    the phase via the cardinality fallback, so a tabular-only instrument
+    cannot wedge here.
+    """
+    iterations = [
+        _iteration(metrics={}, search_phase="tsfm_sweeps", iteration=1),
+        _iteration(metrics={}, search_phase="tsfm_sweeps", iteration=2),
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "direction")
+    assert "tsfm_sweeps" in completed
+
+
+def test_ga_tsfm_cardinality_fallback_needs_two_iterations() -> None:
+    """G-A net floor is 2 (the phase's own min_iterations); a single
+    keyless tsfm-tagged iteration must NOT complete the phase.
+    """
+    iterations = [
+        _iteration(metrics={}, search_phase="tsfm_sweeps", iteration=1),
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "direction")
+    assert "tsfm_sweeps" not in completed
+
+
 def test_tsfm_with_explicit_adapter_key_completes_immediately() -> None:
     iterations = [
         _iteration(

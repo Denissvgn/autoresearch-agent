@@ -215,3 +215,103 @@ async def test_non_auto_evidence_iteration_is_genuine(tmp_path: Path) -> None:
     assert await orchestrator._phase_advancement_is_genuine(
         "res_real", "tsfm_sweeps",
     ) is True
+
+
+@pytest.mark.asyncio
+async def test_gc_tsfm_fallback_validation_is_genuine(tmp_path: Path) -> None:
+    """G-C: a tabular-only instrument emits only tsfm_fallback_validation
+    (+auto_phase_evidence) in tsfm_sweeps. That server signal must count as
+    genuine so stagnation is suppressed there.
+    """
+    workspace = tmp_path / "ws"
+    workspace.mkdir(parents=True)
+    store = ResultsStore(str(tmp_path / "store.db"))
+    await store.initialize()
+
+    await _seed_session_with_iterations(
+        store, "res_gc_tsfm",
+        workspace=workspace,
+        iterations=[
+            {
+                "primary_metric": 0.61,
+                "decision": "discard",
+                "phase": "tsfm_sweeps",
+                "metrics": {
+                    "auto_phase_evidence": True,
+                    "tsfm_fallback_validation": True,
+                },
+            }
+        ],
+        current_phase="tsfm_sweeps",
+    )
+
+    orchestrator = AgentOrchestrator(store)
+    assert await orchestrator._phase_advancement_is_genuine(
+        "res_gc_tsfm", "tsfm_sweeps",
+    ) is True
+
+
+@pytest.mark.asyncio
+async def test_gc_tsfm_auto_only_without_fallback_not_genuine(
+    tmp_path: Path,
+) -> None:
+    """G-C is scoped: tsfm_sweeps with auto_phase_evidence but NO
+    tsfm_fallback_validation (and no tsfm/tsfm_adapter) stays non-genuine —
+    anti-gaming preserved.
+    """
+    workspace = tmp_path / "ws"
+    workspace.mkdir(parents=True)
+    store = ResultsStore(str(tmp_path / "store.db"))
+    await store.initialize()
+
+    await _seed_session_with_iterations(
+        store, "res_gc_tsfm_neg",
+        workspace=workspace,
+        iterations=[
+            {
+                "primary_metric": 0.61,
+                "decision": "discard",
+                "phase": "tsfm_sweeps",
+                "metrics": {"auto_phase_evidence": True},
+            }
+        ],
+        current_phase="tsfm_sweeps",
+    )
+
+    orchestrator = AgentOrchestrator(store)
+    assert await orchestrator._phase_advancement_is_genuine(
+        "res_gc_tsfm_neg", "tsfm_sweeps",
+    ) is False
+
+
+@pytest.mark.asyncio
+async def test_gc_fallback_key_outside_tsfm_is_ignored(tmp_path: Path) -> None:
+    """The tsfm_fallback_validation recognition is scoped to tsfm_sweeps; the
+    same key in another auto-only phase does not make it genuine.
+    """
+    workspace = tmp_path / "ws"
+    workspace.mkdir(parents=True)
+    store = ResultsStore(str(tmp_path / "store.db"))
+    await store.initialize()
+
+    await _seed_session_with_iterations(
+        store, "res_gc_scope",
+        workspace=workspace,
+        iterations=[
+            {
+                "primary_metric": 0.61,
+                "decision": "discard",
+                "phase": "promotion_proposal",
+                "metrics": {
+                    "auto_phase_evidence": True,
+                    "tsfm_fallback_validation": True,
+                },
+            }
+        ],
+        current_phase="promotion_proposal",
+    )
+
+    orchestrator = AgentOrchestrator(store)
+    assert await orchestrator._phase_advancement_is_genuine(
+        "res_gc_scope", "promotion_proposal",
+    ) is False

@@ -22,7 +22,9 @@ from src.config import secret_value, settings
 from src.core.command_runner import GovernedCommandRunner, redact_sensitive_text
 from src.core.artifact_reference import normalize_artifact_references_in_mapping
 from src.core.consistency_validator import (
+    ACCEPTED_ADAPTIVE_NOOP_REASONS,
     build_consistency_report,
+    check_adaptive_feature_sweep,
     consistency_report_json,
 )
 from src.core.experiment_parser import (
@@ -54,7 +56,10 @@ from src.core.research_phase_plan import (
     phase_state_json,
     phases_for_model,
 )
-from src.core.research_phase_plan import _PHASE_ADVANCEMENT_KEYS
+from src.core.research_phase_plan import (
+    _PHASE_ADVANCEMENT_KEYS,
+    NOOP_INHERITABLE_PHASES,
+)
 from src.core.result_artifact import enrich_marker_from_result_artifact
 from src.core.results_store import ResultsStore
 from src.core.structured_hpo import materialize_planned_trials
@@ -111,6 +116,21 @@ _PHASE_SPECIFIC_AGENT_KEYS: Dict[str, frozenset[str]] = {
         },
     ),
 }
+
+# G-C: calibration_replay_gates / multi_seed_robustness / inference_parity_
+# replay are already recognized as genuine by the _PHASE_SPECIFIC_AGENT_KEYS
+# path above, because prepare.py emits exactly those keys. The one tail phase
+# the existing logic misses is tsfm_sweeps: for a legitimately tabular-only
+# instrument prepare.py emits ONLY ``tsfm_fallback_validation`` (a permissive
+# key, deliberately NOT in _PHASE_SPECIFIC_AGENT_KEYS) plus
+# ``auto_phase_evidence:True``. That is the correct, server-confirmed terminal
+# state for the phase, yet stagnation suppression is denied there and the
+# session is terminated mid-tail. ``tsfm_fallback_validation`` is only ever
+# emitted (and only ever present) when prepare.py determined
+# is_tsfm_candidate=False, so its presence is a trustworthy server signal.
+# Recognizing it here is low-risk: it advances only this single evidence phase
+# (G-A already auto-completes it by cardinality regardless).
+_TSFM_FALLBACK_GENUINE_PHASE = "tsfm_sweeps"
 
 # ---------------------------------------------------------------------------
 # Research config dataclass
@@ -1818,6 +1838,37 @@ class AgentOrchestrator:
                 duplicate=duplicate,
             )
 
+        # Issue 5: a noop-inheritable phase (e.g. adaptive_feature_sweeps)
+        # advances on a config-invariant accepted noop. The only config that
+        # produces it is the one already recorded, so a re-run to assert the
+        # evidence dedups. Rejecting it with an evidence-stripped marker wedges
+        # the phase forever. Instead, inherit the accepted evidence from the
+        # completed prior iteration so the normal recording path advances the
+        # phase. Strictly scoped to non-dwell-gated phases (see
+        # NOOP_INHERITABLE_PHASES) so this can never skip genuine work.
+        if (
+            current_phase in NOOP_INHERITABLE_PHASES
+            and duplicate.get("duplicate_reason") is None
+        ):
+            _dup_metrics = self._parse_metrics_json(duplicate.get("metrics_json"))
+            _noop = str(
+                _dup_metrics.get("adaptive_feature_noop_reason") or ""
+            ).strip()
+            if (
+                _noop in ACCEPTED_ADAPTIVE_NOOP_REASONS
+                and check_adaptive_feature_sweep(_dup_metrics) is None
+            ):
+                return self._build_phase_evidence_link(
+                    config=config,
+                    turn=turn,
+                    identity=identity,
+                    identity_hash=identity_hash,
+                    config_snapshot=config_snapshot,
+                    duplicate=duplicate,
+                    current_phase=current_phase,
+                    inherited_metrics=_dup_metrics,
+                )
+
         duplicate_reason = (
             "Duplicate training attempt rejected: the same canonical config, "
             f"seed={identity.get('seed')}, mode={identity.get('validation_mode')}, "
@@ -1943,6 +1994,124 @@ class AgentOrchestrator:
                 "trial_identity_hash": identity_hash,
                 "baseline_linked_from_research_id": prior_research_id,
                 "baseline_linked_from_iteration": prior_iteration,
+            },
+        ), marker
+
+    @staticmethod
+    def _parse_metrics_json(raw: Any) -> Dict[str, Any]:
+        """Best-effort parse of an iteration row's metrics_json into a dict."""
+        if isinstance(raw, dict):
+            return raw
+        if isinstance(raw, str) and raw.strip():
+            try:
+                parsed = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                return {}
+            return parsed if isinstance(parsed, dict) else {}
+        return {}
+
+    def _build_phase_evidence_link(
+        self,
+        *,
+        config: ResearchConfig,
+        turn: int,
+        identity: Dict[str, Any],
+        identity_hash: str,
+        config_snapshot: Optional[str],
+        duplicate: Dict[str, Any],
+        current_phase: str,
+        inherited_metrics: Dict[str, Any],
+    ) -> tuple[ToolExecutionResult, Dict[str, Any]]:
+        """Inherit a noop-phase's accepted evidence on a dedup hit.
+
+        Mirrors :meth:`_build_baseline_link`, but for a ``NOOP_INHERITABLE``
+        phase whose advancement evidence is config-invariant (e.g.
+        ``adaptive_feature_noop_reason: adaptive_features_unavailable``). The
+        re-run dedups against a completed prior iteration that already carries
+        the accepted noop; rather than rejecting it with an evidence-stripped
+        marker (which wedges the phase forever — see Issue 5), synthesize a
+        real, phase-tagged ``completed`` iteration that carries the inherited
+        evidence so the normal recording path advances the phase.
+        """
+
+        prior_research_id = duplicate.get("research_id")
+        prior_iteration = duplicate.get("iteration")
+        prior_metric = duplicate.get("primary_metric")
+        prior_metric_name = duplicate.get("metric_name") or (
+            "composite_direction_score"
+            if config.model_type == "direction"
+            else "primary_metric"
+        )
+        prior_training_gates = training_gates_passed_from_iteration(
+            duplicate, default=False,
+        )
+        prior_all_gates = prior_training_gates
+
+        noop_reason = str(
+            inherited_metrics.get("adaptive_feature_noop_reason") or ""
+        ).strip()
+        # Inherit the structured adaptive_features block too, when the source
+        # iteration recorded one (keeps downstream consistency checks happy).
+        inherited_adaptive = inherited_metrics.get("adaptive_features")
+
+        message = (
+            f"Phase evidence for '{current_phase}' inherited from "
+            f"{prior_research_id} iteration {prior_iteration} "
+            f"(adaptive_feature_noop_reason={noop_reason}). Re-running the "
+            f"only config that produces this config-invariant noop dedups; "
+            f"the accepted evidence is inherited so the phase can advance "
+            f"without a research-irrelevant perturbation."
+        )
+
+        synthetic_block = "\n".join(
+            [
+                "---",
+                "status:             completed",
+                f"primary_metric:     {prior_metric:.6f}"
+                if isinstance(prior_metric, (int, float))
+                else "primary_metric:     0.0",
+                f"metric_name:        {prior_metric_name}",
+                "direction:          higher_is_better",
+                f"training_gates_passed: {str(prior_training_gates).lower()}",
+                f"all_gates_passed:   {str(prior_all_gates).lower()}",
+                f"adaptive_feature_noop_reason: {noop_reason}",
+                f"search_phase:       {current_phase}",
+                f"phase_evidence_linked_from_research_id: {prior_research_id}",
+                f"phase_evidence_linked_from_iteration: {prior_iteration}",
+                "---",
+            ]
+        )
+
+        marker: Dict[str, Any] = {
+            "status": "completed",
+            "primary_metric": prior_metric,
+            "metric_name": prior_metric_name,
+            "training_gates_passed": prior_training_gates,
+            "all_gates_passed": prior_all_gates,
+            "decision": "keep",
+            "search_phase": current_phase,
+            "adaptive_feature_noop_reason": noop_reason,
+            "description": f"{message} (turn {turn})",
+            "config_snapshot": config_snapshot,
+            "canonical_config_hash": identity.get("canonical_config_hash"),
+            "trial_identity": identity,
+            "trial_identity_hash": identity_hash,
+            "phase_evidence_linked_from_research_id": prior_research_id,
+            "phase_evidence_linked_from_iteration": prior_iteration,
+        }
+        if isinstance(inherited_adaptive, dict):
+            marker["adaptive_features"] = inherited_adaptive
+
+        return ToolExecutionResult(
+            synthetic_block,
+            meta={
+                "policy_allowed": True,
+                "policy_operation": "phase_evidence.linked",
+                "returncode": 0,
+                "timed_out": False,
+                "trial_identity_hash": identity_hash,
+                "phase_evidence_linked_from_research_id": prior_research_id,
+                "phase_evidence_linked_from_iteration": prior_iteration,
             },
         ), marker
 
@@ -4008,6 +4177,17 @@ class AgentOrchestrator:
                 current_phase, set(),
             )
             if any(metrics.get(k) for k in phase_specific_keys):
+                return True
+
+            # G-C: tsfm_sweeps confirmed via the server's tabular-fallback
+            # signal is genuine. prepare.py only emits (and only ever
+            # populates) tsfm_fallback_validation when is_tsfm_candidate=False,
+            # so its presence is a trustworthy server determination — not an
+            # LLM bare boolean floating the phase up.
+            if (
+                current_phase == _TSFM_FALLBACK_GENUINE_PHASE
+                and metrics.get("tsfm_fallback_validation")
+            ):
                 return True
         return False
 

@@ -354,6 +354,18 @@ _PHASE_ADVANCEMENT_KEYS: Dict[str, tuple] = {
 }
 
 
+# Phases that advance on presence of an accepted permissive key with NO
+# _phase_has_genuine_dwell gate (see _completed_phase_ids: _adaptive_phase_
+# completed is called directly, unlike tsfm_sweeps et al.). Evidence for these
+# can be config-invariant (e.g. adaptive_features_unavailable on an instrument
+# where adaptive features simply do not apply), so a dedup re-run of the only
+# config that produces it must INHERIT that evidence rather than be rejected
+# with an evidence-stripped marker. Keep this a strict subset — never add a
+# phase that is dwell-gated in _completed_phase_ids(), or a single dedup
+# re-run could skip genuine multi-iteration work.
+NOOP_INHERITABLE_PHASES: frozenset[str] = frozenset({"adaptive_feature_sweeps"})
+
+
 def _completed_phase_ids(
     iterations: List[Dict[str, Any]],
     hpo_studies: List[Dict[str, Any]],
@@ -411,10 +423,18 @@ def _completed_phase_ids(
 
     if _adaptive_phase_completed(iterations):
         completed.add("adaptive_feature_sweeps")
+    tsfm_iters = _iterations_in_phase(iterations, "tsfm_sweeps")
     if (
         any(_has_metric(it, *_PHASE_ADVANCEMENT_KEYS["tsfm_sweeps"]) for it in iterations)
         and _phase_has_genuine_dwell(iterations, "tsfm_sweeps", min_iterations=2)
     ):
+        completed.add("tsfm_sweeps")
+    elif len(tsfm_iters) >= 2:
+        # Sibling-consistent cardinality net (cf. tabular_sweeps >=6,
+        # atr_sweep >=4). tsfm_fallback_validation is a permissive key, so a
+        # legitimately tabular-only instrument that dwells in tsfm_sweeps must
+        # still advance even if the genuine-dwell path does not trip. N=2 is
+        # the phase's own min_iterations.
         completed.add("tsfm_sweeps")
     # AR-5: gate promotion-family phases behind artifact validation.
     # AR-6: also gate behind synthetic-iteration detection.
