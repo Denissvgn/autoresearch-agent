@@ -476,6 +476,15 @@ def check_adaptive_feature_sweep(metrics: Dict[str, Any]) -> Optional[str]:
         return "adaptive_feature_requested_but_inactive"
     if evidence.get("enabled") and int(evidence.get("selected_count") or 0) <= 0:
         return "adaptive_feature_requested_but_no_selected_features"
+    if not evidence.get("requested") and not evidence.get("enabled"):
+        # Issue 6 (Fix B): not requested AND not enabled is a legitimate
+        # "agent hasn't attempted adaptive yet" state — let the phase
+        # next_action / SKILL.md guidance steer the next iteration rather
+        # than hard-blocking THIS one. The adaptive_feature_not_enabled
+        # blocker (below) is reserved for the gaming-detection case
+        # (requested=True AND enabled=False) which the line above already
+        # raises as adaptive_feature_requested_but_inactive.
+        return None
     if not evidence.get("enabled"):
         return "adaptive_feature_not_enabled"
     return None

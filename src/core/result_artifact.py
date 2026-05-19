@@ -176,17 +176,32 @@ def merge_result_payload(
             continue
         marker_value = marker.get(key)
         result_value = payload[key]
+        # Issue 6 root-cause: an explicit None in results.json must not blow
+        # away a value the marker already carries (parse_prepare_output may
+        # have computed it). The enricher's intent is to *add* evidence, not
+        # nullify computed marker fields.
+        if result_value is None and marker_value is not None:
+            continue
         if isinstance(marker_value, dict) and isinstance(result_value, Mapping):
             marker[key] = _deep_merge_result_wins(marker_value, result_value)
         else:
             marker[key] = deepcopy(result_value)
 
     for key in _TOP_LEVEL_RESULT_KEYS:
-        if key in payload and key not in _SERVER_OWNED_KEYS:
-            value = deepcopy(payload[key])
-            if key in ARTIFACT_REFERENCE_KEYS:
-                value = normalize_optional_artifact_ref(value)
-            marker[key] = value
+        if key not in payload or key in _SERVER_OWNED_KEYS:
+            continue
+        raw_value = payload[key]
+        # Issue 6 root-cause (see above): trainer's results.json may emit a
+        # top-level field as explicit null when it isn't applicable; do not
+        # let that null overwrite a non-None marker value derived from the
+        # parsed --- block (e.g. adaptive_feature_noop_reason: "adaptive_
+        # features_unavailable").
+        if raw_value is None and marker.get(key) is not None:
+            continue
+        value = deepcopy(raw_value)
+        if key in ARTIFACT_REFERENCE_KEYS:
+            value = normalize_optional_artifact_ref(value)
+        marker[key] = value
 
     _add_flat_aliases(marker, payload)
 
