@@ -9,6 +9,7 @@ import {
   toneForStatus,
   warningTone,
 } from '../utils/productionOps';
+import ClipboardCopy from './ClipboardCopy';
 
 interface Props {
   state?: ResearchState;
@@ -133,19 +134,15 @@ export default function ProductionOpsPanel({ state }: Props) {
           </div>
           <div className="mt-3 space-y-1 text-xs">
             {ops.rl_profit.artifact_path && (
-              <div className="flex items-start gap-1">
+              <div className="flex items-center gap-1">
                 <span className="text-gray-500 shrink-0">Artifact:</span>
-                <span className="font-mono text-gray-400 truncate" title={ops.rl_profit.artifact_path}>
-                  …{ops.rl_profit.artifact_path.slice(-32)}
-                </span>
+                <ClipboardCopy value={ops.rl_profit.artifact_path} maxLength={16} />
               </div>
             )}
             {ops.rl_profit.artifact_hash && (
               <div className="flex items-center gap-1">
                 <span className="text-gray-500 shrink-0">Hash:</span>
-                <span className="font-mono text-gray-400" title={ops.rl_profit.artifact_hash}>
-                  {ops.rl_profit.artifact_hash.slice(0, 12)}…
-                </span>
+                <ClipboardCopy value={ops.rl_profit.artifact_hash} maxLength={8} />
               </div>
             )}
           </div>
@@ -182,9 +179,7 @@ export default function ProductionOpsPanel({ state }: Props) {
               {ops.oos_provenance.feature_bundle_hash && (
                 <div className="flex items-center gap-1">
                   <span className="text-gray-500 shrink-0">Bundle:</span>
-                  <span className="font-mono text-gray-400" title={ops.oos_provenance.feature_bundle_hash}>
-                    {ops.oos_provenance.feature_bundle_hash.slice(0, 12)}…
-                  </span>
+                  <ClipboardCopy value={ops.oos_provenance.feature_bundle_hash} maxLength={8} />
                 </div>
               )}
               {ops.oos_provenance.blockers.length > 0 && (
@@ -223,7 +218,9 @@ export default function ProductionOpsPanel({ state }: Props) {
             <h3 className="text-sm font-semibold">Rollback Target</h3>
             <StatusPill status={ops.rollback.status} />
           </div>
-          <div className="font-mono text-xs text-gray-300 break-all">{ops.rollback.target ?? '-'}</div>
+          <div className="font-mono text-xs text-gray-300 break-all">
+            <ClipboardCopy value={ops.rollback.target ?? ''} maxLength={16} />
+          </div>
         </section>
 
         <section className="border border-gray-800 bg-gray-900 px-4 py-3">

@@ -11,8 +11,21 @@ export default function Dashboard() {
   const { data: page, isLoading } = useSessionsPage(PAGE, offset);
   const { data: status } = useStatus();
 
+  // Filter States
+  const [filterInstrument, setFilterInstrument] = useState('');
+  const [filterModel, setFilterModel] = useState('');
+  const [filterTag, setFilterTag] = useState('');
+
   const active = allSessions?.filter((s) => s.status === 'running' || s.status === 'paused') ?? [];
-  const recent = page?.items ?? [];
+  const rawRecent = page?.items ?? [];
+  
+  const recent = rawRecent.filter((s) => {
+    const matchInst = !filterInstrument || s.instrument.toLowerCase().includes(filterInstrument.toLowerCase());
+    const matchModel = !filterModel || s.model_type === filterModel;
+    const matchTag = !filterTag || (s.tag && s.tag.toLowerCase().includes(filterTag.toLowerCase()));
+    return matchInst && matchModel && matchTag;
+  });
+
   const total = page?.total ?? 0;
   const hasMore = total > offset + PAGE;
 
@@ -70,10 +83,47 @@ export default function Dashboard() {
 
       {/* Recent */}
       <section>
-        <h2 className="text-sm font-medium text-gray-400 mb-3">
-          Recent Sessions
-          {total > 0 && <span className="text-gray-600 ml-2 font-normal">({total})</span>}
-        </h2>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+          <h2 className="text-sm font-medium text-gray-400">
+            Recent Sessions
+            {total > 0 && <span className="text-gray-600 ml-2 font-normal">({total})</span>}
+          </h2>
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              type="text"
+              placeholder="Search instrument..."
+              value={filterInstrument}
+              onChange={(e) => setFilterInstrument(e.target.value)}
+              className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 outline-none focus:border-indigo-500 w-36"
+            />
+            <select
+              value={filterModel}
+              onChange={(e) => setFilterModel(e.target.value)}
+              className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 outline-none focus:border-indigo-500"
+            >
+              <option value="">All models</option>
+              <option value="direction">Direction</option>
+              <option value="volatility">Volatility</option>
+              <option value="rl">RL</option>
+              <option value="pipeline">Pipeline</option>
+            </select>
+            <input
+              type="text"
+              placeholder="Filter tag..."
+              value={filterTag}
+              onChange={(e) => setFilterTag(e.target.value)}
+              className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 outline-none focus:border-indigo-500 w-28"
+            />
+            {(filterInstrument || filterModel || filterTag) && (
+              <button
+                onClick={() => { setFilterInstrument(''); setFilterModel(''); setFilterTag(''); }}
+                className="text-xs text-gray-500 hover:text-gray-300 transition"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
         {isLoading ? (
           <div className="text-gray-500 text-sm">Loading...</div>
         ) : recent.length === 0 ? (

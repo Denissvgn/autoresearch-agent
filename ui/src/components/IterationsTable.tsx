@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Iteration } from '../api/client';
+import { calculateCompositeRLScore, RL_COMPOSITE_COEFFICIENTS } from '../utils/formulas';
 
 interface Props {
   iterations: Iteration[];
@@ -125,24 +126,24 @@ export default function IterationsTable({ iterations, bestIteration }: Props) {
                           const r = Number(it.secondary_metrics.mean_oos_return.value);
                           const d = Number(it.secondary_metrics.mean_oos_drawdown.value);
                           const cv = it.secondary_metrics?.sharpe_cv ? Number(it.secondary_metrics.sharpe_cv.value) : 0;
-                          const termS = 1.0 * s;
-                          const termR = 0.5 * r;
-                          const termD = 2.0 * d;
-                          const termCV = 0.1 * cv;
-                          const total = termS + termR - termD - termCV;
+                          const { termS, termR, termD, termCV, total } = calculateCompositeRLScore(s, r, d, cv);
+                          const wS = RL_COMPOSITE_COEFFICIENTS.sharpe.weight;
+                          const wR = RL_COMPOSITE_COEFFICIENTS.return.weight;
+                          const wD = RL_COMPOSITE_COEFFICIENTS.drawdown.weight;
+                          const wCV = RL_COMPOSITE_COEFFICIENTS.cv.weight;
                           return (
                             <div className="mb-3 rounded bg-gray-800/70 px-3 py-2 font-mono text-xs flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                              <span className="text-gray-500">composite =</span>
-                              <span className="text-gray-400">1.0×</span>
+                              <span className="text-gray-500 font-sans font-semibold text-[11px] uppercase tracking-wider mr-2">composite =</span>
+                              <span className="text-gray-400">{wS.toFixed(1)}×</span>
                               <span className="text-green-400">{s.toFixed(4)}</span>
                               <span className="text-gray-400">+</span>
-                              <span className="text-gray-400">0.5×</span>
+                              <span className="text-gray-400">{wR.toFixed(1)}×</span>
                               <span className="text-green-400">{r.toFixed(4)}</span>
                               <span className="text-gray-400">−</span>
-                              <span className="text-gray-400">2.0×</span>
+                              <span className="text-gray-400">{wD.toFixed(1)}×</span>
                               <span className="text-red-400">{d.toFixed(4)}</span>
                               <span className="text-gray-400">−</span>
-                              <span className="text-gray-400">0.1×</span>
+                              <span className="text-gray-400">{wCV.toFixed(1)}×</span>
                               <span className="text-orange-400">{cv.toFixed(4)}</span>
                               <span className="text-gray-600">=</span>
                               <span className="text-green-400">{termS.toFixed(4)}</span>
