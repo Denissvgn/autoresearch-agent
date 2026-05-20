@@ -517,13 +517,41 @@ def _phase_has_genuine_dwell(
     permissive fallback (e.g. ``tsfm_adapter``) always count as genuine
     regardless of phase tag, mirroring the legacy contract for agents that
     forget to set ``search_phase``.
+
+    Issue 7: artifact-validated tail phases (calibration_replay_gates,
+    multi_seed_robustness, inference_parity_replay) require BOTH the
+    explicit evidence key AND an in-phase iteration tag. prepare.py emits
+    those keys on every run, so without the tag requirement the very first
+    tabular_sweeps iteration paper-completes phases 5–7 before the agent
+    has ever deliberated on them. Validity remains enforced by
+    check_evidence_artifact in _completed_phase_ids; this gate adds
+    DELIBERATION (the agent must at least once tag an iteration in-phase).
     """
     explicit_keys = _PHASE_EXPLICIT_AGENT_KEYS.get(phase_id, ())
+    in_phase_count = len(_iterations_in_phase(iterations, phase_id))
     if explicit_keys and any(
         _has_metric(it, *explicit_keys) for it in iterations
     ):
+        if phase_id in _PHASE_REQUIRES_IN_PHASE_TAG:
+            return in_phase_count >= min_iterations
         return True
-    return len(_iterations_in_phase(iterations, phase_id)) >= min_iterations
+    return in_phase_count >= min_iterations
+
+
+# Issue 7: tail phases whose evidence prepare.py emits on every run. Without
+# the in-phase tag requirement above, they paper-complete from any iteration
+# carrying the key (typically iter 3 of tabular_sweeps), bypassing per-phase
+# deliberation. Validity is unchanged — check_evidence_artifact still vets the
+# structured artifact. This set documents *which* phases need the agent to at
+# least once mark themselves in-phase. Keep tsfm_sweeps OUT (G-A's cardinality
+# net handles it; the tabular fallback is genuine evidence on any run).
+_PHASE_REQUIRES_IN_PHASE_TAG: frozenset[str] = frozenset(
+    {
+        "calibration_replay_gates",
+        "multi_seed_robustness",
+        "inference_parity_replay",
+    },
+)
 
 
 # Fix 8 — phase-specific keys whose presence proves the agent did real work

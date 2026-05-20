@@ -310,6 +310,15 @@ def _attempt_outcome(row: Dict[str, Any], metrics: Dict[str, Any]) -> str:
         return "pruned"
     if status in {"failed", "error", "timeout", "timed_out", "crash"}:
         return "failed"
+    # Issue 8: a trained-successfully iteration whose only failure mode is a
+    # consistency-gate block is qualitatively different from a training
+    # crash/timeout. Surface it with a distinct label so downstream retry/UI
+    # logic can react (do NOT retry as transient; address the blocker)
+    # without conflating it with real training failure. Fires regardless of
+    # the keep/discard decision — the decision answers "did metric improve?",
+    # outcome answers "did training succeed?".
+    if status in {"completed", "success"} and _consistency_failed(row):
+        return "consistency_blocked"
     if row.get("decision") == "discard":
         return "failed"
     if status in {"completed", "success"}:
@@ -319,6 +328,25 @@ def _attempt_outcome(row: Dict[str, Any], metrics: Dict[str, Any]) -> str:
     if row.get("primary_metric") is not None:
         return "completed" if row.get("all_gates_passed") else "failed"
     return "unknown"
+
+
+def _consistency_failed(row: Dict[str, Any]) -> bool:
+    """True iff the row's consistency_report explicitly recorded passed=False.
+
+    Defensive: missing/malformed report returns False so the outcome path is
+    unchanged from the pre-Issue-8 behavior for older rows.
+    """
+    raw = row.get("consistency_report_json")
+    if not raw:
+        return False
+    if isinstance(raw, dict):
+        report: Any = raw
+    else:
+        try:
+            report = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return False
+    return isinstance(report, dict) and report.get("passed") is False
 
 
 def _replay_status(metrics: Dict[str, Any]) -> str:
