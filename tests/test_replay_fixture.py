@@ -207,13 +207,16 @@ async def test_replay_iterations_iter90_has_real_training_data(
 async def test_replay_fixture_phase_plan_reaches_multi_seed_robustness(
     replay_iterations,
 ) -> None:
-    """Phase plan computed from fixture iterations must reach multi_seed_robustness.
+    """Phase plan computed from fixture iterations must keep the agent
+    in the tail-phase region, NOT advance past multi_seed_robustness.
 
-    Iterations 85-90 provide evidence keys that complete all prior phases
-    (baseline_capture, tabular_sweeps, adaptive_feature_sweeps, tsfm_sweeps,
-    calibration_replay_gates).  The synthetic multi_seed_robustness iterations
-    (95/97) must NOT advance that phase (duplicate run_ids), so
-    current_phase should be multi_seed_robustness.
+    Iters 85-88 complete baseline_capture, tabular_sweeps,
+    adaptive_feature_sweeps, tsfm_sweeps via evidence keys. Iter 89 has
+    real calibration evidence but is a SINGLE in-phase calibration iter;
+    Gap 2 raised calibration_replay_gates floor from 1 to 2, so this
+    fixture no longer auto-completes that phase. The synthetic
+    multi_seed_robustness iters (95/97) still must NOT advance their
+    phase (duplicate run_ids → AR-5 artifact check blocks).
     """
     ctx = await replay_iterations()
 
@@ -224,17 +227,22 @@ async def test_replay_fixture_phase_plan_reaches_multi_seed_robustness(
 
     phase_statuses = {p["id"]: p["status"] for p in state["phases"]}
 
-    # All prior phases must be completed by the evidence-key iters 85-90.
+    # Prior phases up to (but not through) the tail are completed.
     for completed_phase in (
         "baseline_capture",
         "tabular_sweeps",
         "adaptive_feature_sweeps",
         "tsfm_sweeps",
-        "calibration_replay_gates",
     ):
         assert phase_statuses[completed_phase] == "completed", (
             f"Phase '{completed_phase}' should be completed by fixture prior iters"
         )
+
+    # Gap 2: calibration_replay_gates needs ≥2 in-phase iters; fixture has 1.
+    # So it stays in_progress, and that becomes the current_phase.
+    assert phase_statuses["calibration_replay_gates"] != "completed", (
+        "Gap 2: a single in-phase calibration iter no longer completes the phase"
+    )
 
     # Synthetic multi_seed_robustness must NOT be completed (duplicate run_ids).
     assert phase_statuses["multi_seed_robustness"] != "completed", (

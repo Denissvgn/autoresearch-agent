@@ -1856,6 +1856,28 @@ class ResultsStore:
                 return None
             return {"iteration": row[0], "config_snapshot": row[1]}
 
+    async def get_first_iteration_with_config_snapshot(
+        self, research_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Return the earliest iteration row whose config_snapshot is non-null.
+
+        Gap 1 — used by ``_record_iteration`` to derive exploration markers
+        from salient-knob diffs vs the baseline iter (iter 1)'s config.
+        Mirrors ``get_latest_iteration_with_config_snapshot`` but ASC order.
+        """
+        async with self.connection() as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "SELECT iteration, config_snapshot FROM iterations "
+                "WHERE research_id = ? AND config_snapshot IS NOT NULL "
+                "ORDER BY iteration ASC LIMIT 1",
+                (research_id,),
+            )
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            return {"iteration": row[0], "config_snapshot": row[1]}
+
     # ------------------------------------------------------------------
     # HPO Studies (ML-59)
     # ------------------------------------------------------------------

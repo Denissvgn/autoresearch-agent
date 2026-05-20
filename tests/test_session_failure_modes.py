@@ -282,13 +282,17 @@ async def test_synthetic_phase_emission_does_not_advance_phase_plan(
         f"All phase statuses: {phase_statuses}"
     )
 
-    # --- Prior phases (85-90) must be completed normally ---
+    # --- Prior phases (85-88, 90) must be completed normally ---
+    # Gap 2: calibration_replay_gates is intentionally NOT in this list —
+    # the fixture has a single in-phase calibration iter (iter 89) and the
+    # floor was raised from 1 to 2, so the phase legitimately stays
+    # in_progress. The other prior phases still complete via their
+    # evidence keys.
     for phase_id in (
         "baseline_capture",
         "tabular_sweeps",
         "adaptive_feature_sweeps",
         "tsfm_sweeps",
-        "calibration_replay_gates",
     ):
         assert phase_statuses[phase_id] == "completed", (
             f"Phase '{phase_id}' must be completed by real evidence-key "
@@ -398,8 +402,15 @@ async def test_stagnation_forces_terminate_after_window(
         timed_out=False,
         policy_aborted=False,
     )
+    # Gap 2: calibration_replay_gates floor was raised from 1 to 2, so the
+    # fixture's single in-phase calibration iter (iter 89) no longer
+    # completes the phase. With calibration_replay_gates now in_progress,
+    # it becomes the agent's current_phase, and the terminal_reason
+    # surfaces THAT phase instead of multi_seed_robustness. The test's
+    # intent (stagnation termination identifies the in-progress phase)
+    # is preserved; only the specific phase name changed.
     assert terminal_reason == (
-        "agent_self_terminated_during_phase:multi_seed_robustness"
+        "agent_self_terminated_during_phase:calibration_replay_gates"
     )
 
     # Sanity: gap of 11 (102-91=11 < 12) must NOT fire.

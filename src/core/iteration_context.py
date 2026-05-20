@@ -99,6 +99,71 @@ _PARAM_BUCKETS: dict[str, dict[str, "float | str"]] = {
 }
 
 
+# Gap 1 — map each salient knob to the phase-advancement marker key its
+# presence-vs-baseline contributes to. After Issue 10A narrowed advancement
+# keys to deliberate-exploration markers (e.g. ``tabular_sweep_variant``),
+# agents that don't emit those keys explicitly fell through to the slow
+# >=6 cardinality fallback (live: ``res_baf6605ce94f``). This map lets the
+# server auto-derive the marker from any salient-knob diff vs the baseline
+# iter's config_snapshot, restoring the fast key-path without requiring
+# LLM compliance with the prompt instruction.
+_KNOB_TO_MARKER: dict[str, dict[str, str]] = {
+    "direction": {
+        "direction_pct_threshold": "tabular_sweep_variant",
+        "roster_preset": "tabular_sweep_variant",
+        "deadzone_width": "tabular_sweep_variant",
+        "calibration_method": "tabular_sweep_variant",
+        "purge_multiplier": "tabular_sweep_variant",
+        "horizon": "tabular_sweep_variant",
+        "meta_model": "tabular_sweep_variant",
+        "sample_weight_halflife": "tabular_sweep_variant",
+        "threshold_strategy": "tabular_sweep_variant",
+        "threshold_beta": "tabular_sweep_variant",
+    },
+    "volatility": {
+        "volatility_atr_mult": "atr_mult_sweep_enabled",
+        "atr_mult_sweep_enabled": "atr_mult_sweep_enabled",
+        "threshold_strategy": "threshold_calibration_attempt_id",
+        "threshold_beta": "threshold_calibration_attempt_id",
+        "calibration_method": "threshold_calibration_attempt_id",
+        "sample_weight_halflife": "temporal_ensemble_attempt_id",
+        "prediction_horizon": "temporal_ensemble_attempt_id",
+    },
+}
+
+
+def derive_exploration_markers(
+    model_type: str,
+    current_config: Mapping[str, Any] | None,
+    baseline_config: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Return phase-advancement markers this iter should emit, derived
+    from salient-knob diffs vs the baseline iter's config_snapshot.
+
+    An empty dict means the current config matches baseline on every
+    salient knob (this iter IS the baseline, or a re-run with no
+    deliberate exploration). The phase plan's advancement-key check will
+    see no marker and require either an explicit key from the agent OR
+    the cardinality fallback.
+
+    The marker VALUE encodes which knobs drove the variant (e.g.
+    ``"direction_pct_threshold=0.04+roster_preset=v2"``) so downstream
+    digests can show *what* the agent changed without re-deriving it.
+    """
+    if not current_config or not baseline_config:
+        return {}
+    knob_map = _KNOB_TO_MARKER.get(model_type, {})
+    markers: dict[str, Any] = {}
+    for knob, marker_key in knob_map.items():
+        cur = current_config.get(knob)
+        base = baseline_config.get(knob)
+        if cur is not None and cur != base:
+            existing = markers.get(marker_key)
+            entry = f"{knob}={cur}"
+            markers[marker_key] = f"{existing}+{entry}" if existing else entry
+    return markers
+
+
 def build_iteration_context_digest(
     *,
     session: Mapping[str, Any],

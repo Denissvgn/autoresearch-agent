@@ -17,6 +17,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import anthropic
 import httpx
+import yaml
 
 from src.config import secret_value, settings
 from src.core.command_runner import GovernedCommandRunner, redact_sensitive_text
@@ -47,6 +48,7 @@ from src.core.iteration_snapshot import (
 from src.core.iteration_context import (
     ITERATION_CONTEXT_DIGEST_MARKER,
     build_iteration_context_digest,
+    derive_exploration_markers,
 )
 from src.core.log_writer import AgentLogWriter
 from src.core.research_phase_plan import (
@@ -3431,6 +3433,35 @@ class AgentOrchestrator:
             promotion_allowed = bool(preview.get("promotion_allowed"))
             if not promotion_allowed:
                 blockers = self._auto_promotion_preview_blockers(preview)
+                # Gap 3: pull through the underlying collection errors from the
+                # iteration's metrics_json so the audit event / log line
+                # distinguishes infrastructure failures (inference-service
+                # unreachable, 502 from /admin/composite/reload) from genuine
+                # model-validation failures. The errors are persisted by
+                # PromotionEvidenceCollector at
+                # promotion_evidence_collector.py:140 under the
+                # ``promotion_evidence_collection_errors`` key.
+                collection_errors: Optional[Dict[str, str]] = None
+                try:
+                    best_row = await self._store.get_iteration(
+                        research_id, best_iter,
+                    )
+                    best_metrics = (
+                        self._parse_metrics_json(best_row.get("metrics_json"))
+                        if best_row else {}
+                    )
+                    raw_errors = best_metrics.get(
+                        "promotion_evidence_collection_errors"
+                    )
+                    if isinstance(raw_errors, dict) and raw_errors:
+                        collection_errors = {
+                            str(k): str(v) for k, v in raw_errors.items()
+                        }
+                except Exception:
+                    logger.debug(
+                        "Failed to load promotion_evidence_collection_errors for %s iter %s",
+                        research_id, best_iter, exc_info=True,
+                    )
                 await self._emit_auto_promotion_skipped(
                     research_id=research_id,
                     config=config,
@@ -3441,6 +3472,7 @@ class AgentOrchestrator:
                     incomplete_phases=[],
                     promotion_allowed=False,
                     blockers=blockers,
+                    collection_errors=collection_errors,
                 )
                 return
 
@@ -3519,8 +3551,18 @@ class AgentOrchestrator:
         incomplete_phases: List[str],
         promotion_allowed: bool,
         blockers: List[str],
+        collection_errors: Optional[Dict[str, str]] = None,
     ) -> None:
-        """Emit structured observability for expected auto-promotion skips."""
+        """Emit structured observability for expected auto-promotion skips.
+
+        Gap 3: ``collection_errors`` carries the underlying error reasons
+        from ``PromotionEvidenceCollector`` (e.g.
+        ``{"inference_preflight": "adapter_preflight_failed: ConnectTimeout"}``).
+        Surfacing them next to the high-level blocker codes lets operators
+        distinguish infrastructure failures (inference-service unreachable)
+        from genuine model-validation failures, which were indistinguishable
+        in live ``res_baf6605ce94f``.
+        """
         payload = {
             "event": "auto_promotion_skipped",
             "research_id": research_id,
@@ -3534,13 +3576,26 @@ class AgentOrchestrator:
             "promotion_allowed": promotion_allowed,
             "blockers": blockers,
         }
-        logger.info(
-            "ML-53: Auto-promotion skipped for %s: reason=%s iteration=%s blockers=%s",
-            research_id,
-            reason,
-            iteration,
-            blockers,
-        )
+        if collection_errors:
+            payload["collection_errors"] = collection_errors
+        if collection_errors:
+            logger.info(
+                "ML-53: Auto-promotion skipped for %s: reason=%s iteration=%s "
+                "blockers=%s collection_errors=%s",
+                research_id,
+                reason,
+                iteration,
+                blockers,
+                collection_errors,
+            )
+        else:
+            logger.info(
+                "ML-53: Auto-promotion skipped for %s: reason=%s iteration=%s blockers=%s",
+                research_id,
+                reason,
+                iteration,
+                blockers,
+            )
         record_audit_event = getattr(self._store, "record_audit_event", None)
         if callable(record_audit_event):
             try:
@@ -3561,10 +3616,10 @@ class AgentOrchestrator:
                     exc_info=True,
                 )
         try:
-            await agent_log.append(
-                "system",
-                f"Auto-promotion skipped: {reason}",
-            )
+            log_line = f"Auto-promotion skipped: {reason}"
+            if collection_errors:
+                log_line += f" — collection_errors={collection_errors}"
+            await agent_log.append("system", log_line)
         except Exception:
             logger.debug(
                 "Failed to append auto-promotion skip to agent log for %s",
@@ -3749,6 +3804,58 @@ class AgentOrchestrator:
             marker["attempt_snapshot_hash"] = attempt_snapshot_hash
 
         model_type = (session or {}).get("model_type") or marker.get("model_type") or ""
+
+        # Gap 1: auto-inject phase-advancement markers (tabular_sweep_variant,
+        # atr_mult_sweep_enabled, threshold_calibration_attempt_id,
+        # temporal_ensemble_attempt_id) when this iter's config differs from
+        # the baseline iter's config on any salient knob. Closes the fast
+        # key-path of Issue 10A's narrowed advancement keys for agents that
+        # don't emit the markers themselves (live: res_baf6605ce94f had 0/12
+        # iters carrying tabular_sweep_variant; the >=6 cardinality fallback
+        # had to carry the load).
+        #
+        # Skip conditions:
+        # - baseline_capture iter — should NOT carry exploration markers.
+        # - No config_snapshot — nothing to compare against baseline.
+        # - Rejected duplicate / no training executed — the agent prepared
+        #   a config that was caught by canonical-config dedup BEFORE
+        #   prepare.py ran, so no genuine exploration happened. Injecting
+        #   the marker here re-creates Issue 10A's false-advancement bug
+        #   via a different path (live: res_99469dfc1088 iter 2 — a
+        #   rejected duplicate received tabular_sweep_variant and
+        #   completed tabular_sweeps with zero genuine in-phase training).
+        _skip_injection = (
+            active_phase == "baseline_capture"
+            or not marker.get("config_snapshot")
+            or marker.get("duplicate_reason")
+            or marker.get("training_time_s") is None
+        )
+        if not _skip_injection:
+            baseline_iter = (
+                await self._store.get_first_iteration_with_config_snapshot(
+                    research_id,
+                )
+            )
+            if baseline_iter and baseline_iter.get("iteration") != iteration:
+                try:
+                    current_cfg = (
+                        yaml.safe_load(marker.get("config_snapshot") or "") or {}
+                    )
+                    baseline_cfg = (
+                        yaml.safe_load(baseline_iter.get("config_snapshot") or "")
+                        or {}
+                    )
+                except yaml.YAMLError:
+                    current_cfg = baseline_cfg = {}
+                if isinstance(current_cfg, dict) and isinstance(baseline_cfg, dict):
+                    injected = derive_exploration_markers(
+                        model_type=model_type,
+                        current_config=current_cfg,
+                        baseline_config=baseline_cfg,
+                    )
+                    for key, value in injected.items():
+                        marker.setdefault(key, value)
+
         consistency_report = build_consistency_report(
             research_id=research_id,
             iteration=iteration,

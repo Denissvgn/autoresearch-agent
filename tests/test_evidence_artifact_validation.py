@@ -401,30 +401,32 @@ def test_phase_not_marked_complete_when_evidence_artifact_blocker_active() -> No
 
 
 def test_phase_marked_complete_when_real_seed_trials_present() -> None:
-    """Multi-seed phase advances when seed_trials carry distinct run_ids."""
+    """Multi-seed phase advances when ≥3 in-phase iters carry distinct
+    run_ids (Gap 2: floor=3 for multi_seed_robustness)."""
     session = _session_row()
     iterations = _all_prior_phases_completed_iters()
 
-    real_seed_iter = _iteration_row(
-        iteration=7,
-        metrics={
-            "primary_metric": 0.73,
-            "all_gates_passed": True,
-            "seed_trials": [
-                {"mlflow_run_id": f"run-seed-{i}"} for i in range(5)
-            ],
-            "n_seed_trials": 5,
-            "seeds_passed_gates": True,
-        },
-        search_phase="multi_seed_robustness",
-    )
-    iterations.append(real_seed_iter)
+    for idx in range(3):  # Gap 2: floor=3
+        iterations.append(_iteration_row(
+            iteration=7 + idx,
+            metrics={
+                "primary_metric": 0.73,
+                "all_gates_passed": True,
+                "seed_trials": [
+                    {"mlflow_run_id": f"run-seed-{idx}-{i}"} for i in range(5)
+                ],
+                "n_seed_trials": 5,
+                "seeds_passed_gates": True,
+            },
+            search_phase="multi_seed_robustness",
+        ))
 
     state = build_phase_state(session=session, iterations=iterations)
     phase_statuses = {p["id"]: p["status"] for p in state["phases"]}
 
     assert phase_statuses["multi_seed_robustness"] == "completed", (
-        "Distinct run_ids must advance multi_seed_robustness to 'completed'"
+        "Distinct run_ids across the Gap-2 floor of 3 in-phase iters must "
+        "advance multi_seed_robustness to 'completed'"
     )
 
 
@@ -922,7 +924,10 @@ def test_multi_seed_phase_not_advanced_when_all_iterations_are_synthetic() -> No
 
 
 def test_multi_seed_phase_advances_when_iteration_has_training_time() -> None:
-    """AR-6: multi_seed_robustness advances when training_time_s is present (not synthetic)."""
+    """AR-6: multi_seed_robustness advances when training_time_s is present
+    (not synthetic). Gap 2: requires ≥3 in-phase iters; the property under
+    test is still "training_time_s presence advances the phase", just across
+    the raised floor instead of a single iter."""
     session = _session_row()
     prior_iters = _all_prior_phases_completed_iters()
     prior_metric = max(
@@ -930,24 +935,30 @@ def test_multi_seed_phase_advances_when_iteration_has_training_time() -> None:
         for it in prior_iters
     )
 
-    real_seed_iter = _iteration_row(
-        iteration=7,
-        metrics={
-            "training_time_s": 45.7,   # real training ran
-            "primary_metric": prior_metric,  # metric may be same — but training ran
-            "mlflow_run_id": None,
-            "seed_trials": [{"mlflow_run_id": f"run-s-{i}"} for i in range(5)],
-            "n_seed_trials": 5,
-            "seeds_passed_gates": True,
-        },
-        search_phase="multi_seed_robustness",
-    )
+    real_seed_iters = [
+        _iteration_row(
+            iteration=7 + idx,
+            metrics={
+                "training_time_s": 45.7,   # real training ran
+                "primary_metric": prior_metric,  # metric may be same — but training ran
+                "mlflow_run_id": None,
+                "seed_trials": [
+                    {"mlflow_run_id": f"run-s-{idx}-{i}"} for i in range(5)
+                ],
+                "n_seed_trials": 5,
+                "seeds_passed_gates": True,
+            },
+            search_phase="multi_seed_robustness",
+        )
+        for idx in range(3)  # Gap 2: floor=3
+    ]
 
     state = build_phase_state(
-        session=session, iterations=prior_iters + [real_seed_iter]
+        session=session, iterations=prior_iters + real_seed_iters
     )
     phase_statuses = {p["id"]: p["status"] for p in state["phases"]}
 
     assert phase_statuses.get("multi_seed_robustness") == "completed", (
-        "Non-synthetic seed iteration (training_time_s present) must advance the phase"
+        "Non-synthetic seed iterations (training_time_s present) across the "
+        "Gap-2 floor of 3 must advance the phase"
     )

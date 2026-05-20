@@ -174,13 +174,16 @@ def test_issue7_calibration_with_valid_evidence_off_phase_does_not_complete() ->
 
 
 def test_issue7_calibration_with_in_phase_tag_does_complete() -> None:
-    """Same valid evidence, but the agent tagged the iteration in-phase →
-    phase completes (the phase-tag gate is satisfied)."""
+    """Same valid evidence, agent tagged the iterations in-phase, AND enough
+    of them to satisfy Gap 2's raised floor (calibration_replay_gates=2)
+    → phase completes."""
     iterations = [
         _iteration(
             metrics={**_valid_calibration_evidence(), "auto_phase_evidence": True},
             search_phase="calibration_replay_gates",
-        ),
+            iteration=i,
+        )
+        for i in range(1, 3)  # 2 in-phase iters
     ]
     completed = _completed_phase_ids(iterations, [], [], "direction")
     assert "calibration_replay_gates" in completed
@@ -198,11 +201,14 @@ def test_issue7_multi_seed_with_valid_evidence_off_phase_does_not_complete() -> 
 
 
 def test_issue7_multi_seed_with_in_phase_tag_completes() -> None:
+    """Gap 2 floor: multi_seed_robustness=3 in-phase iters required."""
     iterations = [
         _iteration(
             metrics={**_valid_seed_evidence(), "auto_phase_evidence": True},
             search_phase="multi_seed_robustness",
-        ),
+            iteration=i,
+        )
+        for i in range(1, 4)  # 3 in-phase iters
     ]
     completed = _completed_phase_ids(iterations, [], [], "direction")
     assert "multi_seed_robustness" in completed
@@ -225,15 +231,18 @@ def test_issue7_inference_parity_with_valid_evidence_off_phase_does_not_complete
 
 
 def test_issue7_inference_parity_with_in_phase_tag_completes() -> None:
+    """Gap 2 floor: inference_parity_replay=2 in-phase iters required."""
     iterations = [
         _iteration(
             metrics={
-                **_valid_parity_evidence("run-A"),
-                "mlflow_run_id": "run-A",
+                **_valid_parity_evidence(f"run-{idx}"),
+                "mlflow_run_id": f"run-{idx}",
                 "auto_phase_evidence": True,
             },
             search_phase="inference_parity_replay",
-        ),
+            iteration=idx,
+        )
+        for idx in range(1, 3)  # 2 in-phase iters
     ]
     completed = _completed_phase_ids(iterations, [], [], "direction")
     assert "inference_parity_replay" in completed
@@ -398,3 +407,110 @@ def test_issue10a_temporal_ensemble_two_in_phase_iters_completes() -> None:
     ]
     completed = _completed_phase_ids(iterations, [], [], "direction")
     assert "temporal_ensemble" in completed
+
+
+# --- Gap 2: tail-phase floors (2 / 3 / 2) ------------------------------- #
+#
+# Live evidence (`res_baf6605ce94f`): each tail phase completed with a
+# single in-phase iteration because Issue 7's gate used `min_iterations=1`.
+# Gap 2 raises the floors from the phase plan: calibration_replay_gates=2,
+# multi_seed_robustness=3, inference_parity_replay=2. The dwell-gate now
+# reads these from DIRECTION_PHASES / VOLATILITY_PHASES via `_min_iter`.
+
+
+def test_gap2_calibration_one_in_phase_iter_does_not_complete() -> None:
+    """A single in-phase calibration iter is no longer enough; floor=2."""
+    iterations = [
+        _iteration(
+            metrics={**_valid_calibration_evidence(), "auto_phase_evidence": True},
+            search_phase="calibration_replay_gates",
+        ),
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "direction")
+    assert "calibration_replay_gates" not in completed
+
+
+def test_gap2_calibration_two_in_phase_iters_completes() -> None:
+    iterations = [
+        _iteration(
+            metrics={**_valid_calibration_evidence(), "auto_phase_evidence": True},
+            search_phase="calibration_replay_gates",
+            iteration=i,
+        )
+        for i in range(1, 3)
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "direction")
+    assert "calibration_replay_gates" in completed
+
+
+def test_gap2_multi_seed_two_in_phase_iters_does_not_complete() -> None:
+    """Two in-phase seed iters insufficient; floor=3 (need ≥3 seeds for
+    stability statistics)."""
+    iterations = [
+        _iteration(
+            metrics={**_valid_seed_evidence(), "auto_phase_evidence": True},
+            search_phase="multi_seed_robustness",
+            iteration=i,
+        )
+        for i in range(1, 3)
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "direction")
+    assert "multi_seed_robustness" not in completed
+
+
+def test_gap2_multi_seed_three_in_phase_iters_completes() -> None:
+    iterations = [
+        _iteration(
+            metrics={**_valid_seed_evidence(), "auto_phase_evidence": True},
+            search_phase="multi_seed_robustness",
+            iteration=i,
+        )
+        for i in range(1, 4)
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "direction")
+    assert "multi_seed_robustness" in completed
+
+
+def test_gap2_inference_parity_one_in_phase_iter_does_not_complete() -> None:
+    """A single in-phase parity iter is no longer enough; floor=2."""
+    iterations = [
+        _iteration(
+            metrics={
+                **_valid_parity_evidence("run-A"),
+                "mlflow_run_id": "run-A",
+                "auto_phase_evidence": True,
+            },
+            search_phase="inference_parity_replay",
+        ),
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "direction")
+    assert "inference_parity_replay" not in completed
+
+
+def test_gap2_inference_parity_two_in_phase_iters_completes() -> None:
+    iterations = [
+        _iteration(
+            metrics={
+                **_valid_parity_evidence(f"run-{idx}"),
+                "mlflow_run_id": f"run-{idx}",
+                "auto_phase_evidence": True,
+            },
+            search_phase="inference_parity_replay",
+            iteration=idx,
+        )
+        for idx in range(1, 3)
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "direction")
+    assert "inference_parity_replay" in completed
+
+
+def test_gap2_volatility_floors_match_direction() -> None:
+    """Same Gap-2 floors apply to volatility phases."""
+    iterations = [
+        _iteration(
+            metrics={**_valid_calibration_evidence(), "auto_phase_evidence": True},
+            search_phase="calibration_replay_gates",
+        ),
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "volatility")
+    assert "calibration_replay_gates" not in completed  # floor=2, only 1 iter

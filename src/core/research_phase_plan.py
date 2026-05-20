@@ -61,21 +61,21 @@ DIRECTION_PHASES: List[Dict[str, Any]] = [
         "id": "calibration_replay_gates",
         "label": "Calibration/Replay Gates",
         "next_action": "Run full calibration diagnostics and post-cost replay gates on finalists. Emit metrics.calibration_full_validation and metrics.economic_replay.",
-        "min_iterations": 1,
+        "min_iterations": 2,
         "max_iterations": 8,
     },
     {
         "id": "multi_seed_robustness",
         "label": "Multi-Seed Robustness",
         "next_action": "Confirm finalist stability across configured seed trials. Emit metrics.seed_trials or seeds_passed_gates.",
-        "min_iterations": 1,
+        "min_iterations": 3,
         "max_iterations": 6,
     },
     {
         "id": "inference_parity_replay",
         "label": "Inference Parity Replay",
         "next_action": "Validate feature parity, adapter loading, composite reload, latency, and rollback readiness. Emit metrics.inference_parity or inference_reload_validation.",
-        "min_iterations": 1,
+        "min_iterations": 2,
         "max_iterations": 4,
     },
     {
@@ -178,21 +178,21 @@ VOLATILITY_PHASES: List[Dict[str, Any]] = [
         "id": "calibration_replay_gates",
         "label": "Calibration/Replay Gates",
         "next_action": "Run full calibration diagnostics and post-cost replay gates on finalists. Emit metrics.calibration_full_validation and metrics.economic_replay.",
-        "min_iterations": 1,
+        "min_iterations": 2,
         "max_iterations": 8,
     },
     {
         "id": "multi_seed_robustness",
         "label": "Multi-Seed Robustness",
         "next_action": "Confirm finalist stability across configured seed trials. Emit metrics.seed_trials or seeds_passed_gates.",
-        "min_iterations": 1,
+        "min_iterations": 3,
         "max_iterations": 6,
     },
     {
         "id": "inference_parity_replay",
         "label": "Inference Parity Replay",
         "next_action": "Validate feature parity, adapter loading, composite reload, latency, and rollback readiness. Emit metrics.inference_parity or inference_reload_validation.",
-        "min_iterations": 1,
+        "min_iterations": 2,
         "max_iterations": 4,
     },
     {
@@ -440,7 +440,11 @@ def _completed_phase_ids(
             )
             for it in iterations
         )
-        and _phase_has_genuine_dwell(iterations, "calibration_replay_gates", min_iterations=1)
+        and _phase_has_genuine_dwell(
+            iterations,
+            "calibration_replay_gates",
+            min_iterations=_min_iter("calibration_replay_gates", model_type),
+        )
     ):
         completed.add("calibration_replay_gates")
     if (
@@ -452,7 +456,11 @@ def _completed_phase_ids(
             )
             for it in iterations
         )
-        and _phase_has_genuine_dwell(iterations, "multi_seed_robustness", min_iterations=1)
+        and _phase_has_genuine_dwell(
+            iterations,
+            "multi_seed_robustness",
+            min_iterations=_min_iter("multi_seed_robustness", model_type),
+        )
     ):
         completed.add("multi_seed_robustness")
     _inference_prior_run_ids = _prior_run_ids_for_phase(iterations, "inference_parity_replay")
@@ -469,7 +477,11 @@ def _completed_phase_ids(
             )
             for it in iterations
         )
-        and _phase_has_genuine_dwell(iterations, "inference_parity_replay", min_iterations=1)
+        and _phase_has_genuine_dwell(
+            iterations,
+            "inference_parity_replay",
+            min_iterations=_min_iter("inference_parity_replay", model_type),
+        )
     ):
         completed.add("inference_parity_replay")
     if _has_promotion_evidence(iterations, promotions, prior_best=_prior_best):
@@ -544,6 +556,23 @@ _PHASE_REQUIRES_IN_PHASE_TAG: frozenset[str] = frozenset(
         "inference_parity_replay",
     },
 )
+
+
+def _min_iter(phase_id: str, model_type: Optional[str]) -> int:
+    """Look up a phase's ``min_iterations`` floor from the model's phase list.
+
+    Gap 2: the dwell-gate calls in ``_completed_phase_ids`` previously
+    hard-coded ``min_iterations=1`` for the three tail phases, duplicating
+    (and silently ignoring) the per-phase definitions in DIRECTION_PHASES /
+    VOLATILITY_PHASES. This helper makes the phase plan authoritative.
+    """
+    phases = DIRECTION_PHASES if model_type == "direction" else (
+        VOLATILITY_PHASES if model_type == "volatility" else FALLBACK_PHASES
+    )
+    for p in phases:
+        if p["id"] == phase_id:
+            return int(p.get("min_iterations", 1))
+    return 1
 
 
 # Fix 8 — phase-specific keys whose presence proves the agent did real work
