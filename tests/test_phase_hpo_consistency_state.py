@@ -47,21 +47,24 @@ def _passing_metrics() -> dict:
 
 
 def test_direction_phase_state_advances_past_tabular_sweeps():
-    """F3: tabular_sweeps now advances on evidence key, not cardinality.
+    """F3 + Issue 10A: tabular_sweeps advances on a deliberate exploration
+    marker, not on baseline config knobs.
 
-    Previously a session with just two iterations would mark tabular_sweeps
-    complete by virtue of `len(iterations) >= 2`. With the evidence-key
-    contract, we require either an explicit sweep variant key in the config
-    OR 6+ iterations tagged with `search_phase=tabular_sweeps`. We exercise
-    the evidence-key path here by adding `direction_pct_threshold` to one
-    iteration's config.
+    Pre-F3 the phase auto-completed by cardinality. F3 added a key check but
+    accepted broad baseline knobs (``roster_preset``, ``direction_pct_threshold``,
+    ``deadzone_width``, ``calibration_method``) so the baseline alone marked
+    the phase done — that was the Issue 10A bug. Issue 10A narrows the key
+    list to ``tabular_sweep_variant`` (the deliberate marker the agent's
+    next-action prompt asks it to emit). This test exercises that path with
+    an explicit variant key, the only way the single-iter evidence-key path
+    should now fire.
     """
     session = {
         "id": "res_phase",
         "model_type": "direction",
     }
     metrics_with_sweep = _passing_metrics()
-    metrics_with_sweep["config"]["direction_pct_threshold"] = 0.55
+    metrics_with_sweep["tabular_sweep_variant"] = "roster_v1"
     iterations = [
         {
             "iteration": 1,
@@ -647,18 +650,25 @@ def test_research_state_exposes_planned_trials_and_manual_review():
 
 
 def test_volatility_phase_state_advances_past_atr_sweep():
-    """Volatility sessions use VOLATILITY_PHASES. atr_sweep completes when
-    ``volatility_atr_mult`` is present in a metrics_json config, regardless of
-    iteration count."""
+    """Issue 10A: atr_sweep advances on the deliberate ``atr_mult_sweep_enabled``
+    flag (emitted by structured_hpo.py when the sweep runs intentionally), not
+    on the baseline-default ``volatility_atr_mult`` config knob.
+
+    The pre-10A test asserted that a single iter carrying
+    ``config.volatility_atr_mult=3.0`` was enough — but every volatility
+    baseline carries an ATR multiplier, so that allowed the phase to complete
+    with zero in-phase work. Narrowed to ``atr_mult_sweep_enabled`` only.
+    """
     session = {"id": "res_vol_atr", "model_type": "volatility"}
-    metrics_with_atr = {
+    metrics_with_atr_sweep = {
         "all_gates_passed": True,
         "auc": 0.61,
+        "atr_mult_sweep_enabled": True,
         "config": {"volatility_atr_mult": 3.0},
     }
     iterations = [
         {"iteration": 1, "metrics_json": json.dumps({"config": {}}), "all_gates_passed": 0},
-        {"iteration": 2, "metrics_json": json.dumps(metrics_with_atr), "all_gates_passed": 1},
+        {"iteration": 2, "metrics_json": json.dumps(metrics_with_atr_sweep), "all_gates_passed": 1},
     ]
 
     state = build_phase_state(session=session, iterations=iterations)
@@ -672,9 +682,11 @@ def test_volatility_phase_state_advances_past_atr_sweep():
 
 
 def test_volatility_atr_sweep_does_not_complete_without_evidence():
-    """Regression guard: two iterations without volatility_atr_mult evidence
-    must not advance past atr_sweep (prevents the same cardinality-heuristic
-    stall that F3 fixed for direction tabular_sweeps)."""
+    """Regression guard: two iterations without ``atr_mult_sweep_enabled``
+    evidence must not advance past atr_sweep (prevents the same
+    cardinality-heuristic stall that F3 fixed for direction tabular_sweeps;
+    also covers Issue 10A — baseline ``volatility_atr_mult`` is no longer
+    sufficient on its own)."""
     session = {"id": "res_vol_nosweep", "model_type": "volatility"}
     iterations = [
         {"iteration": 1, "metrics_json": json.dumps({"config": {}}), "all_gates_passed": 0},

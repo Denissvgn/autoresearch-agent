@@ -271,3 +271,130 @@ def test_inference_parity_dwell_gate_blocks_off_phase_iteration() -> None:
     ]
     completed = _completed_phase_ids(iterations, [], [], "direction")
     assert "inference_parity_replay" not in completed
+
+
+# --- Issue 10A: tabular-family advancement-key narrowing ---------------- #
+#
+# Live evidence (`res_dd666f273f99`, `res_97bb030dcf05`): the baseline
+# iteration's `metrics_json.config.direction_pct_threshold` (and several
+# sibling config defaults) auto-completed `tabular_sweeps`,
+# `threshold_calibration`, `temporal_ensemble`, and `atr_sweep` from a
+# single non-exploratory run. After narrowing, only deliberate
+# exploration markers satisfy the key check; cardinality fallbacks
+# (>=6 tabular, >=4 atr, >=2 threshold/temporal) provide the safety net.
+
+
+def _baseline_iteration(config: dict) -> dict:
+    """Baseline-shape iteration: knobs live under ``metrics_json.config``,
+    no exploration markers, ``search_phase: baseline_capture``."""
+    return _iteration(metrics={"config": config}, search_phase="baseline_capture")
+
+
+def test_issue10a_tabular_baseline_only_does_not_complete_tabular() -> None:
+    """Baseline carrying `direction_pct_threshold` + `roster_preset` no
+    longer satisfies tabular_sweeps' advancement key (10A fix).
+    """
+    iterations = [
+        _baseline_iteration(
+            {"direction_pct_threshold": 0.03, "roster_preset": "custom"},
+        ),
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "direction")
+    assert "tabular_sweeps" not in completed
+
+
+def test_issue10a_tabular_with_variant_completes() -> None:
+    """A single iteration emitting the deliberate `tabular_sweep_variant`
+    key still completes the phase via the explicit-key path."""
+    iterations = [
+        _iteration(
+            metrics={"tabular_sweep_variant": "roster_v1"},
+            search_phase="tabular_sweeps",
+        ),
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "direction")
+    assert "tabular_sweeps" in completed
+
+
+def test_issue10a_tabular_six_in_phase_iters_completes_via_cardinality() -> None:
+    """Six phase-tagged iterations with NO `tabular_sweep_variant` still
+    complete the phase via the >=6 cardinality fallback at line 402.
+    """
+    iterations = [
+        _iteration(metrics={}, search_phase="tabular_sweeps", iteration=i)
+        for i in range(1, 7)
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "direction")
+    assert "tabular_sweeps" in completed
+
+
+def test_issue10a_atr_sweep_baseline_only_does_not_complete() -> None:
+    """`volatility_atr_mult` and `atr_multiplier` are baseline config
+    defaults; presence must not auto-complete `atr_sweep` (10A fix).
+    """
+    iterations = [
+        _baseline_iteration({"volatility_atr_mult": 2.0, "atr_multiplier": 1.5}),
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "direction")
+    assert "atr_sweep" not in completed
+
+
+def test_issue10a_atr_sweep_with_enabled_flag_completes() -> None:
+    """`atr_mult_sweep_enabled` (already emitted by structured_hpo.py when
+    the sweep runs deliberately) is the retained explicit key."""
+    iterations = [
+        _iteration(
+            metrics={"atr_mult_sweep_enabled": True},
+            search_phase="atr_sweep",
+        ),
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "direction")
+    assert "atr_sweep" in completed
+
+
+def test_issue10a_threshold_calibration_baseline_only_does_not_complete() -> None:
+    """`threshold_strategy` and `calibration_method` are baseline defaults
+    and must no longer auto-complete `threshold_calibration` (10A fix)."""
+    iterations = [
+        _baseline_iteration(
+            {"threshold_strategy": "fixed", "calibration_method": "isotonic"},
+        ),
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "direction")
+    assert "threshold_calibration" not in completed
+
+
+def test_issue10a_threshold_calibration_two_in_phase_iters_completes() -> None:
+    """Two phase-tagged iterations with no explicit key still complete
+    `threshold_calibration` via the >=2 cardinality fallback."""
+    iterations = [
+        _iteration(metrics={}, search_phase="threshold_calibration", iteration=1),
+        _iteration(metrics={}, search_phase="threshold_calibration", iteration=2),
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "direction")
+    assert "threshold_calibration" in completed
+
+
+def test_issue10a_temporal_ensemble_baseline_only_does_not_complete() -> None:
+    """Baseline halflife / horizon / pruning config knobs must no longer
+    auto-complete `temporal_ensemble` (10A fix)."""
+    iterations = [
+        _baseline_iteration(
+            {
+                "sample_weight_halflife": 6000,
+                "prediction_horizon": 6,
+                "ensemble_pruning": True,
+            },
+        ),
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "direction")
+    assert "temporal_ensemble" not in completed
+
+
+def test_issue10a_temporal_ensemble_two_in_phase_iters_completes() -> None:
+    iterations = [
+        _iteration(metrics={}, search_phase="temporal_ensemble", iteration=1),
+        _iteration(metrics={}, search_phase="temporal_ensemble", iteration=2),
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "direction")
+    assert "temporal_ensemble" in completed

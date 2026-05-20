@@ -116,10 +116,12 @@ def test_unchanged_completed_keep_with_passing_consistency():
     assert _attempt_outcome(row, metrics) == "completed"
 
 
-def test_unchanged_completed_discard_with_passing_consistency_still_failed():
-    """Pre-Issue-8 behavior preserved: completed + decision=discard + consistency
-    pass → 'failed' (the agent decided not to keep; outcome semantics unchanged
-    outside the consistency-block case)."""
+def test_completed_discard_with_passing_consistency_now_declined():
+    """Issue 10B updated this assertion: completed + decision=discard +
+    consistency pass is now 'declined' (was 'failed' pre-10B). 'failed' is
+    reserved for training failures; see test_issue10b_declined_outcome.py.
+    Issue 8 precedence (consistency_blocked > declined) is unaffected — see
+    test_consistency_blocked_discard_returns_new_label above."""
     row = _row(
         decision="discard",
         all_gates_passed=True,
@@ -127,7 +129,7 @@ def test_unchanged_completed_discard_with_passing_consistency_still_failed():
         consistency_report_json=_report(passed=True),
     )
     metrics = {"status": "completed"}
-    assert _attempt_outcome(row, metrics) == "failed"
+    assert _attempt_outcome(row, metrics) == "declined"
 
 
 def test_unchanged_completed_when_no_consistency_report():

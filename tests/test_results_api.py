@@ -321,11 +321,13 @@ async def test_research_state_endpoint_reconstructs_session_without_workspace():
                 {
                     "mlflow_run_id": "run-1",
                     "artifact_hash": "artifact-sha",
-                    # F3: tabular_sweeps now requires an explicit evidence
-                    # key. Include the sweep variant so the phase plan
-                    # advances past tabular_sweeps as the assertion below
-                    # expects.
-                    "direction_pct_threshold": 0.55,
+                    # F3 + Issue 10A: tabular_sweeps requires an explicit
+                    # deliberate-exploration marker. ``direction_pct_threshold``
+                    # was a baseline config knob and no longer counts (10A);
+                    # ``tabular_sweep_variant`` is the surviving advancement
+                    # key, so include it to let the phase plan advance past
+                    # tabular_sweeps as the assertion below expects.
+                    "tabular_sweep_variant": "roster_v1",
                     "calibration_full_validation": {"selected": {}},
                     "economic_replay": {"gates": {"all_gates_passed": True}},
                     "inference_parity": {

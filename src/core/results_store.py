@@ -319,6 +319,21 @@ def _attempt_outcome(row: Dict[str, Any], metrics: Dict[str, Any]) -> str:
     # outcome answers "did training succeed?".
     if status in {"completed", "success"} and _consistency_failed(row):
         return "consistency_blocked"
+    # Issue 10B: successful training that the agent declined because the
+    # metric did not beat best (or tied). Precedence is `consistency_blocked`
+    # > `declined` > `failed` so a blocked run is never mistagged as a
+    # voluntary skip. Requires status in {completed, success} — that proves
+    # training itself succeeded; without it we fall through to the legacy
+    # discard→failed branch below so unknown-status rows preserve pre-Issue-10B
+    # semantics. Live evidence (`res_dd666f273f99`): 16 of 23 iterations were
+    # `decision:discard` + `all_gates_passed:true` + `status:completed` and
+    # were mis-tagged as `failed`, inflating dashboard failure rates and
+    # conflating exploration with crashes.
+    if (
+        status in {"completed", "success"}
+        and row.get("decision") == "discard"
+    ):
+        return "declined"
     if row.get("decision") == "discard":
         return "failed"
     if status in {"completed", "success"}:

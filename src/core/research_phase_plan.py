@@ -297,44 +297,36 @@ def phase_cap_exceeded(
 # iteration marks that phase as having produced output.  Mirrors the logic in
 # _completed_phase_ids() so both stay in sync.
 #
-# F3: `tabular_sweeps` previously had no evidence key and so was marked done by
-# pure cardinality. We now require an explicit `tabular_sweep_variant`
-# (or any of the historical canonical knobs `roster_preset`,
-# `direction_pct_threshold`, `deadzone_width`, `calibration_method`) in the
-# config or metrics payload, so the phase only completes when the LLM has
-# actually explored the sweep space.
+# F3 + Issue 10A: `tabular_sweeps` previously had no evidence key and so was
+# marked done by pure cardinality. F3 added an explicit `tabular_sweep_variant`
+# key plus historical canonical knobs (`roster_preset`, `direction_pct_threshold`,
+# `deadzone_width`, `calibration_method`). Issue 10A (live evidence:
+# `res_dd666f273f99`, `res_97bb030dcf05`) revealed that those knobs are present
+# on EVERY baseline config — every promoted baseline carries
+# `direction_pct_threshold` and `roster_preset` defaults — so the phase
+# auto-completed from iter 1 (baseline) before the agent had explored. We now
+# require only the deliberate exploration marker `tabular_sweep_variant` (the
+# agent's next-action prompt already instructs it to emit this); when the agent
+# does not emit it, the >=6 phase-tagged cardinality fallback enforces deliberate
+# work instead.
 #
 # Volatility phases (atr_sweep, threshold_calibration, temporal_ensemble)
-# follow the same contract: emit the listed key or fall back to phase-tagged
-# cardinality (4+ for atr_sweep, 2+ for others).
+# follow the same contract: emit the listed deliberate-exploration key, or
+# fall back to phase-tagged cardinality (4+ for atr_sweep, 2+ for the others).
+# Broad config knobs that exist on the baseline (`volatility_atr_mult`,
+# `threshold_strategy`, `calibration_method`, `sample_weight_halflife`,
+# `prediction_horizon`, `ensemble_pruning`, `base_model_keys`) are intentionally
+# NOT in the advancement key list: their presence does not prove the agent did
+# any sweep work.
 _PHASE_ADVANCEMENT_KEYS: Dict[str, tuple] = {
     "baseline_capture": (),
-    "tabular_sweeps": (
-        "tabular_sweep_variant",
-        "roster_preset",
-        "direction_pct_threshold",
-        "deadzone_width",
-        "calibration_method",
-    ),
+    "tabular_sweeps": ("tabular_sweep_variant",),
     "hpo_screening": (),
     "validation": (),
-    # --- Volatility-specific phases ---
-    "atr_sweep": (
-        "volatility_atr_mult",
-        "atr_multiplier",
-        "atr_mult_sweep_enabled",
-    ),
-    "threshold_calibration": (
-        "threshold_strategy",
-        "threshold_beta",
-        "calibration_method",
-    ),
-    "temporal_ensemble": (
-        "sample_weight_halflife",
-        "prediction_horizon",
-        "ensemble_pruning",
-        "base_model_keys",
-    ),
+    # --- Volatility-specific phases (Issue 10A: deliberate-exploration keys only) ---
+    "atr_sweep": ("atr_mult_sweep_enabled",),
+    "threshold_calibration": ("threshold_calibration_attempt_id",),
+    "temporal_ensemble": ("temporal_ensemble_attempt_id",),
     # --- Shared late phases ---
     "adaptive_feature_sweeps": ("adaptive_features", "adaptive_feature_noop_reason"),
     "tsfm_sweeps": ("tsfm", "tsfm_adapter", "tsfm_fallback_validation"),
