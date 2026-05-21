@@ -227,3 +227,142 @@ async def test_collector_passes_through_existing_smoke_validation(
     patch = await collector.collect_and_patch(session_id, 1)
     # Smoke not in patch because existing paper_validation already passed.
     assert "smoke_validation" not in patch
+
+
+# ---------------------------------------------------------------------------
+# Option B — /admin/paper/replay smoke-validation collection
+# ---------------------------------------------------------------------------
+
+
+def _capture_http_factory(responses):
+    """Factory recording each POST's url/json so tests can assert which
+    endpoints were (not) called. Replays ``responses`` in order."""
+    captures = []
+    state = {"i": 0}
+
+    def factory(timeout_s: float):
+        client = MagicMock()
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock(return_value=False)
+
+        async def post(url, **kw):
+            captures.append({"url": url, "json": kw.get("json")})
+            i = state["i"]
+            state["i"] += 1
+            spec = responses[i] if i < len(responses) else {"status_code": 200, "json": {}}
+            resp = MagicMock()
+            resp.status_code = spec.get("status_code", 200)
+            resp.json = MagicMock(return_value=spec.get("json", {}))
+            return resp
+
+        client.post = post
+        return client
+
+    return factory, captures
+
+
+@pytest.mark.asyncio
+async def test_collector_emits_smoke_validation_when_paper_replay_passes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No pre-staged artifact → collector calls /admin/paper/replay; a
+    passing replay yields smoke_validation evidence the gate accepts."""
+    from pydantic import SecretStr
+    from src.config import settings as _settings
+    monkeypatch.setattr(
+        _settings, "inference_service_auth_token", SecretStr("test-token"),
+    )
+
+    store = ResultsStore(str(tmp_path / "store.db"))
+    await store.initialize()
+    session_id = await _seed(store, metrics={"signal_rate": 0.2})
+
+    factory = _http_factory([
+        {"status_code": 200, "json": {"loaded": True}},                  # preflight
+        {"status_code": 200, "json": {"composite_reload_passed": True}}, # reload
+        {"status_code": 200, "json": {                                   # paper/replay
+            "passed": True,
+            "composite_reload_passed": True,
+            "prior_version_left_intact_on_failure": True,
+            "source": "paper_replay_with_candidate_artifact_validated",
+        }},
+    ])
+    collector = PromotionEvidenceCollector(store, http_client_factory=factory)
+    patch = await collector.collect_and_patch(session_id, 1)
+
+    assert patch["smoke_validation"]["passed"] is True
+    assert patch["smoke_validation"]["source"].endswith("_artifact_validated")
+    assert "smoke_validation" not in patch.get(
+        "promotion_evidence_collection_errors", {}
+    )
+
+
+@pytest.mark.asyncio
+async def test_collector_records_error_when_paper_replay_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A non-passing paper-replay (e.g. sample not staged) keeps the gate
+    hard and surfaces a precise error in collection_errors."""
+    from pydantic import SecretStr
+    from src.config import settings as _settings
+    monkeypatch.setattr(
+        _settings, "inference_service_auth_token", SecretStr("test-token"),
+    )
+
+    store = ResultsStore(str(tmp_path / "store.db"))
+    await store.initialize()
+    session_id = await _seed(store, metrics={"signal_rate": 0.2})
+
+    factory = _http_factory([
+        {"status_code": 200, "json": {"loaded": True}},
+        {"status_code": 200, "json": {"composite_reload_passed": True}},
+        {"status_code": 200, "json": {
+            "passed": False,
+            "error": "sample_not_staged: /data/samples/DOGE_USDT_15m.parquet",
+        }},
+    ])
+    collector = PromotionEvidenceCollector(store, http_client_factory=factory)
+    patch = await collector.collect_and_patch(session_id, 1)
+
+    assert "smoke_validation" not in patch  # gate stays hard
+    errors = patch.get("promotion_evidence_collection_errors", {})
+    assert errors.get("smoke_validation", "").startswith(
+        "paper_replay_not_passed: sample_not_staged"
+    )
+
+
+@pytest.mark.asyncio
+async def test_collector_passthrough_skips_paper_replay_call(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When metrics already carry a passing paper_validation, the collector
+    must NOT POST to /admin/paper/replay (the passthrough branch wins)."""
+    from pydantic import SecretStr
+    from src.config import settings as _settings
+    monkeypatch.setattr(
+        _settings, "inference_service_auth_token", SecretStr("test-token"),
+    )
+
+    store = ResultsStore(str(tmp_path / "store.db"))
+    await store.initialize()
+    session_id = await _seed(
+        store,
+        metrics={"signal_rate": 0.2, "paper_validation": {"passed": True}},
+    )
+
+    factory, captures = _capture_http_factory([
+        {"status_code": 200, "json": {"loaded": True}},
+        {"status_code": 200, "json": {"composite_reload_passed": True}},
+    ])
+    collector = PromotionEvidenceCollector(store, http_client_factory=factory)
+    await collector.collect_and_patch(session_id, 1)
+
+    # preflight + reload may be called, but paper/replay must NOT be.
+    urls = {c["url"] for c in captures}
+    assert not any("/admin/paper/replay" in u for u in urls), (
+        f"paper/replay must be skipped when paper_validation is pre-staged; "
+        f"captured URLs: {urls}"
+    )

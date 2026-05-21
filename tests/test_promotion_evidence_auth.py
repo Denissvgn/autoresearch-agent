@@ -120,9 +120,11 @@ async def test_preflight_call_includes_bearer_token_when_configured(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """``inference_service_auth_token`` configured → POST carries
-    ``Authorization: Bearer <token>`` and ``X-Service-Name`` on both
-    ``/admin/adapter/preflight`` and ``/admin/composite/reload``.
+    """``inference_service_auth_token`` configured → every inference-service
+    admin POST carries ``Authorization: Bearer <token>`` and
+    ``X-Service-Name``. Three endpoints are exercised by collect_and_patch:
+    ``/admin/adapter/preflight``, ``/admin/composite/reload``, and (Option B)
+    ``/admin/paper/replay``.
     """
     monkeypatch.setattr(
         settings, "inference_service_auth_token", SecretStr("inf-token-abc"),
@@ -138,32 +140,40 @@ async def test_preflight_call_includes_bearer_token_when_configured(
             "composite_reload_passed": True,
             "rollback_ready": True,
         }},
+        # Option B: third POST is /admin/paper/replay.
+        {"status_code": 200, "json": {
+            "passed": True,
+            "composite_reload_passed": True,
+            "prior_version_left_intact_on_failure": True,
+            "source": "paper_replay_with_candidate_artifact_validated",
+        }},
     ])
     collector = PromotionEvidenceCollector(store, http_client_factory=factory)
     patch = await collector.collect_and_patch(session_id, 1)
 
-    # Both POSTs were attempted (no auth short-circuit).
-    assert len(captures) == 2, f"Expected 2 POSTs, captured {len(captures)}"
-
-    # Each carries the expected Authorization header...
+    # Every inference-service admin POST carries the auth header — no
+    # short-circuit. The exact count is not pinned (it grows as more
+    # evidence collectors are added); the invariant is "all authed".
+    assert len(captures) >= 2
     for cap in captures:
         assert cap["headers"].get("Authorization") == "Bearer inf-token-abc", (
             f"Authorization header missing or wrong on {cap['url']}: "
             f"{cap['headers']}"
         )
-        # ...and the X-Service-Name service identifier.
         assert cap["headers"].get("X-Service-Name"), (
             f"X-Service-Name header missing on {cap['url']}"
         )
 
-    # Endpoint URLs are the expected admin paths.
+    # All three admin endpoints were hit.
     urls = {cap["url"] for cap in captures}
     assert any("/admin/adapter/preflight" in u for u in urls)
     assert any("/admin/composite/reload" in u for u in urls)
+    assert any("/admin/paper/replay" in u for u in urls)
 
     # Success branches populated the patch.
     assert patch["inference_parity"]["adapter_loading_passed"] is True
     assert patch["inference_parity"]["composite_reload_passed"] is True
+    assert patch["smoke_validation"]["passed"] is True
     assert "inference_preflight" not in patch.get(
         "promotion_evidence_collection_errors", {}
     )

@@ -130,7 +130,14 @@ class PromotionEvidenceCollector:
 
         # --- 5. smoke validation --------------------------------------------
         if not _has_smoke_validation(metrics):
-            payload, err = await self._collect_smoke_validation(metrics)
+            # Option B: the paper-replay endpoint needs instrument/timeframe to
+            # resolve its conventional sample path. Fetch from the session row.
+            session = await self._store.get_session(research_id)
+            instrument = (session or {}).get("instrument")
+            timeframe = (session or {}).get("timeframe")
+            payload, err = await self._collect_smoke_validation(
+                metrics, instrument=instrument, timeframe=timeframe,
+            )
             if payload is not None:
                 patch["smoke_validation"] = payload
             if err:
@@ -279,11 +286,20 @@ class PromotionEvidenceCollector:
     async def _collect_smoke_validation(
         self,
         metrics: Dict[str, Any],
+        *,
+        instrument: Optional[str] = None,
+        timeframe: Optional[str] = None,
     ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
-        """Smoke validation requires running the candidate against a paper
-        replay slice. Currently we accept a server-pre-staged smoke artifact
-        (path emitted by prepare.py) when present; otherwise we fail open
-        with a recorded error so the gate stays soft.
+        """Resolve smoke-validation evidence for the candidate.
+
+        Precedence:
+          1. Pre-staged ``paper_validation`` / ``smoke_validation`` already in
+             metrics → passthrough (e.g. a future canary feed stages it).
+          2. Option B: ask inference-service to run a sandboxed paper-replay
+             via ``/admin/paper/replay``. On a passing replay this yields the
+             evidence the development gate bundle's smoke tier requires.
+          3. Otherwise return a precise error so the gate stays hard and the
+             Gap 3 ``collection_errors`` map shows operators why.
         """
         existing = metrics.get("paper_validation") or metrics.get("smoke_validation")
         if isinstance(existing, dict) and existing.get("passed") is True:
@@ -294,7 +310,42 @@ class PromotionEvidenceCollector:
                 "source": "passthrough_existing",
             }, None
 
-        return None, "smoke_validation_pipeline_not_configured"
+        headers = _inference_service_auth_headers()
+        if headers is None:
+            return None, "inference_auth_token_not_configured"
+
+        url = settings.inference_service_url.rstrip("/")
+        endpoint = f"{url}/admin/paper/replay"
+        body = {
+            "candidate": _candidate_handle(metrics),
+            "instrument": instrument or "DOGE_USDT",
+            "timeframe": timeframe or "15m",
+        }
+        try:
+            client = self._http_client_factory(self._timeout_s)
+            async with client:
+                resp = await client.post(endpoint, json=body, headers=headers)
+        except (httpx.HTTPError, asyncio.TimeoutError) as exc:
+            return None, f"paper_replay_failed: {exc.__class__.__name__}"
+        if resp.status_code != 200:
+            return None, f"paper_replay_status_{resp.status_code}"
+        try:
+            data = resp.json() or {}
+        except json.JSONDecodeError:
+            return None, "paper_replay_invalid_json"
+
+        if not data.get("passed"):
+            return None, f"paper_replay_not_passed: {data.get('error', 'unknown')}"
+        return {
+            "passed": True,
+            "composite_reload_passed": bool(data.get("composite_reload_passed")),
+            "prior_version_left_intact_on_failure": bool(
+                data.get("prior_version_left_intact_on_failure")
+            ),
+            "source": data.get("source")
+            or "paper_replay_with_candidate_artifact_validated",
+            "details": data,
+        }, None
 
 
 # ────────────────────────────────────────────────────────────────────────
