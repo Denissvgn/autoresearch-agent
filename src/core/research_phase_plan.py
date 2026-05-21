@@ -377,7 +377,16 @@ def _completed_phase_ids(
        per-phase ``min_iterations`` floor matched by attempts that explicitly
        tagged ``search_phase == "tabular_sweeps"``. This prevents the phase
        plan from racing ahead of the LLM's actual exploration.
+    4. Post-``res_99469dfc1088`` defense-in-depth: rejected-duplicate
+       iterations are filtered out at the top of this function before any
+       advancement decision. They did not run training, so they cannot
+       count toward cardinality floors, evidence-key presence, or dwell
+       gates regardless of the markers their ``metrics_json`` may carry.
+       Audit/observability rows remain intact in the DB; this filter
+       affects only the completion-set decision.
     """
+
+    iterations = [it for it in iterations if not _is_rejected_duplicate(it)]
 
     completed: set[str] = set()
     if iterations:
@@ -487,6 +496,39 @@ def _completed_phase_ids(
     if _has_promotion_evidence(iterations, promotions, prior_best=_prior_best):
         completed.add("promotion_proposal")
     return completed
+
+
+def _is_rejected_duplicate(iteration: Dict[str, Any]) -> bool:
+    """True when the iteration row was rejected by canonical-config dedup
+    before training ran.
+
+    Such iterations carry a ``config_snapshot`` (the agent's draft) and a
+    ``search_phase`` tag, but did NOT execute prepare.py. They therefore
+    contribute no genuine exploration and must not count toward any
+    phase-advancement criterion (cardinality fallback, evidence-key
+    presence, or dwell gate).
+
+    Live evidence (``res_99469dfc1088``): iter 2 was rejected_duplicate in
+    ``tabular_sweeps`` and falsely completed the phase via a server-injected
+    ``tabular_sweep_variant``; iter 12 was rejected_duplicate in
+    ``inference_parity_replay`` and contributed to satisfying Gap 2's
+    floor=2 even though training never ran (only iter 11 was genuine).
+
+    Defense-in-depth: the Gap 1 orchestrator-side guard already prevents
+    variant-marker injection on duplicates; this filter additionally
+    protects the cardinality fallback path and any future code path
+    where an agent could emit an advancement key on a duplicate iter.
+    Audit/observability rows for duplicates remain intact in the DB; only
+    the phase-advancement decision treats them as no-ops.
+    """
+    if iteration.get("duplicate_reason"):
+        return True
+    metrics = _parse_json(iteration.get("metrics_json"))
+    if isinstance(metrics, dict):
+        status = str(metrics.get("status") or "").lower()
+        if status == "rejected_duplicate":
+            return True
+    return False
 
 
 def _iterations_in_phase(
