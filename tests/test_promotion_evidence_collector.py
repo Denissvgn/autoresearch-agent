@@ -81,7 +81,17 @@ def _http_factory(responses: List[Dict[str, Any]]):
 @pytest.mark.asyncio
 async def test_collector_patches_signal_health_from_signal_rate(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Part B (post-res_99469dfc1088): inference-service /admin/* endpoints
+    # now require a Bearer token. Provide one so the existing happy-path
+    # assertions continue to exercise the success branch.
+    from pydantic import SecretStr
+    from src.config import settings as _settings
+    monkeypatch.setattr(
+        _settings, "inference_service_auth_token", SecretStr("test-token"),
+    )
+
     store = ResultsStore(str(tmp_path / "store.db"))
     await store.initialize()
     session_id = await _seed(

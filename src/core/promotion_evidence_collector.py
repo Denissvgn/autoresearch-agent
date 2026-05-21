@@ -31,7 +31,7 @@ from typing import Any, Dict, Optional, Tuple
 
 import httpx
 
-from src.config import settings
+from src.config import secret_value, settings
 from src.core.results_store import ResultsStore
 
 logger = logging.getLogger(__name__)
@@ -213,10 +213,17 @@ class PromotionEvidenceCollector:
         body = {
             "candidate": _candidate_handle(metrics),
         }
+        headers = _inference_service_auth_headers()
+        if headers is None:
+            # Distinct from "service rejected the call" — operators need to
+            # know the call could not even be authenticated. Surfaced via
+            # Gap 3's collection_errors map to the auto-promotion-skipped
+            # audit event so the diagnostic is actionable.
+            return None, "inference_auth_token_not_configured"
         try:
             client = self._http_client_factory(self._timeout_s)
             async with client:
-                resp = await client.post(endpoint, json=body)
+                resp = await client.post(endpoint, json=body, headers=headers)
         except (httpx.HTTPError, asyncio.TimeoutError) as exc:
             return None, f"adapter_preflight_failed: {exc.__class__.__name__}"
         if resp.status_code != 200:
@@ -244,10 +251,13 @@ class PromotionEvidenceCollector:
             "candidate": _candidate_handle(metrics),
             "dry_run": True,
         }
+        headers = _inference_service_auth_headers()
+        if headers is None:
+            return None, "inference_auth_token_not_configured"
         try:
             client = self._http_client_factory(self._timeout_s)
             async with client:
-                resp = await client.post(endpoint, json=body)
+                resp = await client.post(endpoint, json=body, headers=headers)
         except (httpx.HTTPError, asyncio.TimeoutError) as exc:
             return None, f"reload_dry_run_failed: {exc.__class__.__name__}"
         if resp.status_code != 200:
@@ -363,4 +373,28 @@ def _candidate_handle(metrics: Dict[str, Any]) -> Dict[str, Any]:
         "mlflow_run_id": metrics.get("mlflow_run_id"),
         "result_artifact_path": metrics.get("result_artifact_path"),
         "config_snapshot_hash": metrics.get("canonical_config_hash"),
+    }
+
+
+def _inference_service_auth_headers() -> Optional[Dict[str, str]]:
+    """Bearer-token header for service-to-service admin calls into
+    inference-service's ``/admin/adapter/preflight`` and
+    ``/admin/composite/reload`` endpoints. Returns ``None`` if no token is
+    configured — callers surface this as
+    ``inference_auth_token_not_configured`` so the audit log distinguishes
+    "infrastructure missing" from "infrastructure rejected request".
+
+    Token resolution order (mirrors config_promoter._mlflow_service_auth_headers):
+      1. ``settings.inference_service_auth_token`` (dedicated env var)
+      2. ``settings.mlflow_service_auth_token`` (fallback — operators with
+         a single SERVICE_AUTH_TOKEN / ML_ADMIN_TOKEN don't need two)
+    """
+    token = secret_value(
+        getattr(settings, "inference_service_auth_token", None)
+    ) or secret_value(settings.mlflow_service_auth_token)
+    if not token:
+        return None
+    return {
+        "Authorization": f"Bearer {token}",
+        "X-Service-Name": settings.service_name,
     }

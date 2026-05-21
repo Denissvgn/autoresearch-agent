@@ -451,6 +451,22 @@ class Settings(BaseSettings):
             "versions or promotes production composites."
         ),
     )
+    inference_service_auth_token: SecretStr | None = Field(
+        default=None,
+        repr=False,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_INFERENCE_SERVICE_AUTH_TOKEN",
+            "INFERENCE_SERVICE_AUTH_TOKEN",
+        ),
+        description=(
+            "Bearer token for service-to-service admin calls into inference-service "
+            "(/admin/adapter/preflight, /admin/composite/reload). When unset, "
+            "PromotionEvidenceCollector falls back to mlflow_service_auth_token so "
+            "operators with a single SERVICE_AUTH_TOKEN / ML_ADMIN_TOKEN do not need "
+            "to configure two tokens. Set this only when the inference-service "
+            "trusts a different identity than mlflow-service."
+        ),
+    )
     s3_endpoint_url: Optional[str] = Field(
         default=None,
         validation_alias=AliasChoices("S3_ENDPOINT_URL", "MINIO_ENDPOINT_URL"),
