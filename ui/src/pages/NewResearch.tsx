@@ -47,6 +47,17 @@ export default function NewResearch() {
   const [agentStrategy, setAgentStrategy] = useState<'AGGR' | 'CONS' | 'BALA' | 'SCAL'>('BALA');
   const [initialBalance, setInitialBalance] = useState(10000);
 
+  const instrumentOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return (instruments ?? [])
+      .map((inst) => inst.instrument.trim())
+      .filter((name) => {
+        if (!name || seen.has(name)) return false;
+        seen.add(name);
+        return true;
+      });
+  }, [instruments]);
+
   const modelCards: ModelCard[] = useMemo(() => {
     if (models && models.length > 0) {
       return models.map((m) => ({
@@ -125,12 +136,12 @@ export default function NewResearch() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 16 }}>
               <Field label="Instrument" required>
-                {instruments && instruments.length > 0 ? (
+                {instrumentOptions.length > 0 ? (
                   <select className="select mono" value={instrument} onChange={(e) => setInstrument(e.target.value)} required>
                     <option value="">Select…</option>
-                    {instruments.map((inst) => (
-                      <option key={inst.name} value={inst.instrument}>
-                        {inst.instrument} · {inst.timeframe}
+                    {instrumentOptions.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
                       </option>
                     ))}
                   </select>
@@ -139,7 +150,7 @@ export default function NewResearch() {
                     className="input mono"
                     value={instrument}
                     onChange={(e) => setInstrument(e.target.value)}
-                    placeholder="e.g. DOGE-USDT"
+                    placeholder="e.g. DOGE_USDT"
                     required
                   />
                 )}
