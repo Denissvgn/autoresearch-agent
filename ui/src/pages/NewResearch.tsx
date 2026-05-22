@@ -1,6 +1,31 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useStartResearch, useInstruments, useModels } from '../hooks/useResearch';
+// New research wizard — 720px centered layout per hifi/screen-new.jsx.
+// Required (instrument, timeframe, model type) + optional (tag, iterations,
+// budget, focus, RL knobs) + preview row + actions.
+import { useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useInstruments, useModels, useStartResearch } from '../hooks/useResearch';
+import { Field, Icon, Segmented } from '../components/hifi/primitives';
+
+const TIMEFRAMES = ['5m', '15m', '1h', '4h'];
+
+interface ModelCard {
+  id: string;
+  name: string;
+  desc: string;
+  icon: string;
+}
+
+const FALLBACK_MODELS: ModelCard[] = [
+  { id: 'direction', name: 'direction', desc: 'Up/down classifier with calibration', icon: 'arrU' },
+  { id: 'volatility', name: 'volatility', desc: 'ATR breakout / regime detector', icon: 'bolt' },
+  { id: 'rl', name: 'rl', desc: 'PPO agent for execution policy', icon: 'flask' },
+];
+
+const FOCUS_EXAMPLES = [
+  'temporal stability',
+  'lower drawdown',
+  'reduce overtrading',
+];
 
 export default function NewResearch() {
   const navigate = useNavigate();
@@ -12,18 +37,43 @@ export default function NewResearch() {
   const [timeframe, setTimeframe] = useState('15m');
   const [modelType, setModelType] = useState('direction');
   const [tag, setTag] = useState('');
-  const [quickMode, setQuickMode] = useState(false);
+  const [focusHint, setFocusHint] = useState('');
   const [maxIterations, setMaxIterations] = useState(30);
   const [maxBudget, setMaxBudget] = useState(10);
   const [timeoutMinutes, setTimeoutMinutes] = useState(120);
-  const [focusHint, setFocusHint] = useState('');
-  // RL-specific fixed settings
+  const [quickMode, setQuickMode] = useState(false);
+  // RL knobs
   const [tradingMode, setTradingMode] = useState<'stock' | 'margin'>('stock');
   const [agentStrategy, setAgentStrategy] = useState<'AGGR' | 'CONS' | 'BALA' | 'SCAL'>('BALA');
   const [initialBalance, setInitialBalance] = useState(10000);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const modelCards: ModelCard[] = useMemo(() => {
+    if (models && models.length > 0) {
+      return models.map((m) => ({
+        id: m.id,
+        name: m.name,
+        desc: m.skill || m.id,
+        icon: m.id === 'rl' || m.id.startsWith('pipeline') ? 'flask' : m.id === 'volatility' ? 'bolt' : 'arrU',
+      }));
+    }
+    return FALLBACK_MODELS;
+  }, [models]);
+
+  // Cheap estimates surfaced in the preview row.
+  const estRuntime = useMemo(() => {
+    const perIter = quickMode ? 2 : 6; // minutes
+    const total = maxIterations * perIter;
+    const h = Math.floor(total / 60);
+    const m = total % 60;
+    return h ? `~${h}h ${m}m` : `~${m}m`;
+  }, [maxIterations, quickMode]);
+  const estCost = useMemo(() => Math.min(maxBudget, maxIterations * (quickMode ? 0.04 : 0.24)), [maxIterations, maxBudget, quickMode]);
+
+  const isRlLike = modelType === 'rl' || modelType.startsWith('pipeline');
+
+  const handleStart = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!instrument) return;
     startMut.mutate(
       {
         instrument,
@@ -35,195 +85,280 @@ export default function NewResearch() {
         max_budget_usd: maxBudget,
         timeout_minutes: timeoutMinutes,
         focus_hint: focusHint || undefined,
-        ...(modelType === 'rl' || modelType === 'pipeline' ? {
-          trading_mode: tradingMode,
-          agent_strategy: agentStrategy,
-          initial_balance: initialBalance,
-        } : {}),
+        ...(isRlLike
+          ? {
+              trading_mode: tradingMode,
+              agent_strategy: agentStrategy,
+              initial_balance: initialBalance,
+            }
+          : {}),
       },
-      {
-        onSuccess: (session) => navigate(`/research/${session.id}`),
-      }
+      { onSuccess: (session) => navigate(`/research/${session.id}`) },
     );
   };
 
-  const inputCls = 'w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500';
-  const labelCls = 'block text-sm text-gray-400 mb-1';
-
   return (
-    <div className="max-w-lg">
-      <h1 className="text-xl font-semibold mb-6">New Research Session</h1>
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className={labelCls}>Instrument</label>
-          {instruments && instruments.length > 0 ? (
-            <select value={instrument} onChange={(e) => setInstrument(e.target.value)} className={inputCls} required>
-              <option value="">Select...</option>
-              {instruments.map((inst) => (
-                <option key={inst.name} value={inst.instrument}>{inst.instrument} ({inst.timeframe})</option>
-              ))}
-            </select>
-          ) : (
-            <input
-              value={instrument}
-              onChange={(e) => setInstrument(e.target.value)}
-              placeholder="e.g. DOGE-USDT"
-              className={inputCls}
-              required
-            />
-          )}
+    <div style={{ display: 'grid', placeItems: 'start center', padding: '32px 24px' }}>
+      <div style={{ width: 720, display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div className="col gap-1">
+          <div className="crumb">
+            <Link to="/">Dashboard</Link>
+            <Icon name="chevR" size={12} />
+            <span>New research</span>
+          </div>
+          <h1 className="h1">Start a new research session</h1>
+          <p className="subtle" style={{ maxWidth: 540, lineHeight: 1.5 }}>
+            Configure the instrument and target model. The agent will explore configs, evaluate
+            gates, and surface promotable candidates.
+          </p>
         </div>
 
-        <div>
-          <label className={labelCls}>Timeframe</label>
-          <select value={timeframe} onChange={(e) => setTimeframe(e.target.value)} className={inputCls}>
-            <option value="5m">5m</option>
-            <option value="15m">15m</option>
-            <option value="1h">1h</option>
-            <option value="4h">4h</option>
-          </select>
-        </div>
-
-        <div>
-          <label className={labelCls}>Model Type</label>
-          {models && models.length > 0 ? (
-            <select value={modelType} onChange={(e) => setModelType(e.target.value)} className={inputCls}>
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-          ) : (
-            <select value={modelType} onChange={(e) => setModelType(e.target.value)} className={inputCls}>
-              <option value="direction">direction</option>
-              <option value="volatility">volatility</option>
-              <option value="rl">rl</option>
-              <option value="pipeline">pipeline (dir→vol→rl)</option>
-            </select>
-          )}
-        </div>
-
-        <div>
-          <label className={labelCls}>Tag (optional)</label>
-          <input
-            value={tag}
-            onChange={(e) => setTag(e.target.value)}
-            placeholder="e.g. sweep-lr"
-            className={inputCls}
-          />
-        </div>
-
-        <div>
-          <label className={labelCls}>Focus Hint (optional)</label>
-          <textarea
-            value={focusHint}
-            onChange={(e) => setFocusHint(e.target.value)}
-            placeholder="e.g. Focus on improving temporal stability"
-            rows={2}
-            className={inputCls}
-          />
-        </div>
-
-        {(modelType === 'rl' || modelType === 'pipeline') && (
-          <div className="border border-gray-700 rounded p-4 space-y-4">
-            <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">RL Environment Settings</p>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className={labelCls}>Market Type</label>
-                <select value={tradingMode} onChange={(e) => setTradingMode(e.target.value as 'stock' | 'margin')} className={inputCls}>
-                  <option value="stock">Stock (no leverage)</option>
-                  <option value="margin">Margin (3x leverage)</option>
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Strategy</label>
-                <select value={agentStrategy} onChange={(e) => setAgentStrategy(e.target.value as 'AGGR' | 'CONS' | 'BALA' | 'SCAL')} className={inputCls}>
-                  <option value="BALA">Balanced (BALA)</option>
-                  <option value="AGGR">Aggressive (AGGR)</option>
-                  <option value="CONS">Conservative (CONS)</option>
-                  <option value="SCAL">Scalping (SCAL)</option>
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Initial Balance ($)</label>
-                <input
-                  type="number"
-                  value={initialBalance}
-                  onChange={(e) => setInitialBalance(Number(e.target.value))}
-                  min={100}
-                  max={1000000}
-                  step={1000}
-                  className={inputCls}
-                />
+        <form onSubmit={handleStart} className="col gap-4">
+          {/* Required card */}
+          <div className="card" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div className="row" style={{ justifyContent: 'space-between' }}>
+              <div className="col gap-1">
+                <span className="label">required</span>
+                <h2 className="h2">Target</h2>
               </div>
             </div>
-          </div>
-        )}
 
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <label className={labelCls}>Max Iterations</label>
-            <input
-              type="number"
-              value={maxIterations}
-              onChange={(e) => setMaxIterations(Number(e.target.value))}
-              min={1}
-              max={500}
-              className={inputCls}
-            />
-          </div>
-          <div>
-            <label className={labelCls}>Max Budget ($)</label>
-            <input
-              type="number"
-              value={maxBudget}
-              onChange={(e) => setMaxBudget(Number(e.target.value))}
-              min={1}
-              max={500}
-              step={0.5}
-              className={inputCls}
-            />
-          </div>
-          <div>
-            <label className={labelCls}>Timeout (min)</label>
-            <input
-              type="number"
-              value={timeoutMinutes}
-              onChange={(e) => setTimeoutMinutes(Number(e.target.value))}
-              min={30}
-              max={1440}
-              step={30}
-              className={inputCls}
-            />
-          </div>
-        </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 16 }}>
+              <Field label="Instrument" required>
+                {instruments && instruments.length > 0 ? (
+                  <select className="select mono" value={instrument} onChange={(e) => setInstrument(e.target.value)} required>
+                    <option value="">Select…</option>
+                    {instruments.map((inst) => (
+                      <option key={inst.name} value={inst.instrument}>
+                        {inst.instrument} · {inst.timeframe}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    className="input mono"
+                    value={instrument}
+                    onChange={(e) => setInstrument(e.target.value)}
+                    placeholder="e.g. DOGE-USDT"
+                    required
+                  />
+                )}
+              </Field>
+              <Field label="Timeframe" required>
+                <Segmented options={TIMEFRAMES} value={timeframe} onChange={setTimeframe} />
+              </Field>
+            </div>
 
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            id="quick-mode"
-            checked={quickMode}
-            onChange={(e) => setQuickMode(e.target.checked)}
-            className="rounded border-gray-600"
-          />
-          <label htmlFor="quick-mode" className="text-sm text-gray-400">
-            Quick mode (fewer iterations, reduced sample size)
-          </label>
-        </div>
+            <Field label="Model type" required>
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${modelCards.length}, 1fr)`, gap: 12 }}>
+                {modelCards.map((m) => {
+                  const on = modelType === m.id;
+                  return (
+                    <button
+                      type="button"
+                      key={m.id}
+                      onClick={() => setModelType(m.id)}
+                      className="card"
+                      style={{
+                        padding: 14,
+                        textAlign: 'left',
+                        background: on ? 'var(--surface-2)' : 'var(--surface)',
+                        borderColor: on ? 'var(--fg)' : 'var(--line-soft)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+                        <Icon name={m.icon} color={on ? 'var(--fg)' : 'var(--muted)'} />
+                        {on && <Icon name="check" color="var(--green)" />}
+                      </div>
+                      <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
+                        {m.name}
+                      </div>
+                      <div className="subtle" style={{ fontSize: 11, marginTop: 4 }}>
+                        {m.desc}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
+          </div>
 
-        <div className="pt-2">
-          <button
-            type="submit"
-            disabled={startMut.isPending || !instrument}
-            className="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-medium disabled:opacity-50 transition"
+          {/* Optional card */}
+          <div className="card" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div className="col gap-1">
+              <span className="label">optional</span>
+              <h2 className="h2">Shape the search</h2>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <Field label="Tag">
+                <input className="input mono" value={tag} onChange={(e) => setTag(e.target.value)} placeholder="e.g. sweep-lr" />
+              </Field>
+              <Field label="Max iterations" help={`hard cap at ${maxIterations}`}>
+                <input
+                  className="input mono"
+                  type="number"
+                  value={maxIterations}
+                  onChange={(e) => setMaxIterations(Number(e.target.value))}
+                  min={1}
+                  max={500}
+                />
+              </Field>
+            </div>
+
+            <Field label="Focus hint" help="Direction for the agent's exploration.">
+              <textarea
+                className="textarea"
+                rows={2}
+                value={focusHint}
+                onChange={(e) => setFocusHint(e.target.value)}
+                placeholder="e.g. Improve temporal stability without inflating turnover."
+              />
+              <div className="row gap-2" style={{ marginTop: 6 }}>
+                {FOCUS_EXAMPLES.map((ex) => (
+                  <button
+                    type="button"
+                    key={ex}
+                    className="btn btn--ghost btn--sm"
+                    onClick={() => setFocusHint(ex)}
+                  >
+                    {ex}
+                  </button>
+                ))}
+              </div>
+            </Field>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <Field label="Max budget (USD)">
+                <input
+                  className="input mono"
+                  type="number"
+                  value={maxBudget}
+                  onChange={(e) => setMaxBudget(Number(e.target.value))}
+                  min={1}
+                  max={500}
+                  step={0.5}
+                />
+              </Field>
+              <Field label="Timeout (min)">
+                <input
+                  className="input mono"
+                  type="number"
+                  value={timeoutMinutes}
+                  onChange={(e) => setTimeoutMinutes(Number(e.target.value))}
+                  min={30}
+                  max={1440}
+                  step={30}
+                />
+              </Field>
+            </div>
+
+            <label className={`check ${quickMode ? 'on' : ''}`}>
+              <span className="check__box" onClick={() => setQuickMode(!quickMode)} />
+              <span>Quick mode (fewer iterations, reduced sample size)</span>
+            </label>
+
+            {isRlLike && (
+              <div
+                className="card card--raised"
+                style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}
+              >
+                <span className="label">rl environment</span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                  <Field label="Market">
+                    <select
+                      className="select mono"
+                      value={tradingMode}
+                      onChange={(e) => setTradingMode(e.target.value as 'stock' | 'margin')}
+                    >
+                      <option value="stock">stock (no leverage)</option>
+                      <option value="margin">margin (3x)</option>
+                    </select>
+                  </Field>
+                  <Field label="Strategy">
+                    <select
+                      className="select mono"
+                      value={agentStrategy}
+                      onChange={(e) => setAgentStrategy(e.target.value as 'AGGR' | 'CONS' | 'BALA' | 'SCAL')}
+                    >
+                      <option value="BALA">balanced</option>
+                      <option value="AGGR">aggressive</option>
+                      <option value="CONS">conservative</option>
+                      <option value="SCAL">scalping</option>
+                    </select>
+                  </Field>
+                  <Field label="Initial balance ($)">
+                    <input
+                      className="input mono"
+                      type="number"
+                      value={initialBalance}
+                      onChange={(e) => setInitialBalance(Number(e.target.value))}
+                      min={100}
+                      max={1000000}
+                      step={1000}
+                    />
+                  </Field>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Preview row */}
+          <div
+            className="card card--raised"
+            style={{
+              padding: 16,
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: 12,
+            }}
           >
-            {startMut.isPending ? 'Starting...' : 'Start Research'}
-          </button>
+            <PreviewItem label="estimated runtime" value={estRuntime} />
+            <PreviewItem label="estimated cost" value={`~$${estCost.toFixed(2)}`} />
+            <PreviewItem label="iteration cap" value={`${maxIterations}`} />
+            <PreviewItem label="mode" value={quickMode ? 'quick' : 'standard'} />
+          </div>
+
+          {/* Actions */}
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={() => navigate('/')}
+            >
+              Cancel
+            </button>
+            <div className="row gap-2">
+              <button type="button" className="btn btn--ghost" disabled>
+                Save as draft
+              </button>
+              <button
+                type="submit"
+                className="btn btn--solid"
+                disabled={startMut.isPending || !instrument}
+              >
+                {startMut.isPending ? 'Starting…' : 'Start research'}
+                <Icon name="arrR" size={12} />
+              </button>
+            </div>
+          </div>
           {startMut.isError && (
-            <p className="text-red-400 text-sm mt-2">{(startMut.error as Error).message}</p>
+            <div className="banner banner--red">{(startMut.error as Error).message}</div>
           )}
-        </div>
-      </form>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function PreviewItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="col gap-1">
+      <span className="label">{label}</span>
+      <span className="mono" style={{ fontSize: 14, color: 'var(--fg)' }}>
+        {value}
+      </span>
     </div>
   );
 }

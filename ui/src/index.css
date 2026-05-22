@@ -1,8 +1,8 @@
+/* Hi-fi design tokens & components (ported from design-handoff).
+ * @import must precede all other statements per CSS spec. */
+@import './styles/hifi-tokens.css';
+@import './styles/hifi-components.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-body {
-  @apply bg-gray-950 text-gray-100;
-  font-family: Inter, system-ui, -apple-system, sans-serif;
-}

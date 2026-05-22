@@ -1,0 +1,138 @@
+/* ─────────────────────────────────────────────────────────────
+   AUTORESEARCH · hi-fi tokens
+   Monochrome shell + status colors. Dark by default.
+   Ported from design-handoff: hifi/tokens.css
+   ───────────────────────────────────────────────────────────── */
+
+:root, .theme-dark {
+  /* surface */
+  --bg:          oklch(0.16 0.004 100);
+  --surface:     oklch(0.19 0.005 100);
+  --surface-2:   oklch(0.22 0.005 100);
+  --surface-3:   oklch(0.26 0.006 100);
+  --overlay:     rgba(0, 0, 0, 0.55);
+
+  /* text */
+  --fg:          oklch(0.95 0.003 100);
+  --fg-2:        oklch(0.82 0.005 100);
+  --muted:       oklch(0.66 0.005 100);
+  --faint:       oklch(0.50 0.005 100);
+  --on-accent:   oklch(0.16 0.004 100);
+
+  /* lines */
+  --line:        oklch(0.30 0.005 100);
+  --line-soft:   oklch(0.25 0.005 100);
+  --line-faint:  oklch(0.22 0.005 100);
+
+  /* status */
+  --green:       oklch(0.74 0.14 150);
+  --green-bg:    oklch(0.30 0.06 150);
+  --red:         oklch(0.66 0.18 25);
+  --red-bg:      oklch(0.30 0.10 25);
+  --amber:       oklch(0.78 0.14 75);
+  --amber-bg:    oklch(0.32 0.06 75);
+  --info:        oklch(0.74 0.12 240);
+  --info-bg:     oklch(0.32 0.07 240);
+  --purple:      oklch(0.72 0.12 290);
+  --purple-bg:   oklch(0.30 0.07 290);
+
+  /* accent — used for the brand action only */
+  --accent:      oklch(0.95 0.003 100);
+  --accent-bg:   var(--surface-3);
+  --accent-fg:   var(--on-accent);
+
+  /* shadows */
+  --shadow-1: 0 1px 0 0 rgba(255,255,255,0.04) inset;
+  --shadow-2: 0 8px 24px rgba(0,0,0,0.32);
+
+  /* radius / spacing */
+  --r-1: 4px;
+  --r-2: 6px;
+  --r-3: 8px;
+  --r-4: 12px;
+  --r-pill: 999px;
+
+  /* density */
+  --pad-1: 8px;
+  --pad-2: 12px;
+  --pad-3: 16px;
+  --pad-4: 20px;
+  --pad-5: 24px;
+  --row-h: 36px;
+  --ctl-h: 32px;
+  --text-data: 13px;
+  --text-body: 13px;
+  --text-label: 11px;
+}
+
+.theme-light {
+  --bg:          oklch(0.98 0.003 100);
+  --surface:     oklch(1.00 0 0);
+  --surface-2:   oklch(0.96 0.003 100);
+  --surface-3:   oklch(0.93 0.003 100);
+  --overlay:     rgba(0, 0, 0, 0.45);
+
+  --fg:          oklch(0.18 0.005 100);
+  --fg-2:        oklch(0.32 0.005 100);
+  --muted:       oklch(0.48 0.005 100);
+  --faint:       oklch(0.66 0.005 100);
+  --on-accent:   oklch(0.98 0.003 100);
+
+  --line:        oklch(0.85 0.005 100);
+  --line-soft:   oklch(0.90 0.005 100);
+  --line-faint:  oklch(0.93 0.005 100);
+
+  --green:       oklch(0.48 0.14 150);
+  --green-bg:    oklch(0.92 0.05 150);
+  --red:         oklch(0.50 0.18 25);
+  --red-bg:      oklch(0.93 0.06 25);
+  --amber:       oklch(0.56 0.13 75);
+  --amber-bg:    oklch(0.94 0.06 75);
+  --info:        oklch(0.50 0.13 240);
+  --info-bg:     oklch(0.93 0.05 240);
+  --purple:      oklch(0.50 0.13 290);
+  --purple-bg:   oklch(0.93 0.05 290);
+
+  --accent:      oklch(0.18 0.005 100);
+  --accent-bg:   var(--surface-3);
+  --accent-fg:   var(--on-accent);
+
+  --shadow-1: 0 1px 0 0 rgba(255,255,255,0.6) inset;
+  --shadow-2: 0 8px 24px rgba(0,0,0,0.08);
+}
+
+/* accent options */
+.accent-mono   { /* default */ }
+.accent-ember  { --accent: oklch(0.78 0.15 70);  --accent-fg: oklch(0.18 0.005 100); }
+.accent-cobalt { --accent: oklch(0.66 0.15 250); --accent-fg: oklch(0.98 0.003 100); }
+.accent-lime   { --accent: oklch(0.84 0.18 130); --accent-fg: oklch(0.18 0.005 100); }
+
+/* density */
+.density-compact {
+  --pad-1: 6px;  --pad-2: 8px;  --pad-3: 12px; --pad-4: 14px; --pad-5: 18px;
+  --row-h: 30px; --ctl-h: 28px;
+  --text-data: 12px; --text-body: 12px; --text-label: 10px;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  font-size: var(--text-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* IMPORTANT: tailwind also applies box-sizing on its preflight, but we ensure it here too */
+* { box-sizing: border-box; }
+::selection { background: var(--info-bg); color: var(--info); }
+
+.mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+.tnum { font-variant-numeric: tabular-nums; }
+.num  { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+/* scrollbar — minimal, only on hover */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: transparent; border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
+*:hover::-webkit-scrollbar-thumb { background: var(--line); background-clip: content-box; }

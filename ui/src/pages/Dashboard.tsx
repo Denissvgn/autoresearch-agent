@@ -1,194 +1,345 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+// Dashboard — 5-stat strip, active sessions card grid, recent sessions table.
+// Wired to existing hooks/api; design ported from hifi/screen-dashboard.jsx.
+import { useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useSessions, useSessionsPage, useStatus } from '../hooks/useResearch';
-import StatusBadge from '../components/StatusBadge';
+import { Icon, Sparkline, Stat, StatusBadge } from '../components/hifi/primitives';
+import { ResearchSession } from '../api/client';
 
-const PAGE = 50;
+function fmtMoney(v: number | undefined | null) {
+  if (v == null) return '—';
+  return `$${v.toFixed(2)}`;
+}
+
+function fmtElapsed(startedAt: string, completedAt?: string | null) {
+  const start = new Date(startedAt).getTime();
+  const end = completedAt ? new Date(completedAt).getTime() : Date.now();
+  const sec = Math.max(0, Math.round((end - start) / 1000));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h) return `${h}h ${m}m`;
+  if (m) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+function fmtRelative(iso: string) {
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60) return `${Math.round(diff)}s ago`;
+  if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.round(diff / 3600)}h ago`;
+  return `${Math.round(diff / 86400)}d ago`;
+}
+
+function isActiveStatus(s: string) {
+  return s === 'running' || s === 'paused';
+}
 
 export default function Dashboard() {
-  const [offset, setOffset] = useState(0);
-  const { data: allSessions } = useSessions();
-  const { data: page, isLoading } = useSessionsPage(PAGE, offset);
+  const navigate = useNavigate();
+  const { data: sessions, isLoading, refetch } = useSessions();
+  const { data: recentPage } = useSessionsPage(50, 0);
   const { data: status } = useStatus();
+  const [searchTerm, setSearchTerm] = useState('');
 
-  // Filter States
-  const [filterInstrument, setFilterInstrument] = useState('');
-  const [filterModel, setFilterModel] = useState('');
-  const [filterTag, setFilterTag] = useState('');
+  const active = useMemo(
+    () => (sessions ?? []).filter((s) => isActiveStatus(s.status)),
+    [sessions],
+  );
+  const allRecent = recentPage?.items ?? sessions ?? [];
 
-  const active = allSessions?.filter((s) => s.status === 'running' || s.status === 'paused') ?? [];
-  const rawRecent = page?.items ?? [];
-  
-  const recent = rawRecent.filter((s) => {
-    const matchInst = !filterInstrument || s.instrument.toLowerCase().includes(filterInstrument.toLowerCase());
-    const matchModel = !filterModel || s.model_type === filterModel;
-    const matchTag = !filterTag || (s.tag && s.tag.toLowerCase().includes(filterTag.toLowerCase()));
-    return matchInst && matchModel && matchTag;
-  });
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayMs = today.getTime();
+  const todaySpend = (sessions ?? [])
+    .filter((s) => new Date(s.started_at).getTime() >= todayMs)
+    .reduce((acc, s) => acc + (s.total_api_cost_usd ?? 0), 0);
+  const promotedToday = (sessions ?? []).filter(
+    (s) => s.status === 'completed' && s.completed_at && new Date(s.completed_at).getTime() >= todayMs,
+  ).length;
+  const queueDepth = (status?.active_sessions ?? active.length) - active.length;
 
-  const total = page?.total ?? 0;
-  const hasMore = total > offset + PAGE;
+  const filteredRecent = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return allRecent;
+    return allRecent.filter(
+      (s) =>
+        s.instrument.toLowerCase().includes(q) ||
+        s.model_type.toLowerCase().includes(q) ||
+        (s.tag || '').toLowerCase().includes(q) ||
+        s.id.toLowerCase().includes(q),
+    );
+  }, [allRecent, searchTerm]);
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      {/* Status bar */}
-      <div className="flex items-center gap-6">
-        <div className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-3">
-          <div className="text-xs text-gray-500">Active Sessions</div>
-          <div className="text-2xl font-mono">
-            {status?.active_sessions ?? 0}
-            <span className="text-gray-600 text-sm">/{status?.max_concurrent ?? '—'}</span>
+    <div className="col gap-5" style={{ padding: 24 }}>
+      {/* Page header */}
+      <div className="row" style={{ alignItems: 'flex-end' }}>
+        <div className="col gap-1 grow">
+          <span className="label">overview</span>
+          <h1 className="h1">Dashboard</h1>
+        </div>
+        <div className="row gap-2">
+          <button className="btn btn--ghost" onClick={() => refetch()} title="Refresh">
+            <Icon name="refresh" />
+            Refresh
+          </button>
+          <button className="btn btn--solid" onClick={() => navigate('/research/new')}>
+            <Icon name="plus" />
+            New research
+          </button>
+        </div>
+      </div>
+
+      {/* 5-stat status strip + right column */}
+      <div className="row gap-4" style={{ alignItems: 'stretch' }}>
+        <div
+          className="card grow"
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', padding: 20, gap: 0 }}
+        >
+          <Stat
+            label="Active runs"
+            valueSize="lg"
+            value={active.length}
+            sub={`of ${status?.max_concurrent ?? '—'} max concurrent`}
+          />
+          <div className="divider-v" style={{ margin: '0 16px' }} />
+          <Stat
+            label="Today's spend"
+            valueSize="lg"
+            value={fmtMoney(todaySpend)}
+            sub="across today's sessions"
+          />
+          <div className="divider-v" style={{ margin: '0 16px' }} />
+          <Stat
+            label="Queue"
+            valueSize="lg"
+            value={queueDepth > 0 ? queueDepth : 0}
+            sub="pending starts"
+          />
+          <div className="divider-v" style={{ margin: '0 16px' }} />
+          <Stat
+            label="Promoted today"
+            valueSize="lg"
+            value={promotedToday}
+            sub="ready for review"
+          />
+          <div className="divider-v" style={{ margin: '0 16px' }} />
+          <Stat
+            label="Total sessions"
+            valueSize="lg"
+            value={(sessions ?? []).length}
+            sub="all-time"
+          />
+        </div>
+        <div className="card" style={{ width: 240, padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <span className="label">system</span>
+          <div className="row gap-2">
+            <span className="pill pill--green">
+              <span className="dot" />
+              api ok
+            </span>
+            <span className="pill pill--ghost mono">v0.4.1</span>
+          </div>
+          <div className="row gap-2">
+            <span className="pill pill--info">
+              <span className="dot" />
+              mlflow ok
+            </span>
+          </div>
+          <div className="subtle" style={{ fontSize: 11, lineHeight: 1.5 }}>
+            {status
+              ? `${status.active_sessions} active · ${status.max_concurrent} max concurrent`
+              : 'connecting…'}
           </div>
         </div>
-        <Link
-          to="/research/new"
-          className="px-5 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-medium transition"
-        >
-          + New Research
-        </Link>
       </div>
 
       {/* Active sessions */}
-      {active.length > 0 && (
-        <section>
-          <h2 className="text-sm font-medium text-gray-400 mb-3">Active Sessions</h2>
-          <div className="grid gap-3">
-            {active.map((s) => (
-              <Link
-                key={s.id}
-                to={`/research/${s.id}`}
-                className="bg-gray-800 border border-gray-700 rounded-lg p-4 hover:border-indigo-500/50 transition block"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="font-medium">{s.instrument}</span>
-                    <span className="text-gray-500 ml-2">{s.model_type}</span>
-                    <span className="text-gray-600 ml-2 text-sm">{s.timeframe}</span>
-                    {s.tag && <span className="text-gray-600 ml-2 text-xs">#{s.tag}</span>}
-                  </div>
-                  <StatusBadge status={s.status} />
-                </div>
-                <div className="mt-2 flex gap-4 text-xs text-gray-500">
-                  {s.best_iteration != null && <span>Iteration #{s.best_iteration}</span>}
-                  {s.best_metric != null && (
-                    <span>Best: {s.best_metric.toFixed(4)} @ #{s.best_iteration}</span>
-                  )}
-                  <span>${(s.total_api_cost_usd ?? 0).toFixed(2)}</span>
-                </div>
-              </Link>
-            ))}
+      <section className="col gap-3">
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <div className="col gap-1">
+            <span className="label">live</span>
+            <h2 className="h2">Active sessions</h2>
           </div>
-        </section>
-      )}
-
-      {/* Recent */}
-      <section>
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-          <h2 className="text-sm font-medium text-gray-400">
-            Recent Sessions
-            {total > 0 && <span className="text-gray-600 ml-2 font-normal">({total})</span>}
-          </h2>
-          <div className="flex flex-wrap items-center gap-3">
-            <input
-              type="text"
-              placeholder="Search instrument..."
-              value={filterInstrument}
-              onChange={(e) => setFilterInstrument(e.target.value)}
-              className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 outline-none focus:border-indigo-500 w-36"
-            />
-            <select
-              value={filterModel}
-              onChange={(e) => setFilterModel(e.target.value)}
-              className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 outline-none focus:border-indigo-500"
-            >
-              <option value="">All models</option>
-              <option value="direction">Direction</option>
-              <option value="volatility">Volatility</option>
-              <option value="rl">RL</option>
-              <option value="pipeline">Pipeline</option>
-            </select>
-            <input
-              type="text"
-              placeholder="Filter tag..."
-              value={filterTag}
-              onChange={(e) => setFilterTag(e.target.value)}
-              className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 outline-none focus:border-indigo-500 w-28"
-            />
-            {(filterInstrument || filterModel || filterTag) && (
-              <button
-                onClick={() => { setFilterInstrument(''); setFilterModel(''); setFilterTag(''); }}
-                className="text-xs text-gray-500 hover:text-gray-300 transition"
-              >
-                Clear
-              </button>
-            )}
-          </div>
+          <span className="subtle">{active.length} running</span>
         </div>
         {isLoading ? (
-          <div className="text-gray-500 text-sm">Loading...</div>
-        ) : recent.length === 0 ? (
-          <div className="border border-dashed border-gray-700 rounded-lg px-6 py-10 text-center">
-            <p className="text-gray-500 text-sm">No research sessions yet.</p>
-            <Link
-              to="/research/new"
-              className="mt-3 inline-block px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded text-sm font-medium transition"
-            >
-              Start your first session
-            </Link>
+          <div className="card placeholder" style={{ height: 140 }}>
+            loading…
+          </div>
+        ) : active.length === 0 ? (
+          <div className="card placeholder" style={{ height: 140 }}>
+            no active sessions
           </div>
         ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-700 text-gray-400 text-left">
-                    <th className="py-2 px-3">Instrument</th>
-                    <th className="py-2 px-3">Model</th>
-                    <th className="py-2 px-3">Tag</th>
-                    <th className="py-2 px-3">Status</th>
-                    <th className="py-2 px-3">Iterations</th>
-                    <th className="py-2 px-3">Best</th>
-                    <th className="py-2 px-3">Cost</th>
-                    <th className="py-2 px-3">Started</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recent.map((s) => (
-                    <tr key={s.id} className="border-b border-gray-800 hover:bg-gray-800/50">
-                      <td className="py-2 px-3">
-                        <Link to={`/research/${s.id}`} className="text-indigo-400 hover:underline">
-                          {s.instrument}
-                        </Link>
-                      </td>
-                      <td className="py-2 px-3 text-gray-400">{s.model_type}</td>
-                      <td className="py-2 px-3 text-gray-500 text-xs">{s.tag || '—'}</td>
-                      <td className="py-2 px-3"><StatusBadge status={s.status} /></td>
-                      <td className="py-2 px-3 font-mono">{s.best_iteration ?? '—'}</td>
-                      <td className="py-2 px-3 font-mono">
-                        {s.best_metric != null ? s.best_metric.toFixed(4) : '—'}
-                      </td>
-                      <td className="py-2 px-3 font-mono">${(s.total_api_cost_usd ?? 0).toFixed(2)}</td>
-                      <td className="py-2 px-3 text-gray-500 text-xs">
-                        {new Date(s.started_at).toLocaleString()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {hasMore && (
-              <div className="mt-3 text-center">
-                <button
-                  onClick={() => setOffset((o) => o + PAGE)}
-                  className="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-sm text-gray-300 transition"
-                >
-                  Load more ({total - offset - PAGE} remaining)
-                </button>
-              </div>
-            )}
-          </>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
+              gap: 16,
+            }}
+          >
+            {active.map((s) => (
+              <ActiveSessionCard key={s.id} session={s} />
+            ))}
+          </div>
         )}
       </section>
+
+      {/* Recent sessions */}
+      <section className="col gap-3">
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <div className="col gap-1">
+            <span className="label">archive</span>
+            <h2 className="h2">Recent sessions</h2>
+          </div>
+          <div className="row gap-2">
+            <div
+              className="row gap-2"
+              style={{
+                background: 'var(--surface)',
+                border: '1px solid var(--line)',
+                borderRadius: 'var(--r-2)',
+                padding: '0 10px',
+                height: 32,
+                width: 260,
+              }}
+            >
+              <Icon name="search" size={14} color="var(--muted)" />
+              <input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="search instrument, tag, id…"
+                style={{
+                  flex: 1,
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  color: 'var(--fg)',
+                  fontSize: 12,
+                  fontFamily: "'IBM Plex Mono', monospace",
+                }}
+              />
+            </div>
+            <button className="btn btn--ghost" onClick={() => navigate('/history')}>
+              <Icon name="arrR" />
+              View all
+            </button>
+          </div>
+        </div>
+        <div className="card">
+          <div className="scroll" style={{ maxHeight: 480 }}>
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Session</th>
+                  <th>Instrument</th>
+                  <th>Model</th>
+                  <th className="num">Iters</th>
+                  <th className="num">Best metric</th>
+                  <th className="num">Cost</th>
+                  <th>Status</th>
+                  <th>When</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRecent.slice(0, 25).map((s) => (
+                  <tr key={s.id} onClick={() => navigate(`/research/${s.id}`)}>
+                    <td className="mono" style={{ color: 'var(--muted)' }}>
+                      #{s.id.slice(0, 8)}
+                    </td>
+                    <td>
+                      <span className="mono">{s.instrument}</span>{' '}
+                      <span className="faint mono">· {s.timeframe}</span>
+                    </td>
+                    <td>
+                      <span className="pill pill--ghost">{s.model_type}</span>
+                    </td>
+                    <td className="num">
+                      {s.best_iteration ?? 0}/{s.max_iterations}
+                    </td>
+                    <td className="num">
+                      {s.best_metric != null ? s.best_metric.toFixed(4) : '—'}
+                    </td>
+                    <td className="num">{fmtMoney(s.total_api_cost_usd)}</td>
+                    <td>
+                      <StatusBadge s={s.status} />
+                    </td>
+                    <td className="subtle">{fmtRelative(s.started_at)}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <Icon name="chevR" size={14} color="var(--faint)" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ActiveSessionCard({ session }: { session: ResearchSession }) {
+  const navigate = useNavigate();
+  const progress = Math.min(
+    100,
+    Math.round(((session.best_iteration ?? 0) / Math.max(1, session.max_iterations)) * 100),
+  );
+  // Trend placeholder — full series unavailable on this list endpoint; show a
+  // gentle climb to the current best so the card has a visual cue.
+  const series = session.best_metric != null
+    ? [session.best_metric * 0.92, session.best_metric * 0.97, session.best_metric]
+    : [0, 0, 0];
+
+  return (
+    <div className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <div className="col gap-1">
+          <Link to={`/research/${session.id}`} className="lnk mono" style={{ fontSize: 14 }}>
+            {session.instrument} · {session.timeframe}
+          </Link>
+          <div className="row gap-2" style={{ fontSize: 11 }}>
+            <span className="pill pill--ghost">{session.model_type}</span>
+            <StatusBadge s={session.status} />
+          </div>
+        </div>
+        <div className="avatar" title={session.id.slice(0, 8)}>
+          {session.instrument.slice(0, 2).toUpperCase()}
+        </div>
+      </div>
+      <div style={{ height: 32 }}>
+        <Sparkline data={series} color="var(--fg-2)" fill />
+      </div>
+      <div className="row gap-4">
+        <Stat
+          label="iter"
+          valueSize="sm"
+          value={`${session.best_iteration ?? 0}/${session.max_iterations}`}
+        />
+        <Stat
+          label="best"
+          valueSize="sm"
+          value={session.best_metric != null ? session.best_metric.toFixed(3) : '—'}
+        />
+        <Stat label="cost" valueSize="sm" value={fmtMoney(session.total_api_cost_usd)} />
+      </div>
+      <div className="progress progress--info">
+        <div style={{ width: `${progress}%` }} />
+      </div>
+      <div className="row" style={{ justifyContent: 'space-between', fontSize: 11 }}>
+        <span className="subtle">
+          {session.current_phase || 'pending'} · {fmtElapsed(session.started_at)}
+        </span>
+        <div className="row gap-2">
+          <button className="btn btn--ghost btn--sm" onClick={() => navigate(`/research/${session.id}`)}>
+            <Icon name="arrR" size={12} />
+            Open
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

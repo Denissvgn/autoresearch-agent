@@ -1,11 +1,15 @@
+// App shell: token gate, hi-fi topbar with theme/density/accent prefs, routes.
 import { FormEvent, useState } from 'react';
-import { Routes, Route, Link, NavLink } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import NewResearch from './pages/NewResearch';
 import ResearchDetail from './pages/ResearchDetail';
 import History from './pages/History';
+import Promote from './pages/Promote';
+import Settings from './pages/Settings';
+import { Topbar, useDesignPrefs } from './components/hifi/Topbar';
+import { Icon } from './components/hifi/primitives';
 import {
-  clearAutoresearchApiToken,
   getAutoresearchApiToken,
   hasBuildTimeAutoresearchApiToken,
   setAutoresearchApiToken,
@@ -15,6 +19,7 @@ export default function App() {
   const [hasToken, setHasToken] = useState(() => Boolean(getAutoresearchApiToken()));
   const [tokenDraft, setTokenDraft] = useState('');
   const [showToken, setShowToken] = useState(false);
+  const { theme, setTheme } = useDesignPrefs();
 
   function handleTokenSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -25,103 +30,77 @@ export default function App() {
     setHasToken(true);
   }
 
-  function handleClearToken() {
-    clearAutoresearchApiToken();
-    setHasToken(false);
-  }
-
   if (!hasToken) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-6">
-        <form
-          onSubmit={handleTokenSubmit}
-          className="w-full max-w-sm border border-gray-800 bg-gray-950 p-6"
-        >
-          <h1 className="text-lg font-bold text-indigo-400">Autoresearch Agent</h1>
-          <div className="mt-6 flex justify-between items-center">
-            <label htmlFor="api-token" className="block text-sm text-gray-300">
-              API token
-            </label>
-            <button
-              type="button"
-              onClick={() => setShowToken(!showToken)}
-              className="text-xs text-indigo-400 hover:text-indigo-300"
-            >
-              {showToken ? 'Hide' : 'Show'}
-            </button>
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'grid',
+          placeItems: 'center',
+          padding: 24,
+          background: 'var(--bg)',
+        }}
+      >
+        <form onSubmit={handleTokenSubmit} className="card" style={{ width: 360, padding: 24 }}>
+          <div className="col gap-1" style={{ marginBottom: 16 }}>
+            <span className="label">access</span>
+            <h1 className="h2">autoresearch agent</h1>
+            <p className="subtle" style={{ marginTop: 4, fontSize: 12 }}>
+              Authenticate to unlock the research console.
+            </p>
           </div>
-          <input
-            id="api-token"
-            type={showToken ? 'text' : 'password'}
-            value={tokenDraft}
-            onChange={(event) => setTokenDraft(event.target.value)}
-            autoFocus
-            className="mt-2 w-full border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none focus:border-indigo-500 font-mono"
-            placeholder="bearer_token_..."
-          />
-          <p className="mt-2 text-xs text-gray-500 leading-relaxed">
-            The API token secures internal agent capabilities. Retrieve it from your workspace orchestrator template file or consult the team settings console.
-          </p>
-          <button
-            type="submit"
-            className="mt-4 w-full bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
-          >
+          <div className="field" style={{ marginBottom: 12 }}>
+            <div className="field__lbl">
+              API token
+              <span className="grow" />
+              <button
+                type="button"
+                onClick={() => setShowToken(!showToken)}
+                className="btn btn--ghost btn--sm"
+              >
+                <Icon name={showToken ? 'eyeOff' : 'eye'} size={12} />
+                {showToken ? 'hide' : 'show'}
+              </button>
+            </div>
+            <input
+              className="input mono"
+              type={showToken ? 'text' : 'password'}
+              value={tokenDraft}
+              onChange={(e) => setTokenDraft(e.target.value)}
+              autoFocus
+              placeholder="bearer_token_…"
+            />
+            <div className="field__help">
+              Retrieved from your workspace orchestrator template or the team settings console.
+            </div>
+          </div>
+          <button type="submit" className="btn btn--solid" style={{ width: '100%', height: 36 }}>
             Unlock
           </button>
+          {hasBuildTimeAutoresearchApiToken() && (
+            <p className="faint" style={{ fontSize: 11, marginTop: 12 }}>
+              A build-time token is configured. Submit any value to proceed.
+            </p>
+          )}
         </form>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen">
-      <nav className="border-b border-gray-800 px-6 py-3 flex items-center gap-6">
-        <Link to="/" className="text-base font-bold text-indigo-400 shrink-0">
-          Autoresearch
-        </Link>
-        <div className="flex items-center gap-1">
-          <NavLink
-            to="/"
-            end
-            className={({ isActive }) =>
-              `px-3 py-1.5 rounded text-sm transition ${isActive ? 'bg-gray-800 text-gray-100' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'}`
-            }
-          >
-            Dashboard
-          </NavLink>
-          <NavLink
-            to="/research/new"
-            className={({ isActive }) =>
-              `px-3 py-1.5 rounded text-sm transition ${isActive ? 'bg-gray-800 text-gray-100' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'}`
-            }
-          >
-            New Research
-          </NavLink>
-          <NavLink
-            to="/history"
-            className={({ isActive }) =>
-              `px-3 py-1.5 rounded text-sm transition ${isActive ? 'bg-gray-800 text-gray-100' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'}`
-            }
-          >
-            History
-          </NavLink>
-        </div>
-        {!hasBuildTimeAutoresearchApiToken() && (
-          <button
-            type="button"
-            onClick={handleClearToken}
-            className="ml-auto text-xs text-gray-500 hover:text-gray-300 transition"
-          >
-            Change token
-          </button>
-        )}
-      </nav>
-      <main className="p-6">
+    <div className="app">
+      <Topbar
+        theme={theme}
+        onToggleTheme={() => setTheme(theme === 'theme-dark' ? 'theme-light' : 'theme-dark')}
+      />
+      <main className="app__main">
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/research/new" element={<NewResearch />} />
           <Route path="/research/:id" element={<ResearchDetail />} />
+          <Route path="/research/:id/promote" element={<Promote />} />
           <Route path="/history" element={<History />} />
+          <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>
     </div>
