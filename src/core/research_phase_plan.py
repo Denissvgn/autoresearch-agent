@@ -223,7 +223,15 @@ def build_phase_state(
     completed = _completed_phase_ids(rows, studies, promotion_rows, model_type)
     blocked = _blocked_reason(rows)
     current_phase = _select_current_phase(phases, completed, blocked)
-    next_action = _next_action(phases, current_phase, blocked)
+    all_phases_complete = bool(phases) and all(p["id"] in completed for p in phases)
+    next_action = _next_action(
+        phases, current_phase, blocked, all_phases_complete=all_phases_complete
+    )
+    # Two distinct counts: the genuine number of attempts tagged to the current
+    # phase (operator-facing), and the trailing stall count (stall-warning
+    # signal). They previously shared one field, so the terminal phase reported
+    # every iteration as "in current phase".
+    in_phase_count = len(_iterations_in_phase(rows, current_phase))
     stalled_count = _count_stalled_iterations(rows, phases, current_phase)
 
     return {
@@ -235,7 +243,9 @@ def build_phase_state(
         "next_action": next_action,
         "blocked": blocked is not None,
         "block_reason": blocked,
-        "iterations_in_current_phase": stalled_count,
+        "all_phases_complete": all_phases_complete,
+        "iterations_in_current_phase": in_phase_count,
+        "stalled_iterations": stalled_count,
         "phases": [
             {
                 **phase,
@@ -807,6 +817,13 @@ def _phase_status(
         # stay "in_progress" so the agent receives forward-looking guidance
         # rather than a dead-end blocked status.
         is_terminal = bool(phases) and phase_id == phases[-1]["id"]
+        # Terminal phase whose own evidence is already satisfied: report
+        # "completed" (or "blocked" if a hard blocker remains) so the phase
+        # plan reads as finished. Without this the terminal phase stays
+        # "in_progress" forever — incomplete_phase_ids keeps listing it and the
+        # end-turn guard nudges the agent into another doomed experiment.
+        if is_terminal and phase_id in completed:
+            return "blocked" if blocked else "completed"
         if blocked and is_terminal:
             return "blocked"
         return "in_progress"
@@ -817,8 +834,20 @@ def _next_action(
     phases: List[Dict[str, Any]],
     current_phase: str,
     blocked: Optional[str],
+    *,
+    all_phases_complete: bool = False,
 ) -> str:
     is_terminal = bool(phases) and current_phase == phases[-1]["id"]
+    # All phases complete and no blocker: the agent's job is done. Direct it to
+    # STOP rather than re-running the terminal phase — promotion preview/confirm
+    # is server-owned and runs automatically on session end.
+    if all_phases_complete and not blocked:
+        return (
+            "All research phases are complete. STOP now — do NOT run more "
+            "experiments. Reply with a single line beginning `TERMINATE_REQUEST:` "
+            "and a one-line justification. The server runs promotion "
+            "preview/confirm automatically on session end."
+        )
     base = next(
         (p["next_action"] for p in phases if p["id"] == current_phase),
         "Inspect session state.",

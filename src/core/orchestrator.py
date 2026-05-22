@@ -92,6 +92,26 @@ _PROMOTION_FAMILY: frozenset[str] = frozenset({
     "promotion_proposal",
 })
 
+# Promotion gate blockers the AGENT can act on during the run (model-quality /
+# data-handling). Surfaced in the iteration-context digest so the agent tunes
+# for them before the terminal phase. Infra blockers (inference_*, smoke,
+# signal_health, rollback, inference_parity) are resolved server-side by the
+# PromotionEvidenceCollector at promotion time and are intentionally excluded —
+# they are not the agent's job and would only cause it to flail.
+_AGENT_ACTIONABLE_BLOCKERS: frozenset[str] = frozenset({
+    "signal_saturation",
+    "weak_calibration",
+    "unstable_fold_thresholds",
+    "direction_auc_below_gate_or_missing",
+    "best_metric_below_development_baseline",
+    "missing_brier_score",
+    "missing_reliability_diagram",
+    "missing_threshold_stability_by_fold",
+    "missing_signal_rate_distribution",
+    "missing_per_regime_calibration_status",
+    "tsfm_adapter_load_failure_without_tabular_fallback",
+})
+
 # Stagnation-genuineness check: phase-specific evidence keys that, when
 # present in an iteration's ``metrics_json``, indicate the agent (or a
 # server-side evidence collector) attempted real work in that phase — not a
@@ -2117,6 +2137,54 @@ class AgentOrchestrator:
             },
         ), marker
 
+    async def _promotion_readiness_advisory(
+        self,
+        *,
+        research_id: str,
+        model_type: Optional[str],
+        phase_state: Optional[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Evaluate the current best candidate against the development gate
+        bundle (pure, no HTTP) and return the agent-actionable model-quality
+        blockers. Lets the agent fix issues like ``signal_saturation`` during
+        the run instead of discovering them only at server-side promotion.
+        """
+        if model_type not in ("direction", "volatility"):
+            return []
+        try:
+            from src.core.blocker_classifier import classify_blockers
+            from src.core.development_gate_bundle import (
+                evaluate_development_gate_bundle,
+                load_gate_bundle,
+            )
+
+            best = await self._store.get_best_iteration(research_id)
+            if not best:
+                return []
+            bundle = load_gate_bundle(settings.workspace_root)
+            evaluation = evaluate_development_gate_bundle(
+                bundle=bundle, model_type=str(model_type), best_iteration=best,
+            )
+            actionable = [
+                code
+                for code in evaluation.get("blockers", [])
+                if code in _AGENT_ACTIONABLE_BLOCKERS
+            ]
+            if not actionable:
+                return []
+            return classify_blockers(
+                actionable,
+                checks=evaluation.get("checks"),
+                metrics_payload=self._parse_metrics_json(best.get("metrics_json")),
+                phase_state=phase_state or {},
+            )
+        except Exception:  # pragma: no cover — advisory must never break the loop
+            logger.debug(
+                "Promotion readiness advisory failed for %s", research_id,
+                exc_info=True,
+            )
+            return []
+
     async def _build_iteration_context_digest(
         self,
         *,
@@ -2170,6 +2238,11 @@ class AgentOrchestrator:
                         config.id, exc,
                     )
                     prior_session_summary = []
+            promotion_readiness = await self._promotion_readiness_advisory(
+                research_id=config.id,
+                model_type=config.model_type,
+                phase_state=phase_state,
+            )
             return build_iteration_context_digest(
                 session=session,
                 iterations=iterations,
@@ -2177,6 +2250,7 @@ class AgentOrchestrator:
                 planned_trials=planned_trials,
                 phase_state=phase_state,
                 prior_session_summary=prior_session_summary,
+                promotion_readiness=promotion_readiness,
                 max_chars=settings.iteration_context_max_chars,
                 recent_attempts=settings.iteration_context_recent_attempts,
             )
@@ -3162,6 +3236,19 @@ class AgentOrchestrator:
                             "type": "text",
                             "text": phase_cap_message,
                         })
+                    # Fix D: once all phases are complete, force a clean stop
+                    # immediately rather than letting the agent grind the
+                    # terminal phase until the cap/stagnation guards trip.
+                    all_complete_message = (
+                        await self._maybe_all_phases_complete_terminate(
+                            research_id=research_id,
+                        )
+                    )
+                    if all_complete_message:
+                        tool_results.append({
+                            "type": "text",
+                            "text": all_complete_message,
+                        })
                     # AR-7: warn the LLM when no metric improvement has been
                     # recorded for global_stagnation_window consecutive
                     # iterations. Forces a TERMINATE_REQUEST instead of burning
@@ -3870,6 +3957,26 @@ class AgentOrchestrator:
             consistency_report.get("passed")
         )
 
+        # Fix F: attribute the as-yet-unrecorded portion of the cumulative API
+        # cost to this iteration so per-row api_cost_usd is populated (it was
+        # always 0.0 — total was only stored on the session). Summing the
+        # already-persisted rows is ordering-independent: the turn's cost lands
+        # on the first iteration recorded that turn, 0 on any siblings.
+        per_iteration_cost = 0.0
+        try:
+            _prior_rows = await self._store.get_iterations(research_id)
+            _prior_attributed = sum(
+                float(r.get("api_cost_usd") or 0.0) for r in _prior_rows
+            )
+            per_iteration_cost = max(
+                0.0, round(float(cumulative_cost) - _prior_attributed, 6)
+            )
+        except Exception:  # pragma: no cover — cost attribution must never block recording
+            logger.debug(
+                "Per-iteration cost attribution failed for %s", research_id,
+                exc_info=True,
+            )
+
         await self._store.add_iteration(
             research_id=research_id,
             iteration=iteration,
@@ -3881,6 +3988,7 @@ class AgentOrchestrator:
             config_snapshot=marker.get("config_snapshot"),
             metrics_json=json.dumps(marker),
             training_time_s=training_time,
+            api_cost_usd=per_iteration_cost,
             mlflow_run_id=marker.get("mlflow_run_id"),
             canonical_config_hash=marker.get("canonical_config_hash"),
             trial_identity_hash=marker.get("trial_identity_hash"),
@@ -4226,6 +4334,38 @@ class AgentOrchestrator:
             f"inside this phase. Emit the phase's evidence key (see SKILL.md "
             f"\"Phase Advancement\") to advance, or proceed to the next phase. "
             f"Next phase guidance: {next_action}"
+        )
+
+    async def _maybe_all_phases_complete_terminate(
+        self,
+        *,
+        research_id: str,
+    ) -> Optional[str]:
+        """Fast terminal guard: once every phase is complete, instruct the
+        agent to STOP and emit a TERMINATE_REQUEST immediately rather than
+        running more experiments in the terminal phase. Promotion
+        preview/confirm is server-owned and runs automatically on session end,
+        so re-running the terminal phase only wastes budget. Fires after a
+        single extra in-phase iteration — it does not wait for the phase cap.
+        """
+        session = await self._store.get_session(research_id)
+        if not session:
+            return None
+        phase_state_raw = session.get("phase_state_json")
+        if not isinstance(phase_state_raw, str) or not phase_state_raw.strip():
+            return None
+        try:
+            state = json.loads(phase_state_raw)
+        except (json.JSONDecodeError, TypeError):
+            return None
+        if not state.get("all_phases_complete") or state.get("blocked"):
+            return None
+        return (
+            "[system] ALL RESEARCH PHASES ARE COMPLETE. Do NOT run another "
+            "experiment — the terminal phase needs no further work. Reply now "
+            "with a single line beginning `TERMINATE_REQUEST:` and a one-line "
+            "justification. The server runs promotion preview/confirm "
+            "automatically on session end."
         )
 
     async def _phase_advancement_is_genuine(

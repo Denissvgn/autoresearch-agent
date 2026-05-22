@@ -140,6 +140,19 @@ class PromotionEvidenceCollector:
             )
             if payload is not None:
                 patch["smoke_validation"] = payload
+                # The paper-replay ran the candidate through the real serving
+                # path, so its signal_health (probability summary + hold_rate)
+                # is the dev-scope signal-health evidence the gate needs. Merge
+                # it over any training-derived signal_health from steps 1–2.
+                replay_sh = (payload.get("details") or {}).get("signal_health")
+                if isinstance(replay_sh, dict) and replay_sh:
+                    merged_sh = dict(
+                        patch.get("signal_health")
+                        or metrics.get("signal_health")
+                        or {}
+                    )
+                    merged_sh.update(replay_sh)
+                    patch["signal_health"] = merged_sh
             if err:
                 errors["smoke_validation"] = err
 

@@ -172,6 +172,7 @@ def build_iteration_context_digest(
     planned_trials: Iterable[Mapping[str, Any]] = (),
     phase_state: Optional[Mapping[str, Any]] = None,
     prior_session_summary: Optional[Iterable[Mapping[str, Any]]] = None,
+    promotion_readiness: Optional[Iterable[Mapping[str, Any]]] = None,
     max_chars: int = 6000,
     recent_attempts: int = 5,
 ) -> str:
@@ -247,7 +248,11 @@ def build_iteration_context_digest(
     if phase_state:
         current_phase_id = phase_state.get("current_phase") or ""
         phase_next_action = phase_state.get("next_action") or ""
-        stalled = int(phase_state.get("iterations_in_current_phase") or 0)
+        stalled = int(
+            phase_state.get("stalled_iterations")
+            or phase_state.get("iterations_in_current_phase")
+            or 0
+        )
         if current_phase_id and phase_next_action:
             lines.append(
                 f"- Research phase: {current_phase_id} \u2192 {phase_next_action}"
@@ -259,6 +264,23 @@ def build_iteration_context_digest(
                 "Switch tools/approach now — do not run another experiment "
                 "of the same kind until phase-appropriate tooling has been used."
             )
+
+    # Promotion readiness — surface model-quality gate blockers on the current
+    # best candidate so the agent can tune for them before the terminal phase,
+    # rather than discovering them only at server-side promotion review.
+    readiness = list(promotion_readiness or [])
+    if readiness:
+        lines.append(
+            "- PROMOTION GATE would BLOCK the current best candidate "
+            "(fix these in the relevant earlier phase):"
+        )
+        for detail in readiness:
+            if not isinstance(detail, Mapping):
+                continue
+            code = detail.get("code") or "unknown"
+            label = detail.get("label") or ""
+            fix = detail.get("likely_fix") or ""
+            lines.append(f"    - {code}: {label} {fix}".rstrip())
 
     return _cap_text("\n".join(lines), max_chars)
 

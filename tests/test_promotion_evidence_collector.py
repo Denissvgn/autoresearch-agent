@@ -299,6 +299,54 @@ async def test_collector_emits_smoke_validation_when_paper_replay_passes(
 
 
 @pytest.mark.asyncio
+async def test_collector_merges_signal_health_from_paper_replay(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fix B2: the paper-replay ran the candidate through the real serving
+    path, so its signal_health (probability summary + hold_rate) is patched in
+    as dev-scope signal-health evidence the gate needs."""
+    from pydantic import SecretStr
+    from src.config import settings as _settings
+    monkeypatch.setattr(
+        _settings, "inference_service_auth_token", SecretStr("test-token"),
+    )
+
+    store = ResultsStore(str(tmp_path / "store.db"))
+    await store.initialize()
+    session_id = await _seed(store, metrics={"signal_rate": 0.2})
+
+    factory = _http_factory([
+        {"status_code": 200, "json": {"loaded": True}},                  # preflight
+        {"status_code": 200, "json": {"composite_reload_passed": True}}, # reload
+        {"status_code": 200, "json": {                                   # paper/replay
+            "passed": True,
+            "composite_reload_passed": True,
+            "prior_version_left_intact_on_failure": True,
+            "source": "paper_replay_with_candidate_artifact_validated",
+            "signal_health": {
+                "probability_mean": 0.61,
+                "probability_std": 0.08,
+                "entropy_mean": 0.74,
+                "signal_rate": 0.58,
+                "hold_rate": 0.42,
+            },
+        }},
+    ])
+    collector = PromotionEvidenceCollector(store, http_client_factory=factory)
+    patch = await collector.collect_and_patch(session_id, 1)
+
+    sh = patch["signal_health"]
+    assert sh["probability_mean"] == 0.61
+    assert sh["entropy_mean"] == 0.74
+    assert sh["hold_rate"] == 0.42
+    # Persisted to the iteration so the promotion preview reads it.
+    persisted = await store.get_iteration(session_id, 1)
+    import json as _json
+    assert _json.loads(persisted["metrics_json"])["signal_health"]["entropy_mean"] == 0.74
+
+
+@pytest.mark.asyncio
 async def test_collector_records_error_when_paper_replay_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
