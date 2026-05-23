@@ -651,10 +651,9 @@ _PHASE_EXPLICIT_AGENT_KEYS: Dict[str, tuple] = {
 
 def _adaptive_phase_completed(iterations: List[Dict[str, Any]]) -> bool:
     for idx, row in enumerate(iterations):
-        if (row.get("search_phase") or "") != "adaptive_feature_sweeps" and not _has_metric(
-            row,
-            *_PHASE_ADVANCEMENT_KEYS["adaptive_feature_sweeps"],
-        ):
+        if (row.get("search_phase") or "") != "adaptive_feature_sweeps":
+            continue
+        if not _has_metric(row, *_PHASE_ADVANCEMENT_KEYS["adaptive_feature_sweeps"]):
             continue
 
         metrics = _metrics_of(row)
@@ -780,7 +779,8 @@ def _has_promotion_evidence(
     # AR-5: gate evidence-key path behind artifact validation.
     # AR-6: also gate behind synthetic-iteration detection.
     return any(
-        _has_metric(row, *evidence_keys)
+        (row.get("search_phase") or "") == "promotion_proposal"
+        and _has_metric(row, *evidence_keys)
         and not check_evidence_artifact(_metrics_of(row), "promotion_proposal")
         and not _is_synthetic_promotion_iteration(_metrics_of(row), _pb, "promotion_proposal")
         for row in iterations

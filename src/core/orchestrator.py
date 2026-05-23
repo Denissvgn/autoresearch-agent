@@ -61,6 +61,7 @@ from src.core.research_phase_plan import (
 from src.core.research_phase_plan import (
     _PHASE_ADVANCEMENT_KEYS,
     NOOP_INHERITABLE_PHASES,
+    _is_rejected_duplicate,
 )
 from src.core.result_artifact import enrich_marker_from_result_artifact
 from src.core.results_store import ResultsStore
@@ -4068,6 +4069,22 @@ class AgentOrchestrator:
             search_phase=active_phase,
             metric_improvement_epsilon=settings.global_stagnation_epsilon,
         )
+
+        try:
+            rows_after_record = await self._store.get_iterations(research_id)
+            effective_count = sum(
+                1 for row in rows_after_record if not _is_rejected_duplicate(row)
+            )
+            await self._store.update_session(
+                research_id,
+                effective_iteration_count=effective_count,
+            )
+        except Exception:  # pragma: no cover - counter refresh must not block recording
+            logger.debug(
+                "Effective iteration counter refresh failed for %s",
+                research_id,
+                exc_info=True,
+            )
 
         # ML-59: If this is an HPO study result, also persist to hpo_studies
         if marker.get("mode") == "hpo_study":

@@ -111,6 +111,57 @@ def test_direction_phase_tabular_sweeps_does_not_complete_without_evidence():
     assert _phase_status(state, "tabular_sweeps") == "in_progress"
 
 
+def test_direction_phase_does_not_skip_adaptive_from_off_phase_auto_evidence():
+    """prepare.py emits broad auto evidence on every run.
+
+    A baseline + tabular sweep pair may contain adaptive noop fields,
+    TS-FM fallback validation, and promotion scope metadata, but those keys
+    must not complete later phases unless the row is tagged to that phase.
+    """
+    session = {"id": "res_phase_no_skip", "model_type": "direction"}
+    broad_auto_metrics = {
+        "primary_metric": 0.42,
+        "all_gates_passed": True,
+        "auto_phase_evidence": True,
+        "adaptive_feature_noop_reason": "adaptive_features_unavailable",
+        "adaptive_features": {
+            "requested": False,
+            "enabled": False,
+            "selected_count": 0,
+            "feature_schema_hash": "schema-tabular",
+            "n_features": 90,
+        },
+        "tsfm_fallback_validation": True,
+        "promotion_scope": "development",
+    }
+    iterations = [
+        {
+            "iteration": 1,
+            "metrics_json": json.dumps(broad_auto_metrics),
+            "search_phase": "baseline_capture",
+            "all_gates_passed": 1,
+        },
+        {
+            "iteration": 2,
+            "metrics_json": json.dumps({
+                **broad_auto_metrics,
+                "tabular_sweep_variant": "roster_v1",
+            }),
+            "search_phase": "tabular_sweeps",
+            "all_gates_passed": 1,
+        },
+    ]
+
+    state = build_phase_state(session=session, iterations=iterations)
+
+    assert state["current_phase"] == "adaptive_feature_sweeps"
+    assert _phase_status(state, "baseline_capture") == "completed"
+    assert _phase_status(state, "tabular_sweeps") == "completed"
+    assert _phase_status(state, "adaptive_feature_sweeps") == "in_progress"
+    assert _phase_status(state, "tsfm_sweeps") == "pending"
+    assert _phase_status(state, "promotion_proposal") == "pending"
+
+
 def test_promotion_proposal_requires_preview_or_promotion_evidence():
     session = {
         "id": "res_phase_promotion",
@@ -137,6 +188,7 @@ def test_promotion_proposal_requires_preview_or_promotion_evidence():
             },
         }
     )
+    iterations[0]["search_phase"] = "promotion_proposal"
 
     state = build_phase_state(session=session, iterations=iterations)
 

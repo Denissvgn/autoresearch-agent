@@ -91,10 +91,16 @@ export default function ResearchDetail() {
   const phaseLabel = session.current_phase || state?.current_phase || 'pending';
   const canPromote = !!session.best_iteration && !isActive;
   const iterationCount = iterations?.length ?? 0;
-  const effectiveIterations =
-    session.effective_iteration_count ??
-    state?.budget_usage.iterations_used ??
-    iterationCount;
+  const sessionEffectiveIterations =
+    typeof session.effective_iteration_count === 'number'
+      ? session.effective_iteration_count
+      : 0;
+  const stateIterations = state?.budget_usage.iterations_used ?? 0;
+  const effectiveIterations = Math.max(
+    sessionEffectiveIterations,
+    stateIterations,
+    iterationCount,
+  );
 
   return (
     <div className="col gap-5" style={{ padding: 24 }}>
@@ -276,10 +282,16 @@ function StateTab({
   if (!state) {
     return <div className="placeholder" style={{ height: 240 }}>research state pending…</div>;
   }
-  const phaseItems = state.phase_state.phases.map((p) => ({
+  const activePhaseIndex = state.phase_state.phases.findIndex(
+    (p) =>
+      p.id === state.phase_state.current_phase ||
+      p.status === 'in_progress' ||
+      p.status === 'blocked',
+  );
+  const phaseItems = state.phase_state.phases.map((p, index) => ({
     id: p.id,
     label: p.label,
-    status: p.status,
+    status: activePhaseIndex >= 0 && index > activePhaseIndex ? 'pending' : p.status,
   }));
   const activePhase =
     state.phase_state.phases.find((p) => p.id === state.phase_state.current_phase) ??
