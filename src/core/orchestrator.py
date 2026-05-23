@@ -20,7 +20,7 @@ import httpx
 import yaml
 
 from src.config import secret_value, settings
-from src.core.command_runner import GovernedCommandRunner, redact_sensitive_text
+from src.core.command_runner import GovernedCommandRunner, OutputCallback, redact_sensitive_text
 from src.core.artifact_reference import normalize_artifact_references_in_mapping
 from src.core.consistency_validator import (
     ACCEPTED_ADAPTIVE_NOOP_REASONS,
@@ -75,6 +75,8 @@ logger = logging.getLogger(__name__)
 _CLAUDE_INPUT_USD_PER_TOKEN = 3.0 / 1_000_000
 _CLAUDE_OUTPUT_USD_PER_TOKEN = 15.0 / 1_000_000
 _CLAUDE_MAX_OUTPUT_TOKENS = 8192
+_COMMAND_OUTPUT_LOG_INTERVAL_S = 2.0
+_COMMAND_OUTPUT_LOG_MAX_CHARS = 2000
 
 # Phase 5.4: number of consecutive command-policy rejections after which
 # the agent loop aborts as ``failed`` and waits for operator review.
@@ -388,11 +390,14 @@ def _execute_tool(
     input_data: Dict[str, Any],
     workspace: str,
     session_workspace: str | None = None,
+    output_callback: OutputCallback | None = None,
 ) -> ToolExecutionResult:
     """Execute a tool call and return the text result."""
     try:
         if name == "bash":
-            return _tool_bash(input_data, workspace, session_workspace)
+            return _tool_bash(
+                input_data, workspace, session_workspace, output_callback,
+            )
         elif name == "read_file":
             return ToolExecutionResult(_tool_read_file(input_data, workspace))
         elif name == "write_file":
@@ -411,6 +416,7 @@ def _tool_bash(
     input_data: Dict[str, Any],
     workspace: str,
     session_workspace: str | None = None,
+    output_callback: OutputCallback | None = None,
 ) -> ToolExecutionResult:
     command = input_data["command"]
     timeout = input_data.get("timeout_s", 7200)
@@ -421,7 +427,9 @@ def _tool_bash(
         workspace_root=workspace,
         session_workspace=session_workspace,
     )
-    result = runner.run(command, timeout_s=timeout)
+    result = runner.run(
+        command, timeout_s=timeout, output_callback=output_callback,
+    )
     decision = result.decision
     return ToolExecutionResult(
         result.output,
@@ -523,6 +531,46 @@ class AgentOrchestrator:
         # of re-injecting the same remediation nudge, preventing infinite
         # re-asking on an unresolvable blocker.
         self._blocker_attempt_counters: Dict[str, Dict[str, int]] = {}
+
+    def _make_command_output_callback(
+        self,
+        *,
+        agent_log: AgentLogWriter,
+        loop: asyncio.AbstractEventLoop,
+        turn: int,
+        runtime_command_id: Optional[int],
+    ) -> OutputCallback:
+        last_emit = 0.0
+
+        def _callback(stream: str, chunk: str) -> None:
+            nonlocal last_emit
+            if not chunk.strip():
+                return
+            now = time.monotonic()
+            if (
+                now - last_emit < _COMMAND_OUTPUT_LOG_INTERVAL_S
+                and len(chunk) <= _COMMAND_OUTPUT_LOG_MAX_CHARS
+            ):
+                return
+            last_emit = now
+            truncated = len(chunk) > _COMMAND_OUTPUT_LOG_MAX_CHARS
+            content = chunk[-_COMMAND_OUTPUT_LOG_MAX_CHARS:].rstrip()
+            if not content:
+                return
+            meta = {
+                "stream": stream,
+                "runtime_command_id": runtime_command_id,
+                "partial": True,
+                "truncated": truncated,
+            }
+            asyncio.run_coroutine_threadsafe(
+                agent_log.append(
+                    "command_output", content, turn=turn, meta=meta,
+                ),
+                loop,
+            )
+
+        return _callback
 
     def request_stop(self, research_id: str) -> None:
         self._stop_flags[research_id] = True
@@ -2614,12 +2662,21 @@ class AgentOrchestrator:
                                     status="running",
                                 )
                             command_started_at = time.time()
+                            output_callback = None
+                            if block.name == "bash":
+                                output_callback = self._make_command_output_callback(
+                                    agent_log=agent_log,
+                                    loop=asyncio.get_running_loop(),
+                                    turn=turn,
+                                    runtime_command_id=runtime_command_id,
+                                )
                             tool_execution = await asyncio.to_thread(
                                 _execute_tool,
                                 block.name,
                                 block.input,
                                 settings.workspace_root,
                                 workspace,
+                                output_callback,
                             )
                         tool_result = tool_execution.content
                         tool_meta = tool_execution.meta
@@ -4170,6 +4227,17 @@ class AgentOrchestrator:
             next_action=state.get("next_action"),
             phase_state_json=phase_state_json(state),
         )
+        event = {
+            "event": "phase_state_updated",
+            "research_id": research_id,
+            "current_phase": state.get("current_phase"),
+            "next_action": state.get("next_action"),
+            "phase_state": state,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        if session.get("pipeline_id"):
+            event["pipeline_id"] = session.get("pipeline_id")
+        await broadcaster.broadcast(event)
 
     async def _build_phase_continuation_kick(
         self,

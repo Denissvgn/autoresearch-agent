@@ -8,6 +8,8 @@ import History from './pages/History';
 import Promote from './pages/Promote';
 import Settings from './pages/Settings';
 import { Topbar, useDesignPrefs } from './components/hifi/Topbar';
+import { ResearchRealtimeBridge } from './hooks/useResearch';
+import { WebSocketProvider } from './hooks/useWebSocket';
 import { Icon } from './components/hifi/primitives';
 import {
   getAutoresearchApiToken,
@@ -88,21 +90,24 @@ export default function App() {
   }
 
   return (
-    <div className="app">
-      <Topbar
-        theme={theme}
-        onToggleTheme={() => setTheme(theme === 'theme-dark' ? 'theme-light' : 'theme-dark')}
-      />
-      <main className="app__main">
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/research/new" element={<NewResearch />} />
-          <Route path="/research/:id" element={<ResearchDetail />} />
-          <Route path="/research/:id/promote" element={<Promote />} />
-          <Route path="/history" element={<History />} />
-          <Route path="/settings" element={<Settings />} />
-        </Routes>
-      </main>
-    </div>
+    <WebSocketProvider>
+      <ResearchRealtimeBridge />
+      <div className="app">
+        <Topbar
+          theme={theme}
+          onToggleTheme={() => setTheme(theme === 'theme-dark' ? 'theme-light' : 'theme-dark')}
+        />
+        <main className="app__main">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/research/new" element={<NewResearch />} />
+            <Route path="/research/:id" element={<ResearchDetail />} />
+            <Route path="/research/:id/promote" element={<Promote />} />
+            <Route path="/history" element={<History />} />
+            <Route path="/settings" element={<Settings />} />
+          </Routes>
+        </main>
+      </div>
+    </WebSocketProvider>
   );
 }

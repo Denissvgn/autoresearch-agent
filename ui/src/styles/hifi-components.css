@@ -393,6 +393,9 @@ a.lnk:hover { border-bottom-color: var(--fg); }
 .phase.is-active { border-color: var(--fg); background: var(--surface); }
 .phase.is-active .phase__name { color: var(--fg); }
 .phase.is-active .phase__lbl { color: var(--fg); }
+.phase.is-blocked { border-color: var(--amber); background: var(--amber-bg); }
+.phase.is-blocked .phase__name { color: var(--amber); }
+.phase.is-blocked .phase__lbl { color: var(--amber); }
 
 /* up/down arrows for deltas */
 .delta { display: inline-flex; align-items: center; gap: 2px; font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }

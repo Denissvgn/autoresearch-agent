@@ -22,6 +22,7 @@ _TYPE_LABELS = {
     "text": "CLAUDE",
     "tool_call": "TOOL",
     "tool_result": "RESULT",
+    "command_output": "OUTPUT",
     "system": "SYSTEM",
     "error": "ERROR",
 }
@@ -46,7 +47,7 @@ class AgentLogWriter:
         self._research_id = research_id
         self._pipeline_id = pipeline_id
         self._phase = phase
-        self._line_count = 0
+        self._line_count = self._existing_line_count(log_path)
         os.makedirs(log_path.parent, exist_ok=True)
 
     # ------------------------------------------------------------------
@@ -64,19 +65,21 @@ class AgentLogWriter:
         meta = dict(meta) if isinstance(meta, dict) else {}
         if self._phase:
             meta.setdefault("phase", self._phase)
+        line_number = self._line_count
         entry = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "turn": turn,
             "type": entry_type,
             "content": content,
             "meta": meta,
+            "line_number": line_number,
         }
         line = json.dumps(entry, default=str) + "\n"
         try:
             await asyncio.to_thread(self._write_line, line)
         except Exception:
             logger.warning("Failed to write agent log entry", exc_info=True)
-        self._line_count += 1
+        self._line_count = line_number + 1
 
         # Broadcast to connected WS clients
         try:
@@ -94,6 +97,16 @@ class AgentLogWriter:
     def _write_line(self, line: str) -> None:
         with open(self._path, "a", encoding="utf-8") as f:
             f.write(line)
+
+    @staticmethod
+    def _existing_line_count(log_path: Path) -> int:
+        if not log_path.exists():
+            return 0
+        try:
+            with open(log_path, "r", encoding="utf-8") as f:
+                return sum(1 for raw in f if raw.strip())
+        except OSError:
+            return 0
 
     # ------------------------------------------------------------------
     # Read
@@ -131,9 +144,12 @@ class AgentLogWriter:
                 if not raw:
                     continue
                 try:
-                    entries.append(json.loads(raw))
+                    entry = json.loads(raw)
                 except json.JSONDecodeError:
                     continue
+                if isinstance(entry, dict):
+                    entry.setdefault("line_number", idx)
+                    entries.append(entry)
         return entries
 
 

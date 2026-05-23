@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { Icon } from './primitives';
 import { useStatus } from '../../hooks/useResearch';
+import { useWebSocket } from '../../hooks/useWebSocket';
 
 export type ThemeName = 'theme-dark' | 'theme-light';
 export type DensityName = 'density-comfortable' | 'density-compact';
@@ -66,6 +67,7 @@ export interface TopbarProps {
 export function Topbar({ onToggleTheme, theme }: TopbarProps) {
   const { pathname } = useLocation();
   const { data: status, isError } = useStatus();
+  const { connected: wsConnected } = useWebSocket();
   const connected = !isError && !!status;
   // Treat detail/promote routes as "session" context (no nav highlight)
   const isDashboard = pathname === '/' || pathname.startsWith('/dashboard');
@@ -109,7 +111,7 @@ export function Topbar({ onToggleTheme, theme }: TopbarProps) {
       <div className="topbar__right">
         <span className={`pill ${connected ? 'pill--green' : 'pill--red'}`}>
           <span className="dot" />
-          {connected ? 'srv connected' : 'srv offline'}
+          {connected && wsConnected ? 'srv live' : connected ? 'srv connected' : 'srv offline'}
         </span>
         <span className="label mono" style={{ color: 'var(--faint)' }}>
           {wsHost}

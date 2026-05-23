@@ -286,20 +286,36 @@ export function MetricChart({ points, height = 280, showAxis = true, showBest = 
 // ─────────────────────────────────────────────────────────────
 // Phase bar
 // ─────────────────────────────────────────────────────────────
+export interface PhaseBarItem {
+  id?: string;
+  label: string;
+  status?: string;
+}
+
 export interface PhaseBarProps {
-  phases: string[];
-  active: number;
+  phases: Array<string | PhaseBarItem>;
+  active?: number;
+}
+
+function phaseClass(status: string | undefined, index: number, active?: number): string {
+  const normalized = status || (active == null ? '' : index < active ? 'completed' : index === active ? 'in_progress' : 'pending');
+  if (normalized === 'completed' || normalized === 'done') return 'is-done';
+  if (normalized === 'blocked') return 'is-blocked';
+  if (normalized === 'in_progress' || normalized === 'active') return 'is-active';
+  return '';
 }
 
 export function PhaseBar({ phases, active }: PhaseBarProps) {
   return (
     <div className="row gap-2">
-      {phases.map((p, i) => {
-        const state = i < active ? 'is-done' : i === active ? 'is-active' : '';
+      {phases.map((phase, i) => {
+        const label = typeof phase === 'string' ? phase : phase.label;
+        const id = typeof phase === 'string' ? phase : phase.id || phase.label;
+        const state = phaseClass(typeof phase === 'string' ? undefined : phase.status, i, active);
         return (
-          <div key={p} className={`phase ${state}`}>
+          <div key={id} className={`phase ${state}`}>
             <div className="phase__lbl">step {String(i + 1).padStart(2, '0')}</div>
-            <div className="phase__name truncate">{p}</div>
+            <div className="phase__name truncate">{label}</div>
           </div>
         );
       })}

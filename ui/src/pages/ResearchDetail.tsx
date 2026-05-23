@@ -1,10 +1,9 @@
 // Session detail — header, stat strip, tab navigation, panels for state /
 // metrics / iterations / agent log. Wired to existing hooks; design ported
 // from hifi/screen-session.jsx.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  useAgentLog,
   useIterations,
   usePauseSession,
   useResearchState,
@@ -12,22 +11,23 @@ import {
   useSession,
   useStopSession,
 } from '../hooks/useResearch';
-import { api, AgentLogEntry, Iteration, ResearchState } from '../api/client';
+import { api, Iteration, ResearchState } from '../api/client';
 import {
   Icon,
-  MetricChart,
-  MetricPoint,
   PhaseBar,
   Stat,
   StatusBadge,
 } from '../components/hifi/primitives';
+import AgentLog from '../components/AgentLog';
+import MetricsTrendChart from '../components/MetricsChart';
+import { useWebSocket } from '../hooks/useWebSocket';
 
 type Tab = 'state' | 'metrics' | 'iterations' | 'log';
 
-function fmtElapsed(startIso?: string | null, endIso?: string | null) {
+function fmtElapsed(startIso?: string | null, endIso?: string | null, nowMs = Date.now()) {
   if (!startIso) return '—';
   const start = new Date(startIso).getTime();
-  const end = endIso ? new Date(endIso).getTime() : Date.now();
+  const end = endIso ? new Date(endIso).getTime() : nowMs;
   const sec = Math.max(0, Math.round((end - start) / 1000));
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
@@ -37,6 +37,14 @@ function fmtElapsed(startIso?: string | null, endIso?: string | null) {
   return `${s}s`;
 }
 
+function fmtAgo(iso?: string | null, nowMs = Date.now()) {
+  if (!iso) return '—';
+  const diff = Math.max(0, Math.round((nowMs - new Date(iso).getTime()) / 1000));
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
+  return `${Math.round(diff / 3600)}h ago`;
+}
+
 export default function ResearchDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -44,14 +52,33 @@ export default function ResearchDetail() {
   const { data: iterations } = useIterations(id!);
   const { data: state } = useResearchState(id!);
   const isActive = session?.status === 'running' || session?.status === 'paused';
-  const { data: agentLog } = useAgentLog(id!, isActive);
+  const { lastEvent } = useWebSocket();
+  const [lastLiveAt, setLastLiveAt] = useState<string | null>(null);
+  const [nowMs, setNowMs] = useState(Date.now());
   const pauseMut = usePauseSession();
   const resumeMut = useResumeSession();
   const stopMut = useStopSession();
 
-  // Default tab is metrics for active sessions, state otherwise.
-  const initialTab: Tab = isActive ? 'metrics' : 'state';
-  const [tab, setTab] = useState<Tab>(initialTab);
+  useEffect(() => {
+    if (!isActive) return;
+    const timer = setInterval(() => setNowMs(Date.now()), 15_000);
+    return () => clearInterval(timer);
+  }, [isActive]);
+
+  useEffect(() => {
+    if (!lastEvent || !id) return;
+    const activePhaseId = session?.active_phase_session_id;
+    const matches =
+      lastEvent.research_id === id ||
+      lastEvent.pipeline_id === id ||
+      (activePhaseId && lastEvent.research_id === activePhaseId);
+    if (matches) {
+      setLastLiveAt(new Date().toISOString());
+      setNowMs(Date.now());
+    }
+  }, [lastEvent, id, session?.active_phase_session_id]);
+
+  const [tab, setTab] = useState<Tab>('state');
 
   if (isLoading || !session) {
     return (
@@ -64,6 +91,10 @@ export default function ResearchDetail() {
   const phaseLabel = session.current_phase || state?.current_phase || 'pending';
   const canPromote = !!session.best_iteration && !isActive;
   const iterationCount = iterations?.length ?? 0;
+  const effectiveIterations =
+    session.effective_iteration_count ??
+    state?.budget_usage.iterations_used ??
+    iterationCount;
 
   return (
     <div className="col gap-5" style={{ padding: 24 }}>
@@ -153,7 +184,7 @@ export default function ResearchDetail() {
         <Stat
           label="iteration"
           valueSize="lg"
-          value={`${iterationCount}/${session.max_iterations}`}
+          value={`${effectiveIterations}/${session.max_iterations}`}
         />
         <div className="divider-v" style={{ margin: '0 16px' }} />
         <Stat
@@ -178,7 +209,7 @@ export default function ResearchDetail() {
         <Stat
           label="elapsed"
           valueSize="lg"
-          value={fmtElapsed(session.started_at, session.completed_at)}
+          value={fmtElapsed(session.started_at, session.completed_at, nowMs)}
         />
         <div className="divider-v" style={{ margin: '0 16px' }} />
         <Stat label="mode" valueSize="lg" value={session.quick_mode ? 'quick' : 'standard'} />
@@ -215,25 +246,55 @@ export default function ResearchDetail() {
         </div>
       </div>
 
-      {tab === 'state' && <StateTab state={state ?? null} session={session.model_type} />}
-      {tab === 'metrics' && <MetricsTab iterations={iterations ?? []} />}
+      {tab === 'state' && (
+        <StateTab
+          state={state ?? null}
+          session={session.model_type}
+          lastLiveAt={lastLiveAt}
+          nowMs={nowMs}
+        />
+      )}
+      {tab === 'metrics' && <MetricsTab iterations={iterations ?? []} modelType={session.model_type} />}
       {tab === 'iterations' && <IterationsTab iterations={iterations ?? []} bestIteration={session.best_iteration} researchId={id!} />}
-      {tab === 'log' && <AgentLogTab entries={agentLog?.entries ?? []} researchId={id!} />}
+      {tab === 'log' && <AgentLog researchId={id!} isActive={isActive} />}
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────
-function StateTab({ state, session: modelType }: { state: ResearchState | null; session: string }) {
+function StateTab({
+  state,
+  session: modelType,
+  lastLiveAt,
+  nowMs,
+}: {
+  state: ResearchState | null;
+  session: string;
+  lastLiveAt: string | null;
+  nowMs: number;
+}) {
   if (!state) {
     return <div className="placeholder" style={{ height: 240 }}>research state pending…</div>;
   }
-  const phases = state.phase_state.phases.map((p) => p.label);
-  const activeIdx = state.phase_state.phases.findIndex((p) => p.status === 'active');
-  const safeActive = activeIdx < 0 ? state.phase_state.phases.filter((p) => p.status === 'done').length : activeIdx;
+  const phaseItems = state.phase_state.phases.map((p) => ({
+    id: p.id,
+    label: p.label,
+    status: p.status,
+  }));
+  const activePhase =
+    state.phase_state.phases.find((p) => p.id === state.phase_state.current_phase) ??
+    state.phase_state.phases.find((p) => p.status === 'in_progress' || p.status === 'blocked') ??
+    null;
+  const inPhase = state.phase_state.iterations_in_current_phase ?? 0;
+  const stalled = state.phase_state.stalled_iterations ?? 0;
+  const phaseCap = activePhase?.max_iterations;
+  const phaseFloor = activePhase?.min_iterations;
+  const phasePct = phaseCap ? Math.min(100, Math.round((inPhase / Math.max(1, phaseCap)) * 100)) : null;
 
   const budget = state.budget_usage;
   const budgetPct = Math.min(100, Math.round((budget.api_cost_usd / Math.max(budget.max_budget_usd, 0.0001)) * 100));
+  const iterPct = Math.min(100, Math.round((budget.iterations_used / Math.max(1, budget.max_iterations)) * 100));
+  const inactivityWarn = lastLiveAt ? nowMs - new Date(lastLiveAt).getTime() > 120_000 : false;
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
@@ -241,7 +302,10 @@ function StateTab({ state, session: modelType }: { state: ResearchState | null; 
         <div className="card" style={{ padding: 18 }}>
           <div className="row" style={{ justifyContent: 'space-between' }}>
             <h2 className="h2">{state.current_phase || 'idle'}</h2>
-            <span className="pill pill--info mono">{state.status}</span>
+            <div className="row gap-2">
+              {state.phase_state.all_phases_complete && <span className="pill pill--green">complete</span>}
+              <span className="pill pill--info mono">{state.status}</span>
+            </div>
           </div>
           {state.next_action && (
             <div className="code" style={{ marginTop: 12 }}>
@@ -249,7 +313,43 @@ function StateTab({ state, session: modelType }: { state: ResearchState | null; 
             </div>
           )}
           <div style={{ marginTop: 16 }}>
-            <PhaseBar phases={phases} active={safeActive} />
+            <PhaseBar phases={phaseItems} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginTop: 16 }}>
+            <div className="card card--raised" style={{ padding: 12 }}>
+              <Stat
+                label="phase attempts"
+                value={`${inPhase}${phaseCap ? `/${phaseCap}` : ''}`}
+                sub={phaseFloor ? `${phaseFloor} min` : 'no floor'}
+              />
+              {phasePct != null && (
+                <div className={`progress ${phasePct >= 90 ? 'progress--amber' : 'progress--info'}`} style={{ marginTop: 10 }}>
+                  <div style={{ width: `${phasePct}%` }} />
+                </div>
+              )}
+            </div>
+            <div className="card card--raised" style={{ padding: 12 }}>
+              <Stat
+                label="stall count"
+                value={stalled}
+                deltaDir={stalled > 0 ? 'dn' : 'flat'}
+                sub="trailing no-advance attempts"
+              />
+            </div>
+            <div className="card card--raised" style={{ padding: 12 }}>
+              <Stat label="iteration budget" value={`${iterPct}%`} sub={`${budget.iterations_used}/${budget.max_iterations}`} />
+              <div className={`progress ${iterPct > 80 ? 'progress--red' : iterPct > 60 ? 'progress--amber' : 'progress--info'}`} style={{ marginTop: 10 }}>
+                <div style={{ width: `${iterPct}%` }} />
+              </div>
+            </div>
+            <div className="card card--raised" style={{ padding: 12 }}>
+              <Stat
+                label="last live event"
+                value={fmtAgo(lastLiveAt, nowMs)}
+                deltaDir={inactivityWarn ? 'dn' : 'flat'}
+                sub={inactivityWarn ? 'no update > 2m' : 'websocket/log'}
+              />
+            </div>
           </div>
         </div>
 
@@ -335,6 +435,14 @@ function StateTab({ state, session: modelType }: { state: ResearchState | null; 
           </div>
         </div>
 
+        <div className={`banner ${inactivityWarn ? 'banner--amber' : 'banner--info'}`}>
+          <Icon name="bolt" />
+          <div className="col gap-1">
+            <span style={{ fontWeight: 600 }}>{inactivityWarn ? 'No recent live update' : 'Live progress connected'}</span>
+            <span className="mono" style={{ fontSize: 11 }}>{fmtAgo(lastLiveAt, nowMs)}</span>
+          </div>
+        </div>
+
         <div className="card" style={{ padding: 16 }}>
           <span className="label">rollback target</span>
           <div className="mono" style={{ marginTop: 6, wordBreak: 'break-all' }}>
@@ -389,36 +497,140 @@ function StateTab({ state, session: modelType }: { state: ResearchState | null; 
 }
 
 // ─────────────────────────────────────────────────────────────
-function MetricsTab({ iterations }: { iterations: Iteration[] }) {
-  const points: MetricPoint[] = useMemo(
-    () =>
-      iterations
-        .filter((it) => it.primary_metric != null)
-        .map((it) => ({ i: it.iteration, v: it.primary_metric as number, gates: !!it.all_gates_passed })),
-    [iterations],
-  );
+type MetricDef = { key: string; label: string; better?: 'high' | 'low' };
+
+const MODEL_METRICS: Record<string, MetricDef[]> = {
+  direction: [
+    { key: 'walkforward_auc', label: 'WF AUC' },
+    { key: 'auc', label: 'AUC' },
+    { key: 'precision', label: 'Precision' },
+    { key: 'recall', label: 'Recall' },
+    { key: 'f1', label: 'F1' },
+    { key: 'signal_rate', label: 'Signal Rate' },
+    { key: 'optimal_threshold', label: 'Threshold' },
+    { key: 'prediction_horizon', label: 'Horizon' },
+    { key: 'ece_calibrated', label: 'ECE', better: 'low' },
+    { key: 'brier_score_calibrated', label: 'Brier', better: 'low' },
+  ],
+  volatility: [
+    { key: 'walkforward_auc', label: 'WF AUC' },
+    { key: 'auc', label: 'AUC' },
+    { key: 'precision', label: 'Precision' },
+    { key: 'recall', label: 'Recall' },
+    { key: 'f1', label: 'F1' },
+    { key: 'positive_rate', label: 'Positive Rate' },
+    { key: 'atr_mult', label: 'ATR Mult' },
+    { key: 'signal_rate', label: 'Signal Rate' },
+    { key: 'optimal_threshold', label: 'Threshold' },
+    { key: 'ece_calibrated', label: 'ECE', better: 'low' },
+    { key: 'brier_score_calibrated', label: 'Brier', better: 'low' },
+  ],
+  rl: [
+    { key: 'rl_profit_score', label: 'RL Profit' },
+    { key: 'mean_oos_sharpe', label: 'OOS Sharpe' },
+    { key: 'mean_oos_return', label: 'OOS Return' },
+    { key: 'mean_oos_drawdown', label: 'OOS Drawdown', better: 'low' },
+    { key: 'mean_oos_trades', label: 'OOS Trades' },
+    { key: 'trading_score', label: 'Trading Score' },
+    { key: 'post_cost_return', label: 'Post-Cost Return' },
+    { key: 'max_drawdown', label: 'Replay Drawdown', better: 'low' },
+    { key: 'trade_count', label: 'Replay Trades' },
+    { key: 'turnover', label: 'Turnover' },
+  ],
+};
+
+function metricValue(iteration: Iteration, key: string): unknown {
+  const secondary = iteration.secondary_metrics?.[key]?.value;
+  if (secondary != null) return secondary;
+  const readiness = iteration.feature_readiness_metrics?.[key];
+  if (readiness != null) return readiness;
+  const replay = iteration.rl_economic_replay as Record<string, unknown> | null | undefined;
+  if (replay && replay[key] != null) return replay[key];
+  return iteration.metrics?.[key];
+}
+
+function numberValue(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function fmtMetric(value: unknown): string {
+  const numeric = numberValue(value);
+  if (numeric != null) {
+    if (Math.abs(numeric) >= 100) return numeric.toFixed(0);
+    if (Math.abs(numeric) >= 10) return numeric.toFixed(2);
+    return numeric.toFixed(4);
+  }
+  if (value == null || value === '') return '—';
+  return String(value);
+}
+
+function diagnosticsFor(iterations: Iteration[], modelType: string) {
+  const defs = MODEL_METRICS[modelType] || [];
+  const discovered = new Set<string>();
+  for (const it of iterations) {
+    Object.keys(it.secondary_metrics || {}).forEach((key) => discovered.add(key));
+  }
+  const allDefs = [
+    ...defs,
+    ...Array.from(discovered)
+      .filter((key) => !defs.some((def) => def.key === key))
+      .map((key) => ({ key, label: key.replace(/_/g, ' ') })),
+  ];
+
+  return allDefs.map((def) => {
+    const points = iterations
+      .map((it) => ({ iteration: it.iteration, value: metricValue(it, def.key) }))
+      .filter((point) => point.value != null && point.value !== '');
+    const numeric = points
+      .map((point) => ({ iteration: point.iteration, value: numberValue(point.value) }))
+      .filter((point): point is { iteration: number; value: number } => point.value != null);
+    if (!points.length) return null;
+    const latest = points[points.length - 1];
+    const best = numeric.length
+      ? numeric.reduce((winner, point) => {
+          if (def.better === 'low') return point.value < winner.value ? point : winner;
+          return point.value > winner.value ? point : winner;
+        }, numeric[0])
+      : null;
+    return { ...def, latest, best };
+  }).filter(Boolean) as Array<MetricDef & { latest: { iteration: number; value: unknown }; best: { iteration: number; value: number } | null }>;
+}
+
+function MetricsTab({ iterations, modelType }: { iterations: Iteration[]; modelType: string }) {
   const passCount = iterations.filter((it) => it.all_gates_passed).length;
   const passRate = iterations.length ? Math.round((passCount / iterations.length) * 100) : 0;
-  const best = points.reduce((a, b) => (a.v > b.v ? a : b), { i: 0, v: -Infinity, gates: false } as MetricPoint);
-  const delta = points.length > 1 ? (points[points.length - 1].v - points[0].v) : 0;
+  const primaryPoints = iterations.filter((it) => it.primary_metric != null);
+  const best = primaryPoints.reduce<Iteration | null>((winner, it) => {
+    if (!winner) return it;
+    return (it.primary_metric ?? -Infinity) > (winner.primary_metric ?? -Infinity) ? it : winner;
+  }, null);
+  const delta = primaryPoints.length > 1
+    ? (primaryPoints[primaryPoints.length - 1].primary_metric ?? 0) - (primaryPoints[0].primary_metric ?? 0)
+    : 0;
   const avgTrain = (() => {
     const vals = iterations.map((it) => it.training_time_s).filter((v): v is number => typeof v === 'number');
     if (!vals.length) return '—';
     return `${(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1)}s`;
   })();
+  const diagnostics = useMemo(() => diagnosticsFor(iterations, modelType), [iterations, modelType]);
 
   return (
     <div className="col gap-4">
       <div className="card" style={{ padding: 16 }}>
         <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
-          <span className="label">primary metric</span>
-          {best.v > -Infinity && (
+          <span className="label">objective + model metrics</span>
+          {best && best.primary_metric != null && (
             <span className="mono subtle" style={{ fontSize: 11 }}>
-              best #{best.i} · {best.v.toFixed(4)}
+              best #{best.iteration} · {best.primary_metric.toFixed(4)}
             </span>
           )}
         </div>
-        <MetricChart points={points} />
+        <MetricsTrendChart iterations={iterations} />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
         <div className="card" style={{ padding: 16 }}>
@@ -440,6 +652,28 @@ function MetricsTab({ iterations }: { iterations: Iteration[] }) {
         <div className="card" style={{ padding: 16 }}>
           <Stat label="iterations" value={iterations.length} sub={`${passCount} passing gates`} />
         </div>
+      </div>
+      <div className="card">
+        <div className="card__head">
+          <div className="card__title">Model diagnostics</div>
+          <span className="card__sub">{diagnostics.length}</span>
+        </div>
+        {diagnostics.length === 0 ? (
+          <div className="placeholder" style={{ margin: 14, height: 96 }}>no model metrics yet</div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, padding: 14 }}>
+            {diagnostics.map((metric) => (
+              <div key={metric.key} className="card card--raised" style={{ padding: 12 }}>
+                <div className="label">{metric.label}</div>
+                <div className="stat__value stat__value--sm" style={{ marginTop: 6 }}>{fmtMetric(metric.latest.value)}</div>
+                <div className="subtle mono" style={{ fontSize: 11, marginTop: 4 }}>
+                  latest #{metric.latest.iteration}
+                  {metric.best ? ` · best #${metric.best.iteration} ${fmtMetric(metric.best.value)}` : ''}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -549,76 +783,6 @@ function IterationsTab({
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-type LogFilter = 'all' | 'plan' | 'tool' | 'res' | 'warn' | 'err';
-
-const LOG_FILTERS: { id: LogFilter; label: string }[] = [
-  { id: 'all', label: 'all' },
-  { id: 'plan', label: 'plan' },
-  { id: 'tool', label: 'tool' },
-  { id: 'res', label: 'result' },
-  { id: 'warn', label: 'warn' },
-  { id: 'err', label: 'error' },
-];
-
-function logClass(type: string): string {
-  if (type === 'plan') return 'plan';
-  if (type === 'tool' || type === 'tool_call') return 'tool';
-  if (type === 'result' || type === 'res' || type === 'observation') return 'res';
-  if (type === 'warning' || type === 'warn') return 'warn';
-  if (type === 'error' || type === 'err') return 'err';
-  return 'sys';
-}
-
-function AgentLogTab({ entries, researchId }: { entries: AgentLogEntry[]; researchId: string }) {
-  const [filter, setFilter] = useState<LogFilter>('all');
-  const filtered = useMemo(() => {
-    if (filter === 'all') return entries;
-    return entries.filter((e) => logClass(e.type) === filter);
-  }, [entries, filter]);
-  return (
-    <div className="col gap-3">
-      <div className="row gap-2">
-        <div className="btn-group">
-          {LOG_FILTERS.map((f) => (
-            <div key={f.id} className={`seg ${filter === f.id ? 'on' : ''}`} onClick={() => setFilter(f.id)}>
-              {f.label}
-            </div>
-          ))}
-        </div>
-        <span className="grow subtle" style={{ fontSize: 11 }}>
-          {filtered.length} of {entries.length} entries
-        </span>
-        <button
-          className="btn btn--ghost"
-          onClick={() => navigator.clipboard?.writeText(filtered.map((e) => `[${e.ts}] ${e.type}: ${e.content}`).join('\n'))}
-        >
-          <Icon name="copy" /> Copy
-        </button>
-        <button className="btn btn--ghost" onClick={() => api.downloadAgentLog(researchId)}>
-          <Icon name="dl" /> .jsonl
-        </button>
-      </div>
-      <div className="card" style={{ padding: 14 }}>
-        <pre className="log scroll" style={{ maxHeight: 520, margin: 0 }}>
-          {filtered.length === 0 ? (
-            <span className="dim">no log entries…</span>
-          ) : (
-            filtered.map((e, i) => (
-              <div key={`${e.ts}-${i}`}>
-                <span className="ts">[{(e.ts || '').slice(11, 19)}]</span>{' '}
-                <span className={logClass(e.type)}>
-                  {e.type}: {e.content}
-                </span>
-              </div>
-            ))
-          )}
-        </pre>
       </div>
     </div>
   );

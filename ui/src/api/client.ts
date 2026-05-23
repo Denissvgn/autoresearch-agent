@@ -20,6 +20,7 @@ export interface ResearchSession {
   started_at: string;
   completed_at: string | null;
   error_message: string | null;
+  effective_iteration_count?: number | null;
   resumed_from: string | null;
   current_phase?: string | null;
   next_action?: string | null;
@@ -65,6 +66,9 @@ export interface Iteration {
   training_mode: string | null;
   description: string | null;
   secondary_metrics: Record<string, SecondaryMetric>;
+  feature_readiness_metrics?: Record<string, number>;
+  rl_economic_replay?: Record<string, unknown> | null;
+  attempt_snapshot?: Record<string, unknown> | null;
   // ML-59: HPO search phase
   search_phase: string | null;
   attempt_snapshot_hash?: string | null;
@@ -91,6 +95,7 @@ export interface AgentLogEntry {
   type: string;
   content: string;
   meta: Record<string, unknown>;
+  line_number?: number;
   research_id?: string;
   pipeline_phase?: string;
 }
@@ -238,11 +243,25 @@ export interface ResearchState {
   current_phase: string | null;
   next_action: string | null;
   phase_state: {
+    schema_version?: string;
+    research_id?: string;
+    model_type?: string;
+    generated_at?: string;
     current_phase: string | null;
     next_action: string | null;
     blocked: boolean;
     block_reason: string | null;
-    phases: Array<{ id: string; label: string; status: string; next_action: string }>;
+    all_phases_complete?: boolean;
+    iterations_in_current_phase?: number;
+    stalled_iterations?: number;
+    phases: Array<{
+      id: string;
+      label: string;
+      status: string;
+      next_action: string;
+      min_iterations?: number;
+      max_iterations?: number;
+    }>;
   };
   top_candidates: Array<Record<string, unknown>>;
   failed_pruned_configs: Array<Record<string, unknown>>;

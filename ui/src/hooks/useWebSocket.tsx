@@ -1,4 +1,12 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { getAutoresearchWebSocketProtocols } from '../api/client';
 
 export interface WSEvent {
@@ -9,7 +17,15 @@ export interface WSEvent {
   [key: string]: unknown;
 }
 
-export function useWebSocket() {
+interface WebSocketContextValue {
+  connected: boolean;
+  lastEvent: WSEvent | null;
+  on: (type: string, handler: (e: WSEvent) => void) => () => void;
+}
+
+const WebSocketContext = createContext<WebSocketContextValue | null>(null);
+
+function useWebSocketState(): WebSocketContextValue {
   const [connected, setConnected] = useState(false);
   const [lastEvent, setLastEvent] = useState<WSEvent | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -38,7 +54,7 @@ export function useWebSocket() {
         try {
           const rawEvent = JSON.parse(msg.data) as WSEvent;
           const type = rawEvent.type ?? rawEvent.event;
-          if (!type || type === 'ping') return; // ignore server heartbeat
+          if (!type || type === 'ping') return;
           const event: WSEvent = { ...rawEvent, type };
           setLastEvent(event);
           const handlers = listenersRef.current.get(event.type);
@@ -71,4 +87,17 @@ export function useWebSocket() {
   }, []);
 
   return { connected, lastEvent, on };
+}
+
+export function WebSocketProvider({ children }: { children: ReactNode }) {
+  const value = useWebSocketState();
+  return <WebSocketContext.Provider value={value}>{children}</WebSocketContext.Provider>;
+}
+
+export function useWebSocket() {
+  const value = useContext(WebSocketContext);
+  if (!value) {
+    throw new Error('useWebSocket must be used within WebSocketProvider');
+  }
+  return value;
 }

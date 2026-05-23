@@ -41,6 +41,11 @@ function useWSInvalidation() {
         qc.invalidateQueries({ queryKey: ['research-state'] });
         qc.invalidateQueries({ queryKey: ['status'] });
       }),
+      on('phase_state_updated', () => {
+        qc.invalidateQueries({ queryKey: ['session'] });
+        qc.invalidateQueries({ queryKey: ['research-state'] });
+        qc.invalidateQueries({ queryKey: ['status'] });
+      }),
       on('pipeline_phase_completed', () => {
         qc.invalidateQueries({ queryKey: ['session'] });
         qc.invalidateQueries({ queryKey: ['iterations'] });
@@ -76,8 +81,12 @@ function isTerminalStatus(status?: string) {
     || status === 'promotion_blocked';
 }
 
-export function useSessions() {
+export function ResearchRealtimeBridge() {
   useWSInvalidation();
+  return null;
+}
+
+export function useSessions() {
   return useQuery({ queryKey: ['sessions'], queryFn: api.listSessions, refetchInterval: 30_000 });
 }
 

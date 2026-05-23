@@ -170,6 +170,40 @@ def test_governed_runner_executes_without_shell_and_redacts_output(tmp_path: Pat
     assert "ready" in result.output
 
 
+def test_governed_runner_streams_redacted_output_chunks(tmp_path: Path):
+    workspace, session = _workspace(tmp_path)
+    python_path = Path(workspace) / ".venv" / "bin" / "python"
+    python_path.parent.mkdir(parents=True)
+    python_path.symlink_to(sys.executable)
+    script = Path(workspace) / "scripts" / "autotuner" / "enrich_rl_dataset.py"
+    script.parent.mkdir(parents=True)
+    script.write_text(
+        "import sys\n"
+        "print('TOKEN=top-secret', flush=True)\n"
+        "print('progress 1', flush=True)\n"
+        "print('warn password=bad', file=sys.stderr, flush=True)\n",
+        encoding="utf-8",
+    )
+
+    streamed: list[tuple[str, str]] = []
+    runner = GovernedCommandRunner(
+        workspace_root=workspace,
+        session_workspace=session,
+    )
+    result = runner.run(
+        ".venv/bin/python scripts/autotuner/enrich_rl_dataset.py "
+        "--instrument DOGE_USDT --timeframe 15m",
+        timeout_s=900,
+        output_callback=lambda stream, chunk: streamed.append((stream, chunk)),
+    )
+
+    assert result.returncode == 0
+    assert "top-secret" not in result.output
+    assert "top-secret" not in "".join(chunk for _, chunk in streamed)
+    assert any(stream == "stdout" and "TOKEN=<redacted>" in chunk for stream, chunk in streamed)
+    assert any(stream == "stderr" and "password=<redacted>" in chunk for stream, chunk in streamed)
+
+
 def test_governed_runner_timeout_cleans_process_group(tmp_path: Path):
     workspace, session = _workspace(tmp_path)
     python_path = Path(workspace) / ".venv" / "bin" / "python"
