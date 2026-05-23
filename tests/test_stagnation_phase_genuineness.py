@@ -252,6 +252,41 @@ async def test_gc_tsfm_fallback_validation_is_genuine(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_gc_tsfm_structured_fallback_validation_is_genuine(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws"
+    workspace.mkdir(parents=True)
+    store = ResultsStore(str(tmp_path / "store.db"))
+    await store.initialize()
+
+    await _seed_session_with_iterations(
+        store, "res_gc_tsfm_structured",
+        workspace=workspace,
+        iterations=[
+            {
+                "primary_metric": 0.61,
+                "decision": "discard",
+                "phase": "tsfm_sweeps",
+                "metrics": {
+                    "auto_phase_evidence": True,
+                    "tsfm_fallback_validation": {
+                        "passed": True,
+                        "reason": "tabular_candidate_family",
+                        "candidate_family": "tabular",
+                        "is_tsfm_candidate": False,
+                    },
+                },
+            }
+        ],
+        current_phase="tsfm_sweeps",
+    )
+
+    orchestrator = AgentOrchestrator(store)
+    assert await orchestrator._phase_advancement_is_genuine(
+        "res_gc_tsfm_structured", "tsfm_sweeps",
+    ) is True
+
+
+@pytest.mark.asyncio
 async def test_gc_tsfm_auto_only_without_fallback_not_genuine(
     tmp_path: Path,
 ) -> None:

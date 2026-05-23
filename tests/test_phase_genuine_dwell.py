@@ -67,26 +67,65 @@ def test_tsfm_two_auto_evidence_iterations_complete_phase() -> None:
     assert "tsfm_sweeps" in completed
 
 
-def test_ga_tsfm_cardinality_fallback_completes_without_evidence_key() -> None:
-    """G-A: sibling-consistent net (cf. tabular_sweeps >=6, atr_sweep >=4).
-    Two tsfm-tagged iterations carrying NO tsfm evidence key still complete
-    the phase via the cardinality fallback, so a tabular-only instrument
-    cannot wedge here.
+def test_tsfm_keyless_iterations_do_not_complete_phase() -> None:
+    """Two tsfm-tagged iterations carrying no structured TS-FM evidence must
+    not complete Phase 4.  The phase now requires either adapter evidence or
+    fallback validation, not raw cardinality.
     """
     iterations = [
         _iteration(metrics={}, search_phase="tsfm_sweeps", iteration=1),
         _iteration(metrics={}, search_phase="tsfm_sweeps", iteration=2),
     ]
     completed = _completed_phase_ids(iterations, [], [], "direction")
+    assert "tsfm_sweeps" not in completed
+
+
+def test_tsfm_keyless_single_iteration_does_not_complete_phase() -> None:
+    iterations = [
+        _iteration(metrics={}, search_phase="tsfm_sweeps", iteration=1),
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "direction")
+    assert "tsfm_sweeps" not in completed
+
+
+def test_tsfm_structured_fallback_completes_after_dwell() -> None:
+    iterations = [
+        _iteration(
+            metrics={
+                "tsfm_fallback_validation": {
+                    "passed": True,
+                    "reason": "tabular_candidate_family",
+                    "candidate_family": "tabular",
+                    "is_tsfm_candidate": False,
+                    "fallback_available": True,
+                },
+                "auto_phase_evidence": True,
+            },
+            search_phase="tsfm_sweeps",
+            iteration=i,
+        )
+        for i in range(1, 3)
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "direction")
     assert "tsfm_sweeps" in completed
 
 
-def test_ga_tsfm_cardinality_fallback_needs_two_iterations() -> None:
-    """G-A net floor is 2 (the phase's own min_iterations); a single
-    keyless tsfm-tagged iteration must NOT complete the phase.
-    """
+def test_tsfm_structured_fallback_requires_passed_true() -> None:
     iterations = [
-        _iteration(metrics={}, search_phase="tsfm_sweeps", iteration=1),
+        _iteration(
+            metrics={
+                "tsfm_fallback_validation": {
+                    "passed": False,
+                    "reason": "adapter_required",
+                    "candidate_family": "tsfm",
+                    "is_tsfm_candidate": True,
+                },
+                "auto_phase_evidence": True,
+            },
+            search_phase="tsfm_sweeps",
+            iteration=i,
+        )
+        for i in range(1, 3)
     ]
     completed = _completed_phase_ids(iterations, [], [], "direction")
     assert "tsfm_sweeps" not in completed
@@ -104,6 +143,39 @@ def test_tsfm_with_explicit_adapter_key_completes_immediately() -> None:
     ]
     completed = _completed_phase_ids(iterations, [], [], "direction")
     assert "tsfm_sweeps" in completed
+
+
+def test_tsfm_with_structured_adapter_evidence_completes_immediately() -> None:
+    iterations = [
+        _iteration(
+            metrics={
+                "tsfm_adapter": {
+                    "passed": True,
+                    "base_key": "timesfm_adapter",
+                    "candidate_family": "tsfm",
+                    "artifact_paths": {"timesfm_adapter": "adapters/timesfm.joblib"},
+                },
+                "auto_phase_evidence": True,
+            },
+            search_phase="tsfm_sweeps",
+        ),
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "direction")
+    assert "tsfm_sweeps" in completed
+
+
+def test_tsfm_structured_adapter_rejects_passed_false() -> None:
+    iterations = [
+        _iteration(
+            metrics={
+                "tsfm_adapter": {"passed": False, "base_key": "timesfm_adapter"},
+                "auto_phase_evidence": True,
+            },
+            search_phase="tsfm_sweeps",
+        ),
+    ]
+    completed = _completed_phase_ids(iterations, [], [], "direction")
+    assert "tsfm_sweeps" not in completed
 
 
 def test_calibration_replay_requires_phase_tag_when_auto_only() -> None:
@@ -250,9 +322,8 @@ def test_issue7_inference_parity_with_in_phase_tag_completes() -> None:
 
 def test_issue7_tsfm_sweeps_still_completes_off_phase_via_explicit_key() -> None:
     """tsfm_sweeps is deliberately OUT of _PHASE_REQUIRES_IN_PHASE_TAG — its
-    permissive fallback key is genuine evidence regardless of tag. G-A's
-    cardinality net handles the late-bound case; Issue-7 must not regress
-    tsfm completion via the explicit-adapter shortcut.
+    explicit adapter key is genuine evidence regardless of tag. Issue-7
+    must not regress tsfm completion via the explicit-adapter shortcut.
     """
     iterations = [
         _iteration(

@@ -262,8 +262,28 @@ async def test_record_iteration_copies_results_and_merges_nested_evidence(
     await _create_session(store, session_id="res_rich", workspace=workspace)
 
     results_path = workspace / "results.json"
+    payload = _rich_results_payload()
+    payload.update(
+        {
+            "tsfm_fallback_validation": {
+                "passed": True,
+                "reason": "tabular_candidate_family",
+                "candidate_family": "tabular",
+                "is_tsfm_candidate": False,
+            },
+            "tsfm_adapter_metadata": {
+                "timesfm_adapter": {"forecast_type": "probability"}
+            },
+            "tsfm_adapter_configs": {
+                "timesfm_adapter": {"source": "unit-test"}
+            },
+            "tsfm_adapter_artifact_paths": {
+                "timesfm_adapter": "adapters/timesfm.joblib"
+            },
+        }
+    )
     results_path.write_text(
-        json.dumps(_rich_results_payload()) + "\n",
+        json.dumps(payload) + "\n",
         encoding="utf-8",
     )
     source_hash = _sha256(results_path)
@@ -298,6 +318,10 @@ async def test_record_iteration_copies_results_and_merges_nested_evidence(
     assert metrics["requested_base_models"] == ["lgbm", "xgb"]
     assert metrics["candidate_family"] == "tabular"
     assert metrics["is_tsfm_candidate"] is False
+    assert metrics["tsfm_fallback_validation"]["passed"] is True
+    assert metrics["tsfm_adapter_metadata"]["timesfm_adapter"]["forecast_type"] == "probability"
+    assert metrics["tsfm_adapter_configs"]["timesfm_adapter"]["source"] == "unit-test"
+    assert metrics["tsfm_adapter_artifact_paths"]["timesfm_adapter"] == "adapters/timesfm.joblib"
     assert metrics["feature_schema_hash"] == "schema-rich"
     assert metrics["feature_schema_flags"]["adaptive_levels"][
         "selected_feature_names"

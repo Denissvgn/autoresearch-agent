@@ -44,6 +44,11 @@ _NESTED_RESULT_KEYS = (
     "parity_metadata",
     "feature_provenance",
     "adaptive_features",
+    "tsfm_adapter",
+    "tsfm_fallback_validation",
+    "tsfm_adapter_metadata",
+    "tsfm_adapter_configs",
+    "tsfm_adapter_artifact_paths",
 )
 
 _TOP_LEVEL_RESULT_KEYS = (
@@ -294,6 +299,21 @@ def _add_flat_aliases(
             payload.get("is_tsfm_candidate"),
             config.get("is_tsfm_candidate"),
             metrics.get("is_tsfm_candidate"),
+        ),
+        "tsfm_adapter": (
+            payload.get("tsfm_adapter"),
+            config.get("tsfm_adapter"),
+            metrics.get("tsfm_adapter"),
+        ),
+        "tsfm_fallback_validation": (
+            payload.get("tsfm_fallback_validation"),
+            config.get("tsfm_fallback_validation"),
+            metrics.get("tsfm_fallback_validation"),
+        ),
+        "tsfm_adapter_metadata": (
+            payload.get("tsfm_adapter_metadata"),
+            config.get("tsfm_adapter_metadata"),
+            metrics.get("tsfm_adapter_metadata"),
         ),
     }
     for key, candidates in aliases.items():

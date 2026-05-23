@@ -7,6 +7,7 @@ import types
 import urllib.request
 from pathlib import Path
 
+import joblib
 import pytest
 
 
@@ -117,6 +118,122 @@ def test_direction_prepare_passes_adaptive_and_spectral_keys_to_phase1c():
     assert cfg["spectral_features_enabled"] is True
     assert cfg["spectral_features_version"] == "spectral_features.v1"
     assert cfg["spectral_evidence_report_path"] == "reports/spectral.md"
+
+
+def test_direction_prepare_passes_tsfm_fields_to_phase1c():
+    direction = _load_module(
+        "autoresearch_direction_prepare_tsfm_config_contract",
+        REPO_ROOT / "scripts" / "autotuner" / "direction" / "prepare.py",
+    )
+
+    cfg = direction.build_phase1c_config(
+        {
+            "instrument": "DOGE_USDT",
+            "timeframe": "15m",
+            "candidate_family": "tsfm",
+            "model_family": "timesfm",
+            "tsfm_adapter_configs": {"timesfm_adapter": {"forecast_type": "quantile"}},
+            "tsfm_adapter_artifact_paths": {"timesfm_adapter": "adapters/timesfm.joblib"},
+        }
+    )
+
+    assert cfg["candidate_family"] == "tsfm"
+    assert cfg["model_family"] == "timesfm"
+    assert cfg["tsfm_adapter_configs"] == {
+        "timesfm_adapter": {"forecast_type": "quantile"}
+    }
+    assert cfg["tsfm_adapter_artifact_paths"] == {
+        "timesfm_adapter": "adapters/timesfm.joblib"
+    }
+
+
+def test_direction_prepare_extracts_structured_tsfm_fallback_evidence(tmp_path):
+    direction = _load_module(
+        "autoresearch_direction_prepare_tsfm_fallback_contract",
+        REPO_ROOT / "scripts" / "autotuner" / "direction" / "prepare.py",
+    )
+
+    extracted = direction.extract_metrics(
+        {
+            "metrics": {"auc": 0.64, "precision": 0.6, "recall": 0.7, "f1": 0.65},
+            "walkforward": {"walkforward_mean_auc": 0.61, "walkforward_auc_cv": 0.08},
+            "gate_results": {"all_supported_gates_passed": True},
+            "config": {
+                "candidate_family": "tabular",
+                "training_mode": "stacking",
+                "base_models": ["lgb", "xgb"],
+                "operating_signal_rate": 0.42,
+            },
+        }
+    )
+
+    fallback = extracted["tsfm_fallback_validation"]
+    assert fallback["passed"] is True
+    assert fallback["reason"] == "tabular_candidate_family"
+    assert fallback["candidate_family"] == "tabular"
+    assert fallback["is_tsfm_candidate"] is False
+    assert fallback["base_models"] == ["lgb", "xgb"]
+
+    direction.print_summary(extracted, 12.3, marker_dir=tmp_path)
+    marker = (tmp_path / "last_metrics.txt").read_text()
+    assert "tsfm_fallback_validation_json:" in marker
+    assert '"reason":"tabular_candidate_family"' in marker
+
+
+def test_direction_prepare_extracts_tsfm_adapter_evidence_from_metadata():
+    direction = _load_module(
+        "autoresearch_direction_prepare_tsfm_adapter_contract",
+        REPO_ROOT / "scripts" / "autotuner" / "direction" / "prepare.py",
+    )
+
+    extracted = direction.extract_metrics(
+        {
+            "metrics": {"auc": 0.64, "precision": 0.6, "recall": 0.7, "f1": 0.65},
+            "walkforward": {"walkforward_mean_auc": 0.61, "walkforward_auc_cv": 0.08},
+            "gate_results": {"all_supported_gates_passed": True},
+            "candidate_family": "tsfm",
+            "tsfm_adapter_metadata": {
+                "timesfm_adapter": {
+                    "model_family": "timesfm",
+                    "forecast_type": "probability",
+                    "direction_output_name": "direction_proba",
+                }
+            },
+            "config": {
+                "tsfm_adapter_configs": {"timesfm_adapter": {"temperature": 1.0}},
+                "tsfm_adapter_artifact_paths": {
+                    "timesfm_adapter": "adapters/timesfm.joblib"
+                },
+            },
+        }
+    )
+
+    evidence = extracted["tsfm_adapter"]
+    assert evidence["passed"] is True
+    assert evidence["candidate_family"] == "tsfm"
+    assert evidence["base_key"] == "timesfm_adapter"
+    assert evidence["model_family"] == "timesfm"
+    assert evidence["forecast_type"] == "probability"
+    assert evidence["artifact_paths"] == {
+        "timesfm_adapter": "adapters/timesfm.joblib"
+    }
+    assert "tsfm_fallback_validation" not in extracted
+
+
+def test_run_phase1c_loads_tsfm_adapter_artifact_paths(tmp_path):
+    runner = _load_module(
+        "autoresearch_run_phase1c_direction_tsfm_loader_contract",
+        REPO_ROOT / "scripts" / "training" / "run_phase1c_direction.py",
+    )
+    artifact_path = tmp_path / "timesfm.joblib"
+    joblib.dump({"artifact_type": "tsfm_probability_adapter"}, artifact_path)
+
+    loaded = runner.load_tsfm_adapter_artifacts(
+        {"tsfm_adapter_artifact_paths": {"timesfm_adapter": artifact_path.name}},
+        config_dir=tmp_path,
+    )
+
+    assert loaded == {"timesfm_adapter": {"artifact_type": "tsfm_probability_adapter"}}
 
 
 def test_direction_prepare_extracts_and_marks_adaptive_feature_evidence(tmp_path):

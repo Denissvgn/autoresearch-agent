@@ -2264,6 +2264,9 @@ class ConfigPromoter:
         adapter = inference.get("adapter") or inference.get("tsfm_adapter") or {}
         if not isinstance(adapter, dict):
             adapter = {}
+        structured = metrics_payload.get("tsfm_fallback_validation")
+        if not isinstance(structured, dict):
+            structured = {}
         is_tsfm = any(
             value is True
             for value in (
@@ -2271,6 +2274,7 @@ class ConfigPromoter:
                 metrics_payload.get("tsfm_candidate"),
                 inference.get("is_tsfm_candidate"),
                 inference.get("tsfm_candidate"),
+                structured.get("is_tsfm_candidate"),
             )
         )
         if not is_tsfm:
@@ -2279,6 +2283,8 @@ class ConfigPromoter:
                 metrics_payload.get("candidate_family"),
                 inference.get("model_family"),
                 inference.get("candidate_family"),
+                structured.get("model_family"),
+                structured.get("candidate_family"),
             ):
                 if isinstance(value, str) and value.lower() in {
                     "tsfm",
@@ -2287,7 +2293,7 @@ class ConfigPromoter:
                 }:
                     is_tsfm = True
                     break
-        fallback_passed = any(
+        fallback_passed = structured.get("passed") is True or any(
             container.get(key) is True
             for container in (inference, adapter)
             for key in (
@@ -2298,10 +2304,11 @@ class ConfigPromoter:
         )
         return {
             "required": is_tsfm,
-            "passed": fallback_passed if is_tsfm else None,
+            "passed": fallback_passed if is_tsfm else structured.get("passed"),
             "details": {
                 "inference": inference,
                 "adapter": adapter,
+                "structured": structured,
             },
         }
 

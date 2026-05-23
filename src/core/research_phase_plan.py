@@ -53,7 +53,7 @@ DIRECTION_PHASES: List[Dict[str, Any]] = [
     {
         "id": "tsfm_sweeps",
         "label": "TS-FM Sweeps",
-        "next_action": "Evaluate allowed TS-FM probability adapter candidates with tabular fallback preserved. Emit metrics.tsfm_adapter or tsfm_fallback_validation so the phase advances.",
+        "next_action": "Evaluate allowed TS-FM probability adapter candidates with tabular fallback preserved. Emit metrics.tsfm_adapter_json or metrics.tsfm_fallback_validation_json so the phase advances.",
         "min_iterations": 2,
         "max_iterations": 15,
     },
@@ -434,18 +434,12 @@ def _completed_phase_ids(
 
     if _adaptive_phase_completed(iterations):
         completed.add("adaptive_feature_sweeps")
-    tsfm_iters = _iterations_in_phase(iterations, "tsfm_sweeps")
-    if (
-        any(_has_metric(it, *_PHASE_ADVANCEMENT_KEYS["tsfm_sweeps"]) for it in iterations)
+    if any(_has_tsfm_adapter_evidence(it) for it in iterations):
+        completed.add("tsfm_sweeps")
+    elif (
+        any(_has_tsfm_fallback_evidence(it) for it in iterations)
         and _phase_has_genuine_dwell(iterations, "tsfm_sweeps", min_iterations=2)
     ):
-        completed.add("tsfm_sweeps")
-    elif len(tsfm_iters) >= 2:
-        # Sibling-consistent cardinality net (cf. tabular_sweeps >=6,
-        # atr_sweep >=4). tsfm_fallback_validation is a permissive key, so a
-        # legitimately tabular-only instrument that dwells in tsfm_sweeps must
-        # still advance even if the genuine-dwell path does not trip. N=2 is
-        # the phase's own min_iterations.
         completed.add("tsfm_sweeps")
     # AR-5: gate promotion-family phases behind artifact validation.
     # AR-6: also gate behind synthetic-iteration detection.
@@ -599,8 +593,9 @@ def _phase_has_genuine_dwell(
 # carrying the key (typically iter 3 of tabular_sweeps), bypassing per-phase
 # deliberation. Validity is unchanged — check_evidence_artifact still vets the
 # structured artifact. This set documents *which* phases need the agent to at
-# least once mark themselves in-phase. Keep tsfm_sweeps OUT (G-A's cardinality
-# net handles it; the tabular fallback is genuine evidence on any run).
+# least once mark themselves in-phase. Keep tsfm_sweeps OUT so a real
+# adapter key can complete immediately; structured fallback completion is
+# handled separately with the phase dwell floor.
 _PHASE_REQUIRES_IN_PHASE_TAG: frozenset[str] = frozenset(
     {
         "calibration_replay_gates",
@@ -918,6 +913,41 @@ def _has_metric(iteration: Dict[str, Any], *keys: str) -> bool:
     if isinstance(config, dict):
         containers.append(config)
     return any(any(key in container for key in keys) for container in containers)
+
+
+def _metric_values(iteration: Dict[str, Any], *keys: str) -> List[Any]:
+    payload = _parse_json(iteration.get("metrics_json"))
+    if not isinstance(payload, dict):
+        return []
+    containers = [payload]
+    config = payload.get("config")
+    if isinstance(config, dict):
+        containers.append(config)
+    values: List[Any] = []
+    for container in containers:
+        for key in keys:
+            if key in container:
+                values.append(container[key])
+    return values
+
+
+def _evidence_passed(value: Any) -> bool:
+    if isinstance(value, dict):
+        return value.get("passed") is not False
+    return bool(value)
+
+
+def _has_tsfm_adapter_evidence(iteration: Dict[str, Any]) -> bool:
+    return any(_evidence_passed(value) for value in _metric_values(iteration, "tsfm", "tsfm_adapter"))
+
+
+def _has_tsfm_fallback_evidence(iteration: Dict[str, Any]) -> bool:
+    for value in _metric_values(iteration, "tsfm_fallback_validation"):
+        if value is True:
+            return True
+        if isinstance(value, dict) and value.get("passed") is True:
+            return True
+    return False
 
 
 def _dict_at(root: Dict[str, Any], key: str) -> Dict[str, Any]:

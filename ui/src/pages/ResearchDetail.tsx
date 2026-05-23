@@ -838,7 +838,18 @@ function IterationDetails({
     { label: 'Config Hash', value: iteration.config_snapshot_sha256 || '—' },
     { label: 'Snapshot Path', value: iteration.attempt_snapshot_path || '—' },
   ].filter((entry) => entry.value !== '—');
-  const additionalMetricEntries = recordDetailEntries(iteration.metrics, knownMetricKeys);
+  const tsfmEvidenceKeys = new Set([
+    'tsfm_adapter',
+    'tsfm_fallback_validation',
+    'tsfm_adapter_metadata',
+  ]);
+  const additionalMetricOmitKeys = new Set([...knownMetricKeys, ...tsfmEvidenceKeys]);
+  const tsfmEvidenceEntries = recordDetailEntries({
+    tsfm_adapter: iteration.metrics?.tsfm_adapter,
+    tsfm_fallback_validation: iteration.metrics?.tsfm_fallback_validation,
+    tsfm_adapter_metadata: iteration.metrics?.tsfm_adapter_metadata,
+  });
+  const additionalMetricEntries = recordDetailEntries(iteration.metrics, additionalMetricOmitKeys);
   const readinessEntries = recordDetailEntries(iteration.feature_readiness_metrics);
   const replayEntries = recordDetailEntries(iteration.rl_economic_replay as Record<string, unknown> | null | undefined);
   const attemptEntries = recordDetailEntries(iteration.attempt_snapshot);
@@ -855,6 +866,7 @@ function IterationDetails({
       <div className="col gap-4" style={{ padding: 14 }}>
         <DetailGrid title="Objective" entries={objectiveEntries} />
         <DetailGrid title="Model diagnostics" entries={selectedDiagnostics} />
+        <DetailGrid title="TS-FM evidence" entries={tsfmEvidenceEntries} />
         <DetailGrid title="Run artifacts" entries={artifactEntries} />
         <DetailGrid title="Feature readiness" entries={readinessEntries} />
         <DetailGrid title="Economic replay" entries={replayEntries} />

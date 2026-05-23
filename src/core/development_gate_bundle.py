@@ -1229,13 +1229,18 @@ def _evaluate_inference_parity_gates(
         inference.get("tsfm_adapter"),
         payload.get("tsfm_adapter"),
     )
+    fallback_details = _first_dict(payload.get("tsfm_fallback_validation"))
     if tier_checks.get("adapter_loading_required") and tsfm_candidate:
-        fallback_ok = _bool_field(
-            inference,
-            "tabular_fallback_passed",
-            "fallback_check_passed",
-            "fallback_available",
-        ) or _bool_field(adapter_details, "tabular_fallback_passed", "fallback_available")
+        fallback_ok = (
+            fallback_details.get("passed") is True
+            or _bool_field(
+                inference,
+                "tabular_fallback_passed",
+                "fallback_check_passed",
+                "fallback_available",
+            )
+            or _bool_field(adapter_details, "tabular_fallback_passed", "fallback_available")
+        )
         add_check(
             "inference_tsfm_adapter_loading",
             fallback_ok
@@ -1300,17 +1305,25 @@ def _evaluate_inference_parity_gates(
             adapter_details or inference,
         )
     if tier_checks.get("fallback_required_for_tsfm") and tsfm_candidate:
-        add_check(
-            "inference_tsfm_fallback_check",
-            _bool_field(
+        fallback_passed = (
+            fallback_details.get("passed") is True
+            or _bool_field(
                 inference,
                 "fallback_check_passed",
                 "tabular_fallback_passed",
                 "fallback_available",
             )
-            or _bool_field(adapter_details, "fallback_check_passed", "fallback_available"),
+            or _bool_field(adapter_details, "fallback_check_passed", "fallback_available")
+        )
+        add_check(
+            "inference_tsfm_fallback_check",
+            fallback_passed,
             "tsfm_adapter_load_failure_without_tabular_fallback",
-            adapter_details or inference,
+            {
+                "adapter": adapter_details,
+                "fallback": fallback_details,
+                "inference": inference,
+            },
         )
 
 

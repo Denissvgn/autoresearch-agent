@@ -153,8 +153,9 @@ _PHASE_SPECIFIC_AGENT_KEYS: Dict[str, frozenset[str]] = {
 # session is terminated mid-tail. ``tsfm_fallback_validation`` is only ever
 # emitted (and only ever present) when prepare.py determined
 # is_tsfm_candidate=False, so its presence is a trustworthy server signal.
-# Recognizing it here is low-risk: it advances only this single evidence phase
-# (G-A already auto-completes it by cardinality regardless).
+# Recognizing it here is low-risk: it only marks this single evidence
+# phase as genuine for stagnation handling; phase completion still requires
+# adapter evidence or fallback evidence plus dwell in research_phase_plan.
 _TSFM_FALLBACK_GENUINE_PHASE = "tsfm_sweeps"
 
 # ---------------------------------------------------------------------------
@@ -4516,10 +4517,12 @@ class AgentOrchestrator:
             # populates) tsfm_fallback_validation when is_tsfm_candidate=False,
             # so its presence is a trustworthy server determination — not an
             # LLM bare boolean floating the phase up.
-            if (
-                current_phase == _TSFM_FALLBACK_GENUINE_PHASE
-                and metrics.get("tsfm_fallback_validation")
-            ):
+            fallback_validation = metrics.get("tsfm_fallback_validation")
+            fallback_passed = fallback_validation is True or (
+                isinstance(fallback_validation, dict)
+                and fallback_validation.get("passed") is True
+            )
+            if current_phase == _TSFM_FALLBACK_GENUINE_PHASE and fallback_passed:
                 return True
         return False
 

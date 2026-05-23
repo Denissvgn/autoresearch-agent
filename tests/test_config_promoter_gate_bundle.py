@@ -1994,6 +1994,46 @@ async def test_preview_records_tsfm_fallback_check_when_present(
 
 
 @pytest.mark.asyncio
+async def test_preview_accepts_structured_tsfm_fallback_validation(
+    tmp_path,
+    monkeypatch,
+):
+    _write_gate_bundle_with_m7_controls(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(
+        config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
+    )
+    metrics = _passing_metrics()
+    metrics["model_family"] = "tsfm"
+    metrics["tsfm_fallback_validation"] = {
+        "passed": True,
+        "reason": "tabular_fallback_available",
+        "candidate_family": "tsfm",
+        "is_tsfm_candidate": True,
+        "fallback_available": True,
+    }
+    metrics["inference_parity"].update(
+        {
+            "latency_budget_passed": True,
+        }
+    )
+    store = FakePromotionStore(_best_iteration(metrics))
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    assert preview["gate_bundle_evaluation"]["passed"] is True
+    assert preview["development_promotion_metadata"]["tsfm_fallback_validation"][
+        "required"
+    ] is True
+    assert preview["development_promotion_metadata"]["tsfm_fallback_validation"][
+        "passed"
+    ] is True
+    assert preview["development_promotion_metadata"]["tsfm_fallback_validation"][
+        "details"
+    ]["structured"]["reason"] == "tabular_fallback_available"
+
+
+@pytest.mark.asyncio
 async def test_preview_emits_development_signal_health_metrics(
     tmp_path,
     monkeypatch,
