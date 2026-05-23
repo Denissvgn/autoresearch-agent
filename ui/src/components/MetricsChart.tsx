@@ -4,6 +4,8 @@ import type { Iteration } from '../api/client';
 
 interface Props {
   iterations: Iteration[];
+  selectedIteration?: number | null;
+  onSelectIteration?: (iteration: number) => void;
 }
 
 // Key secondary metrics worth charting per model type.
@@ -44,7 +46,7 @@ function trainingGatesPassed(iteration: Iteration): boolean {
   return iteration.training_gates_passed ?? iteration.all_gates_passed;
 }
 
-export default function MetricsChart({ iterations }: Props) {
+export default function MetricsChart({ iterations, selectedIteration = null, onSelectIteration }: Props) {
   const modelType = detectModelType(iterations);
   const secondaryDefs = CHART_METRICS[modelType] || [];
   const [enabledLines, setEnabledLines] = useState<Set<string>>(new Set(['metric']));
@@ -118,15 +120,28 @@ export default function MetricsChart({ iterations }: Props) {
               stroke="#818CF8"
               strokeWidth={2}
               dot={(props: Record<string, unknown>) => {
-                const { cx, cy, payload } = props as { cx: number; cy: number; payload: { passed: boolean } };
+                const { cx, cy, payload } = props as {
+                  cx?: number;
+                  cy?: number;
+                  payload?: { iteration?: number; passed?: boolean };
+                };
+                if (typeof cx !== 'number' || typeof cy !== 'number' || !payload) return <g />;
+                const iteration = Number(payload.iteration);
+                const selected = Number.isFinite(iteration) && selectedIteration === iteration;
                 return (
                   <circle
                     key={`dot-${cx}-${cy}`}
                     cx={cx}
                     cy={cy}
-                    r={4}
+                    r={selected ? 6 : 4}
                     fill={payload.passed ? '#34D399' : '#F87171'}
-                    stroke="none"
+                    stroke={selected ? '#F9FAFB' : 'none'}
+                    strokeWidth={selected ? 2 : 0}
+                    style={onSelectIteration ? { cursor: 'pointer' } : undefined}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (Number.isFinite(iteration)) onSelectIteration?.(iteration);
+                    }}
                   />
                 );
               }}

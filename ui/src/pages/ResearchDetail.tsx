@@ -2,6 +2,7 @@
 // metrics / iterations / agent log. Wired to existing hooks; design ported
 // from hifi/screen-session.jsx.
 import { useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   useIterations,
@@ -510,6 +511,11 @@ function StateTab({
 
 // ─────────────────────────────────────────────────────────────
 type MetricDef = { key: string; label: string; better?: 'high' | 'low' };
+type MetricDiagnostic = MetricDef & {
+  latest: { iteration: number; value: unknown };
+  best: { iteration: number; value: number } | null;
+};
+type DetailEntry = { key?: string; label: string; value: ReactNode };
 
 const MODEL_METRICS: Record<string, MetricDef[]> = {
   direction: [
@@ -570,6 +576,10 @@ function numberValue(value: unknown): number | null {
   return null;
 }
 
+function hasDisplayValue(value: unknown): boolean {
+  return value != null && value !== '';
+}
+
 function fmtMetric(value: unknown): string {
   const numeric = numberValue(value);
   if (numeric != null) {
@@ -577,11 +587,42 @@ function fmtMetric(value: unknown): string {
     if (Math.abs(numeric) >= 10) return numeric.toFixed(2);
     return numeric.toFixed(4);
   }
-  if (value == null || value === '') return '—';
+  if (!hasDisplayValue(value)) return '—';
   return String(value);
 }
 
-function diagnosticsFor(iterations: Iteration[], modelType: string) {
+function metricLabel(key: string): string {
+  return key
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function renderDetailValue(value: unknown): ReactNode {
+  if (!hasDisplayValue(value)) return '—';
+  if (typeof value === 'number') return fmtMetric(value);
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return `${value.length} items`;
+  if (typeof value === 'object') {
+    const json = JSON.stringify(value);
+    const summary = json.length > 96 ? `${json.slice(0, 93)}...` : json;
+    return <span title={json}>{summary}</span>;
+  }
+  return String(value);
+}
+
+function recordDetailEntries(
+  record: Record<string, unknown> | null | undefined,
+  omitKeys = new Set<string>(),
+): DetailEntry[] {
+  if (!record) return [];
+  return Object.entries(record)
+    .filter(([key, value]) => !omitKeys.has(key) && hasDisplayValue(value))
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => ({ key, label: metricLabel(key), value: renderDetailValue(value) }));
+}
+
+function diagnosticsFor(iterations: Iteration[], modelType: string): MetricDiagnostic[] {
   const defs = MODEL_METRICS[modelType] || [];
   const discovered = new Set<string>();
   for (const it of iterations) {
@@ -591,13 +632,13 @@ function diagnosticsFor(iterations: Iteration[], modelType: string) {
     ...defs,
     ...Array.from(discovered)
       .filter((key) => !defs.some((def) => def.key === key))
-      .map((key) => ({ key, label: key.replace(/_/g, ' ') })),
+      .map((key) => ({ key, label: metricLabel(key) })),
   ];
 
   return allDefs.map((def) => {
     const points = iterations
       .map((it) => ({ iteration: it.iteration, value: metricValue(it, def.key) }))
-      .filter((point) => point.value != null && point.value !== '');
+      .filter((point) => hasDisplayValue(point.value));
     const numeric = points
       .map((point) => ({ iteration: point.iteration, value: numberValue(point.value) }))
       .filter((point): point is { iteration: number; value: number } => point.value != null);
@@ -610,13 +651,167 @@ function diagnosticsFor(iterations: Iteration[], modelType: string) {
         }, numeric[0])
       : null;
     return { ...def, latest, best };
-  }).filter(Boolean) as Array<MetricDef & { latest: { iteration: number; value: unknown }; best: { iteration: number; value: number } | null }>;
+  }).filter(Boolean) as MetricDiagnostic[];
+}
+
+function iterationOptionLabel(iteration: Iteration): string {
+  const metric = iteration.primary_metric != null ? fmtMetric(iteration.primary_metric) : '—';
+  const gates = iteration.all_gates_passed ? 'pass' : 'fail';
+  const phase = iteration.search_phase || 'no phase';
+  return `#${iteration.iteration} · ${metric} · ${gates} · ${phase}`;
+}
+
+function DetailGrid({ title, entries }: { title: string; entries: DetailEntry[] }) {
+  if (!entries.length) return null;
+  const visible = entries.slice(0, 12);
+  const hidden = entries.slice(12);
+  const renderEntry = (entry: DetailEntry, index: number) => (
+    <div
+      key={`${entry.key || entry.label}-${index}`}
+      style={{
+        minWidth: 0,
+        background: 'var(--surface-2)',
+        border: '1px solid var(--line-soft)',
+        borderRadius: 'var(--r-2)',
+        padding: 10,
+      }}
+    >
+      <div className="label truncate">{entry.label}</div>
+      <div className="mono truncate" style={{ marginTop: 6, fontSize: 12 }}>
+        {entry.value}
+      </div>
+    </div>
+  );
+
+  return (
+    <section className="col gap-2">
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <span className="label">{title}</span>
+        <span className="mono subtle" style={{ fontSize: 11 }}>{entries.length}</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 10 }}>
+        {visible.map(renderEntry)}
+      </div>
+      {hidden.length > 0 && (
+        <details className="code" style={{ padding: 10 }}>
+          <summary className="mono" style={{ cursor: 'pointer' }}>{hidden.length} more fields</summary>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 10, marginTop: 10 }}>
+            {hidden.map(renderEntry)}
+          </div>
+        </details>
+      )}
+    </section>
+  );
+}
+
+function IterationDetails({
+  iteration,
+  diagnostics,
+}: {
+  iteration: Iteration | null;
+  diagnostics: MetricDiagnostic[];
+}) {
+  if (!iteration) {
+    return <div className="placeholder" style={{ height: 120 }}>no iteration selected</div>;
+  }
+
+  const knownMetricKeys = new Set(diagnostics.map((metric) => metric.key));
+  const objectiveEntries: DetailEntry[] = [
+    { label: 'Iteration', value: `#${iteration.iteration}` },
+    { label: iteration.metric_name || 'Primary Metric', value: fmtMetric(iteration.primary_metric) },
+    { label: 'Gates', value: iteration.all_gates_passed ? 'pass' : 'fail' },
+    { label: 'Training Gates', value: (iteration.training_gates_passed ?? iteration.all_gates_passed) ? 'pass' : 'fail' },
+    { label: 'Decision', value: iteration.decision || '—' },
+    { label: 'Phase', value: iteration.search_phase || '—' },
+    { label: 'Train Time', value: iteration.training_time_s != null ? `${iteration.training_time_s.toFixed(1)}s` : '—' },
+    { label: 'Created', value: iteration.created_at ? fmtAgo(iteration.created_at) : '—' },
+  ];
+  const selectedDiagnostics = diagnostics
+    .map((metric) => ({
+      key: metric.key,
+      label: metric.label,
+      value: metricValue(iteration, metric.key),
+    }))
+    .filter((entry) => hasDisplayValue(entry.value))
+    .map((entry) => ({ ...entry, value: fmtMetric(entry.value) }));
+  const artifactEntries: DetailEntry[] = [
+    iteration.mlflow_url
+      ? {
+          label: 'MLflow Run',
+          value: (
+            <a href={iteration.mlflow_url} target="_blank" rel="noreferrer" className="lnk mono">
+              {(iteration.mlflow_run_id || '').slice(0, 12) || 'open'}
+            </a>
+          ),
+        }
+      : { label: 'MLflow Run', value: iteration.mlflow_run_id || '—' },
+    { label: 'Model Version', value: iteration.model_version || '—' },
+    { label: 'Registry', value: iteration.model_registry_name || '—' },
+    { label: 'Mode', value: iteration.training_mode || '—' },
+    { label: 'Snapshot Hash', value: iteration.attempt_snapshot_hash || '—' },
+    { label: 'Artifact Hash', value: iteration.artifact_hash || '—' },
+    { label: 'Config Hash', value: iteration.config_snapshot_sha256 || '—' },
+    { label: 'Snapshot Path', value: iteration.attempt_snapshot_path || '—' },
+  ].filter((entry) => entry.value !== '—');
+  const additionalMetricEntries = recordDetailEntries(iteration.metrics, knownMetricKeys);
+  const readinessEntries = recordDetailEntries(iteration.feature_readiness_metrics);
+  const replayEntries = recordDetailEntries(iteration.rl_economic_replay as Record<string, unknown> | null | undefined);
+  const attemptEntries = recordDetailEntries(iteration.attempt_snapshot);
+
+  return (
+    <div className="card">
+      <div className="card__head">
+        <div className="card__title">Iteration details</div>
+        <span className="card__sub mono">#{iteration.iteration}</span>
+        <span className={`pill ${iteration.all_gates_passed ? 'pill--green' : 'pill--red'}`}>
+          <span className="dot" /> {iteration.all_gates_passed ? 'pass' : 'fail'}
+        </span>
+      </div>
+      <div className="col gap-4" style={{ padding: 14 }}>
+        <DetailGrid title="Objective" entries={objectiveEntries} />
+        <DetailGrid title="Model diagnostics" entries={selectedDiagnostics} />
+        <DetailGrid title="Run artifacts" entries={artifactEntries} />
+        <DetailGrid title="Feature readiness" entries={readinessEntries} />
+        <DetailGrid title="Economic replay" entries={replayEntries} />
+        <DetailGrid title="Additional metrics" entries={additionalMetricEntries} />
+        <DetailGrid title="Attempt snapshot" entries={attemptEntries} />
+      </div>
+    </div>
+  );
 }
 
 function MetricsTab({ iterations, modelType }: { iterations: Iteration[]; modelType: string }) {
-  const passCount = iterations.filter((it) => it.all_gates_passed).length;
-  const passRate = iterations.length ? Math.round((passCount / iterations.length) * 100) : 0;
-  const primaryPoints = iterations.filter((it) => it.primary_metric != null);
+  const orderedIterations = useMemo(
+    () => [...iterations].sort((a, b) => a.iteration - b.iteration),
+    [iterations],
+  );
+  const latestIteration = orderedIterations.length
+    ? orderedIterations[orderedIterations.length - 1].iteration
+    : null;
+  const [selectedIteration, setSelectedIteration] = useState<number | null>(null);
+  const [manualSelection, setManualSelection] = useState(false);
+
+  useEffect(() => {
+    if (latestIteration == null) {
+      setSelectedIteration(null);
+      setManualSelection(false);
+      return;
+    }
+    const selectedExists =
+      selectedIteration != null && orderedIterations.some((it) => it.iteration === selectedIteration);
+    if (manualSelection && selectedExists) return;
+    if (manualSelection && !selectedExists) setManualSelection(false);
+    setSelectedIteration(latestIteration);
+  }, [latestIteration, manualSelection, orderedIterations, selectedIteration]);
+
+  const selected = useMemo(
+    () => orderedIterations.find((it) => it.iteration === selectedIteration) ?? orderedIterations[orderedIterations.length - 1] ?? null,
+    [orderedIterations, selectedIteration],
+  );
+  const selectedIterationNumber = selected?.iteration ?? null;
+  const passCount = orderedIterations.filter((it) => it.all_gates_passed).length;
+  const passRate = orderedIterations.length ? Math.round((passCount / orderedIterations.length) * 100) : 0;
+  const primaryPoints = orderedIterations.filter((it) => it.primary_metric != null);
   const best = primaryPoints.reduce<Iteration | null>((winner, it) => {
     if (!winner) return it;
     return (it.primary_metric ?? -Infinity) > (winner.primary_metric ?? -Infinity) ? it : winner;
@@ -625,24 +820,63 @@ function MetricsTab({ iterations, modelType }: { iterations: Iteration[]; modelT
     ? (primaryPoints[primaryPoints.length - 1].primary_metric ?? 0) - (primaryPoints[0].primary_metric ?? 0)
     : 0;
   const avgTrain = (() => {
-    const vals = iterations.map((it) => it.training_time_s).filter((v): v is number => typeof v === 'number');
+    const vals = orderedIterations.map((it) => it.training_time_s).filter((v): v is number => typeof v === 'number');
     if (!vals.length) return '—';
     return `${(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1)}s`;
   })();
-  const diagnostics = useMemo(() => diagnosticsFor(iterations, modelType), [iterations, modelType]);
+  const diagnostics = useMemo(() => diagnosticsFor(orderedIterations, modelType), [orderedIterations, modelType]);
+
+  const selectIteration = (iteration: number) => {
+    setSelectedIteration(iteration);
+    setManualSelection(latestIteration != null && iteration !== latestIteration);
+  };
+
+  const followLatest = () => {
+    setManualSelection(false);
+    setSelectedIteration(latestIteration);
+  };
 
   return (
     <div className="col gap-4">
       <div className="card" style={{ padding: 16 }}>
-        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
-          <span className="label">objective + model metrics</span>
-          {best && best.primary_metric != null && (
-            <span className="mono subtle" style={{ fontSize: 11 }}>
-              best #{best.iteration} · {best.primary_metric.toFixed(4)}
-            </span>
-          )}
+        <div className="row gap-3" style={{ justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+          <div className="col gap-1">
+            <span className="label">objective + model metrics</span>
+            {best && best.primary_metric != null && (
+              <span className="mono subtle" style={{ fontSize: 11 }}>
+                best #{best.iteration} · {best.primary_metric.toFixed(4)}
+              </span>
+            )}
+          </div>
+          <div className="row gap-2" style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <select
+              className="select mono"
+              style={{ width: 280 }}
+              value={selectedIterationNumber ?? ''}
+              onChange={(event) => selectIteration(Number(event.target.value))}
+              disabled={!orderedIterations.length}
+              aria-label="Select iteration metrics"
+            >
+              {orderedIterations.slice().reverse().map((iteration) => (
+                <option key={iteration.id} value={iteration.iteration}>
+                  {iterationOptionLabel(iteration)}
+                </option>
+              ))}
+            </select>
+            {manualSelection && latestIteration != null ? (
+              <button className="btn btn--sm btn--ghost" onClick={followLatest}>
+                latest
+              </button>
+            ) : selectedIterationNumber != null ? (
+              <span className="pill pill--info"><span className="dot" /> latest</span>
+            ) : null}
+          </div>
         </div>
-        <MetricsTrendChart iterations={iterations} />
+        <MetricsTrendChart
+          iterations={orderedIterations}
+          selectedIteration={selectedIterationNumber}
+          onSelectIteration={selectIteration}
+        />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
         <div className="card" style={{ padding: 16 }}>
@@ -662,31 +896,39 @@ function MetricsTab({ iterations, modelType }: { iterations: Iteration[]; modelT
           <Stat label="avg train time" value={avgTrain} />
         </div>
         <div className="card" style={{ padding: 16 }}>
-          <Stat label="iterations" value={iterations.length} sub={`${passCount} passing gates`} />
+          <Stat label="iterations" value={orderedIterations.length} sub={`${passCount} passing gates`} />
         </div>
       </div>
       <div className="card">
         <div className="card__head">
           <div className="card__title">Model diagnostics</div>
           <span className="card__sub">{diagnostics.length}</span>
+          {selectedIterationNumber != null && <span className="card__sub mono">selected #{selectedIterationNumber}</span>}
         </div>
         {diagnostics.length === 0 ? (
           <div className="placeholder" style={{ margin: 14, height: 96 }}>no model metrics yet</div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12, padding: 14 }}>
-            {diagnostics.map((metric) => (
-              <div key={metric.key} className="card card--raised" style={{ padding: 12 }}>
-                <div className="label">{metric.label}</div>
-                <div className="stat__value stat__value--sm" style={{ marginTop: 6 }}>{fmtMetric(metric.latest.value)}</div>
-                <div className="subtle mono" style={{ fontSize: 11, marginTop: 4 }}>
-                  latest #{metric.latest.iteration}
-                  {metric.best ? ` · best #${metric.best.iteration} ${fmtMetric(metric.best.value)}` : ''}
+            {diagnostics.map((metric) => {
+              const selectedValue = selected ? metricValue(selected, metric.key) : null;
+              return (
+                <div key={metric.key} className="card card--raised" style={{ padding: 12 }}>
+                  <div className="label">{metric.label}</div>
+                  <div className="stat__value stat__value--sm" style={{ marginTop: 6 }}>
+                    {hasDisplayValue(selectedValue) ? fmtMetric(selectedValue) : '—'}
+                  </div>
+                  <div className="subtle mono" style={{ fontSize: 11, marginTop: 4 }}>
+                    {selectedIterationNumber != null ? `selected #${selectedIterationNumber}` : 'no selection'}
+                    {metric.latest ? ` · latest #${metric.latest.iteration} ${fmtMetric(metric.latest.value)}` : ''}
+                    {metric.best ? ` · best #${metric.best.iteration} ${fmtMetric(metric.best.value)}` : ''}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
+      <IterationDetails iteration={selected} diagnostics={diagnostics} />
     </div>
   );
 }
