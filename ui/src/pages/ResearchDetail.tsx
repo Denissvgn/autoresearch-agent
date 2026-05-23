@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   useIterations,
+  useAgentLog,
   usePauseSession,
   useResearchState,
   useResumeSession,
@@ -46,13 +47,38 @@ function fmtAgo(iso?: string | null, nowMs = Date.now()) {
   return `${Math.round(diff / 3600)}h ago`;
 }
 
+function timestampMs(iso?: string | null): number | null {
+  if (!iso) return null;
+  const ms = new Date(iso).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function latestActivity(candidates: Array<{ at?: string | null; source: string }>): { at: string | null; source: string } {
+  let latest: { at: string | null; source: string; ms: number } = { at: null, source: 'none', ms: -1 };
+  candidates.forEach((candidate) => {
+    const ms = timestampMs(candidate.at);
+    if (ms !== null && ms > latest.ms) {
+      latest = { at: candidate.at ?? null, source: candidate.source, ms };
+    }
+  });
+  return { at: latest.at, source: latest.source };
+}
+
+function eventTimestamp(event: Record<string, unknown>): string | null {
+  if (typeof event.timestamp === 'string') return event.timestamp;
+  const entry = event.entry as Record<string, unknown> | undefined;
+  return typeof entry?.ts === 'string' ? entry.ts : null;
+}
+
 export default function ResearchDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: session, isLoading } = useSession(id!);
   const { data: iterations } = useIterations(id!);
   const { data: state } = useResearchState(id!);
+  const isRunning = session?.status === 'running';
   const isActive = session?.status === 'running' || session?.status === 'paused';
+  const { data: agentLog } = useAgentLog(id!, isActive);
   const { lastEvent } = useWebSocket();
   const [lastLiveAt, setLastLiveAt] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(Date.now());
@@ -69,12 +95,27 @@ export default function ResearchDetail() {
   useEffect(() => {
     if (!lastEvent || !id) return;
     const activePhaseId = session?.active_phase_session_id;
+    const entry = lastEvent.entry as Record<string, unknown> | undefined;
+    const entryMeta = entry?.meta as Record<string, unknown> | undefined;
     const matches =
       lastEvent.research_id === id ||
       lastEvent.pipeline_id === id ||
-      (activePhaseId && lastEvent.research_id === activePhaseId);
+      lastEvent.session_id === id ||
+      entry?.research_id === id ||
+      entryMeta?.research_id === id ||
+      (activePhaseId &&
+        (lastEvent.research_id === activePhaseId ||
+          lastEvent.session_id === activePhaseId ||
+          entry?.research_id === activePhaseId ||
+          entryMeta?.research_id === activePhaseId));
     if (matches) {
-      setLastLiveAt(new Date().toISOString());
+      const at = eventTimestamp(lastEvent) ?? new Date().toISOString();
+      setLastLiveAt((current) =>
+        latestActivity([
+          { at: current, source: 'websocket/log' },
+          { at, source: 'websocket/log' },
+        ]).at,
+      );
       setNowMs(Date.now());
     }
   }, [lastEvent, id, session?.active_phase_session_id]);
@@ -102,6 +143,23 @@ export default function ResearchDetail() {
     stateIterations,
     iterationCount,
   );
+  const latestIterationAt = latestActivity(
+    (iterations ?? []).map((iteration) => ({ at: iteration.created_at, source: 'iteration' })),
+  );
+  const latestAgentLogAt = latestActivity(
+    (agentLog?.entries ?? []).map((entry) => ({ at: entry.ts, source: 'agent log' })),
+  );
+  const backendActivity = latestActivity([
+    { at: state?.phase_state.generated_at, source: 'phase state' },
+    latestAgentLogAt,
+    latestIterationAt,
+    { at: session.completed_at, source: 'session complete' },
+    { at: session.started_at, source: 'session start' },
+  ]);
+  const liveActivity = latestActivity([
+    { at: lastLiveAt, source: 'websocket/log' },
+    backendActivity,
+  ]);
 
   return (
     <div className="col gap-5" style={{ padding: 24 }}>
@@ -257,8 +315,11 @@ export default function ResearchDetail() {
         <StateTab
           state={state ?? null}
           session={session.model_type}
-          lastLiveAt={lastLiveAt}
+          lastActivityAt={liveActivity.at}
+          lastActivitySource={liveActivity.source}
           nowMs={nowMs}
+          isRunning={isRunning}
+          isPaused={session.status === 'paused'}
         />
       )}
       {tab === 'metrics' && <MetricsTab iterations={iterations ?? []} modelType={session.model_type} />}
@@ -272,13 +333,19 @@ export default function ResearchDetail() {
 function StateTab({
   state,
   session: modelType,
-  lastLiveAt,
+  lastActivityAt,
+  lastActivitySource,
   nowMs,
+  isRunning,
+  isPaused,
 }: {
   state: ResearchState | null;
   session: string;
-  lastLiveAt: string | null;
+  lastActivityAt: string | null;
+  lastActivitySource: string;
   nowMs: number;
+  isRunning: boolean;
+  isPaused: boolean;
 }) {
   if (!state) {
     return <div className="placeholder" style={{ height: 240 }}>research state pending…</div>;
@@ -307,7 +374,25 @@ function StateTab({
   const budget = state.budget_usage;
   const budgetPct = Math.min(100, Math.round((budget.api_cost_usd / Math.max(budget.max_budget_usd, 0.0001)) * 100));
   const iterPct = Math.min(100, Math.round((budget.iterations_used / Math.max(1, budget.max_iterations)) * 100));
-  const inactivityWarn = lastLiveAt ? nowMs - new Date(lastLiveAt).getTime() > 120_000 : false;
+  const inactivityWarn = isRunning && lastActivityAt ? nowMs - new Date(lastActivityAt).getTime() > 120_000 : false;
+  const activitySub = !lastActivityAt
+    ? 'waiting for activity'
+    : isPaused
+      ? `paused · ${lastActivitySource}`
+      : !isRunning
+        ? lastActivitySource
+        : inactivityWarn
+          ? `no ${lastActivitySource} > 2m`
+          : lastActivitySource;
+  const activityBannerText = !lastActivityAt
+    ? 'Waiting for live activity'
+    : isPaused
+      ? 'Session paused'
+      : !isRunning
+        ? 'Latest activity captured'
+        : inactivityWarn
+          ? 'No recent live update'
+          : 'Live progress active';
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
@@ -358,9 +443,9 @@ function StateTab({
             <div className="card card--raised" style={{ padding: 12 }}>
               <Stat
                 label="last live event"
-                value={fmtAgo(lastLiveAt, nowMs)}
+                value={fmtAgo(lastActivityAt, nowMs)}
                 deltaDir={inactivityWarn ? 'dn' : 'flat'}
-                sub={inactivityWarn ? 'no update > 2m' : 'websocket/log'}
+                sub={activitySub}
               />
             </div>
           </div>
@@ -451,8 +536,8 @@ function StateTab({
         <div className={`banner ${inactivityWarn ? 'banner--amber' : 'banner--info'}`}>
           <Icon name="bolt" />
           <div className="col gap-1">
-            <span style={{ fontWeight: 600 }}>{inactivityWarn ? 'No recent live update' : 'Live progress connected'}</span>
-            <span className="mono" style={{ fontSize: 11 }}>{fmtAgo(lastLiveAt, nowMs)}</span>
+            <span style={{ fontWeight: 600 }}>{activityBannerText}</span>
+            <span className="mono" style={{ fontSize: 11 }}>{fmtAgo(lastActivityAt, nowMs)}</span>
           </div>
         </div>
 
