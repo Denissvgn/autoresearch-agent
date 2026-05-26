@@ -112,6 +112,72 @@ The image copies `services/shared`, shared `libs/`, `traid_training_sdk`, the
 committed `poetry.lock`, and the `src/` backend package. The runtime command is
 `uvicorn src.main:app --loop uvloop`.
 
+## Clean-start reset
+
+Use this to wipe accumulated experiment state so the next session re-baselines
+on the current code with nothing stale biasing the agent (e.g. after a scoring
+or feature-lane change). It clears, in order: the SQLite experiment DB
+(sessions + iterations + every table that feeds the agent's per-turn memory —
+the iteration-context digest, cross-session summary, and
+`research_sessions.insights`), the on-disk workspace artifacts (including
+`research_resume.md`), and the MLflow model registry + Postgres ML tables.
+
+**Run it only when no session is `running`.** The DB reset refuses unless idle
+(override with `--force`); both scripts default to a safe preview and require an
+explicit confirmation flag to delete.
+
+1. **Rebuild and restart the affected images** so the new code is live first:
+
+   ```bash
+   docker compose -f compose/base.yml -f compose/infra.yml -f compose/ml.yml -f compose/autoresearch.yml \
+       build autoresearch-agent ensemble-trainer
+   docker compose -f compose/base.yml -f compose/infra.yml -f compose/ml.yml -f compose/autoresearch.yml \
+       up -d autoresearch-agent ensemble-trainer
+   ```
+
+2. **Reset the agent DB + workspace** (in-container, stdlib-only). Preview first:
+
+   ```bash
+   # Preview (no --yes-i-am-sure ⇒ dry-run). The scripts + venv live under
+   # /app/workspace, so cd there first.
+   docker exec traid_autoresearch_agent sh -c \
+       'cd /app/workspace && .venv/bin/python scripts/autotuner/reset_direction_state.py --dry-run'
+   # Full reset (all instruments / model types)
+   docker exec traid_autoresearch_agent sh -c \
+       'cd /app/workspace && .venv/bin/python scripts/autotuner/reset_direction_state.py --yes-i-am-sure'
+   ```
+
+   Scope to one model with `--instrument DOGE_USDT --timeframe 15m --model-type direction`.
+   Add `--keep-workspace` to wipe the DB only.
+
+3. **Clean the MLflow registry + Postgres ML tables** with the existing script
+   (run from an environment that has `mlflow`+`psycopg2` and can reach
+   `mlflow:5000` / Postgres — the repo `.venv` or the ensemble-trainer
+   container). Preview first; `--all` wipes the **entire** registry (all trading
+   models), which is intended for a full reset:
+
+   ```bash
+   .venv/bin/python scripts/db/cleanup_model_registry.py --dry-run --all \
+       --db-url postgresql://admin:secure_password_2024@localhost:5433/traid_platform_db
+   .venv/bin/python scripts/db/cleanup_model_registry.py --all --include-redis --yes-i-am-sure \
+       --db-url postgresql://admin:secure_password_2024@localhost:5433/traid_platform_db \
+       --redis-url redis://:redis_secure_2024@localhost:6380/0
+   ```
+
+4. **Verify clean** then launch a fresh session:
+
+   ```bash
+   docker exec -i traid_autoresearch_agent /app/workspace/.venv/bin/python - <<'PY'
+   import sqlite3; c=sqlite3.connect("/app/workspace/db/experiments.db")
+   print("sessions", c.execute("SELECT count(*) FROM research_sessions").fetchone()[0],
+         "iterations", c.execute("SELECT count(*) FROM iterations").fetchone()[0])
+   PY
+   ```
+
+   Expect `0 0`, no `research_resume.md` under `runs/autotuner/*`, and no
+   `direction_model*` in the MLflow registry. The next session starts at
+   `baseline_capture` with a freshly measured baseline.
+
 ## SQLite Schema
 
 SQLite remains intentional for this single-writer service. Schema evolution is

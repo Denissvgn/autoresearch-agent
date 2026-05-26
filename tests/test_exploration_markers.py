@@ -58,6 +58,43 @@ def test_direction_none_current_value_treated_as_no_diff() -> None:
     assert derive_exploration_markers("direction", cur, base) == {}
 
 
+# --- Direction: nested feature_config lane toggles ---------------------- #
+
+
+def test_direction_feature_lane_toggle_emits_tabular_variant() -> None:
+    """Flipping a nested feature_config lane is a deliberate feature-set
+    change → credited as a tabular_sweep_variant so the phase advances and the
+    iter is not treated as a no-op/duplicate. The variant label drops the
+    nesting prefix for readability."""
+    cur = {"feature_config": {"directional_change_features_enabled": True}}
+    base = {"feature_config": {"directional_change_features_enabled": False}}
+    markers = derive_exploration_markers("direction", cur, base)
+    assert markers == {"tabular_sweep_variant": "directional_change_features_enabled=True"}
+
+
+def test_direction_feature_lane_absent_in_baseline_counts_as_diff() -> None:
+    """Baseline omits the lane key entirely (the common case — only funding is
+    set by default); enabling it should still register as a diff."""
+    cur = {"feature_config": {"vdmc_enabled": True}}
+    base = {"feature_config": {"funding_features_enabled": True}}
+    markers = derive_exploration_markers("direction", cur, base)
+    assert markers == {"tabular_sweep_variant": "vdmc_enabled=True"}
+
+
+def test_direction_feature_config_unchanged_returns_empty() -> None:
+    cfg = {"feature_config": {"funding_features_enabled": True, "vdmc_enabled": False}}
+    assert derive_exploration_markers("direction", cfg, cfg) == {}
+
+
+def test_direction_meta_model_is_no_longer_salient() -> None:
+    """meta_model was pruned from the knob map: serving is Option A (best base
+    learner), so the meta-stacker it controls is never served and changing it
+    must not credit a phase advance."""
+    cur = {"meta_model": "rf"}
+    base = {"meta_model": "logreg"}
+    assert derive_exploration_markers("direction", cur, base) == {}
+
+
 # --- Volatility: knobs map to three distinct marker keys ---------------- #
 
 

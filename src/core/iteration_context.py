@@ -107,6 +107,10 @@ _PARAM_BUCKETS: dict[str, dict[str, "float | str"]] = {
 # server auto-derive the marker from any salient-knob diff vs the baseline
 # iter's config_snapshot, restoring the fast key-path without requiring
 # LLM compliance with the prompt instruction.
+#
+# Keys may be dotted to address nested config blocks (e.g. the ``feature_config``
+# lane sub-flags), resolved against the parsed config_snapshot by
+# ``derive_exploration_markers`` → ``_resolve_dotted``.
 _KNOB_TO_MARKER: dict[str, dict[str, str]] = {
     "direction": {
         "direction_pct_threshold": "tabular_sweep_variant",
@@ -115,10 +119,17 @@ _KNOB_TO_MARKER: dict[str, dict[str, str]] = {
         "calibration_method": "tabular_sweep_variant",
         "purge_multiplier": "tabular_sweep_variant",
         "horizon": "tabular_sweep_variant",
-        "meta_model": "tabular_sweep_variant",
         "sample_weight_halflife": "tabular_sweep_variant",
         "threshold_strategy": "tabular_sweep_variant",
         "threshold_beta": "tabular_sweep_variant",
+        # Feature-lane toggles (nested under feature_config) — flipping a lane is a
+        # deliberate feature-set change, so credit it as a tabular_sweep_variant so
+        # the phase advances and the iter is not treated as a no-op/duplicate.
+        "feature_config.funding_features_enabled": "tabular_sweep_variant",
+        "feature_config.open_interest_features_enabled": "tabular_sweep_variant",
+        "feature_config.directional_change_features_enabled": "tabular_sweep_variant",
+        "feature_config.vdmc_enabled": "tabular_sweep_variant",
+        "feature_config.spectral_features_enabled": "tabular_sweep_variant",
     },
     "volatility": {
         "volatility_atr_mult": "atr_mult_sweep_enabled",
@@ -155,13 +166,30 @@ def derive_exploration_markers(
     knob_map = _KNOB_TO_MARKER.get(model_type, {})
     markers: dict[str, Any] = {}
     for knob, marker_key in knob_map.items():
-        cur = current_config.get(knob)
-        base = baseline_config.get(knob)
+        cur = _resolve_dotted(current_config, knob)
+        base = _resolve_dotted(baseline_config, knob)
         if cur is not None and cur != base:
             existing = markers.get(marker_key)
-            entry = f"{knob}={cur}"
+            # Drop the nesting prefix in the human-readable variant label.
+            entry = f"{knob.rsplit('.', 1)[-1]}={cur}"
             markers[marker_key] = f"{existing}+{entry}" if existing else entry
     return markers
+
+
+def _resolve_dotted(config: Mapping[str, Any], key: str) -> Any:
+    """Resolve a possibly-dotted knob name against a (possibly nested) config.
+
+    ``"threshold_beta"`` reads ``config["threshold_beta"]``;
+    ``"feature_config.vdmc_enabled"`` walks into the nested ``feature_config``
+    block. Returns None if any segment is missing or not a mapping."""
+    if "." not in key:
+        return config.get(key)
+    node: Any = config
+    for part in key.split("."):
+        if not isinstance(node, Mapping):
+            return None
+        node = node.get(part)
+    return node
 
 
 def build_iteration_context_digest(
