@@ -220,6 +220,9 @@ def build_iteration_context_digest(
 
     lines.append(f"- Current blockers: {_blockers_line(rows)}")
     lines.append(f"- Do not repeat: {_duplicate_line(rows)}")
+    # Action 5: within-session foresight — list the distinct configs already tried so
+    # the agent avoids spending a turn proposing a duplicate the guard would reject.
+    lines.extend(_tried_configs_lines(rows))
     hpo_line = _hpo_line(studies, trials)
     if hpo_line:
         lines.append(f"- HPO/planned trials: {hpo_line}")
@@ -359,6 +362,50 @@ def _duplicate_line(iterations: List[Mapping[str, Any]]) -> str:
     reason = row.get("duplicate_reason") or "duplicate training attempt"
     suffix = f" iteration {iteration}" if iteration is not None else ""
     return f"{_short(str(reason), 180)}; duplicate_of={ref}{suffix}"
+
+
+def _tried_configs_lines(iterations: List[Mapping[str, Any]]) -> List[str]:
+    """Action 5: enumerate the distinct configs already attempted THIS session,
+    decoded with their label levers (label_mode / threshold / atr_barrier_mult), so
+    the agent does not spend a turn re-proposing a config the dedup guard will reject.
+    Reuses the per-iteration levers surfaced into the iteration record (P5)."""
+    seen: set[str] = set()
+    entries: List[str] = []
+    for row in reversed(iterations):  # most-recent first
+        metrics = _parse_mapping(row.get("metrics_json"))
+        chash = (
+            row.get("canonical_config_hash")
+            or metrics.get("canonical_config_hash")
+        )
+        label_mode = metrics.get("label_mode") or row.get("label_mode")
+        threshold = metrics.get("direction_pct_threshold")
+        if threshold is None:
+            threshold = row.get("direction_pct_threshold")
+        atr_mult = metrics.get("atr_barrier_mult")
+        key = str(chash) if chash else f"{label_mode}|{threshold}|{atr_mult}"
+        if key in seen:
+            continue
+        seen.add(key)
+        desc: List[str] = []
+        if label_mode:
+            desc.append(str(label_mode))
+        if threshold is not None:
+            desc.append(f"thr={_fmt(_number(threshold))}")
+        if label_mode == "vol_scaled" and atr_mult is not None:
+            desc.append(f"atr_mult={_fmt(_number(atr_mult))}")
+        if chash:
+            desc.append(f"hash={_short(str(chash), 12)}")
+        if desc:
+            entries.append(f"#{row.get('iteration', '?')} " + " ".join(desc))
+        if len(entries) >= 8:
+            break
+    if not entries:
+        return []
+    return [
+        "- Already tried this session (do NOT re-propose an identical canonical "
+        "config — it will be dedup-rejected; vary a meaningful lever):",
+        *[f"  - {entry}" for entry in entries],
+    ]
 
 
 def _hpo_line(

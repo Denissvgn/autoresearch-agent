@@ -101,3 +101,77 @@ def test_iteration_context_digest_handles_empty_iterations():
 
     assert "Best so far: none yet" in digest
     assert "none recorded yet" in digest
+
+
+def test_digest_lists_tried_configs_for_dedup_foresight():
+    """Action 5: the digest enumerates distinct configs already attempted this
+    session (decoded with label levers) so the agent does not re-propose a
+    dedup-rejected config."""
+    session = {
+        "id": "res_tried",
+        "instrument": "DOGE_USDT",
+        "timeframe": "15m",
+        "model_type": "direction",
+        "max_iterations": 10,
+        "max_budget_usd": 2.0,
+        "total_api_cost_usd": 0.5,
+    }
+    iterations = [
+        {
+            "iteration": 1,
+            "primary_metric": 0.40,
+            "decision": "keep",
+            "canonical_config_hash": "fixedcfg01",
+            "metrics_json": json.dumps(
+                {"label_mode": "fixed_pct", "direction_pct_threshold": 0.03}
+            ),
+        },
+        {
+            "iteration": 2,
+            "primary_metric": 0.36,
+            "decision": "discard",
+            "canonical_config_hash": "volcfg02",
+            "metrics_json": json.dumps(
+                {
+                    "label_mode": "vol_scaled",
+                    "direction_pct_threshold": 0.02,
+                    "atr_barrier_mult": 1.5,
+                }
+            ),
+        },
+    ]
+
+    digest = build_iteration_context_digest(session=session, iterations=iterations)
+
+    assert "Already tried this session" in digest
+    assert "fixed_pct" in digest
+    assert "vol_scaled" in digest
+    assert "atr_mult=" in digest  # vol_scaled iteration surfaces atr_barrier_mult
+    assert "fixedcfg01" in digest  # short hash (<=12 chars) rendered untruncated
+
+
+def test_digest_tried_configs_dedupes_repeated_hash():
+    session = {
+        "id": "res_tried2",
+        "instrument": "DOGE_USDT",
+        "timeframe": "15m",
+        "model_type": "direction",
+        "max_iterations": 10,
+        "max_budget_usd": 2.0,
+        "total_api_cost_usd": 0.5,
+    }
+    same = {
+        "canonical_config_hash": "dupcfg01",
+        "metrics_json": json.dumps(
+            {"label_mode": "fixed_pct", "direction_pct_threshold": 0.03}
+        ),
+    }
+    iterations = [
+        {"iteration": 1, "primary_metric": 0.40, "decision": "keep", **same},
+        {"iteration": 2, "primary_metric": 0.40, "decision": "discard", **same},
+    ]
+    digest = build_iteration_context_digest(session=session, iterations=iterations)
+    # The repeated canonical hash should appear once in the tried-configs list
+    # (the "hash=" rendering is unique to that section; the bare hash may also
+    # appear in the "Do not repeat" recent-identities line).
+    assert digest.count("hash=dupcfg01") == 1

@@ -2463,6 +2463,23 @@ class AgentOrchestrator:
                         + response.usage.output_tokens * _CLAUDE_OUTPUT_USD_PER_TOKEN
                     )
                     total_cost += turn_cost
+                    # P3: persist the running spend to the session row each turn so
+                    # total_api_cost_usd is visible mid-run (UI/API + any external
+                    # budget check) and survives a crash — the DB previously stayed
+                    # $0 until completion. Best-effort: a transient DB error must not
+                    # abort the research loop. The completion write remains the
+                    # authoritative final value.
+                    if turn_cost > 0:
+                        try:
+                            await self._store.update_session(
+                                research_id,
+                                total_api_cost_usd=round(total_cost, 4),
+                            )
+                        except Exception as exc:  # pragma: no cover — fail-open
+                            logger.warning(
+                                "Research %s: mid-run cost persist failed: %s",
+                                research_id, exc,
+                            )
 
                 # Process response content blocks
                 assistant_content = response.content

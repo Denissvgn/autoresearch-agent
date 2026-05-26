@@ -578,3 +578,39 @@ def test_artifact_resolver_prefers_stored_model_path(
     )
 
     assert resolved == str(model_path.parent)
+
+
+def test_merge_result_payload_surfaces_label_levers_as_flat_aliases() -> None:
+    """P5/Action 6: label_mode, direction_pct_threshold and atr_barrier_mult from
+    the results.json config block surface as flat marker keys for reliable
+    per-iteration attribution and dedup foresight."""
+    from src.core.result_artifact import merge_result_payload
+
+    marker: Dict[str, Any] = {}
+    payload = {
+        "config": {
+            "label_mode": "vol_scaled",
+            "direction_pct_threshold": 0.025,
+            "atr_barrier_mult": 1.5,
+        }
+    }
+    merge_result_payload(marker, payload)
+    assert marker["label_mode"] == "vol_scaled"
+    assert marker["direction_pct_threshold"] == 0.025
+    assert marker["atr_barrier_mult"] == 1.5
+
+
+def test_merge_result_payload_carries_regime_gated_replay_nested() -> None:
+    """Action 4: economic_replay_regime_gated is a nested result key, merged into
+    the marker like economic_replay (diagnostic only)."""
+    from src.core.result_artifact import merge_result_payload
+
+    marker: Dict[str, Any] = {}
+    gated = {
+        "source": "oof_regime_gated_replay",
+        "post_cost_sharpe": 0.3,
+        "max_drawdown": -0.2,
+        "traded_fraction": 0.6,
+    }
+    merge_result_payload(marker, {"economic_replay_regime_gated": gated})
+    assert marker["economic_replay_regime_gated"] == gated

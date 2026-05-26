@@ -27,6 +27,7 @@ _NESTED_RESULT_KEYS = (
     "calibration_full_validation",
     "calibration_diagnostics",
     "economic_replay",
+    "economic_replay_regime_gated",
     "replay",
     "replay_gates",
     "aggregate",
@@ -284,6 +285,11 @@ def _add_flat_aliases(
         "prediction_horizon": (config.get("prediction_horizon"),),
         "positive_rate": (config.get("label_positive_rate"),),
         "atr_mult": (config.get("atr_mult"),),
+        # P5: label-mode levers actually used by the run, surfaced flat for reliable
+        # per-iteration config attribution and within-session dedup foresight.
+        "label_mode": (config.get("label_mode"), metrics.get("label_mode")),
+        "direction_pct_threshold": (config.get("direction_pct_threshold"),),
+        "atr_barrier_mult": (config.get("atr_barrier_mult"),),
         "n_features": (payload.get("n_features"), metrics.get("n_features")),
         "candidate_family": (
             payload.get("candidate_family"),
