@@ -27,6 +27,7 @@ import asyncio
 import json
 import logging
 import math
+import os
 from typing import Any, Dict, Optional, Tuple
 
 import httpx
@@ -432,12 +433,31 @@ def _candidate_handle(metrics: Dict[str, Any]) -> Dict[str, Any]:
     """Compact identifier the inference service uses to locate the candidate
     artifact (mlflow run + config_snapshot suffice). Inference-service can
     extend this contract without breaking the autoresearch side.
+
+    ``result_artifact_path`` in the iteration metrics is the *local* on-disk
+    result JSON (e.g. ``/app/workspace/runs/.../iteration_NNNN_results.json``),
+    NOT an MLflow artifact subpath. Forwarding it caused inference-service to
+    feed a local path into ``download_artifacts`` → ``artifact_download_failed``.
+    Only forward it when it looks like a relative MLflow artifact subpath;
+    otherwise omit it so inference-service resolves the model from the run.
     """
+    raw_path = metrics.get("result_artifact_path")
+    artifact_path = raw_path if _is_relative_artifact_subpath(raw_path) else None
     return {
         "mlflow_run_id": metrics.get("mlflow_run_id"),
-        "result_artifact_path": metrics.get("result_artifact_path"),
+        "result_artifact_path": artifact_path,
         "config_snapshot_hash": metrics.get("canonical_config_hash"),
     }
+
+
+def _is_relative_artifact_subpath(path: Any) -> bool:
+    """True when ``path`` could be an MLflow artifact subpath (relative dir),
+    not a local filesystem path or a non-model file (results.json / parquet)."""
+    if not isinstance(path, str) or not path:
+        return False
+    if os.path.isabs(path):
+        return False
+    return not path.lower().endswith((".json", ".parquet", ".pkl"))
 
 
 def _inference_service_auth_headers() -> Optional[Dict[str, str]]:

@@ -414,3 +414,49 @@ async def test_collector_passthrough_skips_paper_replay_call(
         f"paper/replay must be skipped when paper_validation is pre-staged; "
         f"captured URLs: {urls}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Fix #1 (autoresearch side) — the candidate handle must not forward a *local*
+# result_artifact_path (a results.json on disk) as an MLflow artifact locator.
+# ---------------------------------------------------------------------------
+from src.core.promotion_evidence_collector import (  # noqa: E402
+    _candidate_handle,
+    _is_relative_artifact_subpath,
+)
+
+
+def test_is_relative_artifact_subpath():
+    assert _is_relative_artifact_subpath("direction_model") is True
+    assert _is_relative_artifact_subpath("volatility_ensemble_model") is True
+    # Rejected: the historical bug input + other non-artifact values
+    assert _is_relative_artifact_subpath(
+        "/app/workspace/runs/x/iteration_0008_results.json"
+    ) is False
+    assert _is_relative_artifact_subpath("results.json") is False
+    assert _is_relative_artifact_subpath("oof.parquet") is False
+    assert _is_relative_artifact_subpath("model.pkl") is False
+    assert _is_relative_artifact_subpath(None) is False
+    assert _is_relative_artifact_subpath(123) is False
+
+
+def test_candidate_handle_drops_local_results_json_path():
+    handle = _candidate_handle(
+        {
+            "mlflow_run_id": "run-123",
+            "result_artifact_path": "/app/workspace/runs/x/iteration_0008_results.json",
+            "canonical_config_hash": "abc",
+        }
+    )
+    assert handle["mlflow_run_id"] == "run-123"
+    assert handle["config_snapshot_hash"] == "abc"
+    # The local results.json path must be dropped (inference-service resolves
+    # the model from the run instead).
+    assert handle["result_artifact_path"] is None
+
+
+def test_candidate_handle_keeps_relative_artifact_subpath():
+    handle = _candidate_handle(
+        {"mlflow_run_id": "run-9", "result_artifact_path": "direction_model"}
+    )
+    assert handle["result_artifact_path"] == "direction_model"
