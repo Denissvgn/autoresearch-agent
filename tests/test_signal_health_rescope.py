@@ -73,3 +73,108 @@ def test_signal_saturation_still_blocks_when_rate_exceeds_cap() -> None:
         bundle=_bundle(), model_type="direction", best_iteration=_iteration(metrics),
     )
     assert "signal_saturation" in result["blockers"]
+
+
+def test_signal_saturation_does_not_block_when_only_oof_youden_exceeds_cap() -> None:
+    """DM-3: regression for the phantom signal_saturation blocker observed on
+    res_be66790e192e. The *deployed* operating signal rate (0.199 on the
+    served threshold) passes the 0.35 cap, but an OOF / Youden-J variant
+    (0.765) is also present in ``gate_results``. The previous
+    ``_max_number(...)`` aggregation took ``max(0.199, 0.765) = 0.765`` and
+    tripped the gate; the precedence-ordered resolver must pick the
+    higher-trust deployed value first and ignore the lower-trust OOF entry."""
+    metrics = {
+        # Untagged Youden-J / OOF variant bleeding into the gate-results bag.
+        # Lowest precedence in the resolver — must NOT win over canonical
+        # deployed sources higher up.
+        "gate_results": {"operating_signal_rate": 0.765},
+        # Deployed operating rate emitted by prepare.py (the value the
+        # inference service will actually serve). Higher precedence.
+        "signal_rate": 0.199,
+        "signal_health": {
+            "metrics": {
+                "probability_mean": 0.61,
+                "probability_std": 0.08,
+                "entropy_mean": 0.74,
+                "signal_rate": 0.199,
+            },
+        },
+    }
+    result = evaluate_development_gate_bundle(
+        bundle=_bundle(), model_type="direction", best_iteration=_iteration(metrics),
+    )
+    assert "signal_saturation" not in result["blockers"]
+
+
+def test_signal_saturation_does_not_block_when_fold_max_within_distribution_buffer() -> None:
+    """DM-3 distribution-gate scope: ``signal_rate_distribution.max`` is the
+    walk-forward per-fold max, NOT the single served operating point. The
+    previous gate compared it against ``max_signal_rate`` (the operating
+    cap, e.g. 0.35), which is the wrong scope — per-fold variance naturally
+    runs higher than the operating mean. With the operating served rate at
+    0.249 (well under 0.35) and fold-3 at 0.361, the gate must use the
+    looser distribution threshold (default ``max_signal_rate * 1.2 = 0.42``)
+    and not block. Mirrors the actual data from res_be66790e192e iter 7."""
+    metrics = {
+        # Deployed served rate — passes the operating cap.
+        "signal_rate": 0.249,
+        "gate_results": {"operating_signal_rate": 0.249},
+        # Per-fold distribution from served_best_base_at_operating_threshold.
+        # max=0.361 > operating cap 0.35 but within the per-fold variance
+        # buffer (0.42).
+        "config": {
+            "calibration_full_validation": {
+                "signal_rate_distribution": {
+                    "by_fold": [0.318, 0.300, 0.361],
+                    "max": 0.361,
+                    "mean": 0.326,
+                    "min": 0.300,
+                    "source": "served_best_base_at_operating_threshold",
+                },
+            },
+        },
+        "signal_health": {
+            "metrics": {
+                "probability_mean": 0.61,
+                "probability_std": 0.08,
+                "entropy_mean": 0.74,
+                "signal_rate": 0.249,
+            },
+        },
+    }
+    result = evaluate_development_gate_bundle(
+        bundle=_bundle(), model_type="direction", best_iteration=_iteration(metrics),
+    )
+    assert "signal_saturation" not in result["blockers"]
+
+
+def test_signal_saturation_blocks_when_fold_max_exceeds_distribution_buffer() -> None:
+    """DM-3 mirror: the distribution gate must still block when per-fold
+    saturation is genuinely above the buffer (cap * 1.2 = 0.42 by default).
+    Guards against the relaxed threshold becoming a free pass."""
+    metrics = {
+        "signal_rate": 0.30,
+        "gate_results": {"operating_signal_rate": 0.30},
+        "config": {
+            "calibration_full_validation": {
+                "signal_rate_distribution": {
+                    "by_fold": [0.40, 0.45, 0.50],
+                    "max": 0.50,  # > 0.42 distribution buffer
+                    "mean": 0.45,
+                    "source": "served_best_base_at_operating_threshold",
+                },
+            },
+        },
+        "signal_health": {
+            "metrics": {
+                "probability_mean": 0.61,
+                "probability_std": 0.08,
+                "entropy_mean": 0.74,
+                "signal_rate": 0.30,
+            },
+        },
+    }
+    result = evaluate_development_gate_bundle(
+        bundle=_bundle(), model_type="direction", best_iteration=_iteration(metrics),
+    )
+    assert "signal_saturation" in result["blockers"]

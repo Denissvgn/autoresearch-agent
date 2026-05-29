@@ -644,6 +644,18 @@ def _is_synthetic_promotion_iteration(
     ):
         return None
 
+    # DM-1 exception: explicit evidence-replay iterations carry an audited
+    # link to the session's best (``evidence_replayed_from_iteration``) and
+    # inherit that iteration's phase-advancement evidence. The orchestrator
+    # only emits this marker when the canonical config-hash matches the
+    # session-best AND the active phase is in
+    # ``EVIDENCE_INHERITABLE_PHASES`` — so the source iteration is
+    # provably the canonical one for this evidence. Treat as a legitimate
+    # replay (not synthetic) so the phase machine advances without forcing
+    # another ~7-minute re-train of an unchanged config.
+    if metrics.get("evidence_replayed_from_iteration") is not None:
+        return None
+
     # Condition 1: no training ran.
     if metrics.get("training_time_s") is not None:
         return None

@@ -154,17 +154,24 @@ def evaluate_development_gate_bundle(
         comparator=">=",
         reason="direction_auc_below_gate_or_missing",
     )
+    # DM-3: this gate must compare the *deployed* operating signal rate
+    # against the cap, NOT a Youden-J / calibrated-OOF rate that the trainer
+    # may also expose. Use a precedence-ordered resolver (first non-null
+    # wins) instead of ``_max_number(...)`` — taking the max conflated the
+    # served rate with off-policy variants and produced the phantom
+    # ``signal_saturation`` blocker observed on session res_be66790e192e
+    # (operating_signal_rate=0.199 actually passes; an OOF Youden_J value
+    # bled into ``gates["operating_signal_rate"]`` and tripped the gate).
     _numeric_gate(
         checks=checks,
         blockers=blockers,
         waivers=waivers,
         name="max_signal_rate",
-        value=_max_number(
-            gates.get("operating_signal_rate"),
-            config.get("operating_signal_rate"),
-            metrics.get("signal_rate"),
-            payload.get("operating_signal_rate"),
-            payload.get("signal_rate"),
+        value=_resolved_operating_signal_rate(
+            metrics=metrics,
+            gates=gates,
+            config=config,
+            payload=payload,
         ),
         threshold=direction_checks.get("max_signal_rate"),
         comparator="<=",
@@ -241,6 +248,16 @@ def evaluate_development_gate_bundle(
         bool(_dict_at(cal_full, "signal_rate_distribution")),
         "missing_signal_rate_distribution",
     )
+    # DM-3: the per-fold ``signal_rate_distribution.max`` measures
+    # walk-forward variance, not the single-point served operating rate.
+    # Comparing the per-fold max against the *operating* cap
+    # ``max_signal_rate`` (e.g. 0.35) over-rotates on natural fold noise
+    # — observed on res_be66790e192e where the served operating rate was
+    # 0.249 (passes the 0.35 cap) but fold-3 hit 0.361 (trips it). Use a
+    # separate, looser threshold ``max_signal_rate_distribution`` when the
+    # gate-bundle YAML configures one; otherwise fall back to a 20% buffer
+    # over the operating cap so per-fold variance does not duplicate the
+    # operating-rate check.
     signal_rate_distribution = _dict_at(cal_full, "signal_rate_distribution")
     signal_distribution_value = _max_number(
         signal_rate_distribution.get("max"),
@@ -249,13 +266,21 @@ def evaluate_development_gate_bundle(
         payload.get("signal_rate_distribution_max"),
     )
     if signal_distribution_value is not None:
+        _distribution_threshold = _first_number(
+            direction_checks.get("max_signal_rate_distribution"),
+        )
+        if _distribution_threshold is None:
+            _op_cap = _first_number(direction_checks.get("max_signal_rate"))
+            _distribution_threshold = (
+                _op_cap * 1.2 if _op_cap is not None else None
+            )
         _numeric_gate(
             checks=checks,
             blockers=blockers,
             waivers=waivers,
             name="max_signal_rate_distribution",
             value=signal_distribution_value,
-            threshold=direction_checks.get("max_signal_rate"),
+            threshold=_distribution_threshold,
             comparator="<=",
             reason="signal_saturation",
         )
@@ -508,6 +533,50 @@ def _max_number(*values: Any) -> float | None:
     numbers = [_first_number(value) for value in values]
     finite_numbers = [number for number in numbers if number is not None]
     return max(finite_numbers) if finite_numbers else None
+
+
+def _resolved_operating_signal_rate(
+    *,
+    metrics: dict[str, Any],
+    gates: dict[str, Any],
+    config: dict[str, Any],
+    payload: dict[str, Any],
+) -> float | None:
+    """DM-3: resolve the *deployed* operating signal rate for gate comparison.
+
+    Precedence (first non-null wins — **not** ``max(...)``) so the gate
+    cannot be tripped by an off-policy variant the trainer happens to expose
+    in one of the bag-of-fields the iteration record carries:
+
+      1. ``metrics["served_signal_rate"]`` — trainer-canonical, tagged value
+         emitted by ``stacking_trainer.py`` (added in DM-3).
+      2. ``payload["served_signal_rate"]`` — root-level passthrough.
+      3. ``metrics["signal_rate"]`` — the metric prepare.py writes from the
+         served threshold (``last_metrics.txt: signal_rate:``).
+      4. ``payload["signal_rate"]`` — root-level flat alias written by
+         ``result_artifact._add_flat_aliases`` from the same trainer source.
+      5. ``config["operating_signal_rate"]`` — trainer's canonical write site
+         (``train_stacking_direction.py``); always the served value.
+      6. ``gates["operating_signal_rate"]`` — phase1c writes the trainer's
+         config value back here, so it's also the served value in the
+         standard path. Lowest precedence so a future OOF / Youden value
+         that lands here cannot trip the gate over a higher-trust source.
+
+    The previous ``_max_number(...)`` aggregation produced the phantom
+    ``signal_saturation`` blocker observed on res_be66790e192e because a
+    single off-policy entry would dominate via ``max``. First-non-null
+    preserves the conservative semantics for genuine saturation (still
+    trips when ALL sources carry a saturating value) while neutralising
+    the bleed.
+    """
+    return _first_number(
+        metrics.get("served_signal_rate"),
+        payload.get("served_signal_rate"),
+        metrics.get("signal_rate"),
+        payload.get("signal_rate"),
+        config.get("operating_signal_rate"),
+        gates.get("operating_signal_rate"),
+    )
 
 
 def _append_blocker(blockers: list[str], reason: str) -> None:

@@ -39,7 +39,18 @@ DIRECTION_PHASES: List[Dict[str, Any]] = [
     {
         "id": "tabular_sweeps",
         "label": "Tabular Sweeps",
-        "next_action": "Sweep bounded tabular roster, horizon, dead-zone, calibration, and threshold settings. Emit metrics.tabular_sweep_variant on each attempt so the phase advances.",
+        # DM-12: explicitly call out direction_pct_threshold and
+        # sample_weight_halflife so the agent's free-form exploration
+        # touches them (both stayed at defaults across all 12 iterations
+        # of res_be66790e192e).
+        "next_action": (
+            "Sweep bounded tabular roster, horizon, dead-zone, "
+            "calibration, and threshold settings — including "
+            "direction_pct_threshold (try 0.015 / 0.040 / 0.050) and "
+            "sample_weight_halflife (try 1000 / 1500 / 2000). Emit "
+            "metrics.tabular_sweep_variant on each attempt so the phase "
+            "advances."
+        ),
         "min_iterations": 6,
         "max_iterations": 40,
     },
@@ -60,7 +71,16 @@ DIRECTION_PHASES: List[Dict[str, Any]] = [
     {
         "id": "calibration_replay_gates",
         "label": "Calibration/Replay Gates",
-        "next_action": "Run full calibration diagnostics and post-cost replay gates on finalists. Emit metrics.calibration_full_validation and metrics.economic_replay.",
+        # DM-13: call out meta_model variants (DM-6: lgb_shallow / mlp_2x32)
+        # and the multi-horizon ensemble toggle (DM-5) so the agent
+        # exercises both in this phase.
+        "next_action": (
+            "Run full calibration diagnostics and post-cost replay gates "
+            "on finalists. Vary meta_model (logreg / lgb_shallow / "
+            "mlp_2x32) and horizon_ensemble_enabled (false / true) as "
+            "primary search dimensions for this phase. Emit "
+            "metrics.calibration_full_validation and metrics.economic_replay."
+        ),
         "min_iterations": 2,
         "max_iterations": 8,
     },
@@ -211,8 +231,15 @@ def build_phase_state(
     iterations: Iterable[Dict[str, Any]],
     hpo_studies: Optional[Iterable[Dict[str, Any]]] = None,
     promotions: Optional[Iterable[Dict[str, Any]]] = None,
+    iterations_remaining: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Derive an operator-facing phase plan and next action."""
+    """Derive an operator-facing phase plan and next action.
+
+    DM-14: ``iterations_remaining`` (optional) lets the orchestrator
+    pass through the budget-headroom count so the per-phase
+    ``headroom_hint`` can drive the ``_next_action`` suffix. ``None``
+    means "no budget context — skip the suffix gate".
+    """
 
     rows = list(iterations)
     studies = list(hpo_studies or [])
@@ -224,8 +251,21 @@ def build_phase_state(
     blocked = _blocked_reason(rows)
     current_phase = _select_current_phase(phases, completed, blocked)
     all_phases_complete = bool(phases) and all(p["id"] in completed for p in phases)
+    # DM-14: per-phase headroom hint — computed BEFORE _next_action so the
+    # active phase's hint can be appended to the action string.
+    headroom_by_phase = {
+        phase["id"]: _phase_headroom_hint(phase["id"], rows)
+        for phase in phases
+    }
+    max_iterations = int(session.get("max_iterations") or 0)
     next_action = _next_action(
-        phases, current_phase, blocked, all_phases_complete=all_phases_complete
+        phases,
+        current_phase,
+        blocked,
+        all_phases_complete=all_phases_complete,
+        headroom_hint=headroom_by_phase.get(current_phase),
+        iterations_remaining=iterations_remaining,
+        max_iterations=max_iterations,
     )
     # Two distinct counts: the genuine number of attempts tagged to the current
     # phase (operator-facing), and the trailing stall count (stall-warning
@@ -250,6 +290,10 @@ def build_phase_state(
             {
                 **phase,
                 "status": _phase_status(phase["id"], current_phase, completed, blocked, phases),
+                # DM-14: per-phase headroom hint surfaced in the state JSON
+                # so dashboards and the orchestrator's iteration-context
+                # digest can read it without recomputing.
+                "headroom_hint": headroom_by_phase.get(phase["id"], "medium"),
             }
             for phase in phases
         ],
@@ -366,6 +410,26 @@ _PHASE_ADVANCEMENT_KEYS: Dict[str, tuple] = {
 # phase that is dwell-gated in _completed_phase_ids(), or a single dedup
 # re-run could skip genuine multi-iteration work.
 NOOP_INHERITABLE_PHASES: frozenset[str] = frozenset({"adaptive_feature_sweeps"})
+
+
+# DM-1: phases whose advancement evidence is already produced by the
+# session's best iteration and is REPLAYABLE without a new training run.
+# When the agent dispatches a re-run of the canonical config that matches
+# this session's best — observed on res_be66790e192e, where iterations
+# 8/10/11/12 all re-ran ``best_train.yaml`` across four different late
+# phases — the orchestrator inherits the evidence instead of paying ~7
+# minutes per re-train. Strictly conservative: only late phases whose
+# advancement keys are pure passthrough JSON (no fresh seed variance
+# required), and the inheritance is guarded by a config-hash match
+# against the session-best iteration. The synthetic-iteration anti-replay
+# guard in ``consistency_validator._is_synthetic_promotion_iteration``
+# whitelists markers tagged with ``evidence_replayed_from_iteration`` so
+# the inherited evidence advances the phase machine.
+EVIDENCE_INHERITABLE_PHASES: frozenset[str] = frozenset({
+    "calibration_replay_gates",
+    "multi_seed_robustness",
+    "inference_parity_replay",
+})
 
 
 def _completed_phase_ids(
@@ -825,12 +889,83 @@ def _phase_status(
     return "pending"
 
 
+# DM-14: per-phase primary sweep keys. Used by ``_phase_headroom_hint`` to
+# decide whether the active phase still has untried levers. The lists are
+# intentionally small — only the dimensions DM-12 / DM-13 wired into the
+# seed roster (so an iteration touching one of these keys is a real probe,
+# not just a parameter the trainer touched as a side-effect).
+_PHASE_PRIMARY_SWEEP_KEYS: Dict[str, tuple[str, ...]] = {
+    "tabular_sweeps": (
+        "direction_pct_threshold",
+        "sample_weight_halflife",
+        "roster_preset",
+        "threshold_strategy",
+    ),
+    "calibration_replay_gates": (
+        "meta_model",
+        "horizon_ensemble_enabled",
+        "stacking_calibration_method",
+    ),
+}
+
+
+def _phase_headroom_hint(
+    phase_id: str,
+    iterations: List[Dict[str, Any]],
+) -> str:
+    """DM-14: estimate the agent's expected lift from another iteration in
+    this phase.
+
+    Returns:
+      * ``"high"`` — none of the phase's primary sweep keys have been
+        touched yet (fresh phase; whatever the agent tries first will
+        be informative).
+      * ``"low"`` — all of the phase's primary sweep keys have been
+        touched in this session (no obvious unexplored lever left).
+      * ``"medium"`` — partial coverage, or the phase isn't in the
+        known-sweeps map (default for promotion / inference / replay
+        phases where the lever count isn't well-defined).
+    """
+    sweep_keys = _PHASE_PRIMARY_SWEEP_KEYS.get(phase_id)
+    if not sweep_keys:
+        return "medium"
+    touched: set[str] = set()
+    for row in iterations:
+        # Iteration's distinguishing-config keys live in metrics_json's
+        # ``config`` dict (the canonical trainer-emitted block) or as
+        # top-level flat keys for the patches that emit them.
+        metrics_blob = row.get("metrics_json")
+        if isinstance(metrics_blob, str):
+            try:
+                parsed = json.loads(metrics_blob)
+            except (json.JSONDecodeError, TypeError):
+                parsed = {}
+        elif isinstance(metrics_blob, dict):
+            parsed = metrics_blob
+        else:
+            parsed = {}
+        cfg = parsed.get("config") if isinstance(parsed, dict) else {}
+        cfg = cfg if isinstance(cfg, dict) else {}
+        for key in sweep_keys:
+            if key in cfg or key in parsed:
+                touched.add(key)
+    coverage = len(touched) / len(sweep_keys)
+    if coverage <= 0.0:
+        return "high"
+    if coverage >= 1.0:
+        return "low"
+    return "medium"
+
+
 def _next_action(
     phases: List[Dict[str, Any]],
     current_phase: str,
     blocked: Optional[str],
     *,
     all_phases_complete: bool = False,
+    headroom_hint: Optional[str] = None,
+    iterations_remaining: Optional[int] = None,
+    max_iterations: int = 0,
 ) -> str:
     is_terminal = bool(phases) and current_phase == phases[-1]["id"]
     # All phases complete and no blocker: the agent's job is done. Direct it to
@@ -847,15 +982,32 @@ def _next_action(
         (p["next_action"] for p in phases if p["id"] == current_phase),
         "Inspect session state.",
     )
+    # DM-14: append the headroom-hint suffix when the active phase is
+    # low-headroom AND budget is tight (< 30% remaining). At budget >=
+    # 30% remaining the agent should still try sweeps; only when budget
+    # is genuinely tight does it pay to skip ahead.
+    suffix = ""
+    if (
+        headroom_hint == "low"
+        and iterations_remaining is not None
+        and max_iterations > 0
+        and iterations_remaining < int(max_iterations * 0.30)
+    ):
+        suffix = (
+            " [headroom_hint: low — primary sweep keys for this phase "
+            "are all touched; consider advancing instead of replaying]"
+        )
     if not blocked:
-        return base
+        return base + suffix
     if is_terminal:
         # At the final phase the blocker IS the primary concern — promotion
         # cannot proceed until it is resolved.
-        return f"{base} Resolve consistency blockers first: {blocked}"
+        return f"{base} Resolve consistency blockers first: {blocked}{suffix}"
     # Mid-pipeline: append as an advisory note.  The phase's own action
     # takes priority so the agent knows WHAT to run next.
-    return f"{base} (Advisory — last attempt has consistency notes: {blocked})"
+    return (
+        f"{base} (Advisory — last attempt has consistency notes: {blocked}){suffix}"
+    )
 
 
 def _count_stalled_iterations(

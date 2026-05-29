@@ -60,6 +60,7 @@ from src.core.research_phase_plan import (
 )
 from src.core.research_phase_plan import (
     _PHASE_ADVANCEMENT_KEYS,
+    EVIDENCE_INHERITABLE_PHASES,
     NOOP_INHERITABLE_PHASES,
     _is_rejected_duplicate,
 )
@@ -1941,6 +1942,52 @@ class AgentOrchestrator:
                     inherited_metrics=_dup_metrics,
                 )
 
+        # DM-1: when the dispatched config matches this session's best and
+        # the active phase is in EVIDENCE_INHERITABLE_PHASES, inherit the
+        # source iteration's phase-advancement evidence instead of paying
+        # ~7 minutes for a re-train that will produce the identical
+        # metric. Observed on res_be66790e192e: iterations 8/10/11/12 all
+        # re-ran the iter-7 best config across calibration_replay_gates,
+        # multi_seed_robustness, and inference_parity_replay — four wasted
+        # training runs against a 50-iteration budget.
+        if (
+            current_phase in EVIDENCE_INHERITABLE_PHASES
+            and duplicate.get("duplicate_reason") is None
+            and duplicate.get("research_id") == config.id
+        ):
+            best = await self._store.get_best_iteration(config.id)
+            best_hash = (
+                best.get("canonical_config_hash") if isinstance(best, dict) else None
+            )
+            if (
+                best_hash
+                and best_hash == identity.get("canonical_config_hash")
+            ):
+                _dup_metrics = self._parse_metrics_json(duplicate.get("metrics_json"))
+                _dup_config = (
+                    _dup_metrics.get("config")
+                    if isinstance(_dup_metrics.get("config"), dict)
+                    else {}
+                )
+                _advancement_keys = _PHASE_ADVANCEMENT_KEYS.get(current_phase, ())
+                # Mirror ``_has_metric``'s any-of semantics in
+                # research_phase_plan._completed_phase_ids: presence of
+                # the key at top level OR nested under ``config`` counts.
+                if any(
+                    _dup_metrics.get(key) or _dup_config.get(key)
+                    for key in _advancement_keys
+                ):
+                    return self._build_evidence_replay_link(
+                        config=config,
+                        turn=turn,
+                        identity=identity,
+                        identity_hash=identity_hash,
+                        config_snapshot=config_snapshot,
+                        duplicate=duplicate,
+                        current_phase=current_phase,
+                        inherited_metrics=_dup_metrics,
+                    )
+
         duplicate_reason = (
             "Duplicate training attempt rejected: the same canonical config, "
             f"seed={identity.get('seed')}, mode={identity.get('validation_mode')}, "
@@ -2184,6 +2231,128 @@ class AgentOrchestrator:
                 "trial_identity_hash": identity_hash,
                 "phase_evidence_linked_from_research_id": prior_research_id,
                 "phase_evidence_linked_from_iteration": prior_iteration,
+            },
+        ), marker
+
+    def _build_evidence_replay_link(
+        self,
+        *,
+        config: ResearchConfig,
+        turn: int,
+        identity: Dict[str, Any],
+        identity_hash: str,
+        config_snapshot: Optional[str],
+        duplicate: Dict[str, Any],
+        current_phase: str,
+        inherited_metrics: Dict[str, Any],
+    ) -> tuple[ToolExecutionResult, Dict[str, Any]]:
+        """DM-1: inherit a session-best iteration's phase evidence on dedup hit.
+
+        When the agent dispatches the *exact* canonical config that already
+        produced this session's best iteration AND the active phase is in
+        :data:`EVIDENCE_INHERITABLE_PHASES`, the orchestrator returns a
+        synthesised prepare.py-like block carrying the prior iteration's
+        metric + phase-advancement evidence keys *without* invoking the
+        training command. The marker carries
+        ``evidence_replayed_from_iteration`` so
+        :func:`~src.core.consistency_validator._is_synthetic_promotion_iteration`
+        whitelists it instead of flagging it as a synthetic-iteration
+        replay attempt.
+
+        Mirrors :meth:`_build_phase_evidence_link` (the
+        ``NOOP_INHERITABLE_PHASES`` path) — the structural difference is
+        the set of keys inherited and the audit field name.
+        """
+
+        prior_research_id = duplicate.get("research_id")
+        prior_iteration = duplicate.get("iteration")
+        prior_metric = duplicate.get("primary_metric")
+        prior_metric_name = duplicate.get("metric_name") or (
+            "composite_direction_score"
+            if config.model_type == "direction"
+            else "primary_metric"
+        )
+        prior_training_gates = training_gates_passed_from_iteration(
+            duplicate, default=False,
+        )
+        prior_all_gates = prior_training_gates
+        prior_mlflow_run_id = duplicate.get("mlflow_run_id") or inherited_metrics.get(
+            "mlflow_run_id"
+        )
+
+        # Surface the phase-advancement evidence the inherited iteration
+        # already produced. Each key is the marker's flat top-level value
+        # so ``_completed_phase_ids`` sees it via ``_has_metric``.
+        advancement_keys = _PHASE_ADVANCEMENT_KEYS.get(current_phase, ())
+        inherited_evidence: Dict[str, Any] = {}
+        for key in advancement_keys:
+            value = inherited_metrics.get(key)
+            if value is None and isinstance(inherited_metrics.get("config"), dict):
+                value = inherited_metrics["config"].get(key)
+            if value is not None:
+                inherited_evidence[key] = value
+
+        message = (
+            f"Evidence for '{current_phase}' inherited from this session's "
+            f"best iteration ({prior_research_id} iter {prior_iteration}, "
+            f"metric={prior_metric_name}={prior_metric}). Canonical config "
+            f"matches — re-running would produce the identical metric in "
+            f"~7 minutes; the prior evidence is carried forward instead."
+        )
+
+        synthetic_block = "\n".join(
+            [
+                "---",
+                "status:             completed",
+                f"primary_metric:     {prior_metric:.6f}"
+                if isinstance(prior_metric, (int, float))
+                else "primary_metric:     0.0",
+                f"metric_name:        {prior_metric_name}",
+                "direction:          higher_is_better",
+                f"training_gates_passed: {str(prior_training_gates).lower()}",
+                f"all_gates_passed:   {str(prior_all_gates).lower()}",
+                f"search_phase:       {current_phase}",
+                f"evidence_replayed_from_research_id: {prior_research_id}",
+                f"evidence_replayed_from_iteration: {prior_iteration}",
+                "---",
+            ]
+        )
+
+        marker: Dict[str, Any] = {
+            "status": "completed",
+            "outcome": "evidence_replayed",
+            "primary_metric": prior_metric,
+            "metric_name": prior_metric_name,
+            "training_gates_passed": prior_training_gates,
+            "all_gates_passed": prior_all_gates,
+            "decision": "keep",
+            "search_phase": current_phase,
+            "description": f"{message} (turn {turn})",
+            "config_snapshot": config_snapshot,
+            "canonical_config_hash": identity.get("canonical_config_hash"),
+            "trial_identity": identity,
+            "trial_identity_hash": identity_hash,
+            # DM-1 audit fields — also the signal _is_synthetic_promotion_
+            # iteration() uses to whitelist this marker.
+            "evidence_replayed_from_research_id": prior_research_id,
+            "evidence_replayed_from_iteration": prior_iteration,
+            # Carry the source iteration's MLflow run id so phase
+            # advancement's artifact-fingerprint check finds the right
+            # training.log.
+            "mlflow_run_id": prior_mlflow_run_id,
+            **inherited_evidence,
+        }
+
+        return ToolExecutionResult(
+            synthetic_block,
+            meta={
+                "policy_allowed": True,
+                "policy_operation": "evidence_replay.linked",
+                "returncode": 0,
+                "timed_out": False,
+                "trial_identity_hash": identity_hash,
+                "evidence_replayed_from_research_id": prior_research_id,
+                "evidence_replayed_from_iteration": prior_iteration,
             },
         ), marker
 
@@ -3212,6 +3381,47 @@ class AgentOrchestrator:
                 if response.stop_reason == "end_turn" and not tool_results:
                     terminate_request = self._extract_terminate_request(agent_text)
                     if terminate_request:
+                        # DM-2: defer TERMINATE_REQUEST when the agent is
+                        # walking away with budget still on the table AND
+                        # the session-best metric is fresh (improvement
+                        # within the last 5 iterations). Observed on
+                        # res_be66790e192e: agent emitted TERMINATE_REQUEST
+                        # at iter 12/50 (24% budget), best_gap=5 — only 5
+                        # distinct hypotheses tried before quitting. The
+                        # 50% floor is a hard ceiling — once half the
+                        # budget is spent, termination is honored
+                        # unconditionally regardless of gap.
+                        deferral = await self._should_defer_terminate(
+                            research_id=research_id,
+                            iteration_count=iteration_count,
+                            duplicate_rejected_count=duplicate_rejected_count,
+                            config=config,
+                        )
+                        if deferral is not None:
+                            logger.info(
+                                "Research %s turn %d: "
+                                "terminate_request_deferred — %s",
+                                research_id, turn, deferral["reason"],
+                            )
+                            await agent_log.append(
+                                "system",
+                                (
+                                    "Terminate request deferred: "
+                                    f"{deferral['reason']}"
+                                ),
+                                turn=turn,
+                            )
+                            messages.append({
+                                "role": "assistant",
+                                "content": assistant_content,
+                            })
+                            messages.append({
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": deferral["text"]}
+                                ],
+                            })
+                            continue
                         logger.info(
                             "Research %s turn %d: honoring TERMINATE_REQUEST",
                             research_id, turn,
@@ -4240,7 +4450,103 @@ class AgentOrchestrator:
                 return "\n".join([stripped, *lines[index + 1 :]]).strip()
         return None
 
-    async def _refresh_phase_state(self, research_id: str) -> None:
+    # DM-2: deferral gate for premature TERMINATE_REQUEST.
+    #
+    # The agent on res_be66790e192e walked away at iteration 12 of a
+    # 50-iteration budget (24% used) with last_best at iter 7 (gap=5),
+    # having tried only 5 distinct configs. The previous handler
+    # honoured terminate_request unconditionally. These constants tune
+    # the protective floor — class-level so they can be patched in
+    # tests without monkey-patching ``settings``.
+    _DM2_BUDGET_DEFER_FRACTION = 0.5
+    _DM2_BEST_GAP_DEFER_FLOOR = 5
+
+    async def _should_defer_terminate(
+        self,
+        *,
+        research_id: str,
+        iteration_count: int,
+        duplicate_rejected_count: int,
+        config: ResearchConfig,
+    ) -> Optional[Dict[str, str]]:
+        """DM-2: return a deferral payload when TERMINATE_REQUEST should
+        be turned into a continuation nudge instead of being honored.
+
+        Returns ``None`` (i.e. honor the request) when any of:
+          * effective iteration count >= 50% of ``config.max_iterations``
+            (the budget hard floor — past this point the agent has run
+            half the planned work and a terminate is honest);
+          * the session has no ``best_iteration`` yet (no progress to
+            protect — the agent's request to quit is informed);
+          * the gap between current iteration and ``best_iteration`` is
+            >= ``_DM2_BEST_GAP_DEFER_FLOOR`` (the existing global
+            stagnation nudge has already had time to fire — see
+            :meth:`_maybe_global_stagnation_terminate`).
+
+        Otherwise returns ``{"reason": ..., "text": ...}`` carrying a
+        short rationale (for logs) and a user-turn message that nudges
+        the agent toward an unexplored lever in the current phase.
+        """
+        effective = max(0, iteration_count - duplicate_rejected_count)
+        max_iters = max(1, int(config.max_iterations))
+        budget_fraction = effective / max_iters
+
+        # Hard floor — past half-budget, terminate is honored regardless of
+        # how recently the best iteration was achieved.
+        if budget_fraction >= self._DM2_BUDGET_DEFER_FRACTION:
+            return None
+
+        session = await self._store.get_session(research_id)
+        best_iteration = session.get("best_iteration") if session else None
+        # No qualifying iteration yet — agent's call to quit is informed.
+        if best_iteration is None:
+            return None
+
+        gap = effective - int(best_iteration)
+        if gap >= self._DM2_BEST_GAP_DEFER_FLOOR:
+            return None
+
+        # Compose a short reason for logs + a nudge text for the agent.
+        current_phase = (
+            self._active_phase_from_marker_or_session({}, session)
+            if session
+            else None
+        )
+        reason = (
+            f"iters_used={effective}/{max_iters} "
+            f"(< {int(self._DM2_BUDGET_DEFER_FRACTION * 100)}% floor), "
+            f"best_gap={gap} (< {self._DM2_BEST_GAP_DEFER_FLOOR})"
+        )
+        text = (
+            "TERMINATE_REQUEST_DEFERRED: "
+            f"only {effective} of {max_iters} iterations used "
+            f"({budget_fraction:.0%}) AND the session best was achieved "
+            f"{gap} iteration(s) ago. "
+            "Either threshold must be cleared before terminate is honored: "
+            f"reach {int(max_iters * self._DM2_BUDGET_DEFER_FRACTION)}+ "
+            "iterations OR show "
+            f"{self._DM2_BEST_GAP_DEFER_FLOOR}+ iterations without metric "
+            "improvement. "
+            "Pick an unexplored lever in the current phase"
+            + (f" '{current_phase}'" if current_phase else "")
+            + " (e.g. a different `meta_model`, `sample_weight_halflife`, "
+            "`direction_pct_threshold`, or `horizon_ensemble` setting) "
+            "and run another experiment. Do NOT re-emit TERMINATE_REQUEST "
+            "until one of the two thresholds above is met."
+        )
+        return {"reason": reason, "text": text}
+
+    async def _refresh_phase_state(
+        self,
+        research_id: str,
+        *,
+        iterations_remaining: Optional[int] = None,
+    ) -> None:
+        """DM-14: when ``iterations_remaining`` is supplied, ``build_phase_state``
+        can gate the active phase's ``next_action`` suffix on budget
+        headroom. ``None`` (the default) skips the suffix gate — the
+        per-phase ``headroom_hint`` field still appears on every phase
+        entry regardless."""
         session = await self._store.get_session(research_id)
         if not session:
             return
@@ -4255,6 +4561,7 @@ class AgentOrchestrator:
                 row for row in promotions
                 if row.get("research_id") == research_id
             ],
+            iterations_remaining=iterations_remaining,
         )
         await self._store.update_session(
             research_id,
@@ -4298,7 +4605,13 @@ class AgentOrchestrator:
         the loop from spinning 7+ times on the same broken promotion.
         """
         # Refresh phase state so this decision uses the latest evidence.
-        await self._refresh_phase_state(research_id)
+        # DM-14: pass through the iterations-remaining count so
+        # build_phase_state can gate the active phase's next_action
+        # suffix on budget headroom.
+        _iters_remaining = max(0, config.max_iterations - iteration_count)
+        await self._refresh_phase_state(
+            research_id, iterations_remaining=_iters_remaining,
+        )
         session = await self._store.get_session(research_id)
         if not session:
             return None

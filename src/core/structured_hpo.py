@@ -429,6 +429,106 @@ def _direction_trial_patches() -> List[Dict[str, Any]]:
             signal_cap=0.45,
             feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
         ),
+        # DM-12: direction_pct_threshold band extensions. Existing seeds
+        # cover ~0.020/0.025/0.0275; add 0.015/0.040/0.050 so the agent
+        # explores tighter and looser dead-zones than the legacy baseline.
+        _direction_patch(
+            threshold=0.015,
+            horizon=DIRECTION_HORIZON_MID,
+            roster="scoped_tabular",
+            calibration="isotonic",
+            beta=0.4,
+            signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+        ),
+        _direction_patch(
+            threshold=0.040,
+            horizon=DIRECTION_HORIZON_FULL,
+            roster="full_tabular",
+            calibration="isotonic",
+            beta=0.5,
+            signal_cap=0.30,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+        ),
+        _direction_patch(
+            threshold=0.050,
+            horizon=DIRECTION_HORIZON_FULL,
+            roster="full_tabular",
+            calibration="sigmoid",
+            beta=0.5,
+            signal_cap=0.25,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            fallback_min_samples=200,
+        ),
+        # DM-12: sample_weight_halflife sweep. Default left to the trainer
+        # (3000 typical) for legacy seeds; these explore shorter recency
+        # windows that adapt faster to regime drift.
+        _direction_patch(
+            threshold=0.025,
+            horizon=DIRECTION_HORIZON_FULL,
+            roster="scoped_tabular",
+            calibration="isotonic",
+            beta=0.5,
+            signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            sample_weight_halflife=1000,
+        ),
+        _direction_patch(
+            threshold=0.025,
+            horizon=DIRECTION_HORIZON_FULL,
+            roster="scoped_tabular",
+            calibration="isotonic",
+            beta=0.5,
+            signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            sample_weight_halflife=1500,
+        ),
+        _direction_patch(
+            threshold=0.025,
+            horizon=DIRECTION_HORIZON_FULL,
+            roster="scoped_tabular",
+            calibration="isotonic",
+            beta=0.5,
+            signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            sample_weight_halflife=2000,
+        ),
+        # DM-13: meta_model variants (from DM-6) + horizon_ensemble
+        # (from DM-5). The agent never tried either in res_be66 because
+        # neither dimension was in the seed roster.
+        _direction_patch(
+            threshold=0.025,
+            horizon=DIRECTION_HORIZON_FULL,
+            roster="scoped_tabular",
+            calibration="isotonic",
+            beta=0.5,
+            signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            meta_model="lgb_shallow",
+            horizon_ensemble_enabled=False,
+        ),
+        _direction_patch(
+            threshold=0.025,
+            horizon=DIRECTION_HORIZON_FULL,
+            roster="scoped_tabular",
+            calibration="isotonic",
+            beta=0.5,
+            signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            meta_model="lgb_shallow",
+            horizon_ensemble_enabled=True,
+        ),
+        _direction_patch(
+            threshold=0.025,
+            horizon=DIRECTION_HORIZON_FULL,
+            roster="scoped_tabular",
+            calibration="isotonic",
+            beta=0.5,
+            signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            meta_model="mlp_2x32",
+            horizon_ensemble_enabled=False,
+        ),
     ]
     return _extend_unique_patches(
         seeds,
@@ -515,6 +615,13 @@ def _direction_patch(
     signal_cap: float,
     feature_version: str,
     fallback_min_samples: int | None = None,
+    # DM-12: recency weighting. None preserves the legacy patch fingerprint
+    # (no key emitted) so existing seeds still produce identical hashes.
+    sample_weight_halflife: int | None = None,
+    # DM-13: meta-model variants from DM-6 (lgb_shallow / mlp_2x32) and the
+    # DM-5 multi-horizon ensemble toggle. Same None-skip discipline as above.
+    meta_model: str | None = None,
+    horizon_ensemble_enabled: bool | None = None,
 ) -> Dict[str, Any]:
     patch: Dict[str, Any] = {
         "direction_pct_threshold": threshold,
@@ -535,6 +642,14 @@ def _direction_patch(
     if fallback_min_samples is not None:
         patch["stacking_calibration_fallback_method"] = "sigmoid"
         patch["stacking_calibration_fallback_min_samples"] = fallback_min_samples
+    # DM-12 / DM-13 keys — only emitted when set so legacy seed fingerprints
+    # remain bit-identical.
+    if sample_weight_halflife is not None:
+        patch["sample_weight_halflife"] = sample_weight_halflife
+    if meta_model is not None:
+        patch["meta_model"] = meta_model
+    if horizon_ensemble_enabled is not None:
+        patch["horizon_ensemble_enabled"] = bool(horizon_ensemble_enabled)
     return patch
 
 
