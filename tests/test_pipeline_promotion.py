@@ -359,3 +359,76 @@ def test_pipeline_promotion_blockers_include_quality_baseline() -> None:
     assert pipeline_controller._promotion_blockers(preview) == [
         "best_metric_below_development_baseline"
     ]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_collect_promotion_evidence_runs_collector(tmp_path, monkeypatch):
+    """PR-9: pipeline promotion must run PromotionEvidenceCollector for the best
+    iteration (the standalone _try_auto_promote path is gated to non-pipeline
+    sessions, so without this the infra blockers always fire in pipeline mode)."""
+    from src.core import promotion_evidence_collector as pec
+
+    store = ResultsStore(str(tmp_path / "db" / "experiments.sqlite"))
+    await store.initialize()
+    workspace = tmp_path / "runs" / "autotuner" / "DOGE_USDT_15m" / "direction"
+    workspace.mkdir(parents=True, exist_ok=True)
+    await store.create_session(
+        session_id="res_dir_pr9",
+        instrument="DOGE_USDT",
+        timeframe="15m",
+        model_type="direction",
+        tag="pr9",
+        quick_mode=False,
+        max_iterations=3,
+        max_budget_usd=3.0,
+        focus_hint=None,
+        workspace_path=str(workspace),
+    )
+    # Best iteration LACKS smoke/inference evidence (the real pipeline case).
+    await store.add_iteration(
+        research_id="res_dir_pr9",
+        iteration=2,
+        primary_metric=0.43,
+        metric_name="composite_direction_score",
+        all_gates_passed=True,
+        decision="keep",
+        description="best",
+        config_snapshot="instrument: DOGE_USDT\n",
+        metrics_json=json.dumps({"mlflow_run_id": "run-dir-pr9", "signal_rate": 0.2}),
+        training_time_s=1.0,
+    )
+
+    calls: list = []
+
+    async def _fake_collect(self, research_id, iteration):
+        calls.append((research_id, iteration))
+        return {"smoke_validation": {"passed": True}}
+
+    monkeypatch.setattr(pec.PromotionEvidenceCollector, "collect_and_patch", _fake_collect)
+    monkeypatch.setattr(pipeline_controller.settings, "auto_collect_promotion_evidence", True)
+
+    controller = PipelineController(store, session_manager=None)
+    await controller._collect_promotion_evidence("res_dir_pr9")
+
+    assert calls == [("res_dir_pr9", 2)]  # collector ran on the resolved best iteration
+
+
+@pytest.mark.asyncio
+async def test_pipeline_collect_promotion_evidence_respects_flag(tmp_path, monkeypatch):
+    """When auto_collect_promotion_evidence is False, the collector is skipped."""
+    from src.core import promotion_evidence_collector as pec
+
+    store = ResultsStore(str(tmp_path / "db" / "experiments.sqlite"))
+    await store.initialize()
+    calls: list = []
+
+    async def _fake_collect(self, research_id, iteration):
+        calls.append((research_id, iteration))
+        return {}
+
+    monkeypatch.setattr(pec.PromotionEvidenceCollector, "collect_and_patch", _fake_collect)
+    monkeypatch.setattr(pipeline_controller.settings, "auto_collect_promotion_evidence", False)
+
+    controller = PipelineController(store, session_manager=None)
+    await controller._collect_promotion_evidence("res_missing")  # no session → no-op
+    assert calls == []

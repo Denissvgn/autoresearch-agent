@@ -442,10 +442,47 @@ class PipelineController:
         iterations = await self._store.get_iterations(session_id)
         return any(training_gates_passed_from_iteration(it) for it in iterations)
 
+    async def _collect_promotion_evidence(self, session_id: str) -> None:
+        """PR-9: run server-side promotion-evidence collection before the
+        ConfigPromoter preview, the same way the standalone orchestrator path
+        does (``_try_auto_promote``). That path is gated to NON-pipeline sessions
+        (``and not config.pipeline_id``), so without this the infrastructure
+        blockers the agent cannot produce evidence for —
+        ``inference_adapter_load_failure``, ``inference_reload_failed``,
+        ``failed_smoke_validation``, ``missing_signal_health_metrics`` — always
+        fired for pipeline runs. Fail-open: never block promotion on collection.
+        """
+        if not settings.auto_collect_promotion_evidence:
+            return
+        try:
+            best = await self._store.get_best_iteration(session_id)
+            best_iter = (best or {}).get("iteration")
+            if best_iter is None:
+                return
+            from src.core.promotion_evidence_collector import (
+                PromotionEvidenceCollector,
+            )
+
+            collector = PromotionEvidenceCollector(self._store)
+            patch = await collector.collect_and_patch(session_id, int(best_iter))
+            if patch:
+                logger.info(
+                    "PR-9: pipeline promotion evidence collected for %s iter %s (keys=%s)",
+                    session_id, best_iter, sorted(patch.keys()),
+                )
+        except Exception as exc:  # pragma: no cover — fail-open
+            logger.warning(
+                "PR-9: pipeline promotion evidence collection failed for %s: %s",
+                session_id, exc, exc_info=True,
+            )
+
     async def _promote_phase(
         self, session_id: str, phase: str,
     ) -> tuple[Dict[str, Any], Dict[str, Any]]:
         """Promote a completed phase through the audited ConfigPromoter path."""
+        # PR-9: collect infra-side promotion evidence before preview (pipeline
+        # mode previously skipped this → guaranteed infra-blocker promotion fail).
+        await self._collect_promotion_evidence(session_id)
         promoter = ConfigPromoter(self._store)
         preview: Optional[Dict[str, Any]] = None
         try:
