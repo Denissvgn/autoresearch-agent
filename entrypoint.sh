@@ -1,9 +1,15 @@
 #!/bin/sh
 # Fix ownership of volume-mounted directories that may have been created
-# by a previous container with a different UID (e.g. system-allocated 999).
-# Runs as root briefly, then exec's the CMD as appuser (1001:1001).
+# by a previous container with a different UID, then exec the CMD as appuser.
+# PR-9: resolve appuser's UID/GID dynamically (the Dockerfile sets it via the
+# APP_UID/APP_GID build args, default 1000 to match the host that owns the
+# bind-mounted /host/configs) instead of hardcoding 1001 — otherwise the app
+# could not write promoted instrument configs.
 set -e
 
-chown -R 1001:1001 /app/workspace/runs /app/workspace/db
+APP_UID="$(id -u appuser)"
+APP_GID="$(id -g appuser)"
 
-exec setpriv --reuid=1001 --regid=1001 --init-groups "$@"
+chown -R "$APP_UID:$APP_GID" /app/workspace/runs /app/workspace/db
+
+exec setpriv --reuid="$APP_UID" --regid="$APP_GID" --init-groups "$@"

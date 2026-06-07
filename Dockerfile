@@ -132,8 +132,15 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Non-root user aligned with the ML services.
-RUN groupadd -g 1001 appuser && useradd -u 1001 -g appuser -m appuser
+# Non-root user. PR-9: UID/GID 1000 to match the host user that owns the
+# bind-mounted ``configs/`` (mounted at /host/configs), so promotion can write
+# the updated instrument config (ConfigPromoter atomic write). UID 1001 left the
+# agent unable to create the temp/rollback files in the host-owned configs dir
+# → PermissionError on promote/confirm. Overridable via build args if a deploy
+# needs a different host UID.
+ARG APP_UID=1000
+ARG APP_GID=1000
+RUN groupadd -g ${APP_GID} appuser && useradd -u ${APP_UID} -g appuser -m appuser
 
 # Copy server venv from builder
 COPY --from=python-builder /app/.venv /app/.venv
