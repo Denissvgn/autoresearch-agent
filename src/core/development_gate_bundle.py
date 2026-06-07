@@ -182,14 +182,24 @@ def evaluate_development_gate_bundle(
         "checks", {}
     )
     selected_metrics = _dict_at(cal_full, "selected", "metrics")
+    # PR-9 Layer 8 (same class as the DM-3 signal_saturation scope fix): the
+    # ``weak_calibration`` gate must compare the *served* model's calibrated ECE
+    # against the cap. Serving is Option A (best-base model), so the served value
+    # is ``best_base_calibration.calibrated.ece`` / ``cal_ece_after`` (~0 for a
+    # well-calibrated model). The ``calibration_full_validation.selected`` ECE
+    # belongs to the INERT meta-stacker (never served) and runs higher — reading it
+    # first produced a phantom ``weak_calibration`` block (e.g. served ECE ~3.9e-17
+    # but selected/meta ECE 0.0677 > 0.05 cap). Precedence-ordered (served first).
+    served_calibrated = _dict_at(config, "best_base_calibration", "calibrated")
     calibrated_ece = _first_number(
+        served_calibrated.get("ece"),
+        cal_diag.get("cal_ece_after"),
         selected_metrics.get("ece"),
         cal_full.get("ece_calibrated"),
         metrics.get("ece_calibrated"),
         metrics.get("ece"),
         payload.get("ece_calibrated"),
         payload.get("ece"),
-        cal_diag.get("cal_ece_after"),
     )
     _numeric_gate(
         checks=checks,
