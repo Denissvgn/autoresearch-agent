@@ -87,14 +87,19 @@ VOLATILITY_SEARCH_SPACE: Dict[str, Any] = {
     },
 }
 
+# RL HPO is now server-owned via materialized planned trials (like direction /
+# volatility), NOT the agent-invoked Optuna ``--hpo`` study. The search covers
+# the PPO ``training:`` hyperparameters (the highest-leverage knobs the Optuna
+# study targeted); reward-shaping stays fixed at the promoted baseline. Each
+# entry is a dotted path into the RL train.yaml so the UI/manifest can render
+# the surface; the trial patches below set the nested ``training:`` block.
 RL_SEARCH_SPACE: Dict[str, Any] = {
-    "source": "scripts/autotuner/rl/prepare.py --hpo",
-    "sampler": "optuna_tpe",
-    "searched_groups": [
-        "ppo_training",
-        "environment_risk",
-        "reward_weights",
-    ],
+    "training.learning_rate": [1e-4, 3e-4, 5e-4, 7e-4],
+    "training.ent_coef": [0.005, 0.01, 0.02, 0.04],
+    "training.clip_range": [0.10, 0.15, 0.20, 0.25, 0.30],
+    "training.gamma": [0.98, 0.99, 0.995, 0.999],
+    "training.n_steps": [1024, 2048, 4096],
+    "training.target_kl": [None, 0.03, 0.04, 0.05, 0.08],
 }
 
 APPROVED_DIRECTION_KNOBS = {
@@ -130,6 +135,27 @@ APPROVED_VOLATILITY_KNOBS = {
     "use_shared_feature_library",
     "validate_feature_consistency",
     "volatility_atr_mult",
+}
+
+# RL patches are NESTED (the RL train.yaml groups hyperparameters under
+# ``training:``), unlike the flat direction/volatility patches. Only the
+# ``training:`` section is searched by the server-owned HPO; the approved leaf
+# knobs below are the PPO hyperparameters it may set.
+RL_PATCH_SECTIONS = {"training"}
+APPROVED_RL_TRAINING_KNOBS = {
+    "learning_rate",
+    "lr_end",
+    "ent_coef",
+    "clip_range",
+    "gamma",
+    "gae_lambda",
+    "n_steps",
+    "n_epochs",
+    "batch_size",
+    "target_kl",
+    "max_grad_norm",
+    "vf_coef",
+    "delta_max",
 }
 
 
@@ -197,6 +223,26 @@ def validate_config_patch(
 ) -> Dict[str, Any]:
     """Validate a server-owned config patch against the approved knob surface."""
 
+    if model_type == "rl":
+        # RL patches are nested: top-level keys must be known sections and each
+        # leaf knob within ``training:`` must be approved.
+        invalid_sections = sorted(set(config_patch) - RL_PATCH_SECTIONS)
+        if invalid_sections:
+            raise ValueError(
+                "Unsupported structured HPO section(s) for rl: "
+                + ", ".join(invalid_sections)
+            )
+        training = config_patch.get("training") or {}
+        if not isinstance(training, Mapping):
+            raise ValueError("rl structured HPO 'training' patch must be a mapping")
+        invalid = sorted(set(training) - APPROVED_RL_TRAINING_KNOBS)
+        if invalid:
+            raise ValueError(
+                "Unsupported structured HPO knob(s) for rl.training: "
+                + ", ".join(invalid)
+            )
+        return dict(config_patch)
+
     if model_type == "direction":
         approved = APPROVED_DIRECTION_KNOBS
     elif model_type == "volatility":
@@ -212,15 +258,31 @@ def validate_config_patch(
     return dict(config_patch)
 
 
+def _deep_merge(base: Dict[str, Any], patch: Mapping[str, Any]) -> Dict[str, Any]:
+    """Recursively merge ``patch`` into ``base`` (nested dicts merged, scalars /
+    lists replaced). Required for RL whose train.yaml groups knobs under nested
+    sections (``training:`` etc.) — a shallow update would drop sibling keys."""
+    for key, value in patch.items():
+        if isinstance(value, Mapping) and isinstance(base.get(key), dict):
+            base[key] = _deep_merge(base[key], value)
+        else:
+            base[key] = copy.deepcopy(value)
+    return base
+
+
 def apply_config_patch(
     base_config: Mapping[str, Any],
     config_patch: Mapping[str, Any],
 ) -> Dict[str, Any]:
-    """Return a train.yaml payload with a flat server-owned patch applied."""
+    """Return a train.yaml payload with a server-owned patch applied.
+
+    Deep-merges so nested RL sections (``training:``) keep their untouched
+    sibling keys. For flat direction/volatility patches this is equivalent to a
+    shallow update (their patch values are scalars/lists, never nested dicts).
+    """
 
     patched = copy.deepcopy(dict(base_config))
-    patched.update(dict(config_patch))
-    return patched
+    return _deep_merge(patched, dict(config_patch))
 
 
 def materialize_planned_trials(
@@ -284,10 +346,11 @@ def _bounded_trials(
         return 0
     if requested_trials <= 0:
         return 0
-    if model_type == "rl":
-        return min(requested_trials, 200)
     if max_iterations <= 0:
         return 0
+    # RL trials are now materialized iterations (one prepare.py run each), so
+    # they must fit within the iteration budget like direction/volatility —
+    # leaving headroom for the agent to interpret results / propose follow-ups.
     return min(requested_trials, max_iterations, 40)
 
 
@@ -332,12 +395,14 @@ def _planned_trials(
     max_trials: int,
     quick_mode: bool,
 ) -> List[Dict[str, Any]]:
-    if max_trials <= 0 or model_type not in {"direction", "volatility"}:
+    if max_trials <= 0 or model_type not in {"direction", "volatility", "rl"}:
         return []
     if model_type == "direction":
         patches = _direction_trial_patches()
-    else:
+    elif model_type == "volatility":
         patches = _volatility_trial_patches()
+    else:
+        patches = _rl_trial_patches()
     workspace = _workspace_path(instrument, timeframe, model_type)
     quick_flag = " --quick" if quick_mode else ""
     trials = []
@@ -679,6 +744,62 @@ def _volatility_patch(
     }
 
 
+def _rl_trial_patches() -> List[Dict[str, Any]]:
+    """Discrete PPO hyperparameter trials for server-owned RL HPO.
+
+    Mirrors the dimensions the old Optuna ``--hpo`` study searched
+    (learning_rate / ent_coef / clip_range / gamma / n_steps / target_kl) as a
+    bounded, reproducible grid. Reward shaping stays at the promoted baseline.
+    """
+    seeds = [
+        _rl_patch(lr=3e-4, ent=0.01, clip=0.20, gamma=0.99, n_steps=2048, target_kl=0.04),
+        _rl_patch(lr=1e-4, ent=0.005, clip=0.15, gamma=0.995, n_steps=2048, target_kl=0.03),
+        _rl_patch(lr=5e-4, ent=0.02, clip=0.30, gamma=0.99, n_steps=4096, target_kl=0.05),
+        _rl_patch(lr=3e-4, ent=0.04, clip=0.20, gamma=0.98, n_steps=1024, target_kl=0.08),
+        _rl_patch(lr=1e-4, ent=0.01, clip=0.10, gamma=0.999, n_steps=4096, target_kl=0.03),
+        _rl_patch(lr=7e-4, ent=0.03, clip=0.25, gamma=0.99, n_steps=2048, target_kl=0.05),
+        _rl_patch(lr=2e-4, ent=0.015, clip=0.20, gamma=0.995, n_steps=2048, target_kl=0.04),
+        _rl_patch(lr=5e-4, ent=0.008, clip=0.15, gamma=0.99, n_steps=1024, target_kl=None),
+    ]
+    return _extend_unique_patches(
+        seeds,
+        (
+            _rl_patch(
+                lr=lr, ent=ent, clip=clip, gamma=gamma, n_steps=n_steps, target_kl=tkl,
+            )
+            for lr in [1e-4, 3e-4, 5e-4]
+            for ent in [0.005, 0.01, 0.02]
+            for clip in [0.15, 0.20, 0.30]
+            for gamma in [0.99, 0.995]
+            for n_steps in [2048, 4096]
+            for tkl in [0.03, 0.05]
+        ),
+    )
+
+
+def _rl_patch(
+    *,
+    lr: float,
+    ent: float,
+    clip: float,
+    gamma: float,
+    n_steps: int,
+    target_kl: float | None,
+) -> Dict[str, Any]:
+    """Nested ``training:`` patch for an RL trial. ``target_kl=None`` explicitly
+    disables the KL brake (yaml ``null``)."""
+    return {
+        "training": {
+            "learning_rate": lr,
+            "ent_coef": ent,
+            "clip_range": clip,
+            "gamma": gamma,
+            "n_steps": n_steps,
+            "target_kl": target_kl,
+        }
+    }
+
+
 def _extend_unique_patches(
     seeds: List[Dict[str, Any]],
     generated: Iterable[Dict[str, Any]],
@@ -714,6 +835,14 @@ def _trial_id(index: int, patch: Mapping[str, Any], model_type: str) -> str:
         roster = str(patch["roster_preset"]).replace("_tabular", "")
         calibration = str(patch["stacking_calibration_method"])
         return f"trial_{index:03d}_dz{threshold}_{roster}_{calibration}"
+    if model_type == "rl":
+        training = patch.get("training") or {}
+        lr = int(round(float(training.get("learning_rate", 0.0)) * 1e5))
+        ent = int(round(float(training.get("ent_coef", 0.0)) * 1000))
+        clip = int(round(float(training.get("clip_range", 0.0)) * 100))
+        tkl = training.get("target_kl")
+        kl = "off" if tkl is None else str(int(round(float(tkl) * 100)))
+        return f"trial_{index:03d}_lr{lr}_ent{ent}_clip{clip}_kl{kl}"
     atr_mult = int(round(float(patch["volatility_atr_mult"]) * 100))
     horizon = int(patch["prediction_horizon"])
     calibration = str(patch["calibration_method"])
@@ -726,11 +855,16 @@ def _workspace_path(instrument: str, timeframe: str, model_type: str) -> str:
 
 
 def _execution(model_type: str, hpo_timesteps: int) -> Dict[str, Any]:
+    # RL is now a server-owned materialized sweep (one prepare.py run per trial),
+    # the same execution model as direction/volatility — no agent-invoked Optuna
+    # ``--hpo`` study. hpo_timesteps is retained for provenance only; each trial
+    # uses the materialized train.yaml's total_timesteps (quick mode = 2 folds).
     if model_type == "rl":
         return {
-            "mode": "optuna_prepare_py",
+            "mode": "agent_bounded_sweep",
             "hpo_timesteps": hpo_timesteps,
-            "result_path": "hpo_results.json",
+            "result_path": "server_hpo_plan.json",
+            "enforced_by": "manifest_budget_and_iteration_cap",
         }
     return {
         "mode": "agent_bounded_sweep",

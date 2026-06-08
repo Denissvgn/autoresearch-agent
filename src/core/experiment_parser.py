@@ -20,6 +20,19 @@ logger = logging.getLogger(__name__)
 _KV_PATTERN = re.compile(r"^\s*(\w[\w_]*)\s*:\s*(.*?)\s*$")
 _ITERATION_MARKER = "ITERATION_RESULT:"
 
+# Statuses prepare.py emits when a run did NOT produce a valid model. The
+# failure blocks (auth_failed / gpu_busy / timeout / crash / generic failure)
+# print a placeholder ``primary_metric: 0.000000`` so the --- block stays
+# well-formed — but that 0.0 is NOT a result. Without nulling it, the phantom
+# 0.0 surfaces as the iteration's metric and can even register as an
+# "improvement" over a prior failure (observed for RL on res_76d405b8caf9,
+# where a failed HPO study reported composite_rl_score=0.0). Keep this aligned
+# with the failure-status set the orchestrator uses to record discard
+# iterations and with research_phase_plan.FAILED_ITERATION_STATUSES.
+FAILURE_STATUSES = frozenset(
+    {"crash", "timeout", "failed", "error", "pruned", "auth_failed", "gpu_busy"}
+)
+
 
 @dataclass
 class IterationMetrics:
@@ -186,6 +199,13 @@ def parse_prepare_output(stdout: str) -> IterationMetrics:
         metrics.all_gates_passed = metrics.training_gates_passed
     elif saw_legacy_gates:
         metrics.training_gates_passed = metrics.all_gates_passed
+
+    # A failed run has no meaningful primary metric. prepare.py's failure
+    # blocks emit a placeholder ``primary_metric: 0.000000`` to keep the ---
+    # block parseable; null it here so the 0.0 cannot masquerade as a result
+    # (phantom metric / false "improvement" over a prior failure).
+    if metrics.primary_metric is not None and metrics.status.lower() in FAILURE_STATUSES:
+        metrics.primary_metric = None
 
     return metrics
 

@@ -432,6 +432,33 @@ EVIDENCE_INHERITABLE_PHASES: frozenset[str] = frozenset({
 })
 
 
+# Iteration statuses that mean the run did NOT produce a valid result. Such
+# iterations must not count toward any phase-advancement criterion — a crashed
+# baseline does not complete baseline_capture, two failed runs do not complete
+# validation, etc. (Live evidence: res_76d405b8caf9, an RL session whose two
+# FAILED iterations completed baseline_capture + validation and fast-forwarded
+# the reported stage to promotion_proposal.) Mirrors the failure-status set in
+# experiment_parser.FAILURE_STATUSES and the orchestrator's discard-recording
+# branch. Kept independent of dedup rejection (handled by _is_rejected_duplicate).
+FAILED_ITERATION_STATUSES: frozenset[str] = frozenset(
+    {"crash", "timeout", "failed", "error", "pruned", "auth_failed", "gpu_busy"}
+)
+
+
+# Evidence keys a SUCCESSFUL RL walk-forward run emits (prepare.py print_summary
+# / the orchestrator results.json synthesis). Their presence proves an iteration
+# produced genuine RL OOS metrics — used to gate the RL ``validation`` phase so
+# it cannot complete on non-RL or contentless iterations.
+RL_OOS_EVIDENCE_KEYS: tuple[str, ...] = (
+    "mean_oos_sharpe",
+    "rl_profit_score",
+    "folds_passed",
+    "oos_sharpe",
+    "trading_score",
+    "mean_oos_return",
+)
+
+
 def _completed_phase_ids(
     iterations: List[Dict[str, Any]],
     hpo_studies: List[Dict[str, Any]],
@@ -460,14 +487,37 @@ def _completed_phase_ids(
        affects only the completion-set decision.
     """
 
-    iterations = [it for it in iterations if not _is_rejected_duplicate(it)]
+    iterations = [
+        it
+        for it in iterations
+        if not _is_rejected_duplicate(it) and not _is_failed_iteration(it)
+    ]
 
     completed: set[str] = set()
     if iterations:
         completed.add("baseline_capture")
-    if hpo_studies:
+    # hpo_screening completes when a study genuinely ran / HPO was disabled /
+    # no HPO was planned (``_hpo_study_completed``), OR the agent did genuine
+    # in-phase screening work (>=2 non-failed iterations tagged hpo_screening).
+    # A merely ``planned`` study with no work does NOT complete it (the
+    # false-advance fix, res_76d405b8caf9 — whose iterations were all FAILED and
+    # are now filtered out above, so they cannot satisfy the cardinality path).
+    # The cardinality fallback prevents an enable_hpo=true session that does
+    # manual screening (instead of the structured Optuna study) from parking at
+    # hpo_screening forever (res_74d62adc7c43).
+    hpo_screening_iters = _iterations_in_phase(iterations, "hpo_screening")
+    if _hpo_study_completed(hpo_studies) or len(hpo_screening_iters) >= 2:
         completed.add("hpo_screening")
-    if len(iterations) >= 2:
+    # validation: generic model types complete on two genuine attempts; RL
+    # additionally requires those attempts to carry real OOS evidence so the
+    # phase cannot complete on contentless / non-RL iterations.
+    if model_type == "rl":
+        rl_oos_iters = [
+            it for it in iterations if _has_metric(it, *RL_OOS_EVIDENCE_KEYS)
+        ]
+        if len(rl_oos_iters) >= 2:
+            completed.add("validation")
+    elif len(iterations) >= 2:
         completed.add("validation")
 
     # Tabular sweeps: evidence key OR phase-tagged minimum effort.
@@ -596,6 +646,61 @@ def _is_rejected_duplicate(iteration: Dict[str, Any]) -> bool:
         status = str(metrics.get("status") or "").lower()
         if status == "rejected_duplicate":
             return True
+    return False
+
+
+def _is_failed_iteration(iteration: Dict[str, Any]) -> bool:
+    """True when the iteration's training run failed (no valid result).
+
+    Such rows are recorded for the audit trail (decision=discard) but produced
+    no model, so they must not count toward phase-advancement cardinality,
+    evidence-key presence, or dwell gates. The failure status is carried in the
+    iteration's ``metrics_json`` (the orchestrator records the crash marker
+    there); the row-level ``status`` column and a non-zero ``returncode`` are
+    also honoured as belt-and-suspenders.
+    """
+    status = str(iteration.get("status") or "").lower()
+    if status in FAILED_ITERATION_STATUSES:
+        return True
+    rc = iteration.get("returncode")
+    if isinstance(rc, int) and rc != 0:
+        return True
+    metrics = _parse_json(iteration.get("metrics_json"))
+    if isinstance(metrics, dict):
+        m_status = str(metrics.get("status") or "").lower()
+        if m_status in FAILED_ITERATION_STATUSES:
+            return True
+    return False
+
+
+def _hpo_study_completed(hpo_studies: List[Dict[str, Any]]) -> bool:
+    """True when the ``hpo_screening`` phase has nothing left to screen.
+
+    Cases:
+      * No study rows at all → HPO was never planned for this session (e.g.
+        an RL run with ``enable_hpo=false`` persists no plan row — see
+        orchestrator's ``model_type=="rl" and enable_hpo`` gate). There is
+        nothing to screen, so the phase must NOT block; otherwise the session
+        parks at ``hpo_screening`` forever (observed on res_6461c902f6c7,
+        which timed out spinning there even though validation had completed).
+      * A genuinely completed/disabled study, or one with >=1 completed trial
+        → done.
+      * ONLY ``planned``/``running`` rows → intent, not work; the phase stays
+        incomplete (this is the false-advance fix — a merely planned study
+        must not complete the phase).
+    """
+    studies = [s for s in (hpo_studies or []) if isinstance(s, dict)]
+    if not studies:
+        return True
+    for study in studies:
+        status = str(study.get("status") or "").lower()
+        if status in {"completed", "disabled"}:
+            return True
+        try:
+            if int(study.get("completed_trials") or 0) > 0:
+                return True
+        except (TypeError, ValueError):
+            continue
     return False
 
 

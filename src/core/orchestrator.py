@@ -885,6 +885,12 @@ class AgentOrchestrator:
                     Path(claim_path).read_text(encoding="utf-8")
                 )
 
+                # Extra per-fold metric lines surfaced for RL so the session
+                # view reflects the walk-forward detail the trainer produced
+                # (sharpe / return / drawdown / folds_passed) instead of just
+                # the composite scalar — and so the RL ``validation`` phase can
+                # see genuine OOS evidence keys on this synthesis path too.
+                extra_lines: list[str] = []
                 if config.model_type == "rl":
                     # RL results use aggregate metrics. Compute composite_rl_score
                     # ML-61: matching prepare.py: 1.0×sharpe + 0.5×return - 2.0×drawdown - 0.1×cv
@@ -904,6 +910,16 @@ class AgentOrchestrator:
                         and folds_passed / max(n_folds, 1) >= 0.5
                     )
                     metric_name = "composite_rl_score"
+                    extra_lines = [
+                        f"mean_oos_sharpe:    {float(mean_sharpe):.6f}",
+                        f"mean_oos_return:    {float(mean_return):.6f}",
+                        f"mean_oos_drawdown:  {float(mean_dd):.6f}",
+                        f"sharpe_cv:          {float(sharpe_cv):.6f}",
+                        f"std_oos_sharpe:     {float(agg.get('std_oos_sharpe') or 0.0):.6f}",
+                        f"trading_score:      {float(agg.get('mean_oos_trading_score') or 0.0):.6f}",
+                        f"rl_profit_score:    {float(agg.get('rl_profit_score') or 0.0):.6f}",
+                        f"folds_passed:       {folds_passed}/{n_folds}",
+                    ]
                 else:
                     # Direction / volatility results
                     wf = results_data.get("walkforward", {})
@@ -927,6 +943,7 @@ class AgentOrchestrator:
                     f"direction:          higher_is_better",
                     f"training_gates_passed: {str(passed).lower()}",
                     f"all_gates_passed:   {str(passed).lower()}",
+                    *extra_lines,
                     f"results_json_path:  {claim_path}",
                     f"result_artifact_consume_source: true",
                     "---",
@@ -1358,19 +1375,27 @@ class AgentOrchestrator:
         focus: str,
         instrument_underscore: str,
     ) -> str:
-        """Build prompt for 3-phase HPO workflow (ML-59)."""
-        hpo_trials = config.hpo_trials
-        hpo_timesteps = config.hpo_timesteps
+        """Build prompt for the server-owned RL HPO workflow.
+
+        The HPO search is now materialized by the server as a bounded set of
+        planned trials (one ``prepare.py`` run each over the PPO hyperparameter
+        grid) — exactly like direction/volatility structured HPO — instead of
+        the agent invoking ``prepare.py --hpo``. Off-plan training commands are
+        rejected by the structured-HPO guard, so the agent runs the listed
+        expected commands exactly. This removes the LLM-adherence drift that
+        caused the Optuna study to never run (RL-TRAINING-ISSUES-ANALYSIS).
+        """
+        trial_count = min(config.hpo_trials, config.max_iterations)
 
         # Load research resume for cross-session context
         resume_block = self._load_research_resume(config)
 
         return (
             f"Tune RL model for {config.instrument} {config.timeframe} "
-            f"(tag: {config.tag}) using **3-phase HPO workflow**. "
-            f"Max {config.max_iterations} refinement iterations.\n\n"
-            f"Execute these phases IN ORDER:\n\n"
-            f"## Phase 1: Setup + HPO Screening\n\n"
+            f"(tag: {config.tag}) using the **server-owned HPO workflow**. "
+            f"The server has materialized up to {trial_count} bounded PPO "
+            f"hyperparameter trials; you execute them exactly.\n\n"
+            f"Execute these steps IN ORDER:\n\n"
             f"1. Setup workspace: {SERVER_OWNED_SETUP_INSTRUCTION}\n"
             f"```bash\n"
             f".venv/bin/python scripts/autotuner/setup.py "
@@ -1378,7 +1403,7 @@ class AgentOrchestrator:
             f"--timeframe {config.timeframe} "
             f"--models rl{setup_extra_args}\n"
             f"```\n\n"
-            f"2. Enrich RL dataset (REQUIRED):\n"
+            f"2. Enrich RL dataset (REQUIRED before any training):\n"
             f"```bash\n"
             f".venv/bin/python "
             f"scripts/autotuner/enrich_rl_dataset.py "
@@ -1386,54 +1411,25 @@ class AgentOrchestrator:
             f"--timeframe {config.timeframe}\n"
             f"```\n"
             f"Verify direction_proba mean is NOT ~0.5.\n\n"
-            f"3. Run Optuna HPO study ({hpo_trials} trials, Bayesian sampling "
-            f"with early stopping):\n"
-            f"```bash\n"
-            f".venv/bin/python "
-            f"scripts/autotuner/rl/prepare.py "
-            f"--config {workspace}/train.yaml "
-            f"--hpo --hpo-trials {hpo_trials} "
-            f"--hpo-timesteps {hpo_timesteps}{quick_flag}\n"
-            f"```\n"
-            f"This will take ~60-120 minutes. The output contains the top-3 "
-            f"parameter configs ranked by composite_rl_score.\n\n"
-            f"## Phase 2: Validate & Refine\n\n"
-            f"4. Read HPO results:\n"
-            f"```bash\n"
-            f"cat {workspace}/hpo_results.json\n"
-            f"```\n\n"
-            f"5. For each of the top-3 configs from Phase 1:\n"
-            f"   a. Write the trial's params into the `training:` section of "
-            f"`{workspace}/train.yaml`\n"
-            f"   b. Run full walk-forward validation:\n"
-            f"```bash\n"
-            f".venv/bin/python "
-            f"scripts/autotuner/rl/prepare.py "
-            f"--config {workspace}/train.yaml{quick_flag}\n"
-            f"```\n"
-            f"   c. If `training_gates_passed` and composite is best so far, copy to "
-            f"`best_train.yaml`\n\n"
-            f"6. Take the best validated config. Then refine using the RL "
-            f"diagnostic playbook:\n"
-            f"   - Fine-tune `reward_weights` (HPO doesn't search these by "
-            f"default)\n"
-            f"   - Adjust based on fold-level metrics and trade counts\n"
-            f"   - Use the Phase 1-6 diagnostic table in README.md\n\n"
-            f"## Phase 3: Robustness Validation\n\n"
-            f"7. Run best config with different seeds to confirm stability "
-            f"(one bash call per command):\n"
-            f"```bash\n"
-            f".venv/bin/python "
-            f"scripts/autotuner/rl/prepare.py "
-            f"--config {workspace}/best_train.yaml --seed 43{quick_flag}\n"
-            f"```\n"
-            f"```bash\n"
-            f".venv/bin/python "
-            f"scripts/autotuner/rl/prepare.py "
-            f"--config {workspace}/best_train.yaml --seed 44{quick_flag}\n"
-            f"```\n"
-            f"If composite_rl_score is consistent across seeds (not wildly "
-            f"different), the config is robust.\n\n"
+            f"3. Run the server-owned HPO trials:\n"
+            f"   - After setup the server materializes "
+            f"`{workspace}/planned_trials/<trial_id>/train.yaml` files and "
+            f"`{workspace}/server_hpo_plan.json`.\n"
+            f"   - Read `{workspace}/server_hpo_plan.json` and run each trial's "
+            f"`expected_command` EXACTLY, one bash call per trial. Each command "
+            f"is `prepare.py --config {workspace}/planned_trials/<trial_id>/"
+            f"train.yaml{quick_flag}`.\n"
+            f"   - Do NOT edit `train.yaml` or any planned-trial YAML, and do "
+            f"NOT invent configs — off-plan training commands are rejected. "
+            f"Each trial's PPO hyperparameters are already baked into its "
+            f"materialized train.yaml.\n"
+            f"   - The `---` block from each run reports `primary_metric` "
+            f"(composite_rl_score) and fold metrics; the server records each as "
+            f"an `hpo_screening` iteration.\n\n"
+            f"4. After all trials finish, interpret the results: identify the "
+            f"trial with the best `composite_rl_score`. Propose any follow-up "
+            f"experiment as a `MANUAL_REVIEW_REQUEST:` line in TEXT only — do "
+            f"not run off-plan commands.\n\n"
             f"{PROMOTION_HANDOFF_INSTRUCTION}\n\n"
             f"Run autonomously."
             f"{fixed_settings_notice}"
@@ -1591,7 +1587,14 @@ class AgentOrchestrator:
 
     @staticmethod
     def _structured_hpo_enforced(config: ResearchConfig) -> bool:
-        return bool(config.enable_hpo and config.model_type in {"direction", "volatility"})
+        # RL HPO is now server-owned via materialized planned trials (same as
+        # direction/volatility) instead of the agent invoking ``prepare.py
+        # --hpo`` — which the agent reliably skipped because the per-turn phase
+        # guidance never reissued the command (see RL-TRAINING-ISSUES-ANALYSIS).
+        return bool(
+            config.enable_hpo
+            and config.model_type in {"direction", "volatility", "rl"}
+        )
 
     async def _active_hpo_study_id(self, research_id: str) -> Optional[str]:
         studies = await self._store.get_hpo_studies(research_id)

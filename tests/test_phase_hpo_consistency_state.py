@@ -292,8 +292,10 @@ def test_structured_hpo_plan_never_inflates_requested_trials():
 
     assert direction_plan["max_trials"] == 1
     assert len(direction_plan["trials"]) == 1
+    # RL HPO is now server-owned via materialized planned trials (like
+    # direction/volatility), so a 1-trial request yields exactly 1 RL trial.
     assert rl_plan["max_trials"] == 1
-    assert rl_plan["trials"] == []
+    assert len(rl_plan["trials"]) == 1
 
 
 def test_structured_hpo_plan_bounds_direction_trials_by_budget():
