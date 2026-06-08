@@ -100,6 +100,8 @@ RL_SEARCH_SPACE: Dict[str, Any] = {
     "training.gamma": [0.98, 0.99, 0.995, 0.999],
     "training.n_steps": [1024, 2048, 4096],
     "training.target_kl": [None, 0.03, 0.04, 0.05, 0.08],
+    # PnL-E1: hard selectivity gate (|direction_proba-0.5| abstain margin).
+    "direction_confidence_gate": [0.0, 0.05, 0.10, 0.15, 0.20],
 }
 
 APPROVED_DIRECTION_KNOBS = {
@@ -142,6 +144,9 @@ APPROVED_VOLATILITY_KNOBS = {
 # ``training:`` section is searched by the server-owned HPO; the approved leaf
 # knobs below are the PPO hyperparameters it may set.
 RL_PATCH_SECTIONS = {"training"}
+# PnL-E1: top-level scalar knobs an RL patch may set alongside the training:
+# block (the hard selectivity gate is not a PPO hyperparameter).
+RL_PATCH_TOPLEVEL_SCALARS = {"direction_confidence_gate"}
 APPROVED_RL_TRAINING_KNOBS = {
     "learning_rate",
     "lr_end",
@@ -224,9 +229,12 @@ def validate_config_patch(
     """Validate a server-owned config patch against the approved knob surface."""
 
     if model_type == "rl":
-        # RL patches are nested: top-level keys must be known sections and each
-        # leaf knob within ``training:`` must be approved.
-        invalid_sections = sorted(set(config_patch) - RL_PATCH_SECTIONS)
+        # RL patches are nested: top-level keys must be known sections (training:)
+        # or approved top-level scalars (selectivity gate), and each leaf knob
+        # within ``training:`` must be approved.
+        invalid_sections = sorted(
+            set(config_patch) - RL_PATCH_SECTIONS - RL_PATCH_TOPLEVEL_SCALARS
+        )
         if invalid_sections:
             raise ValueError(
                 "Unsupported structured HPO section(s) for rl: "
@@ -744,28 +752,43 @@ def _volatility_patch(
     }
 
 
-def _rl_trial_patches() -> List[Dict[str, Any]]:
-    """Discrete PPO hyperparameter trials for server-owned RL HPO.
+# PnL-E1: a single sensible PPO baseline used for the leading selectivity sweep
+# so the gate's effect on post-cost return / turnover is isolated from PPO tuning.
+_RL_PPO_BASELINE = dict(lr=3e-4, ent=0.01, clip=0.20, gamma=0.99, n_steps=2048, target_kl=0.04)
+# Moderate default gate applied to the PPO-search trials (E1 hypothesis: some
+# selectivity helps); the leading sweep pins down the best gate independently.
+_RL_DEFAULT_GATE = 0.10
 
-    Mirrors the dimensions the old Optuna ``--hpo`` study searched
-    (learning_rate / ent_coef / clip_range / gamma / n_steps / target_kl) as a
-    bounded, reproducible grid. Reward shaping stays at the promoted baseline.
+
+def _rl_trial_patches() -> List[Dict[str, Any]]:
+    """Discrete trials for server-owned RL HPO.
+
+    Two blocks: (1) PnL-E1 LEADING selectivity sweep — fix the PPO baseline and
+    vary ONLY ``direction_confidence_gate`` so its effect is isolated; (2) a PPO
+    hyperparameter grid (lr/ent/clip/gamma/n_steps/target_kl) under a moderate
+    gate. Reward shaping stays at the promoted baseline.
     """
-    seeds = [
-        _rl_patch(lr=3e-4, ent=0.01, clip=0.20, gamma=0.99, n_steps=2048, target_kl=0.04),
-        _rl_patch(lr=1e-4, ent=0.005, clip=0.15, gamma=0.995, n_steps=2048, target_kl=0.03),
-        _rl_patch(lr=5e-4, ent=0.02, clip=0.30, gamma=0.99, n_steps=4096, target_kl=0.05),
-        _rl_patch(lr=3e-4, ent=0.04, clip=0.20, gamma=0.98, n_steps=1024, target_kl=0.08),
-        _rl_patch(lr=1e-4, ent=0.01, clip=0.10, gamma=0.999, n_steps=4096, target_kl=0.03),
-        _rl_patch(lr=7e-4, ent=0.03, clip=0.25, gamma=0.99, n_steps=2048, target_kl=0.05),
-        _rl_patch(lr=2e-4, ent=0.015, clip=0.20, gamma=0.995, n_steps=2048, target_kl=0.04),
-        _rl_patch(lr=5e-4, ent=0.008, clip=0.15, gamma=0.99, n_steps=1024, target_kl=None),
+    # (1) Leading gate sweep at the fixed PPO baseline.
+    gate_sweep = [
+        _rl_patch(**_RL_PPO_BASELINE, gate=g)
+        for g in [0.0, 0.05, 0.10, 0.15, 0.20]
+    ]
+    # (2) PPO search seeds under the moderate default gate.
+    ppo_seeds = [
+        _rl_patch(lr=1e-4, ent=0.005, clip=0.15, gamma=0.995, n_steps=2048, target_kl=0.03, gate=_RL_DEFAULT_GATE),
+        _rl_patch(lr=5e-4, ent=0.02, clip=0.30, gamma=0.99, n_steps=4096, target_kl=0.05, gate=_RL_DEFAULT_GATE),
+        _rl_patch(lr=3e-4, ent=0.04, clip=0.20, gamma=0.98, n_steps=1024, target_kl=0.08, gate=_RL_DEFAULT_GATE),
+        _rl_patch(lr=1e-4, ent=0.01, clip=0.10, gamma=0.999, n_steps=4096, target_kl=0.03, gate=_RL_DEFAULT_GATE),
+        _rl_patch(lr=7e-4, ent=0.03, clip=0.25, gamma=0.99, n_steps=2048, target_kl=0.05, gate=_RL_DEFAULT_GATE),
+        _rl_patch(lr=2e-4, ent=0.015, clip=0.20, gamma=0.995, n_steps=2048, target_kl=0.04, gate=_RL_DEFAULT_GATE),
+        _rl_patch(lr=5e-4, ent=0.008, clip=0.15, gamma=0.99, n_steps=1024, target_kl=None, gate=_RL_DEFAULT_GATE),
     ]
     return _extend_unique_patches(
-        seeds,
+        gate_sweep + ppo_seeds,
         (
             _rl_patch(
-                lr=lr, ent=ent, clip=clip, gamma=gamma, n_steps=n_steps, target_kl=tkl,
+                lr=lr, ent=ent, clip=clip, gamma=gamma, n_steps=n_steps,
+                target_kl=tkl, gate=_RL_DEFAULT_GATE,
             )
             for lr in [1e-4, 3e-4, 5e-4]
             for ent in [0.005, 0.01, 0.02]
@@ -785,9 +808,11 @@ def _rl_patch(
     gamma: float,
     n_steps: int,
     target_kl: float | None,
+    gate: float = 0.0,
 ) -> Dict[str, Any]:
-    """Nested ``training:`` patch for an RL trial. ``target_kl=None`` explicitly
-    disables the KL brake (yaml ``null``)."""
+    """RL trial patch: nested ``training:`` PPO knobs + the top-level hard
+    selectivity gate. ``target_kl=None`` explicitly disables the KL brake
+    (yaml ``null``); ``gate`` is the |direction_proba-0.5| abstain margin."""
     return {
         "training": {
             "learning_rate": lr,
@@ -796,7 +821,8 @@ def _rl_patch(
             "gamma": gamma,
             "n_steps": n_steps,
             "target_kl": target_kl,
-        }
+        },
+        "direction_confidence_gate": gate,
     }
 
 
@@ -842,7 +868,8 @@ def _trial_id(index: int, patch: Mapping[str, Any], model_type: str) -> str:
         clip = int(round(float(training.get("clip_range", 0.0)) * 100))
         tkl = training.get("target_kl")
         kl = "off" if tkl is None else str(int(round(float(tkl) * 100)))
-        return f"trial_{index:03d}_lr{lr}_ent{ent}_clip{clip}_kl{kl}"
+        gate = int(round(float(patch.get("direction_confidence_gate", 0.0)) * 100))
+        return f"trial_{index:03d}_lr{lr}_ent{ent}_clip{clip}_kl{kl}_g{gate}"
     atr_mult = int(round(float(patch["volatility_atr_mult"]) * 100))
     horizon = int(patch["prediction_horizon"])
     calibration = str(patch["calibration_method"])

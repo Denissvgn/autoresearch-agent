@@ -61,7 +61,7 @@ def test_rl_trials_are_nested_training_patches_with_ppo_knobs() -> None:
     plan = _rl_plan()
     for trial in plan["trials"]:
         patch = trial["config_patch"]
-        assert set(patch) == {"training"}
+        assert set(patch) == {"training", "direction_confidence_gate"}
         training = patch["training"]
         assert "learning_rate" in training
         assert "target_kl" in training
@@ -70,6 +70,51 @@ def test_rl_trials_are_nested_training_patches_with_ppo_knobs() -> None:
         assert "scripts/autotuner/rl/prepare.py" in trial["expected_command"]
         assert "--quick" in trial["expected_command"]
         assert trial["config_hash"]
+
+
+def test_rl_leading_trials_are_an_isolated_gate_sweep() -> None:
+    """PnL-E1: the first 5 trials fix the PPO baseline and vary ONLY the hard
+    selectivity gate, so its effect on post-cost return / turnover is isolated."""
+    plan = _rl_plan(max_iterations=12, hpo_trials=12)
+    lead = plan["trials"][:5]
+    gates = [t["config_patch"]["direction_confidence_gate"] for t in lead]
+    assert gates == [0.0, 0.05, 0.10, 0.15, 0.20]
+    # PPO baseline identical across the sweep (only the gate moves)
+    ppos = {tuple(sorted(t["config_patch"]["training"].items())) for t in lead}
+    assert len(ppos) == 1
+    # gate is encoded in the trial id
+    assert lead[1]["trial_id"].endswith("_g5")
+    assert lead[4]["trial_id"].endswith("_g20")
+
+
+def test_rl_validate_accepts_gate_scalar_rejects_unknown_top_level() -> None:
+    import pytest
+    validate_config_patch("rl", {"training": {"learning_rate": 3e-4},
+                                 "direction_confidence_gate": 0.1})
+    with pytest.raises(ValueError, match="section"):
+        validate_config_patch("rl", {"training": {}, "bogus_top": 1})
+
+
+def test_materialize_rl_trial_applies_top_level_gate(tmp_path) -> None:
+    workspace = tmp_path / "rl"
+    workspace.mkdir()
+    (workspace / "train.yaml").write_text(
+        yaml.safe_dump(
+            {"training": {"total_timesteps": 500000, "learning_rate": 0.001},
+             "direction_confidence_gate": 0.0, "reward_weights": {"pnl": 1.0}},
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    plan = _rl_plan(max_iterations=5, hpo_trials=5)  # leading gate sweep
+    materialize_planned_trials(plan, workspace)
+    # trial 4 (index 3) is gate=0.15 in the sweep
+    t = plan["trials"][3]
+    payload = yaml.safe_load(
+        (workspace / "planned_trials" / t["trial_id"] / "train.yaml").read_text()
+    )
+    assert payload["direction_confidence_gate"] == 0.15
+    assert payload["training"]["total_timesteps"] == 500000  # sibling preserved
 
 
 def test_rl_trials_are_unique() -> None:
