@@ -61,7 +61,9 @@ def test_rl_trials_are_nested_training_patches_with_ppo_knobs() -> None:
     plan = _rl_plan()
     for trial in plan["trials"]:
         patch = trial["config_patch"]
-        assert set(patch) == {"training", "direction_confidence_gate"}
+        # training + gate always present; reward_weights (E3) optional.
+        assert {"training", "direction_confidence_gate"} <= set(patch)
+        assert set(patch) <= {"training", "direction_confidence_gate", "reward_weights"}
         training = patch["training"]
         assert "learning_rate" in training
         assert "target_kl" in training
@@ -85,6 +87,66 @@ def test_rl_leading_trials_are_an_isolated_gate_sweep() -> None:
     # gate is encoded in the trial id
     assert lead[1]["trial_id"].endswith("_g5")
     assert lead[4]["trial_id"].endswith("_g20")
+
+
+def test_rl_e3_reward_sweep_is_isolated_at_fixed_gate() -> None:
+    """PnL-E3: trials 6-7 hold the PPO baseline + the moderate gate fixed and
+    vary ONLY the turnover/holding reward shaping, isolating its effect."""
+    plan = _rl_plan(max_iterations=20, hpo_trials=20)
+    block_b = plan["trials"][5:7]
+    for t in block_b:
+        assert t["config_patch"]["direction_confidence_gate"] == 0.10
+        assert "reward_weights" in t["config_patch"]
+    rws = [t["config_patch"]["reward_weights"] for t in block_b]
+    assert rws[0] == {"trade": 0.010, "flip": 0.005, "hold": 0.0}
+    assert rws[1] == {"trade": 0.020, "flip": 0.010, "hold": 0.0}
+    # reward profile encoded in the trial id
+    assert block_b[0]["trial_id"].endswith("_g10_t10")
+    assert block_b[1]["trial_id"].endswith("_g10_t20")
+
+
+def test_rl_combined_grid_applies_gate_and_low_turnover_reward() -> None:
+    """Block C (PPO grid) runs under BOTH E1 (gate) and E3 (low-turnover reward)
+    — the Sprint-1 'together' regime."""
+    plan = _rl_plan(max_iterations=20, hpo_trials=20)
+    grid = plan["trials"][7:]
+    assert grid, "expected PPO-grid trials beyond the isolation blocks"
+    for t in grid:
+        cp = t["config_patch"]
+        assert cp["direction_confidence_gate"] == 0.10
+        assert cp["reward_weights"] == {"trade": 0.010, "flip": 0.005, "hold": 0.0}
+
+
+def test_rl_validate_rejects_unknown_reward_knob() -> None:
+    import pytest
+    validate_config_patch("rl", {"training": {}, "reward_weights": {"trade": 0.01, "hold": 0.0}})
+    with pytest.raises(ValueError, match="reward_weights"):
+        validate_config_patch("rl", {"training": {}, "reward_weights": {"bogus_rw": 1}})
+
+
+def test_materialize_rl_trial_merges_reward_weights(tmp_path) -> None:
+    workspace = tmp_path / "rl"
+    workspace.mkdir()
+    (workspace / "train.yaml").write_text(
+        yaml.safe_dump(
+            {"training": {"total_timesteps": 500000},
+             "direction_confidence_gate": 0.0,
+             "reward_weights": {"pnl": 1.0, "sharpe": 0.5, "trade": 0.002,
+                                "flip": 0.001, "hold": 0.001}},
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    plan = _rl_plan(max_iterations=7, hpo_trials=7)  # includes the E3 reward sweep
+    materialize_planned_trials(plan, workspace)
+    t = plan["trials"][5]  # first E3 reward trial (lowturn)
+    payload = yaml.safe_load(
+        (workspace / "planned_trials" / t["trial_id"] / "train.yaml").read_text()
+    )
+    rw = payload["reward_weights"]
+    assert rw["trade"] == 0.010 and rw["flip"] == 0.005 and rw["hold"] == 0.0
+    # untouched reward keys preserved by the deep merge
+    assert rw["pnl"] == 1.0 and rw["sharpe"] == 0.5
 
 
 def test_rl_validate_accepts_gate_scalar_rejects_unknown_top_level() -> None:

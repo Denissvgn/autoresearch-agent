@@ -102,6 +102,11 @@ RL_SEARCH_SPACE: Dict[str, Any] = {
     "training.target_kl": [None, 0.03, 0.04, 0.05, 0.08],
     # PnL-E1: hard selectivity gate (|direction_proba-0.5| abstain margin).
     "direction_confidence_gate": [0.0, 0.05, 0.10, 0.15, 0.20],
+    # PnL-E3: turnover/holding reward shaping (raise churn penalties, drop the
+    # holding penalty so confident positions can ride).
+    "reward_weights.trade": [0.002, 0.010, 0.020],
+    "reward_weights.flip": [0.001, 0.005, 0.010],
+    "reward_weights.hold": [0.001, 0.0],
 }
 
 APPROVED_DIRECTION_KNOBS = {
@@ -143,10 +148,18 @@ APPROVED_VOLATILITY_KNOBS = {
 # ``training:``), unlike the flat direction/volatility patches. Only the
 # ``training:`` section is searched by the server-owned HPO; the approved leaf
 # knobs below are the PPO hyperparameters it may set.
-RL_PATCH_SECTIONS = {"training"}
-# PnL-E1: top-level scalar knobs an RL patch may set alongside the training:
-# block (the hard selectivity gate is not a PPO hyperparameter).
+# PnL-E3: ``reward_weights`` is also a nested patch section (turnover / holding
+# reward shaping). Both training: and reward_weights: deep-merge into train.yaml.
+RL_PATCH_SECTIONS = {"training", "reward_weights"}
+# PnL-E1: top-level scalar knobs an RL patch may set alongside the sections
+# (the hard selectivity gate is not a PPO hyperparameter).
 RL_PATCH_TOPLEVEL_SCALARS = {"direction_confidence_gate"}
+# PnL-E3: reward-weight leaf knobs the server-owned sweep may set (the rl-trainer
+# merges partial overrides into the full reward_weights dict).
+APPROVED_RL_REWARD_KNOBS = {
+    "pnl", "risk", "dd_increment", "leverage", "flip", "trade", "hold",
+    "sharpe", "confidence",
+}
 APPROVED_RL_TRAINING_KNOBS = {
     "learning_rate",
     "lr_end",
@@ -248,6 +261,15 @@ def validate_config_patch(
             raise ValueError(
                 "Unsupported structured HPO knob(s) for rl.training: "
                 + ", ".join(invalid)
+            )
+        reward = config_patch.get("reward_weights") or {}
+        if not isinstance(reward, Mapping):
+            raise ValueError("rl structured HPO 'reward_weights' patch must be a mapping")
+        invalid_rw = sorted(set(reward) - APPROVED_RL_REWARD_KNOBS)
+        if invalid_rw:
+            raise ValueError(
+                "Unsupported structured HPO knob(s) for rl.reward_weights: "
+                + ", ".join(invalid_rw)
             )
         return dict(config_patch)
 
@@ -758,37 +780,52 @@ _RL_PPO_BASELINE = dict(lr=3e-4, ent=0.01, clip=0.20, gamma=0.99, n_steps=2048, 
 # Moderate default gate applied to the PPO-search trials (E1 hypothesis: some
 # selectivity helps); the leading sweep pins down the best gate independently.
 _RL_DEFAULT_GATE = 0.10
+# PnL-E3: turnover/holding reward-shaping profiles. ``None`` = train.yaml default
+# (trade 0.002 / flip 0.001 / hold 0.001). The shaped profiles raise the churn
+# penalties and drop the holding penalty so confident positions can ride. The
+# rl-trainer merges these partial overrides into the full reward_weights dict.
+_RL_REWARD_LOWTURN = {"trade": 0.010, "flip": 0.005, "hold": 0.0}
+_RL_REWARD_LOWTURN_STRONG = {"trade": 0.020, "flip": 0.010, "hold": 0.0}
 
 
 def _rl_trial_patches() -> List[Dict[str, Any]]:
-    """Discrete trials for server-owned RL HPO.
+    """Discrete trials for server-owned RL HPO (Sprint-1: E1 + E3).
 
-    Two blocks: (1) PnL-E1 LEADING selectivity sweep — fix the PPO baseline and
-    vary ONLY ``direction_confidence_gate`` so its effect is isolated; (2) a PPO
-    hyperparameter grid (lr/ent/clip/gamma/n_steps/target_kl) under a moderate
-    gate. Reward shaping stays at the promoted baseline.
+    Leading ISOLATION blocks at the fixed PPO baseline so each lever's effect on
+    post-cost return / turnover is isolated:
+      A. PnL-E1 selectivity sweep — vary ONLY ``direction_confidence_gate``.
+      B. PnL-E3 turnover-reward sweep — at the moderate gate, vary ONLY the
+         reward shaping (churn penalties up, holding penalty off).
+    Then a PPO grid under the combined regime (moderate gate + low-turnover
+    reward), i.e. E1 and E3 applied together.
     """
-    # (1) Leading gate sweep at the fixed PPO baseline.
+    # (A) E1 gate sweep — fixed PPO baseline, baseline reward, varying gate.
     gate_sweep = [
         _rl_patch(**_RL_PPO_BASELINE, gate=g)
         for g in [0.0, 0.05, 0.10, 0.15, 0.20]
     ]
-    # (2) PPO search seeds under the moderate default gate.
+    # (B) E3 reward sweep — fixed PPO baseline + moderate gate, varying reward
+    # shaping (the baseline-reward @ gate=0.10 point is already in block A).
+    reward_sweep = [
+        _rl_patch(**_RL_PPO_BASELINE, gate=_RL_DEFAULT_GATE, reward=_RL_REWARD_LOWTURN),
+        _rl_patch(**_RL_PPO_BASELINE, gate=_RL_DEFAULT_GATE, reward=_RL_REWARD_LOWTURN_STRONG),
+    ]
+    # (C) PPO search seeds under the COMBINED regime (gate + low-turnover reward).
     ppo_seeds = [
-        _rl_patch(lr=1e-4, ent=0.005, clip=0.15, gamma=0.995, n_steps=2048, target_kl=0.03, gate=_RL_DEFAULT_GATE),
-        _rl_patch(lr=5e-4, ent=0.02, clip=0.30, gamma=0.99, n_steps=4096, target_kl=0.05, gate=_RL_DEFAULT_GATE),
-        _rl_patch(lr=3e-4, ent=0.04, clip=0.20, gamma=0.98, n_steps=1024, target_kl=0.08, gate=_RL_DEFAULT_GATE),
-        _rl_patch(lr=1e-4, ent=0.01, clip=0.10, gamma=0.999, n_steps=4096, target_kl=0.03, gate=_RL_DEFAULT_GATE),
-        _rl_patch(lr=7e-4, ent=0.03, clip=0.25, gamma=0.99, n_steps=2048, target_kl=0.05, gate=_RL_DEFAULT_GATE),
-        _rl_patch(lr=2e-4, ent=0.015, clip=0.20, gamma=0.995, n_steps=2048, target_kl=0.04, gate=_RL_DEFAULT_GATE),
-        _rl_patch(lr=5e-4, ent=0.008, clip=0.15, gamma=0.99, n_steps=1024, target_kl=None, gate=_RL_DEFAULT_GATE),
+        _rl_patch(lr=1e-4, ent=0.005, clip=0.15, gamma=0.995, n_steps=2048, target_kl=0.03, gate=_RL_DEFAULT_GATE, reward=_RL_REWARD_LOWTURN),
+        _rl_patch(lr=5e-4, ent=0.02, clip=0.30, gamma=0.99, n_steps=4096, target_kl=0.05, gate=_RL_DEFAULT_GATE, reward=_RL_REWARD_LOWTURN),
+        _rl_patch(lr=3e-4, ent=0.04, clip=0.20, gamma=0.98, n_steps=1024, target_kl=0.08, gate=_RL_DEFAULT_GATE, reward=_RL_REWARD_LOWTURN),
+        _rl_patch(lr=1e-4, ent=0.01, clip=0.10, gamma=0.999, n_steps=4096, target_kl=0.03, gate=_RL_DEFAULT_GATE, reward=_RL_REWARD_LOWTURN),
+        _rl_patch(lr=7e-4, ent=0.03, clip=0.25, gamma=0.99, n_steps=2048, target_kl=0.05, gate=_RL_DEFAULT_GATE, reward=_RL_REWARD_LOWTURN),
+        _rl_patch(lr=2e-4, ent=0.015, clip=0.20, gamma=0.995, n_steps=2048, target_kl=0.04, gate=_RL_DEFAULT_GATE, reward=_RL_REWARD_LOWTURN),
+        _rl_patch(lr=5e-4, ent=0.008, clip=0.15, gamma=0.99, n_steps=1024, target_kl=None, gate=_RL_DEFAULT_GATE, reward=_RL_REWARD_LOWTURN),
     ]
     return _extend_unique_patches(
-        gate_sweep + ppo_seeds,
+        gate_sweep + reward_sweep + ppo_seeds,
         (
             _rl_patch(
                 lr=lr, ent=ent, clip=clip, gamma=gamma, n_steps=n_steps,
-                target_kl=tkl, gate=_RL_DEFAULT_GATE,
+                target_kl=tkl, gate=_RL_DEFAULT_GATE, reward=_RL_REWARD_LOWTURN,
             )
             for lr in [1e-4, 3e-4, 5e-4]
             for ent in [0.005, 0.01, 0.02]
@@ -809,11 +846,14 @@ def _rl_patch(
     n_steps: int,
     target_kl: float | None,
     gate: float = 0.0,
+    reward: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """RL trial patch: nested ``training:`` PPO knobs + the top-level hard
-    selectivity gate. ``target_kl=None`` explicitly disables the KL brake
-    (yaml ``null``); ``gate`` is the |direction_proba-0.5| abstain margin."""
-    return {
+    selectivity gate + optional ``reward_weights:`` shaping (E3). ``target_kl=None``
+    explicitly disables the KL brake (yaml ``null``); ``gate`` is the
+    |direction_proba-0.5| abstain margin; ``reward`` is a partial reward-weight
+    override (merged into the full dict by the trainer)."""
+    patch: Dict[str, Any] = {
         "training": {
             "learning_rate": lr,
             "ent_coef": ent,
@@ -824,6 +864,9 @@ def _rl_patch(
         },
         "direction_confidence_gate": gate,
     }
+    if reward is not None:
+        patch["reward_weights"] = dict(reward)
+    return patch
 
 
 def _extend_unique_patches(
@@ -869,7 +912,11 @@ def _trial_id(index: int, patch: Mapping[str, Any], model_type: str) -> str:
         tkl = training.get("target_kl")
         kl = "off" if tkl is None else str(int(round(float(tkl) * 100)))
         gate = int(round(float(patch.get("direction_confidence_gate", 0.0)) * 100))
-        return f"trial_{index:03d}_lr{lr}_ent{ent}_clip{clip}_kl{kl}_g{gate}"
+        rw = patch.get("reward_weights") or {}
+        # PnL-E3: tag the turnover-penalty profile so reward-shaped trials are
+        # distinct (baseline reward → no suffix).
+        rtag = f"_t{int(round(float(rw.get('trade', 0.0)) * 1000))}" if rw else ""
+        return f"trial_{index:03d}_lr{lr}_ent{ent}_clip{clip}_kl{kl}_g{gate}{rtag}"
     atr_mult = int(round(float(patch["volatility_atr_mult"]) * 100))
     horizon = int(patch["prediction_horizon"])
     calibration = str(patch["calibration_method"])
