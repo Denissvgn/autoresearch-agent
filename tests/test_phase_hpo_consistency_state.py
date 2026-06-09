@@ -906,3 +906,19 @@ def test_latest_known_artifacts_not_populated_when_confirmed_promotion_present()
     # latest_known_artifacts still returns iteration-derived values (they coexist).
     lka = _latest_known_artifacts(iterations)
     assert lka.get("rollback_target", {}).get("value") == "direction_model_v1.9.0"
+
+
+def test_direction_hpo_plan_validates_dm12_dm13_knobs():
+    """Regression: direction trial patches set sample_weight_halflife / meta_model
+    / horizon_ensemble_enabled (DM-12/DM-13). These were missing from
+    APPROVED_DIRECTION_KNOBS, so a plan with >=9 trials (which reaches those
+    seeds) raised 'Unsupported structured HPO knob(s)' and 500'd on session
+    start. Build a 10-trial plan and confirm it validates."""
+    plan = build_structured_hpo_plan(
+        research_id="res_dir_knobs", instrument="DOGE_USDT", timeframe="15m",
+        model_type="direction", quick_mode=False, max_iterations=16,
+        max_budget_usd=10.0, timeout_s=3600, enable_hpo=True, hpo_trials=10,
+        hpo_timesteps=50000,
+    )
+    assert len(plan["trials"]) == 10
+    assert any("sample_weight_halflife" in t["config_patch"] for t in plan["trials"])

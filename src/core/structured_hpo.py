@@ -101,7 +101,10 @@ RL_SEARCH_SPACE: Dict[str, Any] = {
     "training.n_steps": [1024, 2048, 4096],
     "training.target_kl": [None, 0.03, 0.04, 0.05, 0.08],
     # PnL-E1: hard selectivity gate (|direction_proba-0.5| abstain margin).
-    "direction_confidence_gate": [0.0, 0.05, 0.10, 0.15, 0.20],
+    # Recentred for the honest two-sided OOF (post-S1): |proba-0.5| mean 0.26,
+    # so tradeable share at 0.05/0.10/0.20/0.30 = 91/82/63/43% — a real
+    # selectivity curve (the old leaked signal abstained ~entirely above 0.05).
+    "direction_confidence_gate": [0.0, 0.05, 0.10, 0.20, 0.30],
     # PnL-E3: turnover/holding reward shaping (raise churn penalties, drop the
     # holding penalty so confident positions can ride).
     "reward_weights.trade": [0.002, 0.010, 0.020],
@@ -126,6 +129,12 @@ APPROVED_DIRECTION_KNOBS = {
     "threshold_strategy",
     "use_shared_feature_library",
     "validate_feature_consistency",
+    # DM-12 / DM-13 knobs the direction trial patches already set — were missing
+    # here, so direction + enable_hpo raised "Unsupported structured HPO knob(s)"
+    # and 500'd on session start.
+    "sample_weight_halflife",
+    "meta_model",
+    "horizon_ensemble_enabled",
 }
 
 APPROVED_VOLATILITY_KNOBS = {
@@ -800,9 +809,11 @@ def _rl_trial_patches() -> List[Dict[str, Any]]:
     reward), i.e. E1 and E3 applied together.
     """
     # (A) E1 gate sweep — fixed PPO baseline, baseline reward, varying gate.
+    # Recentred for the honest two-sided OOF (post-S1): {0, 0.05, 0.10, 0.20, 0.30}
+    # = tradeable share 100/91/82/63/43% (real selectivity curve).
     gate_sweep = [
         _rl_patch(**_RL_PPO_BASELINE, gate=g)
-        for g in [0.0, 0.05, 0.10, 0.15, 0.20]
+        for g in [0.0, 0.05, 0.10, 0.20, 0.30]
     ]
     # (B) E3 reward sweep — fixed PPO baseline + moderate gate, varying reward
     # shaping (the baseline-reward @ gate=0.10 point is already in block A).

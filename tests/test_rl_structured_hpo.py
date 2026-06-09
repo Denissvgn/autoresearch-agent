@@ -80,13 +80,13 @@ def test_rl_leading_trials_are_an_isolated_gate_sweep() -> None:
     plan = _rl_plan(max_iterations=12, hpo_trials=12)
     lead = plan["trials"][:5]
     gates = [t["config_patch"]["direction_confidence_gate"] for t in lead]
-    assert gates == [0.0, 0.05, 0.10, 0.15, 0.20]
+    assert gates == [0.0, 0.05, 0.10, 0.20, 0.30]
     # PPO baseline identical across the sweep (only the gate moves)
     ppos = {tuple(sorted(t["config_patch"]["training"].items())) for t in lead}
     assert len(ppos) == 1
     # gate is encoded in the trial id
     assert lead[1]["trial_id"].endswith("_g5")
-    assert lead[4]["trial_id"].endswith("_g20")
+    assert lead[4]["trial_id"].endswith("_g30")
 
 
 def test_rl_e3_reward_sweep_is_isolated_at_fixed_gate() -> None:
@@ -170,12 +170,12 @@ def test_materialize_rl_trial_applies_top_level_gate(tmp_path) -> None:
     )
     plan = _rl_plan(max_iterations=5, hpo_trials=5)  # leading gate sweep
     materialize_planned_trials(plan, workspace)
-    # trial 4 (index 3) is gate=0.15 in the sweep
+    # trial 4 (index 3) is gate=0.20 in the recentred sweep
     t = plan["trials"][3]
     payload = yaml.safe_load(
         (workspace / "planned_trials" / t["trial_id"] / "train.yaml").read_text()
     )
-    assert payload["direction_confidence_gate"] == 0.15
+    assert payload["direction_confidence_gate"] == 0.20
     assert payload["training"]["total_timesteps"] == 500000  # sibling preserved
 
 
