@@ -7,6 +7,7 @@ import glob as glob_mod
 import json
 import logging
 import os
+import re
 import shlex
 import subprocess
 import time
@@ -346,6 +347,13 @@ def _safe_write_path(raw: str, workspace: str) -> str:
 
 
 def _normalize_command_for_plan(command: str) -> str:
+    # Strip a leading ``cd <dir> && `` wrapper before normalizing: the agent
+    # prefixes its bash commands with ``cd /app/workspace && `` (per the workspace
+    # CLAUDE.md), but planned-trial ``expected_command``s are stored WITHOUT it.
+    # Without stripping, the structured-HPO guard never matches the agent's
+    # planned-trial command → every trial is rejected as off-plan → the session
+    # aborts after 5 rejections at iteration 0 (observed on the honest E1/E3 run).
+    command = re.sub(r"^\s*cd\s+\S+\s*&&\s*", "", command)
     try:
         return " ".join(shlex.split(command))
     except ValueError:
