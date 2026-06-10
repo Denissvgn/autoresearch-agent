@@ -316,3 +316,27 @@ def test_structured_hpo_enforced_for_rl_with_hpo() -> None:
     assert AgentOrchestrator._structured_hpo_enforced(_cfg("rl", True)) is True
     assert AgentOrchestrator._structured_hpo_enforced(_cfg("rl", False)) is False
     assert AgentOrchestrator._structured_hpo_enforced(_cfg("direction", True)) is True
+
+
+def test_training_command_timeout_is_floored_above_agent_undersetting() -> None:
+    """A prepare.py training run must not be killed below the 2h default no matter
+    what timeout_s the agent sets — the guardrail that prevents losing the first
+    trial of a sweep to an under-set 1800s bash timeout."""
+    eff = AgentOrchestrator._effective_tool_timeout
+    train_cmd = (
+        "cd /app/workspace && .venv/bin/python scripts/autotuner/rl/prepare.py "
+        "--config runs/.../trial_001/train.yaml --quick"
+    )
+    # Agent under-sets 1800s → floored to the 2h training floor.
+    assert eff({"command": train_cmd, "timeout_s": 1800}) == 7200
+    # No timeout_s → default 2h.
+    assert eff({"command": train_cmd}) == 7200
+    # Agent sets a HIGHER value (e.g. full-mode) → honored, not lowered.
+    assert eff({"command": train_cmd, "timeout_s": 10000}) == 10000
+    # The legacy --hpo study path is NOT floored (different lifecycle).
+    assert eff({"command": train_cmd.replace("--quick", "--hpo"),
+                "timeout_s": 1800}) == 1800
+    # Non-training commands keep the small 900s floor.
+    assert eff({"command": "ls -la", "timeout_s": 100}) == 900
+    assert eff({"command": ".venv/bin/python scripts/autotuner/enrich_rl_dataset.py",
+                "timeout_s": 1800}) == 1800

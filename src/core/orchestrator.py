@@ -5060,6 +5060,13 @@ class AgentOrchestrator:
             return "failed"
         return None
 
+    # Training prepare.py runs compute their OWN GPU timeout (up to ~70 min for a
+    # quick multi-seed walk-forward trial). If the agent under-sets timeout_s, the
+    # bash tool kills the run before it records a metric — observed losing the very
+    # first trial of a sweep to a 1800s setting. Floor training commands at the 2h
+    # default so the agent's choice can never truncate a trial below its budget.
+    _TRAINING_COMMAND_TIMEOUT_FLOOR_S = 7200
+
     @staticmethod
     def _effective_tool_timeout(input_data: Dict[str, Any]) -> int:
         timeout = input_data.get("timeout_s", 7200)
@@ -5067,7 +5074,13 @@ class AgentOrchestrator:
             timeout = int(timeout)
         except (TypeError, ValueError):
             timeout = 7200
-        return max(timeout, 900)
+        floor = 900
+        command = str(input_data.get("command", "") or "")
+        # A prepare.py training run (not the legacy --hpo study path) must not be
+        # killed below the 2h default regardless of the agent's timeout_s.
+        if "prepare.py" in command and "--hpo" not in command:
+            floor = AgentOrchestrator._TRAINING_COMMAND_TIMEOUT_FLOOR_S
+        return max(timeout, floor)
 
     @staticmethod
     def _runtime_command_status(tool_meta: Dict[str, Any]) -> str:
