@@ -133,7 +133,14 @@ RL_SEARCH_SPACE: Dict[str, Any] = {
     # Recentred for the honest two-sided OOF (post-S1): |proba-0.5| mean 0.26,
     # so tradeable share at 0.05/0.10/0.20/0.30 = 91/82/63/43% — a real
     # selectivity curve (the old leaked signal abstained ~entirely above 0.05).
-    "direction_confidence_gate": [0.0, 0.05, 0.10, 0.20, 0.30],
+    # MQ-B1: the honest E1 curve was monotonic through 0.30 and not flat —
+    # probe the headroom {0.35, 0.40, 0.50} (config allows ≤ 0.5). Guardrail:
+    # rl/prepare.py flags insufficient_trade_sample below ~20 trades/fold.
+    "direction_confidence_gate": [0.0, 0.05, 0.10, 0.20, 0.30, 0.35, 0.40, 0.50],
+    # MQ-B2: confidence-scaled position sizing (exposure cap ∝ conviction).
+    "confidence_sizing_enabled": [False, True],
+    "confidence_sizing_k": [2.0, 4.0, 8.0],
+    "kelly_fraction_cap": [0.5, 1.0],
     # PnL-E3: turnover/holding reward shaping (raise churn penalties, drop the
     # holding penalty so confident positions can ride).
     "reward_weights.trade": [0.002, 0.010, 0.020],
@@ -237,7 +244,13 @@ APPROVED_VOLATILITY_KNOBS = {
 RL_PATCH_SECTIONS = {"training", "reward_weights"}
 # PnL-E1: top-level scalar knobs an RL patch may set alongside the sections
 # (the hard selectivity gate is not a PPO hyperparameter).
-RL_PATCH_TOPLEVEL_SCALARS = {"direction_confidence_gate"}
+# MQ-B2: the confidence-sizing knobs ride the same top-level channel.
+RL_PATCH_TOPLEVEL_SCALARS = {
+    "direction_confidence_gate",
+    "confidence_sizing_enabled",
+    "confidence_sizing_k",
+    "kelly_fraction_cap",
+}
 # PnL-E3: reward-weight leaf knobs the server-owned sweep may set (the rl-trainer
 # merges partial overrides into the full reward_weights dict).
 APPROVED_RL_REWARD_KNOBS = {
@@ -1230,11 +1243,30 @@ def _rl_trial_patches(*, trading_mode: Optional[str] = None) -> List[Dict[str, A
         _rl_patch(**_RL_PPO_BASELINE, gate=g)
         for g in [0.0, 0.05, 0.10, 0.20, 0.30]
     ]
+    # (A2) MQ-B1: high-gate extension — the honest E1 curve was monotonic
+    # through 0.30 and not flat. Probe {0.35, 0.40, 0.50} PAIRED with the
+    # strongest turnover penalty (the E3 winner: trade=.020), per the backlog.
+    # rl/prepare.py flags insufficient_trade_sample when a point abstains
+    # ~everything, so these rank on evidence, not noise.
+    high_gate_sweep = [
+        _rl_patch(**_RL_PPO_BASELINE, gate=g, reward=lowturn_strong)
+        for g in [0.35, 0.40, 0.50]
+    ]
     # (B) E3 reward sweep — fixed PPO baseline + moderate gate, varying reward
     # shaping (the baseline-reward @ gate=0.10 point is already in block A).
     reward_sweep = [
         _rl_patch(**_RL_PPO_BASELINE, gate=_RL_DEFAULT_GATE, reward=lowturn),
         _rl_patch(**_RL_PPO_BASELINE, gate=_RL_DEFAULT_GATE, reward=lowturn_strong),
+    ]
+    # (B2) MQ-B2: confidence-sizing isolation sweep — fixed PPO baseline +
+    # moderate gate + low-turnover reward, varying ONLY the sizing knobs so the
+    # conviction→exposure mapping's effect on Sharpe/turnover is isolated.
+    sizing_sweep = [
+        _rl_patch(
+            **_RL_PPO_BASELINE, gate=_RL_DEFAULT_GATE, reward=lowturn,
+            sizing_enabled=True, sizing_k=k, kelly_cap=cap,
+        )
+        for k, cap in [(2.0, 1.0), (4.0, 1.0), (8.0, 1.0), (4.0, 0.5)]
     ]
     # (C) PPO search seeds under the COMBINED regime (gate + low-turnover reward).
     ppo_seeds = [
@@ -1247,7 +1279,7 @@ def _rl_trial_patches(*, trading_mode: Optional[str] = None) -> List[Dict[str, A
         _rl_patch(lr=5e-4, ent=0.008, clip=0.15, gamma=0.99, n_steps=1024, target_kl=None, gate=_RL_DEFAULT_GATE, reward=lowturn),
     ]
     return _extend_unique_patches(
-        gate_sweep + reward_sweep + ppo_seeds,
+        gate_sweep + high_gate_sweep + reward_sweep + sizing_sweep + ppo_seeds,
         (
             _rl_patch(
                 lr=lr, ent=ent, clip=clip, gamma=gamma, n_steps=n_steps,
@@ -1273,12 +1305,18 @@ def _rl_patch(
     target_kl: float | None,
     gate: float = 0.0,
     reward: Dict[str, Any] | None = None,
+    # MQ-B2: confidence-sizing knobs (None-skipped → legacy fingerprints stay
+    # bit-identical; sizing_enabled=None means "key absent", i.e. trainer default off).
+    sizing_enabled: bool | None = None,
+    sizing_k: float | None = None,
+    kelly_cap: float | None = None,
 ) -> Dict[str, Any]:
     """RL trial patch: nested ``training:`` PPO knobs + the top-level hard
-    selectivity gate + optional ``reward_weights:`` shaping (E3). ``target_kl=None``
-    explicitly disables the KL brake (yaml ``null``); ``gate`` is the
-    |direction_proba-0.5| abstain margin; ``reward`` is a partial reward-weight
-    override (merged into the full dict by the trainer)."""
+    selectivity gate + optional ``reward_weights:`` shaping (E3) + optional
+    MQ-B2 confidence-sizing knobs. ``target_kl=None`` explicitly disables the
+    KL brake (yaml ``null``); ``gate`` is the |direction_proba-0.5| abstain
+    margin; ``reward`` is a partial reward-weight override (merged into the
+    full dict by the trainer)."""
     patch: Dict[str, Any] = {
         "training": {
             "learning_rate": lr,
@@ -1292,6 +1330,12 @@ def _rl_patch(
     }
     if reward is not None:
         patch["reward_weights"] = dict(reward)
+    if sizing_enabled is not None:
+        patch["confidence_sizing_enabled"] = bool(sizing_enabled)
+    if sizing_k is not None:
+        patch["confidence_sizing_k"] = float(sizing_k)
+    if kelly_cap is not None:
+        patch["kelly_fraction_cap"] = float(kelly_cap)
     return patch
 
 
@@ -1342,7 +1386,14 @@ def _trial_id(index: int, patch: Mapping[str, Any], model_type: str) -> str:
         # PnL-E3: tag the turnover-penalty profile so reward-shaped trials are
         # distinct (baseline reward → no suffix).
         rtag = f"_t{int(round(float(rw.get('trade', 0.0)) * 1000))}" if rw else ""
-        return f"trial_{index:03d}_lr{lr}_ent{ent}_clip{clip}_kl{kl}_g{gate}{rtag}"
+        # MQ-B2: tag conviction-sizing trials (k slope + kelly cap) so the
+        # planned-trial directories are self-describing.
+        stag = ""
+        if patch.get("confidence_sizing_enabled"):
+            _k = int(round(float(patch.get("confidence_sizing_k", 0.0)) * 10))
+            _cap = int(round(float(patch.get("kelly_fraction_cap", 1.0)) * 100))
+            stag = f"_szk{_k}c{_cap}"
+        return f"trial_{index:03d}_lr{lr}_ent{ent}_clip{clip}_kl{kl}_g{gate}{rtag}{stag}"
     atr_mult = int(round(float(patch["volatility_atr_mult"]) * 100))
     horizon = int(patch["prediction_horizon"])
     calibration = str(patch["calibration_method"])

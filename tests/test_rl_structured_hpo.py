@@ -62,9 +62,14 @@ def test_rl_trials_are_nested_training_patches_with_ppo_knobs() -> None:
     plan = _rl_plan()
     for trial in plan["trials"]:
         patch = trial["config_patch"]
-        # training + gate always present; reward_weights (E3) optional.
+        # training + gate always present; reward_weights (E3) and the MQ-B2
+        # sizing knobs are optional extras.
         assert {"training", "direction_confidence_gate"} <= set(patch)
-        assert set(patch) <= {"training", "direction_confidence_gate", "reward_weights"}
+        assert set(patch) <= {
+            "training", "direction_confidence_gate", "reward_weights",
+            "confidence_sizing_enabled", "confidence_sizing_k",
+            "kelly_fraction_cap",
+        }
         training = patch["training"]
         assert "learning_rate" in training
         assert "target_kl" in training
@@ -91,11 +96,13 @@ def test_rl_leading_trials_are_an_isolated_gate_sweep() -> None:
 
 
 def test_rl_e3_reward_sweep_is_isolated_at_fixed_gate() -> None:
-    """PnL-E3: trials 6-7 hold the PPO baseline + the moderate gate fixed and
-    vary ONLY the turnover/holding reward shaping, isolating its effect. The
-    default DOGE base is stock (long-only) so the inert flip term is dropped."""
+    """PnL-E3: the reward-sweep block holds the PPO baseline + the moderate gate
+    fixed and varies ONLY the turnover/holding reward shaping, isolating its
+    effect. MQ-B1 inserted the high-gate block (3 trials) after the gate sweep,
+    so the E3 block now sits at trials [8:10]. The default DOGE base is stock
+    (long-only) so the inert flip term is dropped."""
     plan = _rl_plan(max_iterations=20, hpo_trials=20)  # default = stock
-    block_b = plan["trials"][5:7]
+    block_b = plan["trials"][8:10]
     for t in block_b:
         assert t["config_patch"]["direction_confidence_gate"] == 0.10
         assert "reward_weights" in t["config_patch"]
@@ -109,14 +116,18 @@ def test_rl_e3_reward_sweep_is_isolated_at_fixed_gate() -> None:
 
 def test_rl_combined_grid_applies_gate_and_low_turnover_reward() -> None:
     """Block C (PPO grid) runs under BOTH E1 (gate) and E3 (low-turnover reward)
-    — the Sprint-1 'together' regime (stock default → no inert flip term)."""
-    plan = _rl_plan(max_iterations=20, hpo_trials=20)  # default = stock
-    grid = plan["trials"][7:]
+    — the Sprint-1 'together' regime (stock default → no inert flip term).
+    EPIC B prepends the high-gate (3) and sizing (4) isolation blocks, so the
+    PPO grid starts at trial 14; sizing seeds carry the sizing knobs and are
+    excluded from the pure-grid assertion."""
+    plan = _rl_plan(max_iterations=25, hpo_trials=25)  # default = stock
+    grid = plan["trials"][14:]
     assert grid, "expected PPO-grid trials beyond the isolation blocks"
     for t in grid:
         cp = t["config_patch"]
         assert cp["direction_confidence_gate"] == 0.10
         assert cp["reward_weights"] == {"trade": 0.010, "hold": 0.0}
+        assert "confidence_sizing_enabled" not in cp
 
 
 def test_rl_stock_mode_drops_inert_flip_term() -> None:
@@ -133,9 +144,10 @@ def test_rl_stock_mode_drops_inert_flip_term() -> None:
 
 def test_rl_margin_mode_retains_flip_term() -> None:
     """Margin mode has real long↔short flips, so the flip term stays tunable in
-    both the reward profiles and the published search space."""
+    both the reward profiles and the published search space. (E3 block at
+    [8:10] after the MQ-B1 high-gate insertion.)"""
     plan = _rl_plan(max_iterations=20, hpo_trials=20, trading_mode="margin")
-    block_b = plan["trials"][5:7]
+    block_b = plan["trials"][8:10]
     rws = [t["config_patch"]["reward_weights"] for t in block_b]
     assert rws[0] == {"trade": 0.010, "flip": 0.005, "hold": 0.0}
     assert rws[1] == {"trade": 0.020, "flip": 0.010, "hold": 0.0}
@@ -164,9 +176,9 @@ def test_materialize_rl_trial_merges_reward_weights(tmp_path) -> None:
     )
     # margin mode keeps the flip term so the deep-merge of a partial reward
     # override (including flip) is exercised end-to-end.
-    plan = _rl_plan(max_iterations=7, hpo_trials=7, trading_mode="margin")
+    plan = _rl_plan(max_iterations=10, hpo_trials=10, trading_mode="margin")
     materialize_planned_trials(plan, workspace)
-    t = plan["trials"][5]  # first E3 reward trial (lowturn)
+    t = plan["trials"][8]  # first E3 reward trial (lowturn; after MQ-B1 block)
     payload = yaml.safe_load(
         (workspace / "planned_trials" / t["trial_id"] / "train.yaml").read_text()
     )

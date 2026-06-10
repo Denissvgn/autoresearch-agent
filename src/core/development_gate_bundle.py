@@ -76,8 +76,17 @@ def evaluate_development_gate_bundle(
     checks: list[dict[str, Any]] = []
     blockers: list[str] = []
 
-    def add_check(name: str, passed: bool, reason: str, details: Any = None) -> None:
-        waived = reason in waivers or name in waivers
+    def add_check(
+        name: str,
+        passed: bool,
+        reason: str,
+        details: Any = None,
+        *,
+        unwaivable: bool = False,
+    ) -> None:
+        # MQ-B5: an unwaivable check blocks regardless of iteration waivers —
+        # used for the production-scope post-cost economic gate.
+        waived = (not unwaivable) and (reason in waivers or name in waivers)
         status = "passed" if passed else "waived" if waived else "failed"
         checks.append(
             {
@@ -328,7 +337,18 @@ def evaluate_development_gate_bundle(
         replay_checks = bundle.get("gate_tiers", {}).get("economic_replay", {}).get(
             "checks", {}
         )
-        if replay_checks.get("worsening_vs_baseline_blocks_promotion") is True:
+        # MQ-B5: post-cost-vs-baseline is a FIRST-CLASS gate. At production
+        # scope it is UNCONDITIONAL (enforced regardless of the YAML flag) and
+        # UNWAIVABLE — a config that improves composite/AUC but worsens honest
+        # post-cost PnL cannot promote to production. Development scope keeps
+        # the YAML flag + waiver escape hatch.
+        _production_scope = (
+            str(bundle.get("scope") or "development").strip().lower() == "production"
+        )
+        if (
+            replay_checks.get("worsening_vs_baseline_blocks_promotion") is True
+            or _production_scope
+        ):
             worsening_details = _post_cost_replay_worsening_details(
                 replay,
                 replay_gates,
@@ -338,6 +358,7 @@ def evaluate_development_gate_bundle(
                 not worsening_details["worsened"],
                 "worsening_post_cost_replay",
                 worsening_details,
+                unwaivable=_production_scope,
             )
 
     _evaluate_rl_oos_gates(
@@ -433,8 +454,17 @@ def _evaluate_rl_development_gate_bundle(
     checks: list[dict[str, Any]] = []
     blockers: list[str] = []
 
-    def add_check(name: str, passed: bool, reason: str, details: Any = None) -> None:
-        waived = reason in waivers or name in waivers
+    def add_check(
+        name: str,
+        passed: bool,
+        reason: str,
+        details: Any = None,
+        *,
+        unwaivable: bool = False,
+    ) -> None:
+        # MQ-B5: see the direction-path twin — unwaivable checks block even
+        # when the iteration carries a matching waiver (production economics).
+        waived = (not unwaivable) and (reason in waivers or name in waivers)
         status = "passed" if passed else "waived" if waived else "failed"
         checks.append(
             {
@@ -767,7 +797,14 @@ def _evaluate_rl_economic_replay_gates(
             },
         )
 
-    if tier_checks.get("worsening_vs_baseline_blocks_promotion") is True:
+    if tier_checks.get("worsening_vs_baseline_blocks_promotion") is True or (
+        str(bundle.get("scope") or "development").strip().lower() == "production"
+    ):
+        # MQ-B5: unconditional + unwaivable at production scope (see the
+        # direction-path twin above).
+        _production_scope = (
+            str(bundle.get("scope") or "development").strip().lower() == "production"
+        )
         worsening_details = _post_cost_replay_worsening_details(
             replay,
             replay_gates,
@@ -777,6 +814,7 @@ def _evaluate_rl_economic_replay_gates(
             not worsening_details["worsened"],
             "worsening_post_cost_replay",
             worsening_details,
+            unwaivable=_production_scope,
         )
 
 
