@@ -16,6 +16,35 @@ PLAN_SCHEMA_VERSION = "autoresearch_structured_hpo_plan.v1"
 TRIAL_SCHEMA_VERSION = "autoresearch_structured_trial.v1"
 CURRENT_FEATURE_LIBRARY_VERSION = "2.3.0"
 
+# MQ-A7: canonical evidence-gate report paths required by the feature library
+# when the spectral / DM-7 BTC-enhanced lanes are enabled. Mirrored here (the
+# agent service does not import libs/feature_engineering) — keep in sync with
+# feature_engineering.core.config SPECTRAL_FEATURE_EVIDENCE_REPORT /
+# CROSS_ASSET_BTC_ENHANCED_EVIDENCE_REPORT.
+SPECTRAL_FEATURE_EVIDENCE_REPORT = (
+    "reports/direction-tuning/features/"
+    "dpu-050_spectral_feature_evidence_gate_2026-04-26.md"
+)
+CROSS_ASSET_BTC_ENHANCED_EVIDENCE_REPORT = (
+    "reports/direction-tuning/features/"
+    "dpu-051_cross_asset_btc_enhanced_evidence_gate_2026-05-29.md"
+)
+
+# MQ-A7: explicit all-lanes-off feature_config baseline for the ablation seeds.
+# Explicit False wins over instrument-config promoted lanes in prepare.py, so
+# this is a true OHLCV-core reference on every instrument.
+_ALL_LANES_OFF: Dict[str, Any] = {
+    "directional_change_features_enabled": False,
+    "vdmc_enabled": False,
+    "adaptive_levels_enabled": False,
+    "spectral_features_enabled": False,
+    "cross_asset_features_enabled": False,
+    "cross_asset_btc_enhanced_enabled": False,
+    "derivatives_features_enabled": False,
+    "funding_features_enabled": False,
+    "open_interest_features_enabled": False,
+}
+
 DIRECTION_SCOPED_ROSTER = ["lgb", "lgb_deep", "xgb", "rf", "rf_deep"]
 DIRECTION_FULL_ROSTER = [
     "lgb",
@@ -147,6 +176,40 @@ APPROVED_DIRECTION_KNOBS = {
     "atr_barrier_mult",
     "tb_pt_mult",
     "tb_sl_mult",
+    # MQ-A2: dc_cascade label-ladder params. The cascade's FINEST ATR multiple
+    # controls label difficulty (too fine = micro-noise, coarser = meaningful
+    # swings) — previously invisible to HPO, so the best new labeler only ever
+    # ran at its train.yaml defaults.
+    "dc_theta_atr_mults",
+    "dc_atr_period",
+    "dc_max_samples",
+    # MQ-A3: triple-barrier ATR period (pt/sl mults were already approved).
+    "tb_atr_period",
+    # MQ-A5: post-cost-expectancy threshold strategy cost assumptions (bps).
+    # threshold_strategy itself is already approved; these let a sweep pin the
+    # cost profile the expectancy objective uses.
+    "cost_fee_bps",
+    "cost_slippage_bps",
+    "cost_spread_bps",
+    # MQ-A4: meta-label stage (López de Prado go/no-go on the acted subset).
+    # Default-off; v1 trains + evaluates the secondary model and emits
+    # meta_label_* metrics/artifacts without changing the primary signal.
+    "meta_label_enabled",
+    "meta_label_pt_mult",
+    "meta_label_sl_mult",
+    # MQ-A6: trial-owned composite-objective block (nested dict). The ONLY
+    # channel by which a trial may change the SCORING objective — prepare.py
+    # gives `composite:` highest precedence, above the instrument config
+    # (which otherwise stays authoritative for per-asset scoring constants).
+    # Keys: profile / weights / auc_regime_weighted / auc_regime_weights /
+    # selective_auc_subweight. Scores under a changed objective are NOT
+    # comparable to the session baseline (R3) — isolation seeds only.
+    "composite",
+    # MQ-A7: per-lane feature-config dict (deep-merged into train.yaml's
+    # feature_config block). Explicit train.yaml lanes win over the instrument
+    # config's promoted lanes so ablation trials can actually turn lanes
+    # on AND off per trial.
+    "feature_config",
 }
 
 APPROVED_VOLATILITY_KNOBS = {
@@ -722,6 +785,203 @@ def _direction_trial_patches() -> List[Dict[str, Any]]:
             feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
             label_mode="triple_barrier", tb_pt_mult=1.5, tb_sl_mult=1.0,
         ),
+        # MQ-A2: dc_cascade ladder isolation sweep — same base config as the E6b
+        # dc seed, varying ONLY the theta ladder / ATR period. The FINEST multiple
+        # controls label difficulty; the E6 quick-mode winner (selective AUC 0.711)
+        # only ever ran at the train.yaml default ladder.
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            label_mode="dc_cascade", dc_theta_atr_mults=[8.0, 4.0, 2.0, 1.0],
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            label_mode="dc_cascade", dc_theta_atr_mults=[6.0, 3.0, 1.5],
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            label_mode="dc_cascade", dc_theta_atr_mults=[4.0, 2.0, 1.0],
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            label_mode="dc_cascade", dc_atr_period=7,
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            label_mode="dc_cascade", dc_atr_period=28,
+        ),
+        # MQ-A3: wider barrier-param grid. vol_scaled / triple_barrier were
+        # dismissed at narrow params only (atr_barrier_mult ∈ {1.0, 2.0}; TB
+        # (1.0/1.0), (1.5/1.0)); asymmetric trend-following TB (pt ≫ sl) and the
+        # reverse were never tried.
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            label_mode="vol_scaled", atr_barrier_mult=0.5,
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            label_mode="vol_scaled", atr_barrier_mult=3.0,
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            label_mode="triple_barrier", tb_pt_mult=2.0, tb_sl_mult=1.0,
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            label_mode="triple_barrier", tb_pt_mult=3.0, tb_sl_mult=1.0,
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            label_mode="triple_barrier", tb_pt_mult=1.0, tb_sl_mult=2.0,
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            label_mode="triple_barrier", tb_pt_mult=1.5, tb_sl_mult=1.0,
+            tb_atr_period=7,
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            label_mode="triple_barrier", tb_pt_mult=1.5, tb_sl_mult=1.0,
+            tb_atr_period=28,
+        ),
+        # MQ-A6: selective × regime-weighted co-optimization — the confident
+        # subset (E6a) and the favorable regime (DM-15) likely overlap; these
+        # isolation seeds measure the interaction. The `composite:` block is the
+        # trial-owned objective channel (highest precedence in prepare.py).
+        # R3: scores under a changed objective are NOT baseline-comparable.
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            selective_auc_subweight=0.50,
+            composite={"auc_regime_weighted": True},
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            selective_auc_subweight=0.50,
+            composite={"profile": "rl_feature"},
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            selective_auc_subweight=0.50,
+            composite={"auc_regime_weighted": True, "profile": "rl_feature"},
+        ),
+        # MQ-A7: feature-lane ablation under the selective-AUC objective — one
+        # lane per seed against an explicit all-lanes-off baseline (explicit
+        # False wins over instrument-config promoted lanes, so this is a true
+        # OHLCV-core reference even on instruments like DOGE that promote
+        # cross-asset lanes). Evidence-gated lanes carry their canonical report
+        # paths. External-data lanes (BTC / funding) degrade gracefully when
+        # the series is unavailable for an instrument.
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            feature_config=_ALL_LANES_OFF,
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            feature_config={**_ALL_LANES_OFF, "directional_change_features_enabled": True},
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            feature_config={**_ALL_LANES_OFF, "vdmc_enabled": True},
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            feature_config={**_ALL_LANES_OFF, "adaptive_levels_enabled": True},
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            feature_config={
+                **_ALL_LANES_OFF,
+                "spectral_features_enabled": True,
+                "spectral_evidence_report_path": SPECTRAL_FEATURE_EVIDENCE_REPORT,
+            },
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            feature_config={
+                **_ALL_LANES_OFF,
+                "cross_asset_btc_enhanced_enabled": True,
+                "cross_asset_btc_enhanced_evidence_report_path":
+                    CROSS_ASSET_BTC_ENHANCED_EVIDENCE_REPORT,
+            },
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            feature_config={**_ALL_LANES_OFF, "funding_features_enabled": True},
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            feature_config={
+                **_ALL_LANES_OFF,
+                # All OHLCV-only lanes together (auto train/serve parity; no
+                # external-series dependency → instrument-agnostic).
+                "directional_change_features_enabled": True,
+                "vdmc_enabled": True,
+                "adaptive_levels_enabled": True,
+                "spectral_features_enabled": True,
+                "spectral_evidence_report_path": SPECTRAL_FEATURE_EVIDENCE_REPORT,
+            },
+        ),
+        # MQ-A4: meta-label isolation seeds — train the secondary go/no-go model
+        # on the acted subset (net-of-cost triple-barrier outcome). v1 emits
+        # meta_label_* metrics/artifacts only (primary signal unchanged), so
+        # these seeds measure the achievable precision uplift.
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            meta_label_enabled=True,
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            meta_label_enabled=True, meta_label_pt_mult=1.5, meta_label_sl_mult=1.0,
+        ),
     ]
     return _extend_unique_patches(
         seeds,
@@ -825,6 +1085,18 @@ def _direction_patch(
     atr_barrier_mult: float | None = None,
     tb_pt_mult: float | None = None,
     tb_sl_mult: float | None = None,
+    # MQ-A2/A3: dc_cascade ladder + triple-barrier ATR period (None-skipped).
+    dc_theta_atr_mults: List[float] | None = None,
+    dc_atr_period: int | None = None,
+    tb_atr_period: int | None = None,
+    # MQ-A4: meta-label stage (None-skipped → legacy fingerprints unchanged).
+    meta_label_enabled: bool | None = None,
+    meta_label_pt_mult: float | None = None,
+    meta_label_sl_mult: float | None = None,
+    # MQ-A6: trial-owned composite-objective block (nested dict; None-skipped).
+    composite: Dict[str, Any] | None = None,
+    # MQ-A7: per-lane feature-config ablation dict (None-skipped).
+    feature_config: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     patch: Dict[str, Any] = {
         "direction_pct_threshold": threshold,
@@ -863,6 +1135,26 @@ def _direction_patch(
         patch["tb_pt_mult"] = float(tb_pt_mult)
     if tb_sl_mult is not None:
         patch["tb_sl_mult"] = float(tb_sl_mult)
+    # MQ-A2/A3: dc_cascade ladder + triple-barrier ATR period.
+    if dc_theta_atr_mults is not None:
+        patch["dc_theta_atr_mults"] = [float(v) for v in dc_theta_atr_mults]
+    if dc_atr_period is not None:
+        patch["dc_atr_period"] = int(dc_atr_period)
+    if tb_atr_period is not None:
+        patch["tb_atr_period"] = int(tb_atr_period)
+    # MQ-A4: meta-label stage knobs.
+    if meta_label_enabled is not None:
+        patch["meta_label_enabled"] = bool(meta_label_enabled)
+    if meta_label_pt_mult is not None:
+        patch["meta_label_pt_mult"] = float(meta_label_pt_mult)
+    if meta_label_sl_mult is not None:
+        patch["meta_label_sl_mult"] = float(meta_label_sl_mult)
+    # MQ-A6: trial-owned composite-objective block.
+    if composite is not None:
+        patch["composite"] = copy.deepcopy(dict(composite))
+    # MQ-A7: per-lane feature-config ablation block.
+    if feature_config is not None:
+        patch["feature_config"] = copy.deepcopy(dict(feature_config))
     return patch
 
 
