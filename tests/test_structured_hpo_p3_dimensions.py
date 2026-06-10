@@ -219,3 +219,43 @@ def test_dm12_dm13_extensions_actually_grew_the_roster() -> None:
         "DM-12/DM-13 seeds were dedup'd away — fingerprint collisions "
         "between new and legacy patches. Got %d patches." % len(patches)
     )
+
+
+# --------------------------------------------------------------------------- #
+# E6b — label-mode (supervision target) sweep. All builders already exist in
+# the trainer; the HPO must exercise each mode so the search can find the
+# labelling that widens the confident, high-selective-AUC subset.
+# --------------------------------------------------------------------------- #
+def test_e6b_label_mode_sweep_exercises_all_modes() -> None:
+    patches = _direction_trial_patches()
+    modes = {p.get("label_mode") for p in patches if p.get("label_mode")}
+    # fixed_pct is the implicit default (no key); the sweep adds the three
+    # alternative supervision targets.
+    assert {"vol_scaled", "dc_cascade", "triple_barrier"} <= modes
+    # vol_scaled carries its barrier; triple_barrier carries pt/sl.
+    vol = [p for p in patches if p.get("label_mode") == "vol_scaled"]
+    tb = [p for p in patches if p.get("label_mode") == "triple_barrier"]
+    assert vol and all("atr_barrier_mult" in p for p in vol)
+    assert tb and all("tb_pt_mult" in p and "tb_sl_mult" in p for p in tb)
+    # the default (fixed_pct) seeds carry NO label_mode key (legacy fingerprint)
+    assert any("label_mode" not in p for p in patches)
+
+
+def test_e6b_label_params_only_when_supplied() -> None:
+    """None-skip: label knobs add keys only when set, so legacy fixed_pct seeds
+    keep bit-identical fingerprints."""
+    base = _direction_patch(
+        threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+        calibration="isotonic", beta=0.5, signal_cap=0.35,
+        feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+    )
+    assert "label_mode" not in base and "atr_barrier_mult" not in base
+    vs = _direction_patch(
+        threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+        calibration="isotonic", beta=0.5, signal_cap=0.35,
+        feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+        label_mode="vol_scaled", atr_barrier_mult=2.0,
+    )
+    for k, v in base.items():
+        assert vs[k] == v, k
+    assert vs["label_mode"] == "vol_scaled" and vs["atr_barrier_mult"] == 2.0

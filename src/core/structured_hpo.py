@@ -139,6 +139,14 @@ APPROVED_DIRECTION_KNOBS = {
     # auc_term so the search optimizes the confident-subset edge the RL approval
     # model acts on (not global AUC). 0 = legacy v3 objective.
     "selective_auc_subweight",
+    # E6b: supervision target — label_mode selects the labelling scheme
+    # (fixed_pct dead-zone / vol_scaled ATR dead-zone / dc_cascade Directional-
+    # Change / triple_barrier path-dependent) and its barrier params. Sweeping
+    # these widens the confident, high-selective-AUC subset (the E6 goal).
+    "label_mode",
+    "atr_barrier_mult",
+    "tb_pt_mult",
+    "tb_sl_mult",
 }
 
 APPROVED_VOLATILITY_KNOBS = {
@@ -679,6 +687,41 @@ def _direction_trial_patches() -> List[Dict[str, Any]]:
             feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
             selective_auc_subweight=0.70,
         ),
+        # E6b: label-mode isolation sweep — fix the same base config as the first
+        # seed (the fixed_pct reference) and vary ONLY the supervision target, so
+        # its effect on the confident-subset (selective) AUC is isolated. All label
+        # builders already exist (train_direction_model.py); these just exercise
+        # them through the HPO. dc_cascade uses its config defaults.
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            label_mode="vol_scaled", atr_barrier_mult=1.0,
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            label_mode="vol_scaled", atr_barrier_mult=2.0,
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            label_mode="dc_cascade",
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            label_mode="triple_barrier", tb_pt_mult=1.0, tb_sl_mult=1.0,
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            label_mode="triple_barrier", tb_pt_mult=1.5, tb_sl_mult=1.0,
+        ),
     ]
     return _extend_unique_patches(
         seeds,
@@ -775,6 +818,13 @@ def _direction_patch(
     # E6a: selective-AUC composite sub-weight. None-skipped so legacy seed
     # fingerprints stay bit-identical (no key → v3 global-AUC objective).
     selective_auc_subweight: float | None = None,
+    # E6b: label-mode + barrier params (None-skipped → legacy fixed_pct seeds
+    # keep bit-identical fingerprints). vol_scaled uses atr_barrier_mult;
+    # triple_barrier uses tb_pt_mult / tb_sl_mult; dc_cascade uses its defaults.
+    label_mode: str | None = None,
+    atr_barrier_mult: float | None = None,
+    tb_pt_mult: float | None = None,
+    tb_sl_mult: float | None = None,
 ) -> Dict[str, Any]:
     patch: Dict[str, Any] = {
         "direction_pct_threshold": threshold,
@@ -805,6 +855,14 @@ def _direction_patch(
         patch["horizon_ensemble_enabled"] = bool(horizon_ensemble_enabled)
     if selective_auc_subweight is not None:
         patch["selective_auc_subweight"] = float(selective_auc_subweight)
+    if label_mode is not None:
+        patch["label_mode"] = str(label_mode)
+    if atr_barrier_mult is not None:
+        patch["atr_barrier_mult"] = float(atr_barrier_mult)
+    if tb_pt_mult is not None:
+        patch["tb_pt_mult"] = float(tb_pt_mult)
+    if tb_sl_mult is not None:
+        patch["tb_sl_mult"] = float(tb_sl_mult)
     return patch
 
 
