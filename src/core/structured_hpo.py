@@ -7,7 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Mapping
+from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 import yaml
 
@@ -199,12 +199,13 @@ def build_structured_hpo_plan(
     enable_hpo: bool,
     hpo_trials: int,
     hpo_timesteps: int,
+    trading_mode: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build a bounded HPO plan for manifest, DB, API, and UI state."""
 
     max_trials = _bounded_trials(model_type, max_iterations, enable_hpo, hpo_trials)
     max_trials = _budget_bounded_trials(model_type, max_trials, max_budget_usd)
-    search_space = _search_space(model_type)
+    search_space = _search_space(model_type, trading_mode=trading_mode)
     plan = {
         "schema_version": PLAN_SCHEMA_VERSION,
         "research_id": research_id,
@@ -234,6 +235,7 @@ def build_structured_hpo_plan(
             model_type=model_type,
             max_trials=max_trials,
             quick_mode=quick_mode,
+            trading_mode=trading_mode,
         ),
     }
     plan["plan_hash"] = _hash(plan)
@@ -414,13 +416,28 @@ def _per_trial_budget_usd(model_type: str) -> float:
     return 0.0
 
 
-def _search_space(model_type: str) -> Dict[str, Any]:
+def _is_long_only(trading_mode: Optional[str]) -> bool:
+    """Stock mode is long-only: position never goes negative, so position-flips are
+    structurally impossible — flip_count is always 0 and the reward_weights.flip
+    penalty is inert.  None defaults to stock, matching the trainer/promoter default."""
+    return (trading_mode or "stock").lower() == "stock"
+
+
+def _search_space(
+    model_type: str, *, trading_mode: Optional[str] = None
+) -> Dict[str, Any]:
     if model_type == "direction":
         return DIRECTION_SEARCH_SPACE
     if model_type == "volatility":
         return VOLATILITY_SEARCH_SPACE
     if model_type == "rl":
-        return RL_SEARCH_SPACE
+        space = dict(RL_SEARCH_SPACE)
+        if _is_long_only(trading_mode):
+            # Flip penalty is inert in long-only stock mode — drop the dimension so
+            # the published search space (and any trial generation) does not waste a
+            # lever that cannot change the result.  Margin mode keeps it.
+            space.pop("reward_weights.flip", None)
+        return space
     return {}
 
 
@@ -433,6 +450,7 @@ def _planned_trials(
     model_type: str,
     max_trials: int,
     quick_mode: bool,
+    trading_mode: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     if max_trials <= 0 or model_type not in {"direction", "volatility", "rl"}:
         return []
@@ -441,7 +459,7 @@ def _planned_trials(
     elif model_type == "volatility":
         patches = _volatility_trial_patches()
     else:
-        patches = _rl_trial_patches()
+        patches = _rl_trial_patches(trading_mode=trading_mode)
     workspace = _workspace_path(instrument, timeframe, model_type)
     quick_flag = " --quick" if quick_mode else ""
     trials = []
@@ -797,7 +815,16 @@ _RL_REWARD_LOWTURN = {"trade": 0.010, "flip": 0.005, "hold": 0.0}
 _RL_REWARD_LOWTURN_STRONG = {"trade": 0.020, "flip": 0.010, "hold": 0.0}
 
 
-def _rl_trial_patches() -> List[Dict[str, Any]]:
+def _market_reward(reward: Dict[str, Any], trading_mode: Optional[str]) -> Dict[str, Any]:
+    """Strip the inert ``flip`` term from a reward-shaping profile in long-only stock
+    mode (no sign-change flips), so trials differ only by levers that can actually
+    change the result.  Margin mode keeps flip (real long↔short churn)."""
+    if _is_long_only(trading_mode):
+        return {k: v for k, v in reward.items() if k != "flip"}
+    return dict(reward)
+
+
+def _rl_trial_patches(*, trading_mode: Optional[str] = None) -> List[Dict[str, Any]]:
     """Discrete trials for server-owned RL HPO (Sprint-1: E1 + E3).
 
     Leading ISOLATION blocks at the fixed PPO baseline so each lever's effect on
@@ -807,7 +834,12 @@ def _rl_trial_patches() -> List[Dict[str, Any]]:
          reward shaping (churn penalties up, holding penalty off).
     Then a PPO grid under the combined regime (moderate gate + low-turnover
     reward), i.e. E1 and E3 applied together.
+
+    ``trading_mode`` makes flip shaping market-aware: long-only stock mode drops the
+    inert ``flip`` term (see _market_reward); margin keeps it.
     """
+    lowturn = _market_reward(_RL_REWARD_LOWTURN, trading_mode)
+    lowturn_strong = _market_reward(_RL_REWARD_LOWTURN_STRONG, trading_mode)
     # (A) E1 gate sweep — fixed PPO baseline, baseline reward, varying gate.
     # Recentred for the honest two-sided OOF (post-S1): {0, 0.05, 0.10, 0.20, 0.30}
     # = tradeable share 100/91/82/63/43% (real selectivity curve).
@@ -818,25 +850,25 @@ def _rl_trial_patches() -> List[Dict[str, Any]]:
     # (B) E3 reward sweep — fixed PPO baseline + moderate gate, varying reward
     # shaping (the baseline-reward @ gate=0.10 point is already in block A).
     reward_sweep = [
-        _rl_patch(**_RL_PPO_BASELINE, gate=_RL_DEFAULT_GATE, reward=_RL_REWARD_LOWTURN),
-        _rl_patch(**_RL_PPO_BASELINE, gate=_RL_DEFAULT_GATE, reward=_RL_REWARD_LOWTURN_STRONG),
+        _rl_patch(**_RL_PPO_BASELINE, gate=_RL_DEFAULT_GATE, reward=lowturn),
+        _rl_patch(**_RL_PPO_BASELINE, gate=_RL_DEFAULT_GATE, reward=lowturn_strong),
     ]
     # (C) PPO search seeds under the COMBINED regime (gate + low-turnover reward).
     ppo_seeds = [
-        _rl_patch(lr=1e-4, ent=0.005, clip=0.15, gamma=0.995, n_steps=2048, target_kl=0.03, gate=_RL_DEFAULT_GATE, reward=_RL_REWARD_LOWTURN),
-        _rl_patch(lr=5e-4, ent=0.02, clip=0.30, gamma=0.99, n_steps=4096, target_kl=0.05, gate=_RL_DEFAULT_GATE, reward=_RL_REWARD_LOWTURN),
-        _rl_patch(lr=3e-4, ent=0.04, clip=0.20, gamma=0.98, n_steps=1024, target_kl=0.08, gate=_RL_DEFAULT_GATE, reward=_RL_REWARD_LOWTURN),
-        _rl_patch(lr=1e-4, ent=0.01, clip=0.10, gamma=0.999, n_steps=4096, target_kl=0.03, gate=_RL_DEFAULT_GATE, reward=_RL_REWARD_LOWTURN),
-        _rl_patch(lr=7e-4, ent=0.03, clip=0.25, gamma=0.99, n_steps=2048, target_kl=0.05, gate=_RL_DEFAULT_GATE, reward=_RL_REWARD_LOWTURN),
-        _rl_patch(lr=2e-4, ent=0.015, clip=0.20, gamma=0.995, n_steps=2048, target_kl=0.04, gate=_RL_DEFAULT_GATE, reward=_RL_REWARD_LOWTURN),
-        _rl_patch(lr=5e-4, ent=0.008, clip=0.15, gamma=0.99, n_steps=1024, target_kl=None, gate=_RL_DEFAULT_GATE, reward=_RL_REWARD_LOWTURN),
+        _rl_patch(lr=1e-4, ent=0.005, clip=0.15, gamma=0.995, n_steps=2048, target_kl=0.03, gate=_RL_DEFAULT_GATE, reward=lowturn),
+        _rl_patch(lr=5e-4, ent=0.02, clip=0.30, gamma=0.99, n_steps=4096, target_kl=0.05, gate=_RL_DEFAULT_GATE, reward=lowturn),
+        _rl_patch(lr=3e-4, ent=0.04, clip=0.20, gamma=0.98, n_steps=1024, target_kl=0.08, gate=_RL_DEFAULT_GATE, reward=lowturn),
+        _rl_patch(lr=1e-4, ent=0.01, clip=0.10, gamma=0.999, n_steps=4096, target_kl=0.03, gate=_RL_DEFAULT_GATE, reward=lowturn),
+        _rl_patch(lr=7e-4, ent=0.03, clip=0.25, gamma=0.99, n_steps=2048, target_kl=0.05, gate=_RL_DEFAULT_GATE, reward=lowturn),
+        _rl_patch(lr=2e-4, ent=0.015, clip=0.20, gamma=0.995, n_steps=2048, target_kl=0.04, gate=_RL_DEFAULT_GATE, reward=lowturn),
+        _rl_patch(lr=5e-4, ent=0.008, clip=0.15, gamma=0.99, n_steps=1024, target_kl=None, gate=_RL_DEFAULT_GATE, reward=lowturn),
     ]
     return _extend_unique_patches(
         gate_sweep + reward_sweep + ppo_seeds,
         (
             _rl_patch(
                 lr=lr, ent=ent, clip=clip, gamma=gamma, n_steps=n_steps,
-                target_kl=tkl, gate=_RL_DEFAULT_GATE, reward=_RL_REWARD_LOWTURN,
+                target_kl=tkl, gate=_RL_DEFAULT_GATE, reward=lowturn,
             )
             for lr in [1e-4, 3e-4, 5e-4]
             for ent in [0.005, 0.01, 0.02]

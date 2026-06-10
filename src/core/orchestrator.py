@@ -72,6 +72,47 @@ from src.ws.events import broadcaster
 
 logger = logging.getLogger(__name__)
 
+
+def _resolve_rl_source_model_ids(
+    instrument: str, timeframe: str
+) -> Dict[str, Any]:
+    """Resolve the promoted direction/volatility source run-ids the RL enriched
+    dataset is derived from, for the dedup trial identity.
+
+    Reads the same promoted instrument config the enricher uses
+    (``enrich_rl_dataset._get_mlflow_run_id_from_config``): keys
+    ``source_mlflow_run_id`` (direction) and ``volatility_source_mlflow_run_id``
+    (volatility).  Folding these into ``data_split_id`` makes a legitimately-new RL
+    run against retrained upstream models distinct from the stale run, so a model
+    swap no longer reads as a duplicate (no manual ``training.seed`` bump needed).
+    Returns only the keys that resolve; missing/unreadable config → empty dict
+    (identity falls back to the prior split-only behavior).
+    """
+    host_configs = Path(os.environ.get("HOST_CONFIGS_PATH", "/host/configs"))
+    local_configs = Path("configs")
+    key_map = {
+        "direction_source_run_id": "source_mlflow_run_id",
+        "volatility_source_run_id": "volatility_source_mlflow_run_id",
+    }
+    resolved: Dict[str, Any] = {}
+    for base in (host_configs, local_configs):
+        config_path = base / "instrument_configs" / f"{instrument}_{timeframe}.yaml"
+        if not config_path.exists():
+            continue
+        try:
+            cfg = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            continue
+        if not isinstance(cfg, dict):
+            continue
+        for identity_key, config_key in key_map.items():
+            if identity_key not in resolved and cfg.get(config_key):
+                resolved[identity_key] = cfg[config_key]
+        if len(resolved) == len(key_map):
+            break
+    return resolved
+
+
 # Phase 2.2: Claude pricing constants (Sonnet 3.5 baseline). These mirror
 # the inline numbers used previously and are referenced both by the
 # post-call cost accounting and the pre-spend budget gate.
@@ -1647,6 +1688,12 @@ class AgentOrchestrator:
                 turn=turn,
             )
             return
+        # Resolve upstream source run-ids once for the whole plan (RL only).
+        source_model_ids = (
+            _resolve_rl_source_model_ids(config.instrument, config.timeframe)
+            if config.model_type == "rl"
+            else None
+        )
         for trial in written:
             trial_config_snapshot = None
             materialized_path = trial.get("materialized_config_path")
@@ -1664,6 +1711,7 @@ class AgentOrchestrator:
                 command=trial.get("expected_command"),
                 config_snapshot=trial_config_snapshot,
                 quick_mode=config.quick_mode,
+                source_model_ids=source_model_ids,
             )
             await self._store.update_planned_trial_status(
                 research_id=config.id,
@@ -1886,6 +1934,11 @@ class AgentOrchestrator:
             config_snapshot=config_snapshot,
             quick_mode=config.quick_mode,
             marker=planned_trial or {},
+            source_model_ids=(
+                _resolve_rl_source_model_ids(config.instrument, config.timeframe)
+                if config.model_type == "rl"
+                else None
+            ),
         )
         identity_hash = trial_identity_hash(identity)
         if not identity_hash:

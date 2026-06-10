@@ -116,3 +116,70 @@ def test_trial_identity_hash_distinguishes_seed_mode_and_split():
     assert trial_identity_hash(base) != trial_identity_hash(full_mode)
     assert trial_identity_hash(base) != trial_identity_hash(seed_43)
     assert trial_identity_hash(base) != trial_identity_hash(different_split)
+
+
+def _rl_identity(config_snapshot, *, source_model_ids=None):
+    return build_trial_identity(
+        instrument="DOGE_USDT",
+        timeframe="15m",
+        model_type="rl",
+        command=(
+            ".venv/bin/python scripts/autotuner/rl/prepare.py "
+            "--config runs/autotuner/DOGE_USDT_15m/rl/best_train.yaml --quick"
+        ),
+        config_snapshot=config_snapshot,
+        quick_mode=True,
+        source_model_ids=source_model_ids,
+    )
+
+
+def test_source_model_ids_distinguish_upstream_model_swaps():
+    """Folding upstream direction/volatility run-ids into data_split_id makes a run
+    against retrained source models distinct from the stale run (no manual seed
+    bump). Same ids → same identity (dedup still fires); None → legacy behavior."""
+    config = "training:\n  seed: 42\nwf_n_folds: 3\n"
+
+    legacy = _rl_identity(config)  # no source_model_ids → split-only (pre-change)
+    none_explicit = _rl_identity(config, source_model_ids=None)
+    empty = _rl_identity(config, source_model_ids={})
+    models_v1 = _rl_identity(
+        config,
+        source_model_ids={
+            "direction_source_run_id": "dir_run_aaa",
+            "volatility_source_run_id": "vol_run_111",
+        },
+    )
+    models_v1_again = _rl_identity(
+        config,
+        source_model_ids={
+            "direction_source_run_id": "dir_run_aaa",
+            "volatility_source_run_id": "vol_run_111",
+        },
+    )
+    models_v2 = _rl_identity(
+        config,
+        source_model_ids={
+            "direction_source_run_id": "dir_run_bbb",  # direction re-promoted
+            "volatility_source_run_id": "vol_run_111",
+        },
+    )
+
+    # Back-compat: None / empty leave the split id exactly as before.
+    assert legacy["data_split_id"] == none_explicit["data_split_id"]
+    assert legacy["data_split_id"] == empty["data_split_id"]
+    assert trial_identity_hash(legacy) == trial_identity_hash(none_explicit)
+
+    # Source models present → different split id than the source-less legacy run.
+    assert models_v1["data_split_id"] != legacy["data_split_id"]
+    # A model swap (different upstream run-id) → a different, non-duplicate identity.
+    assert trial_identity_hash(models_v1) != trial_identity_hash(models_v2)
+    # Identical upstream models → identical identity, so true duplicates still dedup.
+    assert trial_identity_hash(models_v1) == trial_identity_hash(models_v1_again)
+
+
+def test_explicit_split_id_without_sources_is_unchanged():
+    """A bare explicit split id with no source models is returned verbatim (the
+    pre-source-aware behavior), so existing identities are not perturbed."""
+    config = "data_split_id: doge_15m_split_v7\n"
+    identity = _rl_identity(config)
+    assert identity["data_split_id"] == "doge_15m_split_v7"

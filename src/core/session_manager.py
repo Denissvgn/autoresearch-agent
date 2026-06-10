@@ -473,6 +473,7 @@ class SessionManager:
             enable_hpo=config.enable_hpo,
             hpo_trials=config.hpo_trials,
             hpo_timesteps=config.hpo_timesteps,
+            trading_mode=config.trading_mode,
         )
 
     @staticmethod

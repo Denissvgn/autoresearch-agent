@@ -20,7 +20,7 @@ from src.core.structured_hpo import (
 )
 
 
-def _rl_plan(*, max_iterations=12, hpo_trials=8, enable_hpo=True):
+def _rl_plan(*, max_iterations=12, hpo_trials=8, enable_hpo=True, trading_mode=None):
     return build_structured_hpo_plan(
         research_id="res_rl_hpo",
         instrument="DOGE_USDT",
@@ -33,6 +33,7 @@ def _rl_plan(*, max_iterations=12, hpo_trials=8, enable_hpo=True):
         enable_hpo=enable_hpo,
         hpo_trials=hpo_trials,
         hpo_timesteps=30000,
+        trading_mode=trading_mode,
     )
 
 
@@ -91,30 +92,54 @@ def test_rl_leading_trials_are_an_isolated_gate_sweep() -> None:
 
 def test_rl_e3_reward_sweep_is_isolated_at_fixed_gate() -> None:
     """PnL-E3: trials 6-7 hold the PPO baseline + the moderate gate fixed and
-    vary ONLY the turnover/holding reward shaping, isolating its effect."""
-    plan = _rl_plan(max_iterations=20, hpo_trials=20)
+    vary ONLY the turnover/holding reward shaping, isolating its effect. The
+    default DOGE base is stock (long-only) so the inert flip term is dropped."""
+    plan = _rl_plan(max_iterations=20, hpo_trials=20)  # default = stock
     block_b = plan["trials"][5:7]
     for t in block_b:
         assert t["config_patch"]["direction_confidence_gate"] == 0.10
         assert "reward_weights" in t["config_patch"]
     rws = [t["config_patch"]["reward_weights"] for t in block_b]
-    assert rws[0] == {"trade": 0.010, "flip": 0.005, "hold": 0.0}
-    assert rws[1] == {"trade": 0.020, "flip": 0.010, "hold": 0.0}
-    # reward profile encoded in the trial id
+    assert rws[0] == {"trade": 0.010, "hold": 0.0}
+    assert rws[1] == {"trade": 0.020, "hold": 0.0}
+    # reward profile encoded in the trial id (by the trade penalty)
     assert block_b[0]["trial_id"].endswith("_g10_t10")
     assert block_b[1]["trial_id"].endswith("_g10_t20")
 
 
 def test_rl_combined_grid_applies_gate_and_low_turnover_reward() -> None:
     """Block C (PPO grid) runs under BOTH E1 (gate) and E3 (low-turnover reward)
-    — the Sprint-1 'together' regime."""
-    plan = _rl_plan(max_iterations=20, hpo_trials=20)
+    — the Sprint-1 'together' regime (stock default → no inert flip term)."""
+    plan = _rl_plan(max_iterations=20, hpo_trials=20)  # default = stock
     grid = plan["trials"][7:]
     assert grid, "expected PPO-grid trials beyond the isolation blocks"
     for t in grid:
         cp = t["config_patch"]
         assert cp["direction_confidence_gate"] == 0.10
-        assert cp["reward_weights"] == {"trade": 0.010, "flip": 0.005, "hold": 0.0}
+        assert cp["reward_weights"] == {"trade": 0.010, "hold": 0.0}
+
+
+def test_rl_stock_mode_drops_inert_flip_term() -> None:
+    """Stock mode is long-only: no reward_weights patch may carry the inert flip
+    term, so no two trials differ only by a knob that cannot change the result."""
+    plan = _rl_plan(max_iterations=20, hpo_trials=20, trading_mode="stock")
+    for t in plan["trials"]:
+        rw = t["config_patch"].get("reward_weights")
+        if rw is not None:
+            assert "flip" not in rw, f"stock-mode trial {t['trial_id']} carries flip"
+    # the published search space also drops the inert flip dimension
+    assert "reward_weights.flip" not in plan["search_space"]
+
+
+def test_rl_margin_mode_retains_flip_term() -> None:
+    """Margin mode has real long↔short flips, so the flip term stays tunable in
+    both the reward profiles and the published search space."""
+    plan = _rl_plan(max_iterations=20, hpo_trials=20, trading_mode="margin")
+    block_b = plan["trials"][5:7]
+    rws = [t["config_patch"]["reward_weights"] for t in block_b]
+    assert rws[0] == {"trade": 0.010, "flip": 0.005, "hold": 0.0}
+    assert rws[1] == {"trade": 0.020, "flip": 0.010, "hold": 0.0}
+    assert "reward_weights.flip" in plan["search_space"]
 
 
 def test_rl_validate_rejects_unknown_reward_knob() -> None:
@@ -137,7 +162,9 @@ def test_materialize_rl_trial_merges_reward_weights(tmp_path) -> None:
         ),
         encoding="utf-8",
     )
-    plan = _rl_plan(max_iterations=7, hpo_trials=7)  # includes the E3 reward sweep
+    # margin mode keeps the flip term so the deep-merge of a partial reward
+    # override (including flip) is exercised end-to-end.
+    plan = _rl_plan(max_iterations=7, hpo_trials=7, trading_mode="margin")
     materialize_planned_trials(plan, workspace)
     t = plan["trials"][5]  # first E3 reward trial (lowturn)
     payload = yaml.safe_load(

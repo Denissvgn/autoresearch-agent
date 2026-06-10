@@ -174,8 +174,16 @@ def build_trial_identity(
     config_snapshot: Any,
     quick_mode: bool,
     marker: Optional[Mapping[str, Any]] = None,
+    source_model_ids: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Build a duplicate-detection identity for one planned/training attempt."""
+    """Build a duplicate-detection identity for one planned/training attempt.
+
+    ``source_model_ids`` (RL only): the upstream direction/volatility model run-ids
+    the enriched training data is derived from.  Folding them into ``data_split_id``
+    makes a legitimately-new run against retrained upstream models distinct from the
+    stale run, so a model swap no longer looks like a duplicate (removing the need
+    for a manual ``training.seed`` bump).  Omitted/None for direction & volatility.
+    """
 
     marker = marker or {}
     config_payload = canonical_config_payload(config_snapshot)
@@ -195,7 +203,9 @@ def build_trial_identity(
             quick_mode=quick_mode,
             marker=marker,
         ),
-        "data_split_id": _resolve_data_split_id(config_payload),
+        "data_split_id": _resolve_data_split_id(
+            config_payload, source_model_ids=source_model_ids
+        ),
     }
     return identity
 
@@ -335,44 +345,75 @@ def _resolve_validation_mode(
     return "quick" if quick_mode else "full"
 
 
-def _resolve_data_split_id(config_payload: Any) -> str:
-    if not isinstance(config_payload, Mapping):
-        return "default"
+def _normalize_source_model_ids(
+    source_model_ids: Optional[Mapping[str, Any]]
+) -> Dict[str, Any]:
+    """Keep only the resolved (non-empty) upstream source run-ids under stable keys,
+    so the data-split identity changes when (and only when) an upstream model swaps."""
+    if not isinstance(source_model_ids, Mapping):
+        return {}
+    out: Dict[str, Any] = {}
+    for key in ("direction_source_run_id", "volatility_source_run_id"):
+        value = source_model_ids.get(key)
+        if value:
+            out[key] = value
+    return out
 
-    explicit = _first_nested(
-        config_payload,
-        (
-            ("data_split_id",),
-            ("split_id",),
-            ("dataset_hash",),
-            ("data_hash",),
-            ("training", "data_split_id"),
-            ("training", "split_id"),
-            ("data", "split_id"),
-            ("data", "dataset_hash"),
-            ("dataset", "split_id"),
-            ("dataset", "dataset_hash"),
-        ),
-    )
-    if explicit is not None:
-        return str(explicit)
 
+def _resolve_data_split_id(
+    config_payload: Any,
+    *,
+    source_model_ids: Optional[Mapping[str, Any]] = None,
+) -> str:
+    sources = _normalize_source_model_ids(source_model_ids)
+
+    if isinstance(config_payload, Mapping):
+        explicit = _first_nested(
+            config_payload,
+            (
+                ("data_split_id",),
+                ("split_id",),
+                ("dataset_hash",),
+                ("data_hash",),
+                ("training", "data_split_id"),
+                ("training", "split_id"),
+                ("data", "split_id"),
+                ("data", "dataset_hash"),
+                ("dataset", "split_id"),
+                ("dataset", "dataset_hash"),
+            ),
+        )
+    else:
+        explicit = None
+
+    # An explicit split id still combines with upstream source run-ids: the same
+    # walk-forward split over a different enriched signal IS a different dataset.
     split_fields: Dict[str, Any] = {}
-    for key in (
-        "walkforward_n_folds",
-        "wf_n_folds",
-        "wf_train_bars",
-        "wf_test_bars",
-        "wf_embargo_bars",
-        "wf_anchor",
-        "purge_multiplier",
-        "execution_lag",
-    ):
-        value = _nested_get(config_payload, (key,))
-        if value is not None:
-            split_fields[key] = value
+    if explicit is not None:
+        split_fields["explicit_split_id"] = str(explicit)
+    elif isinstance(config_payload, Mapping):
+        for key in (
+            "walkforward_n_folds",
+            "wf_n_folds",
+            "wf_train_bars",
+            "wf_test_bars",
+            "wf_embargo_bars",
+            "wf_anchor",
+            "purge_multiplier",
+            "execution_lag",
+        ):
+            value = _nested_get(config_payload, (key,))
+            if value is not None:
+                split_fields[key] = value
+
+    split_fields.update(sources)
+
     if not split_fields:
         return "default"
+    # Back-compat: a bare explicit split id with no upstream sources returns the
+    # split id verbatim (unchanged from the pre-source-aware behavior).
+    if set(split_fields) == {"explicit_split_id"}:
+        return split_fields["explicit_split_id"]
     encoded = json.dumps(
         _canonicalize(split_fields),
         sort_keys=True,
