@@ -135,6 +135,10 @@ APPROVED_DIRECTION_KNOBS = {
     "sample_weight_halflife",
     "meta_model",
     "horizon_ensemble_enabled",
+    # E6a: selective-AUC composite sub-weight — folds top-25%-confident AUC into
+    # auc_term so the search optimizes the confident-subset edge the RL approval
+    # model acts on (not global AUC). 0 = legacy v3 objective.
+    "selective_auc_subweight",
 }
 
 APPROVED_VOLATILITY_KNOBS = {
@@ -651,6 +655,30 @@ def _direction_trial_patches() -> List[Dict[str, Any]]:
             meta_model="mlp_2x32",
             horizon_ensemble_enabled=False,
         ),
+        # E6a: selective-AUC isolation sweep — fix the same base config as the first
+        # seed (which is the subweight=0 / v3 reference) and vary ONLY
+        # selective_auc_subweight, so its effect on the confident-subset edge the RL
+        # approval model acts on is isolated. Placed after the curated DM-12/DM-13
+        # seeds so a small (≤10-trial) plan keeps its dimension coverage; the full
+        # E6 sweep materializes these.
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            selective_auc_subweight=0.30,
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            selective_auc_subweight=0.50,
+        ),
+        _direction_patch(
+            threshold=0.020, horizon=DIRECTION_HORIZON_FULL, roster="scoped_tabular",
+            calibration="isotonic", beta=0.5, signal_cap=0.35,
+            feature_version=CURRENT_FEATURE_LIBRARY_VERSION,
+            selective_auc_subweight=0.70,
+        ),
     ]
     return _extend_unique_patches(
         seeds,
@@ -744,6 +772,9 @@ def _direction_patch(
     # DM-5 multi-horizon ensemble toggle. Same None-skip discipline as above.
     meta_model: str | None = None,
     horizon_ensemble_enabled: bool | None = None,
+    # E6a: selective-AUC composite sub-weight. None-skipped so legacy seed
+    # fingerprints stay bit-identical (no key → v3 global-AUC objective).
+    selective_auc_subweight: float | None = None,
 ) -> Dict[str, Any]:
     patch: Dict[str, Any] = {
         "direction_pct_threshold": threshold,
@@ -772,6 +803,8 @@ def _direction_patch(
         patch["meta_model"] = meta_model
     if horizon_ensemble_enabled is not None:
         patch["horizon_ensemble_enabled"] = bool(horizon_ensemble_enabled)
+    if selective_auc_subweight is not None:
+        patch["selective_auc_subweight"] = float(selective_auc_subweight)
     return patch
 
 
