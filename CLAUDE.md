@@ -71,8 +71,8 @@ cp {WORKSPACE}/train.yaml {WORKSPACE}/best_train.yaml
 - NEVER write outside `/app/workspace/`
 - Do NOT run `docker`, `git`, `make`, or `apt` — they are not installed
 - Spend at most 2-3 tool calls on setup/reading, then START TRAINING
-- **NEVER pipe prepare.py output** through `| tail`, `| head`, `| grep`, or `timeout`. The full stdout is critical for iteration detection. Just run prepare.py directly — the tool has a 30-minute timeout built in.
-- Do NOT set `timeout_s` below 1800 for prepare.py commands. Training takes 5-20 minutes.
+- **NEVER pipe prepare.py output** through `| tail`, `| head`, `| grep`, or `timeout`. The full stdout is critical for iteration detection. Just run prepare.py directly — the bash tool defaults to a 2-hour timeout, which already covers a full trial.
+- **Do NOT set `timeout_s` for prepare.py** — rely on the 2-hour default. Walk-forward training runs every fold across multiple seed trials sequentially, so a single trial can take 30–40 minutes (longer than a naive "one training run"). If you ever do set `timeout_s`, keep it at or above the trial's own auto-calculated GPU timeout (printed as `[prepare] Auto-calculated timeout: …`); never set it below that, or the bash tool will kill the trial before it can finish and the iteration records no metric.
 - If training crashes with connection errors (data-ingest, mlflow, feature-service), wait 15 seconds and retry. Do NOT debug the connection — these are transient Docker DNS issues.
 
 ## Anti-Waste Rules (MANDATORY)
