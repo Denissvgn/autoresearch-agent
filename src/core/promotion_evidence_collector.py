@@ -350,7 +350,7 @@ class PromotionEvidenceCollector:
 
         if not data.get("passed"):
             return None, f"paper_replay_not_passed: {data.get('error', 'unknown')}"
-        return {
+        payload = {
             "passed": True,
             "composite_reload_passed": bool(data.get("composite_reload_passed")),
             "prior_version_left_intact_on_failure": bool(
@@ -359,7 +359,14 @@ class PromotionEvidenceCollector:
             "source": data.get("source")
             or "paper_replay_with_candidate_artifact_validated",
             "details": data,
-        }, None
+        }
+        # MQ-D1 (S3): surface the served-distribution parity report as a
+        # first-class field so it is archived with the promotion record
+        # (a failing check already flipped `passed` upstream and is caught
+        # by the paper_replay_not_passed branch above).
+        if isinstance(data.get("served_distribution_parity"), dict):
+            payload["served_distribution_parity"] = data["served_distribution_parity"]
+        return payload, None
 
 
 # ────────────────────────────────────────────────────────────────────────

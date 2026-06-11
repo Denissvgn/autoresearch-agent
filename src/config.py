@@ -125,6 +125,19 @@ class Settings(BaseSettings):
         default="INFO",
         validation_alias=AliasChoices("AUTORESEARCH_LOG_LEVEL", "LOG_LEVEL"),
     )
+    agent_output_digest_max_chars: int = Field(
+        default=12_000,
+        description=(
+            "Track D2: bash tool outputs longer than this are digested before "
+            "entering the agent's context (metrics block / markers / errors "
+            "kept, noise collapsed, full log persisted to the workspace). "
+            "0 disables digesting (legacy: full raw output every turn)."
+        ),
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_AGENT_OUTPUT_DIGEST_MAX_CHARS",
+            "AGENT_OUTPUT_DIGEST_MAX_CHARS",
+        ),
+    )
     api_v1_prefix: str = Field(
         default="/api/v1",
         validation_alias=AliasChoices("AUTORESEARCH_API_V1_PREFIX", "API_V1_PREFIX"),

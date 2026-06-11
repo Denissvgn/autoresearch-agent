@@ -352,3 +352,24 @@ def test_training_command_timeout_is_floored_above_agent_undersetting() -> None:
     assert eff({"command": "ls -la", "timeout_s": 100}) == 900
     assert eff({"command": ".venv/bin/python scripts/autotuner/enrich_rl_dataset.py",
                 "timeout_s": 1800}) == 1800
+
+
+def test_rl_data_reuse_sweep_is_isolated_and_tagged() -> None:
+    """Anti-overfit #3: the data-reuse block varies ONLY wf_timesteps_multiplier
+    (passes-per-bar budget) at the fixed PPO baseline + moderate gate +
+    low-turnover reward, and the trial id carries the _dr tag."""
+    plan = _rl_plan(max_iterations=40, hpo_trials=40)
+    dr_trials = [
+        t for t in plan["trials"]
+        if "wf_timesteps_multiplier" in t["config_patch"]
+    ]
+    mults = sorted(t["config_patch"]["wf_timesteps_multiplier"] for t in dr_trials)
+    assert mults == [10.0, 20.0]
+    for t in dr_trials:
+        assert t["trial_id"].endswith(f"_dr{int(t['config_patch']['wf_timesteps_multiplier'])}")
+        # isolation: same moderate gate + low-turnover reward as block B
+        assert t["config_patch"]["direction_confidence_gate"] > 0.0
+        assert t["config_patch"]["reward_weights"]["trade"] >= 0.01
+    # the knob is approved (validation must accept the patch unchanged)
+    from src.core.structured_hpo import validate_config_patch
+    validate_config_patch("rl", dr_trials[0]["config_patch"])

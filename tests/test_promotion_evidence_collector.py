@@ -299,6 +299,87 @@ async def test_collector_emits_smoke_validation_when_paper_replay_passes(
 
 
 @pytest.mark.asyncio
+async def test_collector_archives_served_distribution_parity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """MQ-D1: the S3 parity report from /admin/paper/replay is surfaced as a
+    first-class smoke_validation field so it lands in the promotion record."""
+    from pydantic import SecretStr
+    from src.config import settings as _settings
+    monkeypatch.setattr(
+        _settings, "inference_service_auth_token", SecretStr("test-token"),
+    )
+
+    store = ResultsStore(str(tmp_path / "store.db"))
+    await store.initialize()
+    session_id = await _seed(store, metrics={"signal_rate": 0.2})
+
+    parity_block = {
+        "check": "served_distribution_parity.v1",
+        "status": "pass",
+        "blocking": True,
+        "comparison": {"severity": "none", "psi": 0.01},
+    }
+    factory = _http_factory([
+        {"status_code": 200, "json": {"loaded": True}},                  # preflight
+        {"status_code": 200, "json": {"composite_reload_passed": True}}, # reload
+        {"status_code": 200, "json": {                                   # paper/replay
+            "passed": True,
+            "composite_reload_passed": True,
+            "prior_version_left_intact_on_failure": True,
+            "source": "paper_replay_with_candidate_artifact_validated",
+            "served_distribution_parity": parity_block,
+        }},
+    ])
+    collector = PromotionEvidenceCollector(store, http_client_factory=factory)
+    patch = await collector.collect_and_patch(session_id, 1)
+
+    assert patch["smoke_validation"]["served_distribution_parity"] == parity_block
+    # and it stays inside details for the archived raw response too
+    assert (
+        patch["smoke_validation"]["details"]["served_distribution_parity"]
+        == parity_block
+    )
+
+
+@pytest.mark.asyncio
+async def test_collector_rejects_replay_failed_by_distribution_parity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """MQ-D1: a replay failed by the S3 check yields NO smoke evidence —
+    the gate stays hard and the error names the parity failure."""
+    from pydantic import SecretStr
+    from src.config import settings as _settings
+    monkeypatch.setattr(
+        _settings, "inference_service_auth_token", SecretStr("test-token"),
+    )
+
+    store = ResultsStore(str(tmp_path / "store.db"))
+    await store.initialize()
+    session_id = await _seed(store, metrics={"signal_rate": 0.2})
+
+    factory = _http_factory([
+        {"status_code": 200, "json": {"loaded": True}},
+        {"status_code": 200, "json": {"composite_reload_passed": True}},
+        {"status_code": 200, "json": {
+            "passed": False,
+            "error": "served_distribution_parity_failed",
+            "served_distribution_parity": {"status": "fail", "blocking": True},
+        }},
+    ])
+    collector = PromotionEvidenceCollector(store, http_client_factory=factory)
+    patch = await collector.collect_and_patch(session_id, 1)
+
+    assert "smoke_validation" not in patch
+    errors = patch.get("promotion_evidence_collection_errors", {})
+    assert errors.get("smoke_validation") == (
+        "paper_replay_not_passed: served_distribution_parity_failed"
+    )
+
+
+@pytest.mark.asyncio
 async def test_collector_merges_signal_health_from_paper_replay(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

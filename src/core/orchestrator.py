@@ -39,6 +39,7 @@ from src.core.gate_status import (
     normalize_training_gate_aliases,
     training_gates_passed_from_iteration,
 )
+from src.core.output_digest import digest_command_output
 from src.core.iteration_snapshot import (
     build_iteration_attempt_snapshot,
     build_trial_identity,
@@ -2999,10 +3000,41 @@ class AgentOrchestrator:
                                 **tool_meta,
                             },
                         )
+                        # Track D2: digest large bash outputs before they enter
+                        # the agent's context — the raw `tool_result` variable
+                        # stays untouched for the server-side marker parsing
+                        # below (ITERATION_RESULT / `---` metrics / HPO study).
+                        agent_visible_result = tool_result
+                        if (
+                            block.name == "bash"
+                            and len(tool_result) > settings.agent_output_digest_max_chars > 0
+                        ):
+                            _full_log_rel = None
+                            try:
+                                _log_dir = Path(workspace) / "command_logs"
+                                _log_dir.mkdir(parents=True, exist_ok=True)
+                                _log_file = _log_dir / f"turn_{turn:03d}_{block.id[-8:]}.log"
+                                _log_file.write_text(tool_result, encoding="utf-8")
+                                _full_log_rel = str(
+                                    _log_file.relative_to(settings.workspace_root)
+                                ) if str(_log_file).startswith(str(settings.workspace_root)) else str(_log_file)
+                            except Exception as _log_exc:  # noqa: BLE001
+                                logger.debug("Full-log persist failed: %s", _log_exc)
+                            agent_visible_result = digest_command_output(
+                                tool_result,
+                                max_chars=settings.agent_output_digest_max_chars,
+                                full_log_path=_full_log_rel,
+                            )
+                            logger.info(
+                                "Research %s turn %d: digested bash output "
+                                "%d → %d chars",
+                                research_id, turn,
+                                len(tool_result), len(agent_visible_result),
+                            )
                         tool_results.append({
                             "type": "tool_result",
                             "tool_use_id": block.id,
-                            "content": tool_result,
+                            "content": agent_visible_result,
                         })
                         _cmd_str = redact_sensitive_text(
                             str(block.input.get("command", ""))

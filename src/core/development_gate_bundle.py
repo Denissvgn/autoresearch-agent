@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 from typing import Any, Dict, Iterable
@@ -17,6 +18,77 @@ DEFAULT_GATE_BUNDLE_RELATIVE_PATH = (
 PRODUCTION_GATE_BUNDLE_RELATIVE_PATH = (
     "reports/direction-tuning/promotion/production_gate_bundle_v1.yaml"
 )
+
+
+def apply_instrument_gate_overrides(
+    bundle: dict[str, Any],
+    *,
+    instrument: str | None,
+    timeframe: str | None,
+    workspace_root: str | Path,
+) -> dict[str, Any]:
+    """MQ-C1: overlay per-instrument gate thresholds onto a gate bundle.
+
+    Reads the ``gates_overrides`` block of the promoted instrument config
+    (``configs/instrument_configs/{INST}_{TF}.yaml``) shaped as
+    ``{tier_name: {check_key: value}}`` and deep-merges it into a COPY of the
+    bundle's ``gate_tiers[tier]["checks"]``. Noisier instruments can carry
+    different floors (e.g. a lower ``min_direction_auc``) without touching the
+    global bundle defaults. Provenance: every applied override is recorded in
+    ``bundle["instrument_gate_overrides"]`` (instrument, source path, and
+    per-key from→to), which the evaluators echo into their result so the
+    promotion record shows exactly which thresholds were in force.
+
+    Never raises — a missing/malformed config returns the bundle unchanged.
+    """
+    if not instrument or not timeframe:
+        return bundle
+    cfg_path = (
+        Path(workspace_root)
+        / "configs"
+        / "instrument_configs"
+        / f"{instrument}_{timeframe}.yaml"
+    )
+    if not cfg_path.exists():
+        return bundle
+    try:
+        with cfg_path.open(encoding="utf-8") as handle:
+            raw = (yaml.safe_load(handle) or {}).get("gates_overrides")
+    except (OSError, yaml.YAMLError):
+        return bundle
+    if not isinstance(raw, dict) or not raw:
+        return bundle
+
+    patched = copy.deepcopy(bundle)
+    tiers = patched.setdefault("gate_tiers", {})
+    applied: dict[str, Any] = {}
+    for tier_name, tier_overrides in raw.items():
+        if not isinstance(tier_overrides, dict):
+            continue
+        tier = tiers.setdefault(str(tier_name), {})
+        if not isinstance(tier, dict):
+            continue
+        checks = tier.setdefault("checks", {})
+        if not isinstance(checks, dict):
+            continue
+        tier_applied: dict[str, Any] = {}
+        for key, value in tier_overrides.items():
+            tier_applied[str(key)] = {
+                "from": checks.get(key),
+                "to": value,
+            }
+            checks[str(key)] = value
+        if tier_applied:
+            applied[str(tier_name)] = tier_applied
+    if not applied:
+        return bundle
+    patched["instrument_gate_overrides"] = {
+        "instrument": instrument,
+        "timeframe": timeframe,
+        "source": str(cfg_path),
+        "applied": applied,
+    }
+    return patched
 
 
 def load_gate_bundle(workspace_root: str | Path) -> dict[str, Any]:
@@ -411,6 +483,8 @@ def evaluate_development_gate_bundle(
             source="development_gate_bundle",
         ),
         "waivers": sorted(waivers),
+        # MQ-C1: which per-instrument thresholds were in force (None = global).
+        "instrument_gate_overrides": bundle.get("instrument_gate_overrides"),
     }
 
 
@@ -529,6 +603,8 @@ def _evaluate_rl_development_gate_bundle(
             source="development_gate_bundle",
         ),
         "waivers": sorted(waivers),
+        # MQ-C1: which per-instrument thresholds were in force (None = global).
+        "instrument_gate_overrides": bundle.get("instrument_gate_overrides"),
     }
 
 

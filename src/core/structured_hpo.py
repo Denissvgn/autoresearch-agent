@@ -250,6 +250,10 @@ RL_PATCH_TOPLEVEL_SCALARS = {
     "confidence_sizing_enabled",
     "confidence_sizing_k",
     "kelly_fraction_cap",
+    # Anti-overfit #3: data-reuse budget (passes per training bar). The right
+    # reuse level is per-instrument (noise level, data span) — searchable, not
+    # a constant (rule R1). Default 30; lower = less memorization risk.
+    "wf_timesteps_multiplier",
 }
 # PnL-E3: reward-weight leaf knobs the server-owned sweep may set (the rl-trainer
 # merges partial overrides into the full reward_weights dict).
@@ -1268,6 +1272,17 @@ def _rl_trial_patches(*, trading_mode: Optional[str] = None) -> List[Dict[str, A
         )
         for k, cap in [(2.0, 1.0), (4.0, 1.0), (8.0, 1.0), (4.0, 0.5)]
     ]
+    # (B3) Anti-overfit #3: data-reuse isolation sweep — fixed PPO baseline +
+    # moderate gate + low-turnover reward, varying ONLY the passes-per-bar
+    # budget (default 30 is already block A's implicit point; lower budgets
+    # trade raw fit for generalization — let the evidence pick per instrument).
+    data_reuse_sweep = [
+        _rl_patch(
+            **_RL_PPO_BASELINE, gate=_RL_DEFAULT_GATE, reward=lowturn,
+            timesteps_multiplier=m,
+        )
+        for m in [10.0, 20.0]
+    ]
     # (C) PPO search seeds under the COMBINED regime (gate + low-turnover reward).
     ppo_seeds = [
         _rl_patch(lr=1e-4, ent=0.005, clip=0.15, gamma=0.995, n_steps=2048, target_kl=0.03, gate=_RL_DEFAULT_GATE, reward=lowturn),
@@ -1279,7 +1294,8 @@ def _rl_trial_patches(*, trading_mode: Optional[str] = None) -> List[Dict[str, A
         _rl_patch(lr=5e-4, ent=0.008, clip=0.15, gamma=0.99, n_steps=1024, target_kl=None, gate=_RL_DEFAULT_GATE, reward=lowturn),
     ]
     return _extend_unique_patches(
-        gate_sweep + high_gate_sweep + reward_sweep + sizing_sweep + ppo_seeds,
+        gate_sweep + high_gate_sweep + reward_sweep + sizing_sweep
+        + data_reuse_sweep + ppo_seeds,
         (
             _rl_patch(
                 lr=lr, ent=ent, clip=clip, gamma=gamma, n_steps=n_steps,
@@ -1310,6 +1326,8 @@ def _rl_patch(
     sizing_enabled: bool | None = None,
     sizing_k: float | None = None,
     kelly_cap: float | None = None,
+    # Anti-overfit #3: passes-per-bar budget (None-skipped → trainer default 30)
+    timesteps_multiplier: float | None = None,
 ) -> Dict[str, Any]:
     """RL trial patch: nested ``training:`` PPO knobs + the top-level hard
     selectivity gate + optional ``reward_weights:`` shaping (E3) + optional
@@ -1336,6 +1354,8 @@ def _rl_patch(
         patch["confidence_sizing_k"] = float(sizing_k)
     if kelly_cap is not None:
         patch["kelly_fraction_cap"] = float(kelly_cap)
+    if timesteps_multiplier is not None:
+        patch["wf_timesteps_multiplier"] = float(timesteps_multiplier)
     return patch
 
 
@@ -1393,7 +1413,11 @@ def _trial_id(index: int, patch: Mapping[str, Any], model_type: str) -> str:
             _k = int(round(float(patch.get("confidence_sizing_k", 0.0)) * 10))
             _cap = int(round(float(patch.get("kelly_fraction_cap", 1.0)) * 100))
             stag = f"_szk{_k}c{_cap}"
-        return f"trial_{index:03d}_lr{lr}_ent{ent}_clip{clip}_kl{kl}_g{gate}{rtag}{stag}"
+        # Anti-overfit #3: tag data-reuse trials (passes-per-bar budget)
+        drtag = ""
+        if patch.get("wf_timesteps_multiplier") is not None:
+            drtag = f"_dr{int(round(float(patch['wf_timesteps_multiplier'])))}"
+        return f"trial_{index:03d}_lr{lr}_ent{ent}_clip{clip}_kl{kl}_g{gate}{rtag}{stag}{drtag}"
     atr_mult = int(round(float(patch["volatility_atr_mult"]) * 100))
     horizon = int(patch["prediction_horizon"])
     calibration = str(patch["calibration_method"])

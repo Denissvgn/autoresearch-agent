@@ -26,6 +26,7 @@ from src.core.blocker_classifier import classify_blockers
 from src.config import secret_value, settings
 from src.core.consistency_validator import build_consistency_report
 from src.core.development_gate_bundle import (
+    apply_instrument_gate_overrides,
     evaluate_development_gate_bundle,
     load_gate_bundle,
     load_production_gate_bundle,
@@ -203,6 +204,7 @@ class ConfigPromoter:
         )
         gate_bundle_evaluation = self._evaluate_gate_bundle(
             model_type, best_for_gate,
+            instrument=instrument, timeframe=timeframe,
         )
         gate_bundle_evaluation, consistency_report = (
             self._apply_pipeline_feature_replay_policy(
@@ -2703,10 +2705,25 @@ class ConfigPromoter:
         self,
         model_type: str,
         best_iteration: Dict[str, Any],
+        *,
+        instrument: Optional[str] = None,
+        timeframe: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Evaluate the best iteration against the development gate bundle."""
+        """Evaluate the best iteration against the development gate bundle.
+
+        MQ-C1: when the instrument identity is provided, per-instrument gate
+        thresholds (``gates_overrides`` in the promoted instrument config) are
+        overlaid onto the bundle before evaluation, with provenance recorded
+        in the result.
+        """
         try:
             bundle = load_gate_bundle(settings.workspace_root)
+            bundle = apply_instrument_gate_overrides(
+                bundle,
+                instrument=instrument,
+                timeframe=timeframe,
+                workspace_root=settings.workspace_root,
+            )
         except Exception as exc:
             if model_type == "direction":
                 return {
