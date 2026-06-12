@@ -1527,8 +1527,12 @@ class ResultsStore:
             )
             await db.commit()
 
-            # ML-53: Update session best for keep OR improve (research progress)
-            if decision in ("keep", "improve"):
+            # Session best is the PROMOTABLE frontier: only gates-passing
+            # 'keep' iterations move it. 'improve' (gates failed, raw metric
+            # up) is recorded but must not raise the bar — otherwise honest
+            # gates-passing runs get compared against an unpromotable metric
+            # and mislabeled 'discard' (observed res_d4b50d19ad9b iter 13).
+            if decision == "keep":
                 session = await self.get_session(research_id)
                 best_metric = session["best_metric"] if session else None
                 if session and primary_metric is not None and (
@@ -1823,7 +1827,27 @@ class ResultsStore:
     ) -> Optional[Dict[str, Any]]:
         async with self.connection() as db:
             db.row_factory = aiosqlite.Row
-            # ML-53: Include 'improve' decisions (research progress)
+            # Promotion safety: the best PROMOTABLE iteration is the highest
+            # metric among gates-PASSING runs, regardless of the decision
+            # label — decision labels compare raw metrics against a running
+            # best that may itself be a gates-failing run (observed
+            # res_d4b50d19ad9b: gates-failing 0.575 'improve' outranked the
+            # honest gates-passing 0.564 'discard'). Promote-confirm refuses
+            # gate-failing configs anyway, so picking them in preview only
+            # guarantees a refused promotion.
+            cursor = await db.execute(
+                """SELECT * FROM iterations
+                   WHERE research_id = ? AND all_gates_passed = 1
+                     AND primary_metric IS NOT NULL
+                   ORDER BY primary_metric DESC LIMIT 1""",
+                (research_id,),
+            )
+            row = await cursor.fetchone()
+            if row is not None:
+                return dict(row)
+            # ML-53 legacy fallback: no gates-passing iteration recorded —
+            # surface the best keep/improve so callers can still inspect it
+            # (confirm will gate-check it).
             cursor = await db.execute(
                 """SELECT * FROM iterations
                    WHERE research_id = ? AND decision IN ('keep', 'improve')

@@ -2591,6 +2591,13 @@ class AgentOrchestrator:
         # effective count of real training attempts is
         # (iteration_count - duplicate_rejected_count).
         duplicate_rejected_count = 0
+        # Track D1 (inert-change detection): primary metrics seen this
+        # session. Deterministic training means a bit-identical metric from a
+        # DIFFERENT config proves the changed knob does not affect the scored
+        # artifact (e.g. Option-A-inert meta/stacking knobs, no-data feature
+        # lanes, non-winner roster removals) — the agent gets told explicitly
+        # instead of mistaking the result for evidence.
+        seen_primary_metrics: set[float] = set()
         total_cost = 0.0
         last_input_tokens = 0  # Phase 2.2: rolling estimate for budget gate
         # Phase 5.4: abort the session if the agent keeps trying to run
@@ -3167,6 +3174,36 @@ class AgentOrchestrator:
                                     metrics.primary_metric,
                                     metrics.training_gates_passed,
                                 )
+                                # Track D1: bit-identical metric from a new
+                                # config ⇒ the changed knob is INERT for the
+                                # scored artifact. Tell the agent explicitly —
+                                # otherwise it reads the rerun as evidence and
+                                # keeps probing dead dimensions (observed:
+                                # Option-A meta/stacking knobs, no-data
+                                # lanes, non-winner roster removals).
+                                _metric_val = float(metrics.primary_metric)
+                                if _metric_val in seen_primary_metrics and tool_results:
+                                    tool_results[-1]["content"] = (
+                                        str(tool_results[-1]["content"])
+                                        + "\n\n⚠️ INERT CHANGE DETECTED: this run "
+                                        f"reproduced an earlier iteration's metric "
+                                        f"BIT-IDENTICALLY ({_metric_val:.6f}). "
+                                        "Training is deterministic — an identical "
+                                        "metric from a different config means the "
+                                        "knob(s) you changed do NOT affect the "
+                                        "scored artifact (e.g. Option-A-inert "
+                                        "meta/stacking knobs, feature lanes with "
+                                        "no data, removing non-winning roster "
+                                        "members). Do NOT count this as evidence; "
+                                        "switch to a different search dimension."
+                                    )
+                                    await agent_log.append(
+                                        "system",
+                                        f"Inert-change note injected (metric "
+                                        f"{_metric_val:.6f} repeated)",
+                                        turn=turn,
+                                    )
+                                seen_primary_metrics.add(_metric_val)
                             elif (
                                 metrics.status in (
                                     "crash", "timeout", "failed", "error",

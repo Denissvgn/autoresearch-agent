@@ -109,9 +109,15 @@ def test_headroom_hint_medium_for_phase_without_sweep_keys() -> None:
 def test_headroom_hint_accepts_top_level_keys_too() -> None:
     """Iterations that surface the sweep key at metrics_json top level
     (instead of under ``config.*``) must still register as touched."""
-    rows = [_iter_with_top_level_keys({"meta_model": "lgb_shallow"})]
-    # calibration_replay_gates has 3 keys; one touched → medium.
-    assert _phase_headroom_hint("calibration_replay_gates", rows) == "medium"
+    # Option A (2026-06-11): meta_model was removed from the phase's sweep
+    # keys (score-inert — the meta-stacker is never served); the served
+    # model's calibration_method is the phase's ONLY key now
+    # (threshold_strategy / horizon_ensemble_* also removed as score-inert).
+    rows = [_iter_with_top_level_keys({"calibration_method": "beta"})]
+    # The single phase key registered as touched via a top-level
+    # metrics_json key → full coverage → low. (Were top-level detection
+    # broken, this would report "high".)
+    assert _phase_headroom_hint("calibration_replay_gates", rows) == "low"
 
 
 def test_headroom_hint_handles_malformed_metrics_json() -> None:

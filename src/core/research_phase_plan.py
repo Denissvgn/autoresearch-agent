@@ -71,15 +71,22 @@ DIRECTION_PHASES: List[Dict[str, Any]] = [
     {
         "id": "calibration_replay_gates",
         "label": "Calibration/Replay Gates",
-        # DM-13: call out meta_model variants (DM-6: lgb_shallow / mlp_2x32)
-        # and the multi-horizon ensemble toggle (DM-5) so the agent
-        # exercises both in this phase.
+        # Option A (2026-05-26): serving ships the single best BASE learner —
+        # meta_model / stacking_calibration_* control the never-served
+        # meta-stacker and are SCORE-INERT (observed: full-mode iterations
+        # varying them reproduce the parent metric bit-identically). The
+        # phase's calibration lever is the SERVED model's calibration_method.
         "next_action": (
             "Run full calibration diagnostics and post-cost replay gates "
-            "on finalists. Vary meta_model (logreg / lgb_shallow / "
-            "mlp_2x32) and horizon_ensemble_enabled (false / true) as "
-            "primary search dimensions for this phase. Emit "
-            "metrics.calibration_full_validation and metrics.economic_replay."
+            "on finalists. Vary calibration_method (isotonic / sigmoid / "
+            "temperature / beta — calibrates the SERVED best-base model) "
+            "as the primary search dimension for this phase. Do NOT vary "
+            "meta_model, stacking_calibration_*, horizon_ensemble_*, "
+            "meta_label_*, min_cal_samples / cal_fraction (score-inert "
+            "under Option A serving), or threshold_strategy (the econ "
+            "replay applies its own gating policy — threshold changes are "
+            "score-inert too). Emit metrics.calibration_full_validation "
+            "and metrics.economic_replay."
         ),
         "min_iterations": 2,
         "max_iterations": 8,
@@ -87,7 +94,18 @@ DIRECTION_PHASES: List[Dict[str, Any]] = [
     {
         "id": "multi_seed_robustness",
         "label": "Multi-Seed Robustness",
-        "next_action": "Confirm finalist stability across configured seed trials. Emit metrics.seed_trials or seeds_passed_gates.",
+        # 2026-06-11: this pipeline is DETERMINISTIC — varying training.seed
+        # or n_seed_trials is an INERT change (bit-identical metric). The
+        # stability evidence is fold stability, emitted on every run.
+        "next_action": (
+            "Confirm finalist stability via the walk-forward fold metrics "
+            "(walkforward_auc_cv, fold gates) the best config's run already "
+            "emitted — this pipeline is deterministic, so do NOT vary seeds "
+            "or n_seed_trials (inert) and do NOT re-run an unchanged config "
+            "(dedup rejects it). A robustness probe that IS meaningful here: "
+            "one small data-window or fold-count perturbation, judged on "
+            "fold-stability metrics."
+        ),
         "min_iterations": 3,
         "max_iterations": 6,
     },
@@ -204,7 +222,18 @@ VOLATILITY_PHASES: List[Dict[str, Any]] = [
     {
         "id": "multi_seed_robustness",
         "label": "Multi-Seed Robustness",
-        "next_action": "Confirm finalist stability across configured seed trials. Emit metrics.seed_trials or seeds_passed_gates.",
+        # 2026-06-11: this pipeline is DETERMINISTIC — varying training.seed
+        # or n_seed_trials is an INERT change (bit-identical metric). The
+        # stability evidence is fold stability, emitted on every run.
+        "next_action": (
+            "Confirm finalist stability via the walk-forward fold metrics "
+            "(walkforward_auc_cv, fold gates) the best config's run already "
+            "emitted — this pipeline is deterministic, so do NOT vary seeds "
+            "or n_seed_trials (inert) and do NOT re-run an unchanged config "
+            "(dedup rejects it). A robustness probe that IS meaningful here: "
+            "one small data-window or fold-count perturbation, judged on "
+            "fold-stability metrics."
+        ),
         "min_iterations": 3,
         "max_iterations": 6,
     },
@@ -1004,12 +1033,20 @@ _PHASE_PRIMARY_SWEEP_KEYS: Dict[str, tuple[str, ...]] = {
         "direction_pct_threshold",
         "sample_weight_halflife",
         "roster_preset",
-        "threshold_strategy",
+        # MQ-HPO: tuned base-learner candidates — a real discrimination lever
+        # (bases otherwise train on fixed defaults). threshold_strategy is
+        # NOT here: the econ replay applies its own gating policy, making
+        # the operating threshold score-inert.
+        "base_hpo_enabled",
     ),
     "calibration_replay_gates": (
-        "meta_model",
-        "horizon_ensemble_enabled",
-        "stacking_calibration_method",
+        # Option A: meta_model / stacking_calibration_* removed — they probe
+        # the never-served meta-stacker (score-inert). horizon_ensemble_*
+        # removed for the same reason (feeds only the meta-stacker).
+        # threshold_strategy removed too: the econ replay applies its own
+        # gating policy, so the operating threshold is score-inert. The
+        # served model's calibrator is the real lever.
+        "calibration_method",
     ),
 }
 
