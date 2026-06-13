@@ -644,6 +644,7 @@ def _development_baseline_promotion(
     quality_baseline_usable: bool | None = None,
     quality_baseline_unusable: bool | None = None,
     rolled_back_at: str | None = None,
+    composite_formula_version: str | None = None,
 ) -> dict:
     row = _promotion_row("development", promotion_id=promotion_id)
     row["promotion_metadata"].update(
@@ -653,6 +654,10 @@ def _development_baseline_promotion(
             "metric_name": metric_name,
         }
     )
+    if composite_formula_version is not None:
+        row["promotion_metadata"][
+            "composite_formula_version"
+        ] = composite_formula_version
     if quality_baseline_usable is not None:
         row["promotion_metadata"][
             "quality_baseline_usable"
@@ -1081,6 +1086,78 @@ async def test_preview_skips_quality_baseline_metric_name_mismatch(
         "not_comparable_metric_name_mismatch"
     )
     assert preview["quality_baseline_evaluation"]["blockers"] == []
+
+
+@pytest.mark.asyncio
+async def test_preview_skips_quality_baseline_formula_version_mismatch(
+    tmp_path,
+    monkeypatch,
+):
+    """R3: a v6 champion below a v5 baseline numerically must NOT be blocked —
+    different composite_formula_version makes the numbers incomparable, so the
+    newer-formula champion passes the quality baseline (gates still protect)."""
+    _write_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+    metrics = _passing_metrics()
+    metrics["composite_formula_version"] = "v6_sized_econ"
+    store = FakePromotionStore(
+        _best_iteration(
+            metrics,
+            primary_metric=0.6969,  # below the v5 baseline numerically
+            metric_name="composite_direction_score",
+        ),
+        promotions=[
+            _development_baseline_promotion(
+                best_metric=0.7133,
+                metric_name="composite_direction_score",
+                composite_formula_version="v5_calibration",
+            )
+        ],
+    )
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    assert preview["promotion_allowed"] is True
+    assert preview["quality_baseline_evaluation"]["status"] == (
+        "not_comparable_formula_version_mismatch"
+    )
+    assert preview["quality_baseline_evaluation"]["blockers"] == []
+
+
+@pytest.mark.asyncio
+async def test_preview_blocks_same_formula_regression(
+    tmp_path,
+    monkeypatch,
+):
+    """Guard: SAME formula version still does the strict numeric compare — a
+    real regression below the baseline must still be blocked."""
+    _write_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+    monkeypatch.setattr(config_promoter.settings, "global_stagnation_epsilon", 0.0001)
+    metrics = _passing_metrics()
+    metrics["composite_formula_version"] = "v6_sized_econ"
+    store = FakePromotionStore(
+        _best_iteration(
+            metrics,
+            primary_metric=0.60,
+            metric_name="composite_direction_score",
+        ),
+        promotions=[
+            _development_baseline_promotion(
+                best_metric=0.6969,
+                metric_name="composite_direction_score",
+                composite_formula_version="v6_sized_econ",
+            )
+        ],
+    )
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    assert "best_metric_below_development_baseline" in (
+        preview["quality_baseline_evaluation"]["blockers"]
+    )
 
 
 @pytest.mark.asyncio

@@ -1285,6 +1285,10 @@ class ConfigPromoter:
             "target_path": target_path,
             "best_metric": best_iteration.get("primary_metric"),
             "metric_name": best_iteration.get("metric_name"),
+            # R3: persist the formula version so the NEXT session's quality
+            # baseline check can detect a cross-formula mismatch instead of
+            # comparing incomparable numbers.
+            "composite_formula_version": self._formula_version(metrics_payload),
             "training_gates_passed": training_gates_passed,
             "gates_passed": gates_passed,
             "development_gate_bundle_passed": development_gate_bundle_passed,
@@ -2327,6 +2331,9 @@ class ConfigPromoter:
         current_metric_name = self._clean_metric_name(
             best_iteration.get("metric_name")
         )
+        current_formula_version = self._formula_version(
+            self._best_iteration_payload(best_iteration)
+        )
         epsilon = float(settings.global_stagnation_epsilon)
         comparison: Dict[str, Any] = {
             "current_research_id": research_id,
@@ -2457,6 +2464,39 @@ class ConfigPromoter:
             return {
                 "passed": True,
                 "status": "not_comparable_metric_name_mismatch",
+                "mode": QUALITY_BASELINE_MODE,
+                "blockers": [],
+                "checks": checks,
+                "comparison": comparison,
+            }
+
+        # R3: scores are NOT comparable across composite formula versions, even
+        # when the metric NAME matches (composite_direction_score spans
+        # v5_calibration / v6_sized_econ with different term semantics). A
+        # raw numeric compare here wrongly blocks a newer-formula champion
+        # behind an older-formula baseline (observed: v6 0.6969 blocked by v5
+        # 0.7133, so every session re-derived from the stale promoted config).
+        # The newer formula is the current scoring truth → pass through and
+        # let the gates (floors / all_gates_passed) protect quality.
+        baseline_formula_version = self._promotion_formula_version(baseline)
+        comparison["current_formula_version"] = current_formula_version
+        comparison["baseline_formula_version"] = baseline_formula_version
+        if (
+            current_formula_version
+            and baseline_formula_version
+            and current_formula_version != baseline_formula_version
+        ):
+            add_check(
+                "quality_formula_version_comparable",
+                "warning",
+                details={
+                    "current_formula_version": current_formula_version,
+                    "baseline_formula_version": baseline_formula_version,
+                },
+            )
+            return {
+                "passed": True,
+                "status": "not_comparable_formula_version_mismatch",
                 "mode": QUALITY_BASELINE_MODE,
                 "blockers": [],
                 "checks": checks,
@@ -2632,6 +2672,26 @@ class ConfigPromoter:
             return None
         text = str(value).strip()
         return text or None
+
+    @classmethod
+    def _formula_version(cls, payload: Dict[str, Any]) -> Optional[str]:
+        """composite_formula_version from a metrics payload (top-level mirror
+        or the composite_components blob). None when absent."""
+        if not isinstance(payload, dict):
+            return None
+        version = payload.get("composite_formula_version")
+        if not version:
+            components = payload.get("composite_components")
+            if isinstance(components, dict):
+                version = components.get("composite_formula_version")
+        return cls._clean_metric_name(version)
+
+    @classmethod
+    def _promotion_formula_version(cls, promotion: Dict[str, Any]) -> Optional[str]:
+        metadata = cls._promotion_metadata(promotion)
+        return cls._clean_metric_name(
+            metadata.get("composite_formula_version")
+        )
 
     async def _promotion_iterations(
         self,
