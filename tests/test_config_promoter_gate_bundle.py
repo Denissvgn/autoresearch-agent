@@ -1126,6 +1126,44 @@ async def test_preview_skips_quality_baseline_formula_version_mismatch(
 
 
 @pytest.mark.asyncio
+async def test_preview_passes_when_baseline_predates_version_stamp(
+    tmp_path,
+    monkeypatch,
+):
+    """A current-formula champion must NOT be blocked by a LEGACY baseline that
+    has no composite_formula_version (predates stamping) — unknown version is
+    not comparable (R3), even though the champion's number is lower."""
+    _write_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+    monkeypatch.setattr(config_promoter.settings, "global_stagnation_epsilon", 0.0001)
+    metrics = _passing_metrics()
+    metrics["composite_formula_version"] = "v6_sized_econ"
+    store = FakePromotionStore(
+        _best_iteration(
+            metrics,
+            primary_metric=0.6969,
+            metric_name="composite_direction_score",
+        ),
+        promotions=[
+            _development_baseline_promotion(
+                best_metric=0.7133,
+                metric_name="composite_direction_score",
+                composite_formula_version=None,  # legacy, unstamped
+            )
+        ],
+    )
+
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    assert preview["promotion_allowed"] is True
+    assert preview["quality_baseline_evaluation"]["status"] == (
+        "not_comparable_formula_version_mismatch"
+    )
+    assert preview["quality_baseline_evaluation"]["blockers"] == []
+
+
+@pytest.mark.asyncio
 async def test_preview_blocks_same_formula_regression(
     tmp_path,
     monkeypatch,

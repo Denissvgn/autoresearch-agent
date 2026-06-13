@@ -2481,10 +2481,21 @@ class ConfigPromoter:
         baseline_formula_version = self._promotion_formula_version(baseline)
         comparison["current_formula_version"] = current_formula_version
         comparison["baseline_formula_version"] = baseline_formula_version
-        if (
+        # A numeric metric comparison is valid ONLY when both sides are the
+        # SAME, explicitly-stamped formula version. Different versions — or a
+        # baseline that predates version stamping (legacy promotions have no
+        # composite_formula_version) — are not comparable (R3): pass through so
+        # the current-formula champion isn't blocked by an incomparable number.
+        # The gates (floors / all_gates_passed) still protect quality, and
+        # going forward every promotion persists its version so same-version
+        # comparisons resume strict.
+        _formula_comparable = bool(
             current_formula_version
             and baseline_formula_version
-            and current_formula_version != baseline_formula_version
+            and current_formula_version == baseline_formula_version
+        )
+        if not _formula_comparable and (
+            current_formula_version or baseline_formula_version
         ):
             add_check(
                 "quality_formula_version_comparable",
