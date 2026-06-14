@@ -47,6 +47,12 @@ class FakePromotionStore:
     async def get_iterations(self, research_id: str):
         return self.iterations
 
+    async def get_iteration(self, research_id: str, iteration: int):
+        for it in self.iterations:
+            if it.get("iteration") == iteration:
+                return it
+        return self.best
+
     async def record_promotion(self, **kwargs):
         record = {
             "id": len(self.promotions) + 1,
@@ -1123,6 +1129,59 @@ async def test_preview_skips_quality_baseline_formula_version_mismatch(
         "not_comparable_formula_version_mismatch"
     )
     assert preview["quality_baseline_evaluation"]["blockers"] == []
+
+
+@pytest.mark.asyncio
+async def test_preview_collects_smoke_evidence_when_missing(
+    tmp_path,
+    monkeypatch,
+):
+    """A timed-out / manually-promoted session has no smoke_validation in its
+    metrics. preview() must collect it (mirroring the orchestrator) so the
+    promotion isn't falsely blocked on failed_smoke_validation when the
+    paper-replay would pass."""
+    _write_gate_bundle(tmp_path)
+    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
+    monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
+    monkeypatch.setattr(
+        config_promoter.settings, "auto_collect_promotion_evidence", True, raising=False
+    )
+    metrics = _passing_metrics()
+    metrics.pop("smoke_validation", None)  # timed-out session: never collected
+    best = _best_iteration(metrics, primary_metric=0.71, metric_name="auc")
+
+    collected = {"called": False}
+
+    class _FakeCollector:
+        def __init__(self, store):
+            self._store = store
+
+        async def collect_and_patch(self, research_id, iteration):
+            collected["called"] = True
+            # Simulate a passing paper-replay patched into the iteration.
+            patched = dict(metrics)
+            patched["smoke_validation"] = {"passed": True}
+            self._store.iterations = [
+                {**self._store.best, "metrics_json": json.dumps(patched)}
+            ]
+            self._store.best = self._store.iterations[0]
+            return {"smoke_validation": {"passed": True}}
+
+    import src.core.promotion_evidence_collector as pec
+    monkeypatch.setattr(pec, "PromotionEvidenceCollector", _FakeCollector)
+
+    store = FakePromotionStore(best, promotions=[])
+    preview = await ConfigPromoter(store).preview("research_1")
+
+    # The core contract: preview collected the missing evidence (it would not
+    # have if smoke_validation were already present — see the passing-metrics
+    # tests which never trigger the collector).
+    assert collected["called"] is True
+    # And the collected passing smoke evidence is reflected (not stuck on the
+    # missing-evidence blocker).
+    assert "failed_smoke_validation" not in [
+        b.get("code") for b in (preview.get("blocker_details") or [])
+    ]
 
 
 @pytest.mark.asyncio

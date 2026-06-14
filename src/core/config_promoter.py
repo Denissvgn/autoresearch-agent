@@ -42,6 +42,13 @@ from src.core.results_store import ResultsStore
 logger = logging.getLogger(__name__)
 
 
+def _has_smoke_validation_evidence(metrics: Dict[str, Any]) -> bool:
+    """True when a passing smoke/paper validation is already in the metrics —
+    used to skip re-collection in preview."""
+    smoke = metrics.get("smoke_validation") or metrics.get("paper_validation")
+    return isinstance(smoke, dict) and smoke.get("passed") is True
+
+
 def _atomic_write_text(path: str, content: str) -> None:
     """Sync helper: tmp+fsync+os.replace atomic write.
 
@@ -113,6 +120,15 @@ class ConfigPromoter:
         best = await self._store.get_best_iteration(research_id)
         if not best:
             raise ValueError(f"No winning iteration found for {research_id}")
+
+        # Self-sufficient evidence collection: the orchestrator collects
+        # promotion evidence (smoke validation, signal health, reload) in its
+        # session-end auto-promotion flow, but a session that TIMED OUT or is
+        # promoted manually never reached that phase — leaving smoke_validation
+        # absent and the gate stuck on failed_smoke_validation even though the
+        # paper-replay would pass. Collect it here too (fail-open) so preview
+        # reflects the real, collectable evidence.
+        best = await self._ensure_promotion_evidence(research_id, best)
 
         workspace_path = session["workspace_path"]
         model_type = session["model_type"]
@@ -2165,6 +2181,44 @@ class ConfigPromoter:
             }
         )
         return readiness
+
+    async def _ensure_promotion_evidence(
+        self, research_id: str, best: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Collect promotion evidence (smoke/signal-health/reload) into the
+        best iteration when it is missing, then return the re-fetched row.
+
+        Mirrors the orchestrator's session-end collection so promotions of
+        timed-out or manually-promoted sessions are not falsely blocked on
+        infrastructure evidence the agent cannot itself produce. Fail-open:
+        any collection error leaves ``best`` unchanged.
+        """
+        if not getattr(settings, "auto_collect_promotion_evidence", True):
+            return best
+        payload = self._best_iteration_payload(best)
+        if _has_smoke_validation_evidence(payload):
+            return best
+        try:
+            from src.core.promotion_evidence_collector import (
+                PromotionEvidenceCollector,
+            )
+
+            collector = PromotionEvidenceCollector(self._store)
+            patch = await collector.collect_and_patch(
+                research_id, best["iteration"],
+            )
+            if patch:
+                refreshed = await self._store.get_iteration(
+                    research_id, best["iteration"],
+                )
+                if refreshed:
+                    return refreshed
+        except Exception as exc:  # pragma: no cover — fail-open
+            logger.warning(
+                "promotion evidence collection in preview failed for %s: %s",
+                research_id, exc,
+            )
+        return best
 
     def _build_smoke_validation(
         self,
