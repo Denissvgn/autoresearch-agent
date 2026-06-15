@@ -1436,19 +1436,22 @@ class ResultsStore:
         return await self.get_session(session_id)
 
     async def delete_session(self, session_id: str) -> bool:
+        # Delete EVERY child that holds a research_id FK to research_sessions
+        # before the parent row, else SQLite raises FOREIGN KEY constraint failed.
+        # ``hpo_studies`` was previously omitted, so RL/HPO sessions (which create
+        # study rows) could never be deleted — keep this list in sync with the
+        # research_id FK graph in init_schema.
         async with self.connection() as db:
-            await db.execute(
-                "DELETE FROM runtime_commands WHERE research_id = ?", (session_id,),
-            )
-            await db.execute(
-                "DELETE FROM iterations WHERE research_id = ?", (session_id,),
-            )
-            await db.execute(
-                "DELETE FROM planned_trials WHERE research_id = ?", (session_id,),
-            )
-            await db.execute(
-                "DELETE FROM promotions WHERE research_id = ?", (session_id,),
-            )
+            for child in (
+                "runtime_commands",
+                "iterations",
+                "planned_trials",
+                "promotions",
+                "hpo_studies",
+            ):
+                await db.execute(
+                    f"DELETE FROM {child} WHERE research_id = ?", (session_id,),
+                )
             cursor = await db.execute(
                 "DELETE FROM research_sessions WHERE id = ?", (session_id,),
             )
