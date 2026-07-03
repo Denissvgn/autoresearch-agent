@@ -1,0 +1,10 @@
+{
+  "category": "experiment_parser",
+  "function": "parse_iteration_marker",
+  "description": "text with no ITERATION_RESULT marker returns null",
+  "input": {
+    "text": "Setup complete. No metrics this turn, just bookkeeping.\n"
+  },
+  "expected": null,
+  "source_sha": "a0de1205b8f7283fccfade1dc63b0e23f707052e"
+}

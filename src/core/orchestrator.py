@@ -6,6 +6,7 @@ import asyncio
 import glob as glob_mod
 import json
 import logging
+import math
 import os
 import re
 import shlex
@@ -21,7 +22,12 @@ import httpx
 import yaml
 
 from src.config import secret_value, settings
-from src.core.command_runner import GovernedCommandRunner, OutputCallback, redact_sensitive_text
+from src.core.command_runner import (
+    CommandProcessRegistry,
+    GovernedCommandRunner,
+    OutputCallback,
+    redact_sensitive_text,
+)
 from src.core.artifact_reference import normalize_artifact_references_in_mapping
 from src.core.consistency_validator import (
     ACCEPTED_ADAPTIVE_NOOP_REASONS,
@@ -68,6 +74,12 @@ from src.core.research_phase_plan import (
 )
 from src.core.result_artifact import enrich_marker_from_result_artifact
 from src.core.results_store import ResultsStore
+from src.core.state_machine import (
+    IllegalTransitionError,
+    SessionEvent,
+    SessionStateMachine,
+    SessionState,
+)
 from src.core.structured_hpo import materialize_planned_trials
 from src.ws.events import broadcaster
 
@@ -444,12 +456,19 @@ def _execute_tool(
     workspace: str,
     session_workspace: str | None = None,
     output_callback: OutputCallback | None = None,
+    *,
+    command_deadline_mono: float | None = None,
+    proc_registry: CommandProcessRegistry | None = None,
+    research_id: str | None = None,
 ) -> ToolExecutionResult:
     """Execute a tool call and return the text result."""
     try:
         if name == "bash":
             return _tool_bash(
                 input_data, workspace, session_workspace, output_callback,
+                command_deadline_mono=command_deadline_mono,
+                proc_registry=proc_registry,
+                research_id=research_id,
             )
         elif name == "read_file":
             return ToolExecutionResult(_tool_read_file(input_data, workspace))
@@ -470,18 +489,31 @@ def _tool_bash(
     workspace: str,
     session_workspace: str | None = None,
     output_callback: OutputCallback | None = None,
+    *,
+    command_deadline_mono: float | None = None,
+    proc_registry: CommandProcessRegistry | None = None,
+    research_id: str | None = None,
 ) -> ToolExecutionResult:
     command = input_data["command"]
     timeout = input_data.get("timeout_s", 7200)
     # Enforce minimum timeout — agents routinely ignore tool-description hints
     if timeout < 900:
         timeout = 900
+    # ARC-011 P0-006: cap the per-command timeout at the session's remaining
+    # soft budget so the command_runner's own psutil kill path fires at the
+    # session boundary. The cap wins even below the 900s floor — a session
+    # about to time out must not start a 15-minute command. ``ceil`` (not
+    # truncation) so the command overruns by <1s into the grace buffer and the
+    # soft check then trips cleanly, avoiding a cap≈0 thrash of subprocesses.
+    if command_deadline_mono is not None:
+        timeout = min(timeout, max(0, math.ceil(command_deadline_mono - time.monotonic())))
     runner = GovernedCommandRunner(
         workspace_root=workspace,
         session_workspace=session_workspace,
     )
     result = runner.run(
         command, timeout_s=timeout, output_callback=output_callback,
+        proc_registry=proc_registry, research_id=research_id,
     )
     decision = result.decision
     return ToolExecutionResult(
@@ -569,8 +601,23 @@ def _tool_grep(input_data: Dict[str, Any], workspace: str) -> str:
 class AgentOrchestrator:
     """Runs a Claude agent session for autonomous ML experiment tuning."""
 
-    def __init__(self, store: ResultsStore) -> None:
+    def __init__(
+        self,
+        store: ResultsStore,
+        *,
+        state_machine: Optional[SessionStateMachine] = None,
+    ) -> None:
         self._store = store
+        # ARC-011 P0-004: the state machine is the sole session-status writer.
+        # When not injected (e.g. unit tests exercising non-lifecycle paths)
+        # one is constructed bound to the shared broadcaster; production
+        # injects a shared instance so SessionManager and the orchestrator
+        # share one per-session lock registry (the W8 fix).
+        self._sm = state_machine or SessionStateMachine(store, broadcaster)
+        # ARC-011 P0-006: registry of in-flight governed subprocesses so a
+        # hard-timeout / operator-stop cancel can reap the process tree from
+        # outside the to_thread worker that owns the Popen handle.
+        self._command_procs = CommandProcessRegistry()
         self._client = anthropic.AsyncAnthropic(
             base_url=settings.anthropic_base_url,
             api_key=secret_value(settings.anthropic_auth_token),
@@ -2607,6 +2654,17 @@ class AgentOrchestrator:
         _policy_aborted = False
         start_time = time.monotonic()
         max_turns = config.max_iterations * 10  # ~10 turns per iteration
+        # ARC-011 P0-006: absolute monotonic soft deadline. Each governed
+        # command's per-command timeout is capped at the budget remaining to
+        # this deadline so the command_runner's own psutil kill path fires at
+        # the session boundary (cancelling asyncio.to_thread cannot interrupt
+        # the worker thread). The hard wait_for in _run_and_cleanup is the
+        # backstop; a cancel-handler reap covers operator stop.
+        _soft_timeout_s = (
+            config.timeout_s if config.timeout_s > 0
+            else settings.experiment_timeout_s
+        )
+        _command_deadline_mono = start_time + _soft_timeout_s
 
         # Agent log capture
         agent_log = AgentLogWriter(
@@ -2855,7 +2913,10 @@ class AgentOrchestrator:
                                 turn=turn,
                                 tool_name=block.name,
                                 command=redact_sensitive_text(raw_command_for_tool),
-                                timeout_s=self._effective_tool_timeout(block.input),
+                                timeout_s=min(
+                                    self._effective_tool_timeout(block.input),
+                                    max(0, int(_command_deadline_mono - time.monotonic())),
+                                ),
                                 metadata={"tool_id": block.id},
                             )
                             runtime_command_id = runtime_command["id"]
@@ -2937,6 +2998,9 @@ class AgentOrchestrator:
                                 settings.workspace_root,
                                 workspace,
                                 output_callback,
+                                command_deadline_mono=_command_deadline_mono,
+                                proc_registry=self._command_procs,
+                                research_id=research_id,
                             )
                         tool_result = tool_execution.content
                         tool_meta = tool_execution.meta
@@ -3691,48 +3755,98 @@ class AgentOrchestrator:
                     break
 
             # ML-62 / hardening Phase 1.1: distinguish stop/timeout/completion.
-            # Stop must take precedence over timeout: an operator-driven stop
-            # while the timeout window has also elapsed should not be reported
-            # as `timed_out`, and a stopped session must never auto-promote.
-            if self._should_stop(research_id):
-                final_status = "stopped"
-            elif _policy_aborted:
-                # Phase 5.4: explicit failure — agent kept hitting the
-                # command policy; operator review is required.
-                final_status = "failed"
-            elif _timed_out:
-                final_status = "timed_out"
-            else:
-                final_status = "completed"
+            # ARC-011 P0-004: the terminal status is now written by the state
+            # machine, which resolves any racing stop/timeout/fail under the
+            # per-session lock by severity (fail > timeout > stop > complete).
+            # This closes W8: a stop already in flight (status=`stopping`)
+            # refuses a `complete`, so auto-promote is skipped and the session
+            # ends `stopped` instead of spuriously `completed`.
             elapsed_total = time.monotonic() - start_time
-            # F9: derive a structured terminal_reason so postmortems can tell
-            # apart "phase plan finished" from "agent quit at turn 305 with
-            # phases still open and $83 of budget left".
+            completed_at = datetime.now(timezone.utc).isoformat()
+            effective_iterations = iteration_count - duplicate_rejected_count
+
+            if _policy_aborted:
+                _exit_event = SessionEvent.FAIL
+                _reason_status = "failed"
+            elif _timed_out:
+                _exit_event = SessionEvent.TIMEOUT
+                _reason_status = "timed_out"
+            elif self._should_stop(research_id):
+                # An operator stop is in flight. Finalize it via the machine
+                # (STOP_REQUESTED is a no-op backstop if stop_session already
+                # wrote `stopping`; FINALIZE_STOP resolves to `stopped`).
+                _exit_event = SessionEvent.FINALIZE_STOP
+                _reason_status = "stopped"
+            else:
+                _exit_event = SessionEvent.COMPLETE
+                _reason_status = "completed"
+
             terminal_reason = await self._derive_terminal_reason(
                 research_id=research_id,
-                final_status=final_status,
-                iteration_count=(iteration_count - duplicate_rejected_count),
+                final_status=_reason_status,
+                iteration_count=effective_iterations,
                 total_cost=total_cost,
                 config=config,
                 timed_out=_timed_out,
                 policy_aborted=_policy_aborted,
             )
+
+            # Q2 split: persist pure accounting status-free so cost is always
+            # captured even if the status transition is refused by a racing
+            # higher-severity event. No `status=` here (grep-clean).
             await self._store.update_session(
                 research_id,
-                status=final_status,
-                completed_at=datetime.now(timezone.utc).isoformat(),
                 total_api_cost_usd=round(total_cost, 4),
-                terminal_reason=terminal_reason,
-                effective_iteration_count=(iteration_count - duplicate_rejected_count),
+                effective_iteration_count=effective_iterations,
             )
-            await broadcaster.broadcast({
-                "event": "research_completed",
-                "research_id": research_id,
-                "status": final_status,
+
+            _exit_broadcast_fields = {
                 "iterations": iteration_count,
                 "total_cost_usd": round(total_cost, 4),
                 "elapsed_s": round(elapsed_total, 1),
-            })
+            }
+            _exit_status_fields = {
+                "completed_at": completed_at,
+                "terminal_reason": terminal_reason,
+            }
+            _exit_result = None
+            try:
+                if _exit_event is SessionEvent.FINALIZE_STOP:
+                    # Ensure `stopping` is recorded (idempotent if stop_session
+                    # already did, or if only the flag was set e.g. by
+                    # shutdown) before finalizing to `stopped`.
+                    await self._sm.transition(
+                        research_id, SessionEvent.STOP_REQUESTED,
+                    )
+                _exit_result = await self._sm.transition(
+                    research_id,
+                    _exit_event,
+                    status_fields=_exit_status_fields,
+                    broadcast_fields=_exit_broadcast_fields,
+                )
+            except IllegalTransitionError:
+                # Our intent was refused because a stop is in flight and
+                # `stopping` is the only transitional state that lingers
+                # (complete/timeout/fail resolve atomically to terminal).
+                # Finalize the stop so the session resolves to `stopped` with
+                # no auto-promote (W8-A). Any other from-state is unexpected;
+                # leave the status to its winning owner.
+                try:
+                    _exit_result = await self._sm.transition(
+                        research_id,
+                        SessionEvent.FINALIZE_STOP,
+                        status_fields=_exit_status_fields,
+                        broadcast_fields=_exit_broadcast_fields,
+                    )
+                except IllegalTransitionError:
+                    _exit_result = None
+
+            if _exit_result is not None:
+                final_status = _exit_result.new_state.value
+            else:
+                _sess = await self._store.get_session(research_id)
+                final_status = (_sess or {}).get("status", "unknown")
+
             logger.info(
                 "Research %s %s: %d iterations, $%.4f, %.0fs",
                 research_id, final_status, iteration_count, total_cost, elapsed_total,
@@ -3751,27 +3865,62 @@ class AgentOrchestrator:
                 config.instrument, config.timeframe,
             )
 
-            # ── ML-53 Fix 2.4: Auto-promote standalone sessions ──────────
-            # When a standalone (non-pipeline) session completes with a
-            # best iteration that passed training gates and promotion preview
-            # readiness, call config_promoter.confirm() to write the winning
-            # config and PATCH the composite in mlflow-service. This closes
-            # the gap where promotion-ready models were "orphaned" after
-            # standalone tuning.
+            # ── ML-53 Fix 2.4 / ARC-011 §4.3: Auto-promote standalone sessions ──
+            # Promote only on a net running→completed completion signalled by
+            # the machine (``should_auto_promote`` is False when severity was
+            # redirected, e.g. a racing stop refused the completion — W8).
             if (
-                final_status == "completed"
+                _exit_result is not None
+                and _exit_result.should_auto_promote
                 and not getattr(config, "pipeline_id", None)
             ):
                 await self._try_auto_promote(research_id, config, agent_log)
             # ── end ML-53 Fix 2.4 ────────────────────────────────────────
 
         except asyncio.CancelledError:
-            await self._store.update_session(
-                research_id,
-                status="stopped",
-                completed_at=datetime.now(timezone.utc).isoformat(),
-                total_api_cost_usd=round(total_cost, 4),
-            )
+            # ARC-011 P0-006: FIRST reap any in-flight governed subprocess tree.
+            # Cancelling this coroutine cannot interrupt the to_thread worker
+            # that owns the Popen handle, so an operator stop / hard-timeout
+            # cancel would otherwise leak the training subprocess until its own
+            # per-command timeout. Run the psutil kill in a worker thread so
+            # its ~10s wait does not block the event loop; a kill failure must
+            # not prevent the status finalize below.
+            try:
+                await asyncio.to_thread(self._command_procs.kill_all, research_id)
+            except Exception:
+                logger.exception(
+                    "Research %s: failed to reap in-flight commands on cancel",
+                    research_id,
+                )
+            # ARC-011 P0-004: persist accounting, then drive the session to
+            # ``stopped`` through the state machine. A cancel with no
+            # higher-severity terminal in flight means stopped: record the
+            # stop intent (``running|paused → stopping``; no-op if stop_session
+            # already wrote it) then finalize (``stopping → stopped``). Both
+            # are no-ops against a terminal that already won (W8-B: a late
+            # cancel cannot overwrite ``completed``) and refused against a more
+            # severe in-flight intent (timing_out/failing resolve atomically to
+            # their own terminal — those transitional states never persist, so
+            # STOP_REQUESTED never collides with them).
+            try:
+                await self._store.update_session(
+                    research_id,
+                    total_api_cost_usd=round(total_cost, 4),
+                    effective_iteration_count=(iteration_count - duplicate_rejected_count),
+                )
+            except Exception:
+                logger.exception(
+                    "Research %s: failed to persist accounting on cancel", research_id,
+                )
+            try:
+                await self._sm.transition(research_id, SessionEvent.STOP_REQUESTED)
+                await self._sm.transition(
+                    research_id,
+                    SessionEvent.FINALIZE_STOP,
+                    status_fields={"completed_at": datetime.now(timezone.utc).isoformat()},
+                )
+            except IllegalTransitionError:
+                pass
             logger.info("Research %s: cancelled", research_id)
             await agent_log.append("system", "Session cancelled")
             # ML-60: Still extract insights from partial sessions
@@ -3781,19 +3930,43 @@ class AgentOrchestrator:
         except Exception as exc:
             logger.exception("Research %s failed: %s", research_id, exc)
             terminal_reason = f"error_unrecoverable:{type(exc).__name__}"
-            await self._store.update_session(
-                research_id,
-                status="failed",
-                completed_at=datetime.now(timezone.utc).isoformat(),
-                total_api_cost_usd=round(total_cost, 4),
-                error_message=str(exc)[:2000],
-                terminal_reason=terminal_reason,
-            )
-            await broadcaster.broadcast({
-                "event": "research_failed",
-                "research_id": research_id,
-                "error": str(exc)[:500],
-            })
+            try:
+                await self._store.update_session(
+                    research_id,
+                    total_api_cost_usd=round(total_cost, 4),
+                    effective_iteration_count=(iteration_count - duplicate_rejected_count),
+                )
+            except Exception:
+                logger.exception(
+                    "Research %s: failed to persist accounting on error", research_id,
+                )
+            # ARC-011 P0-004: FAIL is severity 4 (highest) — it wins any race
+            # under the lock, redirecting an in-flight stopping/completing to
+            # `failed` and skipping auto-promote. The machine emits the
+            # `research_failed` broadcast with the merged error field.
+            try:
+                await self._sm.transition(
+                    research_id,
+                    SessionEvent.FAIL,
+                    status_fields={
+                        "completed_at": datetime.now(timezone.utc).isoformat(),
+                        "error_message": str(exc)[:2000],
+                        "terminal_reason": terminal_reason,
+                    },
+                    broadcast_fields={"error": str(exc)[:500]},
+                )
+            except IllegalTransitionError:
+                # Already terminal (e.g. a concurrent fail/complete won) — the
+                # first writer owns the status. Best-effort broadcast so
+                # clients still observe the error.
+                try:
+                    await broadcaster.broadcast({
+                        "event": "research_failed",
+                        "research_id": research_id,
+                        "error": str(exc)[:500],
+                    })
+                except Exception:
+                    pass
             await agent_log.append("error", str(exc)[:2000])
 
         finally:

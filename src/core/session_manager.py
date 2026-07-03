@@ -21,6 +21,12 @@ from src.core.service_preflight import (
     require_preflight_ready,
     run_service_preflight,
 )
+from src.core.state_machine import (
+    IllegalTransitionError,
+    SessionEvent,
+    SessionState,
+    SessionStateMachine,
+)
 from src.core.structured_hpo import build_structured_hpo_plan, hpo_plan_json
 from src.ws.events import broadcaster
 
@@ -43,9 +49,18 @@ class ActiveSession:
 class SessionManager:
     """Manages the lifecycle of research sessions as asyncio tasks."""
 
-    def __init__(self, store: ResultsStore) -> None:
+    def __init__(
+        self,
+        store: ResultsStore,
+        *,
+        state_machine: Optional[SessionStateMachine] = None,
+    ) -> None:
         self._store = store
-        self._orchestrator = AgentOrchestrator(store)
+        # ARC-011 P0-003: the state machine is the sole session-status writer.
+        # Injected in production so SessionManager and its orchestrator share
+        # one per-session lock registry; tests may omit it.
+        self._sm = state_machine or SessionStateMachine(store, broadcaster)
+        self._orchestrator = AgentOrchestrator(store, state_machine=self._sm)
         self._pipeline_ctrl = PipelineController(store, self)
         self._active: Dict[str, ActiveSession] = {}
         self._active_pipelines: Dict[str, asyncio.Task] = {}
@@ -136,10 +151,20 @@ class SessionManager:
                 research_id=session["id"],
                 reason=classification["reason"],
             )
-            await self._store.update_session(
+            # ARC-011 P0-003: route recovery through the state machine (the
+            # sole status writer). RESTART_RECOVER from running|paused resolves
+            # to the caller-selected recovery-terminal; error_message rides in
+            # status_fields. Recovery broadcasts nothing (additive audit only).
+            recovery_target = (
+                SessionState.INTERRUPTED
+                if status == "interrupted"
+                else SessionState.RESUMABLE
+            )
+            await self._sm.transition(
                 session["id"],
-                status=status,
-                error_message=classification["reason"],
+                SessionEvent.RESTART_RECOVER,
+                recovery_target=recovery_target,
+                status_fields={"error_message": classification["reason"]},
             )
             logger.warning(
                 "Recovered orphaned session %s as %s: %s",
@@ -325,6 +350,13 @@ class SessionManager:
         session alive past its budget. The hard cap is the soft cap plus a
         grace window so the orchestrator's per-turn timeout still has a
         chance to fire and finalize state cleanly first.
+
+        ARC-011 P0-003: the hard-timeout path reclassifies to ``timed_out``
+        via the state machine (``HARD_TIMEOUT`` resolves ``running|stopping|
+        stopped → timed_out`` by severity and the documented ``stopped →
+        timed_out`` carve-out). The initial ``running`` status remains a
+        storage-layer default of ``create_session`` (out of the P0-003 grep
+        scope; design §11); every transition thereafter is machine-authored.
         """
         soft_timeout = (
             config.timeout_s if config.timeout_s > 0
@@ -338,22 +370,25 @@ class SessionManager:
                 timeout=hard_timeout,
             )
         except asyncio.TimeoutError:
-            # The orchestrator's CancelledError branch already wrote
-            # status="stopped"; overwrite to "timed_out" because this was a
-            # safety-net cancel, not an operator stop.
+            # Safety-net cancel, not an operator stop: reclassify to timed_out.
+            # HARD_TIMEOUT resolves from any in-flight state by severity and
+            # from terminal ``stopped`` via the documented carve-out (the
+            # orchestrator's CancelledError branch writes no status itself).
             logger.warning(
                 "Research %s exceeded hard timeout %ds — forcing timed_out",
                 research_id, hard_timeout,
             )
             try:
-                await self._store.update_session(
+                await self._sm.transition(
                     research_id,
-                    status="timed_out",
-                    completed_at=datetime.now(timezone.utc).isoformat(),
-                    error_message=(
-                        f"Hard timeout ({hard_timeout}s, grace={grace_s}s) exceeded; "
-                        "session was forcibly cancelled."
-                    ),
+                    SessionEvent.HARD_TIMEOUT,
+                    status_fields={
+                        "completed_at": datetime.now(timezone.utc).isoformat(),
+                        "error_message": (
+                            f"Hard timeout ({hard_timeout}s, grace={grace_s}s) "
+                            "exceeded; session was forcibly cancelled."
+                        ),
+                    },
                 )
             except Exception:
                 logger.exception(
@@ -1059,13 +1094,33 @@ class SessionManager:
     async def stop_session(self, research_id: str) -> bool:
         """Request a graceful stop for a running session.
 
-        The DB transition to a terminal status is intentionally left to the
-        orchestrator's finally-block so we don't race the loop and clobber a
-        legitimate `completed`/`timed_out`/`failed` status with `stopped`.
-        Callers should poll `get_session` if they need the final state.
+        ARC-011 P0-003: records the stop *intent* by writing the transitional
+        ``stopping`` status through the state machine (``running|paused →
+        stopping``) under the per-session lock, so a racing orchestrator
+        completion is refused (the W8 fix — stop beats complete). The
+        orchestrator's exit/CancelledError path owns the ``stopping →
+        stopped`` finalize; this method only records intent, requests the
+        flag, and drains the task. Against a higher-severity in-flight event
+        (timing_out/failing) the intent is refused and we return False;
+        against an already-terminal session the transition is an idempotent
+        no-op.
         """
         active = self._active.get(research_id)
         if not active:
+            return False
+        # Record stop intent so a racing `complete` is refused under the lock.
+        # Against a terminal session the transition is an idempotent no-op
+        # (``new_state`` stays terminal, ``changed`` is False) — detect that and
+        # decline; against a higher-severity in-flight event (timing_out/failing)
+        # it raises ``IllegalTransitionError``. Either way there is nothing to
+        # stop. Only when we land in ``stopping`` do we set the flag and drain.
+        try:
+            result = await self._sm.transition(
+                research_id, SessionEvent.STOP_REQUESTED,
+            )
+        except IllegalTransitionError:
+            return False
+        if result.new_state is not SessionState.STOPPING:
             return False
         self._orchestrator.request_stop(research_id)
         await self._drain_or_cancel_task(
@@ -1125,8 +1180,15 @@ class SessionManager:
         active = self._active.get(research_id)
         if not active:
             return False
+        # ARC-011 P0-003: route through the state machine. (running, pause) →
+        # paused; illegal against a winding-down session (stopping/completing/
+        # timing_out/failing) or terminal — return False so the API 404s
+        # rather than clobber an in-flight terminal (pause sibling-of-W8).
+        try:
+            await self._sm.transition(research_id, SessionEvent.PAUSE)
+        except IllegalTransitionError:
+            return False
         self._orchestrator.request_pause(research_id)
-        await self._store.update_session(research_id, status="paused")
         logger.info("Paused research %s", research_id)
         return True
 
@@ -1134,8 +1196,13 @@ class SessionManager:
         active = self._active.get(research_id)
         if not active:
             return False
+        # ARC-011 P0-003: (paused, resume) → running; illegal from any other
+        # state (a winding-down or terminal session cannot resume).
+        try:
+            await self._sm.transition(research_id, SessionEvent.RESUME)
+        except IllegalTransitionError:
+            return False
         self._orchestrator.request_resume(research_id)
-        await self._store.update_session(research_id, status="running")
         logger.info("Resumed research %s", research_id)
         return True
 

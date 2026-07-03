@@ -1,0 +1,20 @@
+{
+  "category": "experiment_parser",
+  "function": "parse_prepare_output",
+  "description": "completed run with all gates passed and a primary metric",
+  "input": {
+    "stdout": "lines before\n---\nstatus:             completed\nprimary_metric:     0.586800\nmetric_name:        walkforward_mean_auc\ndirection:          higher_is_better\ntraining_gates_passed: true\nall_gates_passed:   true\ntraining_time_s:    342.1\nfolds_passed:       5/5\nsharpe_cv:          0.18\n---\ntail lines\n"
+  },
+  "expected": {
+    "status": "completed",
+    "primary_metric": 0.5868,
+    "metric_name": "walkforward_mean_auc",
+    "direction": "higher_is_better",
+    "training_gates_passed": true,
+    "all_gates_passed": true,
+    "training_time_s": 342.1,
+    "folds_passed": "5/5",
+    "sharpe_cv": 0.18
+  },
+  "source_sha": "a0de1205b8f7283fccfade1dc63b0e23f707052e"
+}

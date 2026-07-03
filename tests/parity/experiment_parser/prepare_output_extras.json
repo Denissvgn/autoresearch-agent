@@ -1,0 +1,34 @@
+{
+  "category": "experiment_parser",
+  "function": "parse_prepare_output",
+  "description": "completed run carrying JSON-valued extra keys (calibration/economic replay)",
+  "input": {
+    "stdout": "---\nstatus:             completed\nprimary_metric:     0.612300\nmetric_name:        walkforward_mean_auc\ndirection:          higher_is_better\ntraining_gates_passed: true\nall_gates_passed:   true\ntraining_time_s:    300.0\ncalibration_json:   {\"method\": \"isotonic\", \"folds\": 5}\neconomic_replay_json: {\"sharpe\": 1.2, \"max_drawdown\": 0.08}\n---\n"
+  },
+  "expected": {
+    "status": "completed",
+    "primary_metric": 0.6123,
+    "metric_name": "walkforward_mean_auc",
+    "direction": "higher_is_better",
+    "training_gates_passed": true,
+    "all_gates_passed": true,
+    "training_time_s": 300.0,
+    "calibration_json": {
+      "method": "isotonic",
+      "folds": 5
+    },
+    "calibration": {
+      "method": "isotonic",
+      "folds": 5
+    },
+    "economic_replay_json": {
+      "sharpe": 1.2,
+      "max_drawdown": 0.08
+    },
+    "economic_replay": {
+      "sharpe": 1.2,
+      "max_drawdown": 0.08
+    }
+  },
+  "source_sha": "a0de1205b8f7283fccfade1dc63b0e23f707052e"
+}

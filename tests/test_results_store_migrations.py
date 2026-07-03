@@ -1,0 +1,132 @@
+"""Tests for ARC-011 P0-008 / P0-009 / P0-010 — migration error surfacing.
+
+P0-009's target (a bare ``try/except Exception: pass`` over ``ALTER TABLE``)
+was already removed in commit 3c47c1e34 (Phase 1.3 hardening) and replaced
+with ``_add_column_if_missing`` — a ``PRAGMA table_info`` pre-check (LBYL)
+that lets genuine ``OperationalError`` propagate. These tests pin that
+behavior, the migration runner's idempotency, the version-skew guard, and the
+ARC-011 P0-008 de-duplication (evolutionary columns live in the migration as
+the single source of truth, not the bootstrap ``_SCHEMA_SQL``).
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+os.environ.setdefault("ANTHROPIC_BASE_URL", "http://anthropic.invalid")
+os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "test-token")
+
+import aiosqlite
+import pytest
+
+from src.core.results_store import (
+    _LATEST_SCHEMA_VERSION,
+    ResultsStore,
+    _add_column_if_missing,
+    _set_schema_version,
+)
+
+# ---------------------------------------------------------------------------
+# P0-009 — _add_column_if_missing (LBYL pre-check; real errors propagate)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_add_column_if_missing_is_idempotent(tmp_path: Path) -> None:
+    db_path = tmp_path / "idem_cols.sqlite"
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute("CREATE TABLE t (id INTEGER PRIMARY KEY)")
+        await _add_column_if_missing(db, "t", "name TEXT")
+        # Second call must be a no-op, not raise duplicate-column.
+        await _add_column_if_missing(db, "t", "name TEXT")
+        cursor = await db.execute("PRAGMA table_info(t)")
+        cols = {row[1] for row in await cursor.fetchall()}
+    assert {"id", "name"}.issubset(cols)
+
+
+@pytest.mark.asyncio
+async def test_add_column_if_missing_propagates_real_errors(tmp_path: Path) -> None:
+    db_path = tmp_path / "real_err.sqlite"
+    async with aiosqlite.connect(db_path) as db:
+        await db.execute("CREATE TABLE t (id INTEGER PRIMARY KEY)")
+        with pytest.raises(aiosqlite.Error):
+            # Invalid column definition: a genuine OperationalError must escape
+            # (not be swallowed by an idempotency guard).
+            await _add_column_if_missing(db, "t", "bad column ((((")
+
+
+# ---------------------------------------------------------------------------
+# P0-010 — initialize() idempotency + version-skew guard
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_initialize_is_idempotent(tmp_path: Path) -> None:
+    """initialize() twice (same store re-runs, and a reopened DB) is a no-op."""
+    db_path = tmp_path / "idem_init.sqlite"
+    store = ResultsStore(str(db_path))
+    await store.initialize()
+    version_after_first = await store.get_schema_version()
+    # initialize() closes + reopens internally when _conn is already set.
+    await store.initialize()
+    version_after_second = await store.get_schema_version()
+    await store.close()
+
+    # A second store on the same DB file must also be a clean no-op.
+    store2 = ResultsStore(str(db_path))
+    await store2.initialize()
+    version_after_reopen = await store2.get_schema_version()
+    await store2.close()
+
+    assert version_after_first == _LATEST_SCHEMA_VERSION
+    assert {version_after_first, version_after_second, version_after_reopen} == {
+        _LATEST_SCHEMA_VERSION,
+    }
+
+
+@pytest.mark.asyncio
+async def test_initialize_rejects_newer_schema(tmp_path: Path) -> None:
+    """A schema_version newer than supported must fail loudly, not silently migrate."""
+    db_path = tmp_path / "skew.sqlite"
+    store = ResultsStore(str(db_path))
+    await store.initialize()
+    await store.close()
+
+    # Forge a version from the future.
+    async with aiosqlite.connect(str(db_path)) as db:
+        await _set_schema_version(db, _LATEST_SCHEMA_VERSION + 1)
+        await db.commit()
+
+    future_store = ResultsStore(str(db_path))
+    with pytest.raises(RuntimeError, match="newer than supported"):
+        await future_store.initialize()
+
+
+@pytest.mark.asyncio
+async def test_fresh_db_migrates_to_latest_with_evolutionary_columns(
+    tmp_path: Path,
+) -> None:
+    """A fresh DB reaches the latest version and the evolutionary columns that
+    ARC-011 P0-008 moved out of the bootstrap (single source of truth = the
+    migration) are present — i.e. _migrate_to_v1 still adds them for fresh DBs."""
+    db_path = tmp_path / "fresh.sqlite"
+    store = ResultsStore(str(db_path))
+    await store.initialize()
+    assert await store.get_schema_version() == _LATEST_SCHEMA_VERSION
+    await store.close()
+
+    async with aiosqlite.connect(str(db_path)) as db:
+        cursor = await db.execute("PRAGMA table_info(research_sessions)")
+        cols = {row[1] for row in await cursor.fetchall()}
+
+    evolutionary = {
+        "manifest_json",
+        "manifest_path",
+        "manifest_hash",
+        "current_phase",
+        "next_action",
+        "phase_state_json",
+    }
+    assert evolutionary.issubset(cols), evolutionary - cols

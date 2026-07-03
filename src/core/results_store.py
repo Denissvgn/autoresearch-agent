@@ -1,4 +1,16 @@
-"""SQLite-backed persistence for research sessions, iterations, and promotions."""
+"""SQLite-backed persistence for research sessions, iterations, and promotions.
+
+Exception policy (ARC-011 P0-008): the full try/except inventory with rationale
+lives in ``docs/adr/ARC-011-results-store-exception-inventory.md``. Summary —
+every ``except`` here is either a narrow read-degrade
+``(json.JSONDecodeError, TypeError)`` or, in two cases, a deliberate broad
+catch: ``initialize()`` ``except Exception:`` re-raises after closing the
+connection (cleanup, not swallowing — and it must stay broad to also surface
+the version-skew ``RuntimeError``), and ``ping()`` is narrowed to
+``aiosqlite.Error`` (health-probe degrade). There are no migration catch-alls:
+``_add_column_if_missing`` uses a ``PRAGMA table_info`` pre-check (LBYL) so
+genuine ``OperationalError`` propagate (P0-009).
+"""
 
 from __future__ import annotations
 
@@ -28,6 +40,7 @@ from src.core.observability import (
     alert_suggestions,
     log_research_event,
 )
+from src.core.pagination import clamp_limit
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +64,9 @@ CREATE TABLE IF NOT EXISTS research_sessions (
     max_budget_usd REAL DEFAULT 10.0,
     focus_hint TEXT,
     workspace_path TEXT NOT NULL,
-    manifest_json TEXT,
-    manifest_path TEXT,
-    manifest_hash TEXT,
-    current_phase TEXT,
-    next_action TEXT,
-    phase_state_json TEXT,
+    -- manifest_{json,path,hash} and current_phase/next_action/phase_state_json
+    -- are added by _migrate_to_v1 (single source of truth for evolutionary
+    -- columns; ARC-011 P0-008). initialize() always runs v0 -> v1.
     started_at TEXT NOT NULL,
     completed_at TEXT,
     total_api_cost_usd REAL DEFAULT 0.0,
@@ -248,8 +258,6 @@ CREATE INDEX IF NOT EXISTS idx_planned_trials_expected_command
 CREATE INDEX IF NOT EXISTS idx_runtime_commands_research_status
     ON runtime_commands(research_id, status);
 """
-
-_CURRENT_SCHEMA_VERSION = 1
 
 _MODEL_TO_SKILL = {
     "direction": "direction-autotuner",
@@ -660,11 +668,38 @@ async def _migrate_to_v4(db: aiosqlite.Connection) -> None:
     )
 
 
+async def _migrate_to_v5(db: aiosqlite.Connection) -> None:
+    """Cursor-pagination supporting indexes (ARC-011 P0-015..019).
+
+    Adds composite indexes so keyset cursor queries
+    (``WHERE (started_at, id) < (?, ?)``) on ``research_sessions`` /
+    ``pipelines`` and the per-session iteration scan avoid a table scan. The
+    tiebreaker is the explicit ``id`` primary key: the implicit ``rowid`` is
+    not indexable in the target SQLite build ("no such column: rowid"), and
+    for ``iterations`` ``id`` is the INTEGER PK ≡ rowid. ``CREATE INDEX IF NOT
+    EXISTS`` is idempotent, so this is safe on both fresh and legacy DBs. See
+    ``docs/adr/ARC-011-cursor-pagination.md`` §4.
+    """
+    for statement in (
+        "CREATE INDEX IF NOT EXISTS "
+        "idx_sessions_started_at_rowid "
+        "ON research_sessions(started_at DESC, id DESC)",
+        "CREATE INDEX IF NOT EXISTS "
+        "idx_pipelines_started_at_rowid "
+        "ON pipelines(started_at DESC, id DESC)",
+        "CREATE INDEX IF NOT EXISTS "
+        "idx_iterations_research_iteration "
+        "ON iterations(research_id, iteration)",
+    ):
+        await db.execute(statement)
+
+
 _MIGRATIONS = (
     (1, _migrate_to_v1),
     (2, _migrate_to_v2),
     (3, _migrate_to_v3),
     (4, _migrate_to_v4),
+    (5, _migrate_to_v5),
 )
 _LATEST_SCHEMA_VERSION = _MIGRATIONS[-1][0]
 
@@ -737,7 +772,7 @@ class ResultsStore:
                 async with await db.execute("SELECT 1") as cursor:
                     row = await cursor.fetchone()
             return bool(row and row[0] == 1)
-        except Exception:
+        except aiosqlite.Error:
             logger.exception("ResultsStore ping failed")
             return False
 
@@ -985,6 +1020,8 @@ class ResultsStore:
         status_in: Optional[Sequence[str]] = None,
         limit: Optional[int] = None,
         offset: int = 0,
+        cursor: Optional[tuple[Any, int]] = None,
+        reverse: bool = False,
     ) -> List[Dict[str, Any]]:
         clauses = []
         params: list = []
@@ -1001,20 +1038,37 @@ class ResultsStore:
         if instrument:
             clauses.append("instrument = ?")
             params.append(instrument)
+        # ARC-011 P0-015..019: cursor path uses a keyset predicate on
+        # ``(started_at, id)`` which is stable under concurrent inserts (no
+        # offset drift). The legacy LIMIT/OFFSET path is preserved for backward
+        # compatibility (deprecated at the API layer). The ``id`` tiebreaker
+        # makes ordering deterministic on timestamp ties on both paths.
+        # ``reverse=True`` flips the comparison + ORDER BY for backward traversal
+        # (store-layer support for a future ``before`` cursor; not yet API-exposed).
+        if cursor is not None:
+            if reverse:
+                clauses.append("(started_at, id) > (?, ?)")
+                order_and_limit = " ORDER BY started_at ASC, id ASC LIMIT ?"
+            else:
+                clauses.append("(started_at, id) < (?, ?)")
+                order_and_limit = " ORDER BY started_at DESC, id DESC LIMIT ?"
+            params.extend(cursor)
+            params.append(clamp_limit(limit))
+            select = "SELECT * FROM research_sessions"
+        else:
+            suffix = ""
+            if limit is not None:
+                suffix = f" LIMIT {int(limit)} OFFSET {int(offset)}"
+            order_and_limit = f" ORDER BY started_at DESC, id DESC{suffix}"
+            select = "SELECT * FROM research_sessions"
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-        # Phase 5.1: pagination — bounded LIMIT/OFFSET so callers can't
-        # accidentally pull tens of thousands of rows in one shot.
-        suffix = ""
-        if limit is not None:
-            suffix = f" LIMIT {int(limit)} OFFSET {int(offset)}"
         async with self.connection() as db:
             db.row_factory = aiosqlite.Row
-            cursor = await db.execute(
-                f"SELECT * FROM research_sessions{where} "
-                f"ORDER BY started_at DESC{suffix}",
+            db_cursor = await db.execute(
+                f"{select}{where}{order_and_limit}",
                 params,
             )
-            return [dict(r) for r in await cursor.fetchall()]
+            return [dict(r) for r in await db_cursor.fetchall()]
 
     async def count_sessions(
         self,
@@ -1595,15 +1649,47 @@ class ResultsStore:
         }
 
     async def get_iterations(
-        self, research_id: str,
+        self,
+        research_id: str,
+        limit: Optional[int] = None,
+        cursor: Optional[tuple[Any, int]] = None,
+        reverse: bool = False,
     ) -> List[Dict[str, Any]]:
+        # ARC-011 P0-017: pagination is opt-in. ``limit`` omitted -> full list
+        # (today's behavior). ``limit`` present -> keyset cursor on
+        # ``(iteration, id)`` (id is the INTEGER PRIMARY KEY == rowid; the
+        # ``(research_id, iteration)`` UNIQUE constraint makes the iteration
+        # column unique within a session, so ``id`` is a harmless tiebreaker).
+        # ``reverse=True`` flips comparison + ORDER BY for backward traversal.
+        if limit is None:
+            async with self.connection() as db:
+                db.row_factory = aiosqlite.Row
+                db_cursor = await db.execute(
+                    "SELECT * FROM iterations "
+                    "WHERE research_id = ? ORDER BY iteration ASC, id ASC",
+                    (research_id,),
+                )
+                return [dict(r) for r in await db_cursor.fetchall()]
+        clauses = ["research_id = ?"]
+        params: list[Any] = [research_id]
+        if cursor is not None:
+            if reverse:
+                clauses.append("(iteration, id) < (?, ?)")
+                order = " ORDER BY iteration DESC, id DESC LIMIT ?"
+            else:
+                clauses.append("(iteration, id) > (?, ?)")
+                order = " ORDER BY iteration ASC, id ASC LIMIT ?"
+            params.extend(cursor)
+        else:
+            order = " ORDER BY iteration ASC, id ASC LIMIT ?"
+        where = " AND ".join(clauses)
         async with self.connection() as db:
             db.row_factory = aiosqlite.Row
-            cursor = await db.execute(
-                "SELECT * FROM iterations WHERE research_id = ? ORDER BY iteration",
-                (research_id,),
+            db_cursor = await db.execute(
+                f"SELECT * FROM iterations WHERE {where}{order}",
+                (*params, clamp_limit(limit)),
             )
-            return [dict(r) for r in await cursor.fetchall()]
+            return [dict(r) for r in await db_cursor.fetchall()]
 
     async def get_cross_session_iteration_summary(
         self,
@@ -2514,6 +2600,8 @@ class ResultsStore:
         instrument: Optional[str] = None,
         limit: Optional[int] = None,
         offset: int = 0,
+        cursor: Optional[tuple[Any, int]] = None,
+        reverse: bool = False,
     ) -> List[Dict[str, Any]]:
         clauses = []
         params: list = []
@@ -2523,18 +2611,32 @@ class ResultsStore:
         if instrument:
             clauses.append("instrument = ?")
             params.append(instrument)
+        # ARC-011 P0-018: cursor keyset path mirrors list_sessions. The legacy
+        # LIMIT/OFFSET path is preserved (deprecated at the API layer).
+        if cursor is not None:
+            if reverse:
+                clauses.append("(started_at, id) > (?, ?)")
+                order_and_limit = " ORDER BY started_at ASC, id ASC LIMIT ?"
+            else:
+                clauses.append("(started_at, id) < (?, ?)")
+                order_and_limit = " ORDER BY started_at DESC, id DESC LIMIT ?"
+            params.extend(cursor)
+            params.append(clamp_limit(limit))
+            select = "SELECT * FROM pipelines"
+        else:
+            suffix = ""
+            if limit is not None:
+                suffix = f" LIMIT {int(limit)} OFFSET {int(offset)}"
+            order_and_limit = f" ORDER BY started_at DESC, id DESC{suffix}"
+            select = "SELECT * FROM pipelines"
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
-        suffix = ""
-        if limit is not None:
-            suffix = f" LIMIT {int(limit)} OFFSET {int(offset)}"
         async with self.connection() as db:
             db.row_factory = aiosqlite.Row
-            cursor = await db.execute(
-                f"SELECT * FROM pipelines{where} "
-                f"ORDER BY started_at DESC{suffix}",
+            db_cursor = await db.execute(
+                f"{select}{where}{order_and_limit}",
                 params,
             )
-            rows = [dict(r) for r in await cursor.fetchall()]
+            rows = [dict(r) for r in await db_cursor.fetchall()]
             for row in rows:
                 self._decode_pipeline_metadata(row)
             return rows

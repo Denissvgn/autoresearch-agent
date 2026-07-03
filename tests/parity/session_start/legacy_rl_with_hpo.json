@@ -1,0 +1,45 @@
+{
+  "category": "session_start",
+  "function": "construct_research_config",
+  "description": "legacy RL request with HPO settings and initial balance",
+  "input": {
+    "request": {
+      "id": "res_parity0002",
+      "instrument": "BTC_USDT",
+      "timeframe": "1h",
+      "model_type": "rl",
+      "tag": "parity-rl",
+      "quick_mode": false,
+      "max_iterations": 50,
+      "max_budget_usd": 25.0,
+      "trading_mode": "margin",
+      "agent_strategy": "BALA",
+      "initial_balance": 10000.0,
+      "enable_hpo": true,
+      "hpo_trials": 20,
+      "hpo_timesteps": 50000
+    }
+  },
+  "expected": {
+    "id": "res_parity0002",
+    "instrument": "BTC_USDT",
+    "timeframe": "1h",
+    "model_type": "rl",
+    "tag": "parity-rl",
+    "quick_mode": false,
+    "max_iterations": 50,
+    "max_budget_usd": 25.0,
+    "timeout_s": 0,
+    "focus_hint": null,
+    "workspace_path": "",
+    "trading_mode": "margin",
+    "agent_strategy": "BALA",
+    "initial_balance": 10000.0,
+    "enable_hpo": true,
+    "hpo_trials": 20,
+    "hpo_timesteps": 50000,
+    "resumed_from": null,
+    "pipeline_id": null
+  },
+  "source_sha": "a0de1205b8f7283fccfade1dc63b0e23f707052e"
+}

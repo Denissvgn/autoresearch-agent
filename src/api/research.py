@@ -5,9 +5,10 @@ from __future__ import annotations
 import glob
 import hashlib
 import json
+import logging
 import os
 from collections.abc import Awaitable, Callable
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Mapping, Optional
 
 import yaml
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
@@ -16,9 +17,24 @@ from pydantic import BaseModel, Field, field_validator
 from src.api.audit import record_api_audit_event
 from src.api.auth import require_api_auth
 from src.config import settings
+from src.core.pagination import (
+    DEFAULT_PAGE_SIZE,
+    MAX_PAGE_SIZE,
+    build_cursor_page,
+    compute_next_cursor,
+    decode_cursor,
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["research"], dependencies=[Depends(require_api_auth)])
 VALID_PIPELINE_PHASES = {"direction", "volatility", "rl"}
+
+
+def _started_at_id_cursor(row: Mapping[str, Any]) -> tuple[Any, Any]:
+    """Cursor extractor for sessions/pipelines (sorted by started_at DESC, id DESC)."""
+
+    return (row["started_at"], row["id"])
 
 # These will be injected by main.py
 _session_manager = None
@@ -331,11 +347,39 @@ async def list_research(
     status: Optional[str] = None,
     model_type: Optional[str] = None,
     instrument: Optional[str] = None,
-    limit: int = Query(default=100, ge=1, le=500),
-    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    offset: int = Query(default=0, ge=0, deprecated=True),
+    cursor: Optional[str] = None,
 ):
-    """Phase 5.1: paginated session listing."""
+    """Paginated session listing.
 
+    Opaque cursor pagination (ARC-011 P0-016) is the primary mode: pass the
+    ``next_cursor`` from a prior response to fetch the next page — the response
+    is then ``{items, limit, next_cursor}`` (no ``total``). The legacy
+    ``offset`` parameter is deprecated; omitting ``cursor`` preserves the
+    original ``{items, total, limit, offset}`` envelope exactly.
+    """
+
+    # Under direct (non-FastAPI) calls used by the test suite, `limit`/`offset`
+    # receive the Query() sentinel rather than their defaults; coerce them.
+    if not isinstance(limit, int):
+        limit = DEFAULT_PAGE_SIZE
+    if not isinstance(offset, int):
+        offset = 0
+    decoded = decode_cursor(cursor)
+    if decoded is None and cursor:
+        logger.warning("malformed /research cursor token; serving page 1")
+    if decoded is not None:
+        items = await _store.list_sessions(
+            status=status, model_type=model_type, instrument=instrument,
+            limit=limit, cursor=decoded,
+        )
+        return build_cursor_page(items, limit, _started_at_id_cursor)
+    if offset > 0:
+        logger.warning(
+            "offset pagination is deprecated for /research; use cursor "
+            "(ARC-011 P0-016)"
+        )
     items = await _store.list_sessions(
         status=status, model_type=model_type, instrument=instrument,
         limit=limit, offset=offset,
@@ -343,11 +387,14 @@ async def list_research(
     total = await _store.count_sessions(
         status=status, model_type=model_type, instrument=instrument,
     )
+    # Legacy offset envelope, with an additive ``next_cursor`` so clients can
+    # transparently upgrade to cursor pagination on the next request.
     return {
         "items": items,
         "total": total,
         "limit": limit,
         "offset": offset,
+        "next_cursor": compute_next_cursor(items, limit, _started_at_id_cursor),
     }
 
 
@@ -777,20 +824,46 @@ async def list_models():
 async def list_pipelines(
     status: Optional[str] = None,
     instrument: Optional[str] = None,
-    limit: int = Query(default=100, ge=1, le=500),
-    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    offset: int = Query(default=0, ge=0, deprecated=True),
+    cursor: Optional[str] = None,
 ):
-    """Phase 5.1: paginated pipeline listing."""
+    """Paginated pipeline listing.
 
+    Opaque cursor pagination (ARC-011 P0-018); see ``list_research`` for the
+    envelope rules. The legacy ``offset`` parameter is deprecated.
+    """
+
+    # Under direct (non-FastAPI) calls used by the test suite, `limit`/`offset`
+    # receive the Query() sentinel rather than their defaults; coerce them.
+    if not isinstance(limit, int):
+        limit = DEFAULT_PAGE_SIZE
+    if not isinstance(offset, int):
+        offset = 0
+    decoded = decode_cursor(cursor)
+    if decoded is None and cursor:
+        logger.warning("malformed /pipelines cursor token; serving page 1")
+    if decoded is not None:
+        items = await _store.list_pipelines(
+            status=status, instrument=instrument, limit=limit, cursor=decoded,
+        )
+        return build_cursor_page(items, limit, _started_at_id_cursor)
+    if offset > 0:
+        logger.warning(
+            "offset pagination is deprecated for /pipelines; use cursor "
+            "(ARC-011 P0-018)"
+        )
     items = await _store.list_pipelines(
         status=status, instrument=instrument, limit=limit, offset=offset,
     )
     total = await _store.count_pipelines(status=status, instrument=instrument)
+    # Legacy offset envelope, with an additive ``next_cursor``.
     return {
         "items": items,
         "total": total,
         "limit": limit,
         "offset": offset,
+        "next_cursor": compute_next_cursor(items, limit, _started_at_id_cursor),
     }
 
 

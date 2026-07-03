@@ -253,7 +253,7 @@ async def test_session_start_persists_preflight_in_manifest(monkeypatch, tmp_pat
     monkeypatch.setattr(
         session_manager_module,
         "AgentOrchestrator",
-        lambda store: fake_orchestrator,
+        lambda store, state_machine=None: fake_orchestrator,
     )
     monkeypatch.setattr(
         session_manager_module,
@@ -325,7 +325,7 @@ async def test_session_start_preflight_failure_skips_llm_call(monkeypatch, tmp_p
     monkeypatch.setattr(
         session_manager_module,
         "AgentOrchestrator",
-        lambda store: fake_orchestrator,
+        lambda store, state_machine=None: fake_orchestrator,
     )
     monkeypatch.setattr(
         session_manager_module,

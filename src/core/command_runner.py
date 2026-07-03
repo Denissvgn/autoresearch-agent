@@ -43,6 +43,62 @@ class CommandRunResult:
         return not self.decision.allowed
 
 
+class CommandProcessRegistry:
+    """Thread-safe registry of in-flight governed subprocesses, keyed by session.
+
+    ARC-011 P0-006: ``GovernedCommandRunner.run`` executes inside a worker
+    thread (via ``asyncio.to_thread``), so cancelling the awaiting task on a
+    hard-timeout or operator stop cannot interrupt the poll loop that owns the
+    ``Popen`` handle. The orchestrator's cancel handler therefore calls
+    ``kill_all`` to reap the process tree through the existing psutil
+    SIGTERM->SIGKILL path (``_terminate_process_group_without_communicate``)
+    rather than letting the child leak until its own per-command timeout.
+
+    Written from worker threads (``register``/``unregister``) and read + killed
+    from the event-loop thread (``kill_all``); a ``threading.Lock`` serializes
+    the dict mutation across both.
+    """
+
+    def __init__(self) -> None:
+        self._procs: dict[str, set[subprocess.Popen[str]]] = {}
+        self._lock = threading.Lock()
+
+    def register(self, research_id: str, proc: subprocess.Popen[str]) -> None:
+        with self._lock:
+            self._procs.setdefault(research_id, set()).add(proc)
+
+    def unregister(self, research_id: str, proc: subprocess.Popen[str]) -> None:
+        with self._lock:
+            procs = self._procs.get(research_id)
+            if procs is None:
+                return
+            procs.discard(proc)
+            if not procs:
+                self._procs.pop(research_id, None)
+
+    @property
+    def size(self) -> int:
+        """Number of sessions with at least one registered subprocess."""
+        with self._lock:
+            return len(self._procs)
+
+    def kill_all(self, research_id: str) -> None:
+        """Best-effort terminate every still-running subprocess tree for a session.
+
+        Snapshots under the lock, then kills outside it so the psutil wait
+        (up to ~10s) does not block worker-thread ``register``/``unregister``.
+        Already-exited procs (``poll()`` is not ``None``) are skipped.
+        """
+        with self._lock:
+            procs = list(self._procs.get(research_id, ()))
+        for proc in procs:
+            try:
+                if proc.poll() is None:
+                    _terminate_process_group_without_communicate(proc)
+            except Exception:
+                pass
+
+
 class GovernedCommandRunner:
     """Validate and execute one approved command without invoking a shell."""
 
@@ -61,6 +117,8 @@ class GovernedCommandRunner:
         *,
         timeout_s: int,
         output_callback: OutputCallback | None = None,
+        proc_registry: CommandProcessRegistry | None = None,
+        research_id: str | None = None,
     ) -> CommandRunResult:
         decision = evaluate_command_policy(
             command,
@@ -82,61 +140,70 @@ class GovernedCommandRunner:
             text=True,
             start_new_session=True,
         )
-        stdout_chunks: list[str] = []
-        stderr_chunks: list[str] = []
-        output_queue: queue.Queue[tuple[OutputStream, str]] = queue.Queue()
-        readers = _start_output_readers(proc, output_queue)
-        timed_out = False
-        started_at = time.monotonic()
+        # ARC-011 P0-006: register the live Popen so a hard-timeout / operator
+        # stop cancel can reap this process tree from outside the worker thread
+        # (cancelling asyncio.to_thread cannot interrupt this poll loop).
+        if proc_registry is not None and research_id is not None:
+            proc_registry.register(research_id, proc)
+        try:
+            stdout_chunks: list[str] = []
+            stderr_chunks: list[str] = []
+            output_queue: queue.Queue[tuple[OutputStream, str]] = queue.Queue()
+            readers = _start_output_readers(proc, output_queue)
+            timed_out = False
+            started_at = time.monotonic()
 
-        while True:
-            _drain_output_queue(
-                output_queue, stdout_chunks, stderr_chunks, output_callback,
-            )
-            if proc.poll() is not None:
-                if all(not reader.is_alive() for reader in readers):
-                    _drain_output_queue(
-                        output_queue, stdout_chunks, stderr_chunks, output_callback,
-                    )
-                    break
-            elif time.monotonic() - started_at > timeout_s:
-                timed_out = True
-                _terminate_process_group_without_communicate(proc)
-
-            if timed_out:
-                for reader in readers:
-                    reader.join(timeout=1)
+            while True:
                 _drain_output_queue(
                     output_queue, stdout_chunks, stderr_chunks, output_callback,
                 )
-                partial = _combine_output(
-                    "".join(stdout_chunks), "".join(stderr_chunks),
-                )
-                if partial:
-                    partial = _truncate_output(redact_sensitive_text(partial))
-                timeout_msg = f"\n[Command timed out after {timeout_s}s]"
-                return CommandRunResult(
-                    output=(
-                        (partial + timeout_msg)
-                        if partial
-                        else f"Command timed out after {timeout_s}s"
-                    ),
-                    decision=decision,
-                    returncode=proc.returncode,
-                    timed_out=True,
-                )
+                if proc.poll() is not None:
+                    if all(not reader.is_alive() for reader in readers):
+                        _drain_output_queue(
+                            output_queue, stdout_chunks, stderr_chunks, output_callback,
+                        )
+                        break
+                elif time.monotonic() - started_at > timeout_s:
+                    timed_out = True
+                    _terminate_process_group_without_communicate(proc)
 
-            time.sleep(0.05)
+                if timed_out:
+                    for reader in readers:
+                        reader.join(timeout=1)
+                    _drain_output_queue(
+                        output_queue, stdout_chunks, stderr_chunks, output_callback,
+                    )
+                    partial = _combine_output(
+                        "".join(stdout_chunks), "".join(stderr_chunks),
+                    )
+                    if partial:
+                        partial = _truncate_output(redact_sensitive_text(partial))
+                    timeout_msg = f"\n[Command timed out after {timeout_s}s]"
+                    return CommandRunResult(
+                        output=(
+                            (partial + timeout_msg)
+                            if partial
+                            else f"Command timed out after {timeout_s}s"
+                        ),
+                        decision=decision,
+                        returncode=proc.returncode,
+                        timed_out=True,
+                    )
 
-        output = _combine_output("".join(stdout_chunks), "".join(stderr_chunks))
-        output = _truncate_output(redact_sensitive_text(output))
-        if proc.returncode != 0:
-            output += f"\n[exit code: {proc.returncode}]"
-        return CommandRunResult(
-            output=output or "(no output)",
-            decision=decision,
-            returncode=proc.returncode,
-        )
+                time.sleep(0.05)
+
+            output = _combine_output("".join(stdout_chunks), "".join(stderr_chunks))
+            output = _truncate_output(redact_sensitive_text(output))
+            if proc.returncode != 0:
+                output += f"\n[exit code: {proc.returncode}]"
+            return CommandRunResult(
+                output=output or "(no output)",
+                decision=decision,
+                returncode=proc.returncode,
+            )
+        finally:
+            if proc_registry is not None and research_id is not None:
+                proc_registry.unregister(research_id, proc)
 
 
 def redact_sensitive_text(text: str) -> str:

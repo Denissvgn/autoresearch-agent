@@ -206,9 +206,10 @@ async def test_list_sessions_status_in_filters_at_sql_level(store: ResultsStore)
 @pytest.mark.asyncio
 async def test_results_store_records_schema_version(store: ResultsStore) -> None:
     # Schema v4 adds terminate_request_received, terminate_request_body, and
-    # effective_iteration_count columns on research_sessions. Mirrors
+    # effective_iteration_count columns on research_sessions; v5 (ARC-011
+    # P0-015..019) adds the cursor-pagination indexes. Mirrors
     # _LATEST_SCHEMA_VERSION in results_store.
-    assert await store.get_schema_version() == 4
+    assert await store.get_schema_version() == 5
     assert await store.ping() is True
 
 

@@ -1,0 +1,18 @@
+{
+  "category": "experiment_parser",
+  "function": "parse_iteration_marker",
+  "description": "well-formed ITERATION_RESULT marker with a keep decision",
+  "input": {
+    "text": "I ran prepare.py and reviewed the output.\nITERATION_RESULT: {\"iteration\": 3, \"primary_metric\": 0.6123, \"metric_name\": \"walkforward_mean_auc\", \"all_gates_passed\": true, \"decision\": \"keep\", \"description\": \"raised deadzone\"}\nMoving on.\n"
+  },
+  "expected": {
+    "iteration": 3,
+    "primary_metric": 0.6123,
+    "metric_name": "walkforward_mean_auc",
+    "all_gates_passed": true,
+    "decision": "keep",
+    "description": "raised deadzone",
+    "training_gates_passed": true
+  },
+  "source_sha": "a0de1205b8f7283fccfade1dc63b0e23f707052e"
+}

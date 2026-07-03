@@ -3,22 +3,26 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, Response
 
 from src.api.auth import require_api_auth
+from src.core.artifact_reference import first_valid_artifact_ref
 from src.core.consistency_validator import (
     build_consistency_report,
     parse_consistency_report,
 )
-from src.core.artifact_reference import first_valid_artifact_ref
 from src.core.gate_status import training_gates_passed_from
 from src.core.log_writer import AgentLogWriter, _format_entry
+from src.core.pagination import MAX_PAGE_SIZE, build_cursor_page, decode_cursor
 from src.core.research_state import build_research_state
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["results"], dependencies=[Depends(require_api_auth)])
 
@@ -31,6 +35,12 @@ def init(store, *, mlflow_external_url: str = "http://localhost:5000"):
     global _store, _mlflow_external_url
     _store = store
     _mlflow_external_url = mlflow_external_url
+
+
+def _iteration_cursor_extractor(row: Mapping[str, Any]) -> tuple[Any, Any]:
+    """Cursor extractor for iterations (sorted by iteration ASC, id ASC)."""
+
+    return (row["iteration"], row["id"])
 
 
 def _decode_pipeline_payload(pipeline: Dict[str, Any]) -> Dict[str, Any]:
@@ -498,13 +508,37 @@ async def get_results(research_id: str):
 
 
 @router.get("/research/{research_id}/iterations")
-async def get_iterations(research_id: str):
-    """All iterations with metrics and config snapshots."""
+async def get_iterations(
+    research_id: str,
+    limit: Optional[int] = Query(default=None, ge=1, le=MAX_PAGE_SIZE),
+    cursor: Optional[str] = None,
+):
+    """Iterations with metrics and config snapshots.
+
+    Pagination is opt-in (ARC-011 P0-017): omit ``limit`` to receive the full
+    bare list (today's behavior). Pass ``limit`` to receive a cursor-paginated
+    envelope ``{items, limit, next_cursor}``.
+    """
+
+    # Under direct (non-FastAPI) calls used by the test suite, `limit` receives
+    # the Query() sentinel rather than its default; coerce it to "not provided".
+    if not isinstance(limit, int):
+        limit = None
     _, session, _ = await _resolve_result_context(research_id)
     if not session:
-        return []
-    iterations = await _store.get_iterations(session["id"])
-    return _enrich_iterations(iterations, session.get("model_type", ""))
+        if limit is None:
+            return []
+        return {"items": [], "limit": limit, "next_cursor": None}
+    if limit is None:
+        iterations = await _store.get_iterations(session["id"])
+        return _enrich_iterations(iterations, session.get("model_type", ""))
+    decoded = decode_cursor(cursor)
+    if decoded is None and cursor:
+        logger.warning("malformed /iterations cursor token; serving page 1")
+    rows = await _store.get_iterations(session["id"], limit=limit, cursor=decoded)
+    page = build_cursor_page(rows, limit, _iteration_cursor_extractor)
+    page["items"] = _enrich_iterations(rows, session.get("model_type", ""))
+    return page
 
 
 @router.get("/research/{research_id}/iterations/{iteration_num}")

@@ -1,0 +1,23 @@
+{
+  "category": "command_policy",
+  "function": "evaluate_command_policy",
+  "description": "an executable outside the allow-list (rm) is rejected",
+  "input": {
+    "command": "rm -f <workspace>/train.yaml",
+    "workspace_root": "<workspace>",
+    "session_workspace": null
+  },
+  "input_setup": {
+    "create_files": {
+      "train.yaml": "agent_strategy: BALA\n"
+    }
+  },
+  "expected": {
+    "allowed": false,
+    "argv": [],
+    "normalized_command": "",
+    "operation": "",
+    "reason": "Executable 'rm' is not allowed"
+  },
+  "source_sha": "a0de1205b8f7283fccfade1dc63b0e23f707052e"
+}

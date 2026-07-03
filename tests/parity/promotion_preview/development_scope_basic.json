@@ -1,0 +1,880 @@
+{
+  "category": "promotion_preview",
+  "function": "config_promoter.preview",
+  "description": "development-scope preview over the minimal replay fixture",
+  "replay_fixture": "res_a1ba6cbd520f_minimal",
+  "input": {
+    "research_id": "res_a1ba6cbd520f_minimal",
+    "scope": "development",
+    "approval": null
+  },
+  "input_setup": {},
+  "expected": {
+    "research_id": "res_a1ba6cbd520f_minimal",
+    "iteration": 90,
+    "model_type": "direction",
+    "instrument": "DOGE_USDT",
+    "timeframe": "15m",
+    "scope": "development",
+    "promotion_scope": "development",
+    "target_path": "<host_configs>/instrument_configs/DOGE_USDT_15m.yaml",
+    "new_config": "agent_strategy: BALA\ndirection_pct_threshold: 0.023\ntabular_sweep_variant: v4\n",
+    "config_snapshot_sha256": "<redacted>",
+    "current_config": null,
+    "best_metric": 0.6394,
+    "training_gates_passed": true,
+    "gates_passed": true,
+    "development_gate_bundle_passed": false,
+    "consistency_report_passed": false,
+    "quality_baseline_passed": true,
+    "gate_bundle_evaluation": {
+      "gate_bundle_id": null,
+      "version": null,
+      "model_type": "direction",
+      "applicable": true,
+      "passed": false,
+      "checks": [],
+      "blockers": [
+        "missing_development_gate_bundle"
+      ],
+      "error": "[Errno 2] No such file or directory: '<workspace>/reports/direction-tuning/promotion/development_gate_bundle_v1.yaml'",
+      "blocker_details": [
+        {
+          "code": "missing_development_gate_bundle",
+          "label": "Missing development gate bundle.",
+          "category": "missing_evidence",
+          "source": "development_gate_bundle",
+          "likely_fix": "Produce the required evidence payload before promotion."
+        }
+      ]
+    },
+    "candidate_pool_record": {
+      "source": "autoresearch.iterations",
+      "research_id": "res_a1ba6cbd520f_minimal",
+      "iteration": 90,
+      "iteration_row_id": 6,
+      "config_snapshot_sha256": "<redacted>",
+      "attempt_snapshot_hash": null,
+      "attempt_snapshot_path": null,
+      "artifact_hash": null,
+      "consistency_passed": false,
+      "consistency_blockers": [
+        "missing_calibration_diagnostics",
+        "inference_feature_schema_mismatch",
+        "missing_feature_schema_hash",
+        "missing_rollback_target",
+        "failed_smoke_validation"
+      ],
+      "consistency_blocker_details": [
+        {
+          "code": "missing_calibration_diagnostics",
+          "label": "Calibration diagnostics are missing.",
+          "category": "missing_evidence",
+          "source": "cross_service_consistency",
+          "likely_fix": "Produce the required evidence payload before promotion."
+        },
+        {
+          "code": "inference_feature_schema_mismatch",
+          "label": "Inference feature schema does not match training.",
+          "category": "phase_not_run",
+          "source": "cross_service_consistency",
+          "likely_fix": "Complete the required later research phase and emit its evidence payload.",
+          "phase": "inference_parity_replay"
+        },
+        {
+          "code": "missing_feature_schema_hash",
+          "label": "Feature schema hash evidence is missing.",
+          "category": "missing_evidence",
+          "source": "cross_service_consistency",
+          "likely_fix": "Produce the required evidence payload before promotion."
+        },
+        {
+          "code": "missing_rollback_target",
+          "label": "Rollback target is missing.",
+          "category": "missing_evidence",
+          "source": "cross_service_consistency",
+          "likely_fix": "Produce the required evidence payload before promotion."
+        },
+        {
+          "code": "failed_smoke_validation",
+          "label": "Smoke or paper validation failed or is missing.",
+          "category": "phase_not_run",
+          "source": "cross_service_consistency",
+          "likely_fix": "Complete the required later research phase and emit its evidence payload.",
+          "phase": "promotion_proposal"
+        }
+      ],
+      "quality_baseline_passed": true,
+      "quality_baseline_blockers": [],
+      "quality_baseline_blocker_details": [],
+      "quality_baseline_evaluation": {
+        "passed": true,
+        "status": "no_eligible_development_baseline",
+        "mode": "development_quality_baseline",
+        "blockers": [],
+        "checks": [
+          {
+            "name": "current_best_metric_recorded",
+            "status": "passed",
+            "reason": null,
+            "details": {
+              "current_metric": 0.6394,
+              "current_metric_name": "auc"
+            }
+          },
+          {
+            "name": "eligible_development_baseline_present",
+            "status": "warning",
+            "reason": null,
+            "details": {
+              "model_type": "direction",
+              "instrument": "DOGE_USDT",
+              "timeframe": "15m"
+            }
+          }
+        ],
+        "comparison": {
+          "current_research_id": "res_a1ba6cbd520f_minimal",
+          "current_iteration": 90,
+          "current_metric": 0.6394,
+          "current_metric_name": "auc",
+          "baseline_promotion_id": null,
+          "baseline_research_id": null,
+          "baseline_iteration": null,
+          "baseline_metric": null,
+          "baseline_metric_name": null,
+          "epsilon": 0.0001,
+          "delta": null
+        },
+        "blocker_details": []
+      },
+      "status": "blocked",
+      "blockers": [
+        "missing_development_gate_bundle"
+      ],
+      "blocker_details": [
+        {
+          "code": "missing_development_gate_bundle",
+          "label": "Missing development gate bundle.",
+          "category": "missing_evidence",
+          "source": "development_gate_bundle",
+          "likely_fix": "Produce the required evidence payload before promotion."
+        }
+      ],
+      "inspectable": true,
+      "promotion_record_created": false
+    },
+    "best_candidate_ownership": {
+      "source": "autoresearch.iterations",
+      "research_id": "res_a1ba6cbd520f_minimal",
+      "iteration": 90,
+      "iteration_row_id": 6,
+      "config_snapshot_sha256": "<redacted>",
+      "attempt_snapshot_hash": null,
+      "attempt_snapshot_path": null,
+      "artifact_hash": null,
+      "mlflow_run_id": "<redacted>"
+    },
+    "consistency_report": {
+      "schema_version": "cross_service_consistency_report.v1",
+      "research_id": "res_a1ba6cbd520f_minimal",
+      "iteration": 90,
+      "model_type": "direction",
+      "generated_at": "<redacted>",
+      "mode": "promotion",
+      "passed": false,
+      "blockers": [
+        "missing_calibration_diagnostics",
+        "inference_feature_schema_mismatch",
+        "missing_feature_schema_hash",
+        "missing_rollback_target",
+        "failed_smoke_validation"
+      ],
+      "checks": [
+        {
+          "name": "config_snapshot_present",
+          "status": "passed",
+          "detail": null
+        },
+        {
+          "name": "mlflow_run_id_valid",
+          "status": "passed",
+          "detail": null
+        },
+        {
+          "name": "artifact_reference_present",
+          "status": "passed",
+          "detail": null
+        },
+        {
+          "name": "calibration_diagnostics_present",
+          "status": "failed",
+          "detail": null
+        },
+        {
+          "name": "economic_replay_present",
+          "status": "warning",
+          "detail": null
+        },
+        {
+          "name": "inference_feature_roster_parity",
+          "status": "failed",
+          "detail": null
+        },
+        {
+          "name": "feature_schema_hash_recorded",
+          "status": "failed",
+          "detail": null
+        },
+        {
+          "name": "adaptive_feature_schema_flags_recorded",
+          "status": "passed",
+          "detail": null
+        },
+        {
+          "name": "rollback_target_addressable",
+          "status": "failed",
+          "detail": null
+        },
+        {
+          "name": "smoke_or_paper_validation",
+          "status": "failed",
+          "detail": null
+        },
+        {
+          "name": "docs_wiki_status_recorded",
+          "status": "warning",
+          "detail": null
+        }
+      ],
+      "config_snapshot_sha256": "<redacted>",
+      "artifact_hash": null,
+      "feature_schema_hash": null,
+      "mlflow_run_id": "<redacted>",
+      "blocker_details": [
+        {
+          "code": "missing_calibration_diagnostics",
+          "label": "Calibration diagnostics are missing.",
+          "category": "missing_evidence",
+          "source": "cross_service_consistency",
+          "likely_fix": "Produce the required evidence payload before promotion."
+        },
+        {
+          "code": "inference_feature_schema_mismatch",
+          "label": "Inference feature schema does not match training.",
+          "category": "phase_not_run",
+          "source": "cross_service_consistency",
+          "likely_fix": "Complete the required later research phase and emit its evidence payload.",
+          "phase": "inference_parity_replay"
+        },
+        {
+          "code": "missing_feature_schema_hash",
+          "label": "Feature schema hash evidence is missing.",
+          "category": "missing_evidence",
+          "source": "cross_service_consistency",
+          "likely_fix": "Produce the required evidence payload before promotion."
+        },
+        {
+          "code": "missing_rollback_target",
+          "label": "Rollback target is missing.",
+          "category": "missing_evidence",
+          "source": "cross_service_consistency",
+          "likely_fix": "Produce the required evidence payload before promotion."
+        },
+        {
+          "code": "failed_smoke_validation",
+          "label": "Smoke or paper validation failed or is missing.",
+          "category": "phase_not_run",
+          "source": "cross_service_consistency",
+          "likely_fix": "Complete the required later research phase and emit its evidence payload.",
+          "phase": "promotion_proposal"
+        }
+      ]
+    },
+    "quality_baseline_evaluation": {
+      "passed": true,
+      "status": "no_eligible_development_baseline",
+      "mode": "development_quality_baseline",
+      "blockers": [],
+      "checks": [
+        {
+          "name": "current_best_metric_recorded",
+          "status": "passed",
+          "reason": null,
+          "details": {
+            "current_metric": 0.6394,
+            "current_metric_name": "auc"
+          }
+        },
+        {
+          "name": "eligible_development_baseline_present",
+          "status": "warning",
+          "reason": null,
+          "details": {
+            "model_type": "direction",
+            "instrument": "DOGE_USDT",
+            "timeframe": "15m"
+          }
+        }
+      ],
+      "comparison": {
+        "current_research_id": "res_a1ba6cbd520f_minimal",
+        "current_iteration": 90,
+        "current_metric": 0.6394,
+        "current_metric_name": "auc",
+        "baseline_promotion_id": null,
+        "baseline_research_id": null,
+        "baseline_iteration": null,
+        "baseline_metric": null,
+        "baseline_metric_name": null,
+        "epsilon": 0.0001,
+        "delta": null
+      },
+      "blocker_details": []
+    },
+    "development_promotion_metadata": {
+      "schema_version": "development_promotion_metadata.v1",
+      "scope": "development",
+      "created_at": "<redacted>",
+      "research_id": "res_a1ba6cbd520f_minimal",
+      "iteration": 90,
+      "model_type": "direction",
+      "instrument": "DOGE_USDT",
+      "timeframe": "15m",
+      "target_path": "<host_configs>/instrument_configs/DOGE_USDT_15m.yaml",
+      "best_metric": 0.6394,
+      "metric_name": "auc",
+      "composite_formula_version": null,
+      "training_gates_passed": true,
+      "gates_passed": true,
+      "development_gate_bundle_passed": false,
+      "consistency_report_passed": false,
+      "quality_baseline_passed": true,
+      "quality_baseline_usable": true,
+      "promotion_allowed": false,
+      "blocker_details": [
+        {
+          "code": "missing_development_gate_bundle",
+          "label": "Missing development gate bundle.",
+          "category": "missing_evidence",
+          "source": "development_gate_bundle",
+          "likely_fix": "Produce the required evidence payload before promotion."
+        },
+        {
+          "code": "missing_calibration_diagnostics",
+          "label": "Calibration diagnostics are missing.",
+          "category": "missing_evidence",
+          "source": "cross_service_consistency",
+          "likely_fix": "Produce the required evidence payload before promotion."
+        },
+        {
+          "code": "inference_feature_schema_mismatch",
+          "label": "Inference feature schema does not match training.",
+          "category": "phase_not_run",
+          "source": "cross_service_consistency",
+          "likely_fix": "Complete the required later research phase and emit its evidence payload.",
+          "phase": "inference_parity_replay"
+        },
+        {
+          "code": "missing_feature_schema_hash",
+          "label": "Feature schema hash evidence is missing.",
+          "category": "missing_evidence",
+          "source": "cross_service_consistency",
+          "likely_fix": "Produce the required evidence payload before promotion."
+        },
+        {
+          "code": "missing_rollback_target",
+          "label": "Rollback target is missing.",
+          "category": "missing_evidence",
+          "source": "cross_service_consistency",
+          "likely_fix": "Produce the required evidence payload before promotion."
+        },
+        {
+          "code": "failed_smoke_validation",
+          "label": "Smoke or paper validation failed or is missing.",
+          "category": "phase_not_run",
+          "source": "cross_service_consistency",
+          "likely_fix": "Complete the required later research phase and emit its evidence payload.",
+          "phase": "promotion_proposal"
+        }
+      ],
+      "live_production_promotion_allowed": false,
+      "live_production_promotion_requested": false,
+      "gate_bundle": {
+        "gate_bundle_id": null,
+        "version": null,
+        "scope": "development",
+        "passed": false,
+        "blockers": [
+          "missing_development_gate_bundle"
+        ],
+        "blocker_details": [
+          {
+            "code": "missing_development_gate_bundle",
+            "label": "Missing development gate bundle.",
+            "category": "missing_evidence",
+            "source": "development_gate_bundle",
+            "likely_fix": "Produce the required evidence payload before promotion."
+          }
+        ],
+        "checks": [],
+        "waivers": []
+      },
+      "best_candidate_ownership": {
+        "source": "autoresearch.iterations",
+        "research_id": "res_a1ba6cbd520f_minimal",
+        "iteration": 90,
+        "iteration_row_id": 6,
+        "config_snapshot_sha256": "<redacted>",
+        "attempt_snapshot_hash": null,
+        "attempt_snapshot_path": null,
+        "artifact_hash": null,
+        "mlflow_run_id": "<redacted>"
+      },
+      "candidate_pool_record": {
+        "source": "autoresearch.iterations",
+        "research_id": "res_a1ba6cbd520f_minimal",
+        "iteration": 90,
+        "iteration_row_id": 6,
+        "config_snapshot_sha256": "<redacted>",
+        "attempt_snapshot_hash": null,
+        "attempt_snapshot_path": null,
+        "artifact_hash": null,
+        "consistency_passed": false,
+        "consistency_blockers": [
+          "missing_calibration_diagnostics",
+          "inference_feature_schema_mismatch",
+          "missing_feature_schema_hash",
+          "missing_rollback_target",
+          "failed_smoke_validation"
+        ],
+        "consistency_blocker_details": [
+          {
+            "code": "missing_calibration_diagnostics",
+            "label": "Calibration diagnostics are missing.",
+            "category": "missing_evidence",
+            "source": "cross_service_consistency",
+            "likely_fix": "Produce the required evidence payload before promotion."
+          },
+          {
+            "code": "inference_feature_schema_mismatch",
+            "label": "Inference feature schema does not match training.",
+            "category": "phase_not_run",
+            "source": "cross_service_consistency",
+            "likely_fix": "Complete the required later research phase and emit its evidence payload.",
+            "phase": "inference_parity_replay"
+          },
+          {
+            "code": "missing_feature_schema_hash",
+            "label": "Feature schema hash evidence is missing.",
+            "category": "missing_evidence",
+            "source": "cross_service_consistency",
+            "likely_fix": "Produce the required evidence payload before promotion."
+          },
+          {
+            "code": "missing_rollback_target",
+            "label": "Rollback target is missing.",
+            "category": "missing_evidence",
+            "source": "cross_service_consistency",
+            "likely_fix": "Produce the required evidence payload before promotion."
+          },
+          {
+            "code": "failed_smoke_validation",
+            "label": "Smoke or paper validation failed or is missing.",
+            "category": "phase_not_run",
+            "source": "cross_service_consistency",
+            "likely_fix": "Complete the required later research phase and emit its evidence payload.",
+            "phase": "promotion_proposal"
+          }
+        ],
+        "quality_baseline_passed": true,
+        "quality_baseline_blockers": [],
+        "quality_baseline_blocker_details": [],
+        "quality_baseline_evaluation": {
+          "passed": true,
+          "status": "no_eligible_development_baseline",
+          "mode": "development_quality_baseline",
+          "blockers": [],
+          "checks": [
+            {
+              "name": "current_best_metric_recorded",
+              "status": "passed",
+              "reason": null,
+              "details": {
+                "current_metric": 0.6394,
+                "current_metric_name": "auc"
+              }
+            },
+            {
+              "name": "eligible_development_baseline_present",
+              "status": "warning",
+              "reason": null,
+              "details": {
+                "model_type": "direction",
+                "instrument": "DOGE_USDT",
+                "timeframe": "15m"
+              }
+            }
+          ],
+          "comparison": {
+            "current_research_id": "res_a1ba6cbd520f_minimal",
+            "current_iteration": 90,
+            "current_metric": 0.6394,
+            "current_metric_name": "auc",
+            "baseline_promotion_id": null,
+            "baseline_research_id": null,
+            "baseline_iteration": null,
+            "baseline_metric": null,
+            "baseline_metric_name": null,
+            "epsilon": 0.0001,
+            "delta": null
+          },
+          "blocker_details": []
+        },
+        "status": "blocked",
+        "blockers": [
+          "missing_development_gate_bundle"
+        ],
+        "blocker_details": [
+          {
+            "code": "missing_development_gate_bundle",
+            "label": "Missing development gate bundle.",
+            "category": "missing_evidence",
+            "source": "development_gate_bundle",
+            "likely_fix": "Produce the required evidence payload before promotion."
+          }
+        ],
+        "inspectable": true,
+        "promotion_record_created": false
+      },
+      "cross_service_consistency": {
+        "schema_version": "cross_service_consistency_report.v1",
+        "research_id": "res_a1ba6cbd520f_minimal",
+        "iteration": 90,
+        "model_type": "direction",
+        "generated_at": "<redacted>",
+        "mode": "promotion",
+        "passed": false,
+        "blockers": [
+          "missing_calibration_diagnostics",
+          "inference_feature_schema_mismatch",
+          "missing_feature_schema_hash",
+          "missing_rollback_target",
+          "failed_smoke_validation"
+        ],
+        "checks": [
+          {
+            "name": "config_snapshot_present",
+            "status": "passed",
+            "detail": null
+          },
+          {
+            "name": "mlflow_run_id_valid",
+            "status": "passed",
+            "detail": null
+          },
+          {
+            "name": "artifact_reference_present",
+            "status": "passed",
+            "detail": null
+          },
+          {
+            "name": "calibration_diagnostics_present",
+            "status": "failed",
+            "detail": null
+          },
+          {
+            "name": "economic_replay_present",
+            "status": "warning",
+            "detail": null
+          },
+          {
+            "name": "inference_feature_roster_parity",
+            "status": "failed",
+            "detail": null
+          },
+          {
+            "name": "feature_schema_hash_recorded",
+            "status": "failed",
+            "detail": null
+          },
+          {
+            "name": "adaptive_feature_schema_flags_recorded",
+            "status": "passed",
+            "detail": null
+          },
+          {
+            "name": "rollback_target_addressable",
+            "status": "failed",
+            "detail": null
+          },
+          {
+            "name": "smoke_or_paper_validation",
+            "status": "failed",
+            "detail": null
+          },
+          {
+            "name": "docs_wiki_status_recorded",
+            "status": "warning",
+            "detail": null
+          }
+        ],
+        "config_snapshot_sha256": "<redacted>",
+        "artifact_hash": null,
+        "feature_schema_hash": null,
+        "mlflow_run_id": "<redacted>",
+        "blocker_details": [
+          {
+            "code": "missing_calibration_diagnostics",
+            "label": "Calibration diagnostics are missing.",
+            "category": "missing_evidence",
+            "source": "cross_service_consistency",
+            "likely_fix": "Produce the required evidence payload before promotion."
+          },
+          {
+            "code": "inference_feature_schema_mismatch",
+            "label": "Inference feature schema does not match training.",
+            "category": "phase_not_run",
+            "source": "cross_service_consistency",
+            "likely_fix": "Complete the required later research phase and emit its evidence payload.",
+            "phase": "inference_parity_replay"
+          },
+          {
+            "code": "missing_feature_schema_hash",
+            "label": "Feature schema hash evidence is missing.",
+            "category": "missing_evidence",
+            "source": "cross_service_consistency",
+            "likely_fix": "Produce the required evidence payload before promotion."
+          },
+          {
+            "code": "missing_rollback_target",
+            "label": "Rollback target is missing.",
+            "category": "missing_evidence",
+            "source": "cross_service_consistency",
+            "likely_fix": "Produce the required evidence payload before promotion."
+          },
+          {
+            "code": "failed_smoke_validation",
+            "label": "Smoke or paper validation failed or is missing.",
+            "category": "phase_not_run",
+            "source": "cross_service_consistency",
+            "likely_fix": "Complete the required later research phase and emit its evidence payload.",
+            "phase": "promotion_proposal"
+          }
+        ]
+      },
+      "quality_baseline_evaluation": {
+        "passed": true,
+        "status": "no_eligible_development_baseline",
+        "mode": "development_quality_baseline",
+        "blockers": [],
+        "checks": [
+          {
+            "name": "current_best_metric_recorded",
+            "status": "passed",
+            "reason": null,
+            "details": {
+              "current_metric": 0.6394,
+              "current_metric_name": "auc"
+            }
+          },
+          {
+            "name": "eligible_development_baseline_present",
+            "status": "warning",
+            "reason": null,
+            "details": {
+              "model_type": "direction",
+              "instrument": "DOGE_USDT",
+              "timeframe": "15m"
+            }
+          }
+        ],
+        "comparison": {
+          "current_research_id": "res_a1ba6cbd520f_minimal",
+          "current_iteration": 90,
+          "current_metric": 0.6394,
+          "current_metric_name": "auc",
+          "baseline_promotion_id": null,
+          "baseline_research_id": null,
+          "baseline_iteration": null,
+          "baseline_metric": null,
+          "baseline_metric_name": null,
+          "epsilon": 0.0001,
+          "delta": null
+        },
+        "blocker_details": []
+      },
+      "decision_record": {
+        "model_quality": [],
+        "calibration": [],
+        "economic_replay": [],
+        "rl_oos": [],
+        "inference_parity": [],
+        "rollback": [],
+        "smoke_validation": [],
+        "signal_health": [],
+        "inference_reload": [],
+        "quality_baseline": []
+      },
+      "registry_metadata": {
+        "mlflow_run_id": "<redacted>",
+        "model_registry_name": null,
+        "model_version": null,
+        "ensemble_model_registry_name": null,
+        "ensemble_model_version": null,
+        "serving_model_registry_name": null,
+        "serving_model_version": null,
+        "artifact_uri": null
+      },
+      "composite_metadata": {},
+      "rollback_target": null,
+      "rollback_readiness": {
+        "model_type": "direction",
+        "instrument": "DOGE_USDT",
+        "timeframe": "15m",
+        "target_path": "<host_configs>/instrument_configs/DOGE_USDT_15m.yaml",
+        "previous_config_present": false,
+        "previous_config_snapshot_path": null,
+        "previous_config_sha256": null,
+        "previous_development_version_addressable": false,
+        "rollback_by_instrument_timeframe_supported": true,
+        "rollback_method": "instrument_timeframe_development_config",
+        "rollback_target_recorded": false,
+        "rollback_target": null,
+        "prior_version_left_intact_on_failure": true
+      },
+      "smoke_validation": {
+        "schema_version": "development_smoke_validation.v1",
+        "passed": false,
+        "evidence_passed": false,
+        "config_parse_passed": true,
+        "config_parse_error": null,
+        "composite_reload_supported": false,
+        "prior_version_left_intact_on_failure": true,
+        "tsfm_fallback_required": false,
+        "tsfm_fallback_passed": true,
+        "source": "autoresearch_config_promoter"
+      },
+      "signal_health": {
+        "schema_version": "development_direction_signal_health.v1",
+        "source": "autoresearch_config_promoter",
+        "observable": true,
+        "status": "ok",
+        "metrics": {
+          "sample_count": 0,
+          "probability_mean": null,
+          "probability_std": null,
+          "entropy_mean": null,
+          "signal_rate": null,
+          "operating_threshold": 0.5
+        },
+        "operational": {
+          "feature_schema_mismatch_count": 0,
+          "roster_parity_passed": null,
+          "latency_ms_p95": null,
+          "adapter_failure_count": 0,
+          "rl_hold_rate": null,
+          "base_model_disagreement_mean": null
+        },
+        "drift": {
+          "psi": null,
+          "kl_divergence": null,
+          "training_distribution": {},
+          "deltas": {}
+        },
+        "alerts": []
+      },
+      "inference_reload_validation": {
+        "schema_version": "development_inference_reload_validation.v1",
+        "source": "autoresearch_config_promoter",
+        "passed": false,
+        "failed_checks": [
+          "adapter_loading_passed",
+          "composite_reload_passed",
+          "feature_count_alignment_passed",
+          "feature_name_alignment_passed",
+          "model_roster_parity_passed",
+          "rollback_ready"
+        ],
+        "checks": {
+          "feature_name_alignment_passed": false,
+          "feature_count_alignment_passed": false,
+          "model_roster_parity_passed": false,
+          "adapter_loading_passed": false,
+          "observation_dimension_parity_passed": true,
+          "fallback_behavior_passed": true,
+          "latency_budget_passed": true,
+          "composite_reload_passed": false,
+          "rollback_ready": false,
+          "prior_version_preserved_on_reload_failure": true
+        },
+        "requirements": {
+          "tsfm_fallback_required": false,
+          "rl_observation_changed": false
+        },
+        "details": {
+          "inference": {},
+          "adapter": {},
+          "composite": {}
+        }
+      },
+      "tsfm_fallback_validation": {
+        "required": false,
+        "passed": null,
+        "details": {
+          "inference": {},
+          "adapter": {},
+          "structured": {}
+        }
+      }
+    },
+    "promotion_allowed": false,
+    "blocker_details": [
+      {
+        "code": "missing_development_gate_bundle",
+        "label": "Missing development gate bundle.",
+        "category": "missing_evidence",
+        "source": "development_gate_bundle",
+        "likely_fix": "Produce the required evidence payload before promotion."
+      },
+      {
+        "code": "missing_calibration_diagnostics",
+        "label": "Calibration diagnostics are missing.",
+        "category": "missing_evidence",
+        "source": "cross_service_consistency",
+        "likely_fix": "Produce the required evidence payload before promotion."
+      },
+      {
+        "code": "inference_feature_schema_mismatch",
+        "label": "Inference feature schema does not match training.",
+        "category": "phase_not_run",
+        "source": "cross_service_consistency",
+        "likely_fix": "Complete the required later research phase and emit its evidence payload.",
+        "phase": "inference_parity_replay"
+      },
+      {
+        "code": "missing_feature_schema_hash",
+        "label": "Feature schema hash evidence is missing.",
+        "category": "missing_evidence",
+        "source": "cross_service_consistency",
+        "likely_fix": "Produce the required evidence payload before promotion."
+      },
+      {
+        "code": "missing_rollback_target",
+        "label": "Rollback target is missing.",
+        "category": "missing_evidence",
+        "source": "cross_service_consistency",
+        "likely_fix": "Produce the required evidence payload before promotion."
+      },
+      {
+        "code": "failed_smoke_validation",
+        "label": "Smoke or paper validation failed or is missing.",
+        "category": "phase_not_run",
+        "source": "cross_service_consistency",
+        "likely_fix": "Complete the required later research phase and emit its evidence payload.",
+        "phase": "promotion_proposal"
+      }
+    ]
+  },
+  "source_sha": "a0de1205b8f7283fccfade1dc63b0e23f707052e"
+}

@@ -1,0 +1,21 @@
+{
+  "category": "experiment_parser",
+  "function": "parse_prepare_output",
+  "description": "failed run: no primary metric, gates not passed",
+  "input": {
+    "stdout": "stderr merged\n---\nstatus:             failed\nprimary_metric:     0.000000\nmetric_name:        walkforward_mean_auc\ndirection:          higher_is_better\ntraining_gates_passed: false\nall_gates_passed:   false\ntraining_time_s:    12.4\ngate_failures:      [overfit, calibration]\n---\n"
+  },
+  "expected": {
+    "status": "failed",
+    "primary_metric": null,
+    "metric_name": "walkforward_mean_auc",
+    "direction": "higher_is_better",
+    "training_gates_passed": false,
+    "all_gates_passed": false,
+    "training_time_s": 12.4,
+    "gate_failures": [
+      "[overfit, calibration]"
+    ]
+  },
+  "source_sha": "a0de1205b8f7283fccfade1dc63b0e23f707052e"
+}

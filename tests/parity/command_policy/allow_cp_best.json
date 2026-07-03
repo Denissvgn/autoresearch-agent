@@ -1,0 +1,23 @@
+{
+  "category": "command_policy",
+  "function": "evaluate_command_policy",
+  "description": "cp of train.yaml to best_train.yaml inside the workspace is allowed",
+  "input": {
+    "command": "cp <workspace>/train.yaml <workspace>/best_train.yaml",
+    "workspace_root": "<workspace>",
+    "session_workspace": null
+  },
+  "input_setup": {
+    "create_files": {
+      "train.yaml": "agent_strategy: BALA\n"
+    }
+  },
+  "expected": {
+    "allowed": false,
+    "argv": [],
+    "normalized_command": "",
+    "operation": "",
+    "reason": "cp requires a resolved session workspace"
+  },
+  "source_sha": "a0de1205b8f7283fccfade1dc63b0e23f707052e"
+}

@@ -1,0 +1,40 @@
+{
+  "category": "session_start",
+  "function": "construct_research_config",
+  "description": "legacy direction request with trading_mode and agent_strategy",
+  "input": {
+    "request": {
+      "id": "res_parity0001",
+      "instrument": "DOGE_USDT",
+      "timeframe": "15m",
+      "model_type": "direction",
+      "tag": "parity-baseline",
+      "max_iterations": 30,
+      "max_budget_usd": 10.0,
+      "trading_mode": "margin",
+      "agent_strategy": "AGGR"
+    }
+  },
+  "expected": {
+    "id": "res_parity0001",
+    "instrument": "DOGE_USDT",
+    "timeframe": "15m",
+    "model_type": "direction",
+    "tag": "parity-baseline",
+    "quick_mode": false,
+    "max_iterations": 30,
+    "max_budget_usd": 10.0,
+    "timeout_s": 0,
+    "focus_hint": null,
+    "workspace_path": "",
+    "trading_mode": "margin",
+    "agent_strategy": "AGGR",
+    "initial_balance": null,
+    "enable_hpo": false,
+    "hpo_trials": 20,
+    "hpo_timesteps": 50000,
+    "resumed_from": null,
+    "pipeline_id": null
+  },
+  "source_sha": "a0de1205b8f7283fccfade1dc63b0e23f707052e"
+}

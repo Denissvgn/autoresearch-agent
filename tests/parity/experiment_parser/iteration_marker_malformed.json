@@ -1,0 +1,10 @@
+{
+  "category": "experiment_parser",
+  "function": "parse_iteration_marker",
+  "description": "ITERATION_RESULT marker followed by malformed JSON returns null",
+  "input": {
+    "text": " ITERATION_RESULT: {\"iteration\": 4, broken\nnext line\n"
+  },
+  "expected": null,
+  "source_sha": "a0de1205b8f7283fccfade1dc63b0e23f707052e"
+}
