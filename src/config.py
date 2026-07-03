@@ -480,6 +480,21 @@ class Settings(BaseSettings):
             "trusts a different identity than mlflow-service."
         ),
     )
+    production_approval_verifier: SecretStr | None = Field(
+        default=None,
+        repr=False,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_PRODUCTION_APPROVAL_VERIFIER",
+            "PRODUCTION_APPROVAL_VERIFIER",
+        ),
+        description=(
+            "HMAC-SHA256 secret used to verify the signature on production-scope "
+            "promotion approvals (W18 / P0-020). When unset, all production "
+            "promotions are rejected (fail-closed). The approval.signature must be "
+            "the hex HMAC-SHA256 of '{research_id}:{scope}:{approver}' keyed by "
+            "this secret."
+        ),
+    )
     s3_endpoint_url: Optional[str] = Field(
         default=None,
         validation_alias=AliasChoices("S3_ENDPOINT_URL", "MINIO_ENDPOINT_URL"),

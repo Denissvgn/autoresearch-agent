@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Enforced mandatory cryptographic approval for production-scope promotions
+  (ARC-011 **P0-020 / P0-021**, W18). `POST /research/{id}/promote/confirm`
+  with `scope=production` now verifies the `approval.signature` as the hex
+  HMAC-SHA256 of `"{research_id}:{scope}:{approver}"` keyed by the new
+  `production_approval_verifier` secret (`AUTORESEARCH_PRODUCTION_APPROVAL_VERIFIER`).
+  When the verifier is unset, all production promotions are rejected with
+  HTTP 400 **fail-closed** until the operator configures the secret; other
+  scopes (`development`, `canary`, `paper`) are unaffected. The
+  `promotion.confirm` audit event additionally records the named `approver`
+  and `approval_method` (the API caller's identity was already recorded as
+  `actor_id`). This is an **intentional hardening**: production promotions
+  that previously worked with a presence-only signature now require the
+  verifier configured and a valid HMAC. Added
+  `tests/test_promotion_approval.py` (16 tests across all four acceptance
+  criteria).
+
 - Added opaque cursor pagination to the list endpoints (ARC-011 **P0-015..
   P0-019**). `GET /api/v1/research` and `GET /api/v1/pipelines` accept a new
   `cursor` query param (base64url of `(sort_key, id)`); passing it switches the
