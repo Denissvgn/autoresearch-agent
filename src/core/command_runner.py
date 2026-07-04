@@ -10,7 +10,8 @@ import subprocess
 import threading
 import time
 from dataclasses import dataclass
-from typing import Callable, Literal
+from types import MappingProxyType
+from typing import Callable, Literal, Mapping
 
 from src.core.command_policy import CommandDecision, evaluate_command_policy
 
@@ -27,6 +28,90 @@ _SECRET_VALUE_RE = re.compile(
     r"([^\s'\"<>]+)"
 )
 _BEARER_RE = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+")
+
+# --- Governed-subprocess environment (ARC-011 P0-023) -----------------------
+# The child of a governed command is built from this allow-list (default-deny):
+# anything not enumerated below is dropped from the inherited environment.
+# See docs/adr/ARC-011-security-spike.md §4.3 (agent-path env contract).
+_CHILD_ENV_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        # Shell / locale / runtime
+        "PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE",
+        "TERM", "TMPDIR", "TMP",
+        # Python / venv (PYTHON* / LC_* also kept via prefix match below)
+        "VIRTUAL_ENV", "PKG_CONFIG_PATH",
+        # Host config / workspace roots (setup.py, direction/prepare.py, enrich_rl_dataset.py)
+        "HOST_CONFIGS_PATH", "AUTORESEARCH_HOST_CONFIGS_PATH",
+        "AUTORESEARCH_WORKSPACE_ROOT", "WORKSPACE_ROOT",
+        # rl-trainer delegation (rl/prepare.py:132-138)
+        "RL_TRAINER_URL", "RL_POLL_INTERVAL", "RL_ENRICHED_BUCKET",
+        "RL_TRAINER_SERVICE_TOKEN", "AUTORESEARCH_RL_TRAINER_SERVICE_TOKEN",
+        "ML_ADMIN_TOKEN",
+        # minio / S3 (rl/prepare.py:1273-1274, boto3)
+        "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+        "AWS_DEFAULT_REGION", "AWS_REGION", "AWS_SESSION_TOKEN",
+        "S3_ENDPOINT_URL", "MINIO_ENDPOINT_URL", "MLFLOW_S3_ENDPOINT_URL",
+        # mlflow tracking URI only (NOT the promotion token); consumed by the
+        # rl-trainer SDK via MLFLOW_TRACKING_URI -> config -> set_tracking_uri.
+        "MLFLOW_TRACKING_URI",
+        # data-ingest (enrich_rl_dataset.py:597)
+        "DATA_INGEST_URL",
+        # training-child niceties rl/prepare.py:1948-1949 re-sets on its own copy
+        "NUMBA_CACHE_DIR", "MPLCONFIGDIR",
+    }
+)
+# Kept by prefix so the Python family (PYTHONUNBUFFERED, PYTHONPATH, ...) and
+# locale family propagate without enumerating every member.
+_CHILD_ENV_PREFIXES: tuple[str, ...] = ("PYTHON", "LC_")
+
+# Defense-in-depth: unambiguous server control-plane secrets never needed by an
+# experiment script. Subtracted last so a name cannot leak even if it were to
+# appear in the allow-list above.
+#
+# NOTE: ML_ADMIN_TOKEN is intentionally NOT forbidden. In config.py it is an
+# alias for BOTH rl_trainer_service_token (which rl/prepare.py needs to call
+# rl-trainer) AND mlflow_service_auth_token (the production-promotion token).
+# It cannot be cleanly stripped by name without breaking RL auth; splitting
+# that alias is tracked as a follow-up to P0-023.
+_FORBIDDEN_CHILD_ENV: frozenset[str] = frozenset(
+    {
+        "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY",
+        "AUTORESEARCH_API_TOKEN",
+        "AUTORESEARCH_PROMETHEUS_TOKEN", "PROMETHEUS_TOKEN",
+        "AUTORESEARCH_MLFLOW_SERVICE_AUTH_TOKEN", "MLFLOW_SERVICE_AUTH_TOKEN",
+        "SERVICE_AUTH_TOKEN",
+        "AUTORESEARCH_INFERENCE_SERVICE_AUTH_TOKEN",
+        "INFERENCE_SERVICE_AUTH_TOKEN",
+        "AUTORESEARCH_PRODUCTION_APPROVAL_VERIFIER",
+        "PRODUCTION_APPROVAL_VERIFIER",
+    }
+)
+
+
+def _build_child_env(
+    environ: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Build the env dict handed to a governed subprocess (ARC-011 P0-023).
+
+    Default-deny: only names in ``_CHILD_ENV_ALLOWLIST`` or matching
+    ``_CHILD_ENV_PREFIXES`` are kept, then ``_FORBIDDEN_CHILD_ENV`` is
+    subtracted. Closes the secret-inheritance gap documented in
+    docs/adr/ARC-011-security-spike.md §4.1 while preserving the experiment-
+    legitimate vars the six ``_ALLOWED_SCRIPTS`` entries (and their known
+    training children) read.
+    """
+    source = environ if environ is not None else MappingProxyType(os.environ)
+    kept = {
+        name: value
+        for name, value in source.items()
+        if name in _CHILD_ENV_ALLOWLIST
+        or any(name.startswith(prefix) for prefix in _CHILD_ENV_PREFIXES)
+    }
+    for forbidden in _FORBIDDEN_CHILD_ENV:
+        kept.pop(forbidden, None)
+    return kept
+
+
 OutputStream = Literal["stdout", "stderr"]
 OutputCallback = Callable[[OutputStream, str], None]
 
@@ -135,6 +220,7 @@ class GovernedCommandRunner:
         proc = subprocess.Popen(
             decision.argv,
             cwd=self._workspace_root,
+            env=_build_child_env(),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,

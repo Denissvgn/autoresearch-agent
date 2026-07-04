@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 import time
@@ -9,7 +10,11 @@ from pathlib import Path
 import pytest
 
 from src.core.command_policy import evaluate_command_policy
-from src.core.command_runner import GovernedCommandRunner, redact_sensitive_text
+from src.core.command_runner import (
+    _CHILD_ENV_ALLOWLIST,
+    GovernedCommandRunner,
+    redact_sensitive_text,
+)
 
 try:
     import anthropic  # noqa: F401
@@ -282,3 +287,86 @@ def test_redaction_handles_bearer_and_env_like_values():
     assert "abc.def" not in redacted
     assert "my-token" not in redacted
     assert "p4ss" not in redacted
+
+
+def test_governed_runner_strips_control_plane_secrets_from_child_env(
+    tmp_path: Path, monkeypatch
+):
+    """ARC-011 P0-023 DoD: server control-plane secrets must not reach the child."""
+    # Plant server-only canaries in the parent env the child would otherwise inherit.
+    canaries = {
+        "ANTHROPIC_AUTH_TOKEN": "leak-anthropic",
+        "AUTORESEARCH_API_TOKEN": "leak-api",
+        "AUTORESEARCH_MLFLOW_SERVICE_AUTH_TOKEN": "leak-promo",
+        "AUTORESEARCH_PRODUCTION_APPROVAL_VERIFIER": "leak-hmac",
+    }
+    for name, value in canaries.items():
+        monkeypatch.setenv(name, value)
+    # An experiment-legitimate secret (rl-trainer delegation) that must be kept.
+    monkeypatch.setenv("ML_ADMIN_TOKEN", "kept-rl-admin")
+    # A core runtime var that must also be kept.
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+
+    workspace, session = _workspace(tmp_path)
+    python_path = Path(workspace) / ".venv" / "bin" / "python"
+    python_path.parent.mkdir(parents=True)
+    python_path.symlink_to(sys.executable)
+    env_dump_path = Path(workspace) / "child_env.json"
+    script = Path(workspace) / "scripts" / "autotuner" / "enrich_rl_dataset.py"
+    script.parent.mkdir(parents=True)
+    script.write_text(
+        "import json, os, pathlib\n"
+        f"pathlib.Path({str(env_dump_path)!r}).write_text("
+        "json.dumps(dict(os.environ)))\n",
+        encoding="utf-8",
+    )
+
+    runner = GovernedCommandRunner(workspace_root=workspace, session_workspace=session)
+    result = runner.run(
+        ".venv/bin/python scripts/autotuner/enrich_rl_dataset.py "
+        "--instrument DOGE_USDT --timeframe 15m",
+        timeout_s=60,
+    )
+
+    assert result.returncode == 0, result.output
+    child_env = json.loads(env_dump_path.read_text(encoding="utf-8"))
+
+    # Stripped: every planted server control-plane canary is absent from the child.
+    for name, value in canaries.items():
+        assert name not in child_env, f"{name} leaked into governed child env"
+        assert value not in child_env.values(), (
+            f"{name}'s value leaked via another env var"
+        )
+    # Kept: experiment-legitimate creds and core runtime vars propagate.
+    assert child_env.get("ML_ADMIN_TOKEN") == "kept-rl-admin"
+    assert child_env.get("PATH") == "/usr/bin:/bin"
+
+
+def test_build_child_env_allowlist_covers_approved_script_inventory():
+    """Static contract: the allow-list ⊇ every var the six _ALLOWED_SCRIPTS read.
+
+    X-002 parity is pure-function and does not exercise live env, so this guard
+    catches the realistic regression vector: a future edit dropping an
+    experiment-legitimate var. Consumers (file:line) per ARC-011 P0-023 inventory.
+    """
+    required = {
+        # setup.py:31, direction/prepare.py:167, enrich_rl_dataset.py:131
+        "HOST_CONFIGS_PATH",
+        # rl/prepare.py:132-135
+        "RL_TRAINER_URL", "RL_POLL_INTERVAL", "RL_ENRICHED_BUCKET",
+        # rl/prepare.py:137-138 (rl-trainer delegation)
+        "RL_TRAINER_SERVICE_TOKEN", "ML_ADMIN_TOKEN",
+        # rl/prepare.py:1273-1274 (boto3 client)
+        "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+        # rl/prepare.py:134
+        "S3_ENDPOINT_URL", "MLFLOW_S3_ENDPOINT_URL",
+        # enrich_rl_dataset.py:597
+        "DATA_INGEST_URL",
+        # consumed downstream by rl-trainer SDK; inherited via os.environ.copy()
+        # into the training children (direction/volatility/rl prepare.py).
+        "MLFLOW_TRACKING_URI",
+    }
+    missing = required - _CHILD_ENV_ALLOWLIST
+    assert not missing, (
+        f"_CHILD_ENV_ALLOWLIST dropped a var an approved script reads: {sorted(missing)}"
+    )

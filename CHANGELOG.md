@@ -2,6 +2,47 @@
 
 ## Unreleased
 
+- Introduced the `LLMProvider` protocol and normalized value types
+  (ARC-011 **P1-001**, R4/R5; consumes `docs/adr/ARC-011-llm-provider-spike.md`
+  §4 verbatim). New `src/core/llm_provider.py` declares the provider-agnostic
+  contract every LLM backend must satisfy: `messages_create` (main agentic
+  path), `complete` (one-shot insights/Haiku path), an optional `stream`,
+  `estimate_cost` (→ P1-003), `capabilities` (→ P4-009/P4-010), and
+  `classify_error` (→ loop-owned retry). The normalized types are
+  Anthropic-shaped (`ToolUseBlock.input: dict`, `ToolResultBlock`,
+  `ToolDef`) so the upcoming `AnthropicProvider` (P1-002) is a 1:1 wrapper and
+  the parity suite is preserved. `StopReason` is the R5-critical enum the loop
+  will key off (`END_TURN` triggers phase continuation); the *"tool calls
+  present ⇒ `TOOL_USE`"* invariant (Gemini `STOP`-with-function-calls quirk)
+  is documented as the provider's responsibility. **No behavior change** — this
+  is a type-only module; P1-002 extracts `AnthropicProvider` and P1-004 wires
+  the orchestrator to accept any `LLMProvider`. Added
+  `tests/test_llm_provider.py` (contract surface, R5 `StopReason` mapping,
+  frozen-value-type, and headless-import tests). Wiki page deferred to after
+  P1-002 lands.
+
+- Sanitized the governed subprocess environment so approved experiment scripts
+  no longer inherit server control-plane secrets (ARC-011 **P0-023**, R2 — gap
+  uncovered by the X-004 security spike; see
+  `docs/adr/ARC-011-security-spike.md` §4.1/§4.3). `GovernedCommandRunner` now
+  spawns with an explicit `env=` built **default-deny** from an allow-list
+  (`_CHILD_ENV_ALLOWLIST` + `PYTHON`/`LC_` prefixes, minus a
+  `_FORBIDDEN_CHILD_ENV` defense-in-depth set). Dropped from the child env:
+  `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_API_KEY`, `AUTORESEARCH_API_TOKEN`,
+  `AUTORESEARCH_PROMETHEUS_TOKEN`/`PROMETHEUS_TOKEN`, the mlflow promotion
+  token (`AUTORESEARCH_MLFLOW_SERVICE_AUTH_TOKEN`/`MLFLOW_SERVICE_AUTH_TOKEN`/
+  `SERVICE_AUTH_TOKEN`), `INFERENCE_SERVICE_AUTH_TOKEN`, and the
+  `PRODUCTION_APPROVAL_VERIFIER` HMAC secret. Kept (experiment-legitimate, per
+  the script inventory): `PATH`/`HOME`/Python/venv, service URLs, minio
+  `AWS_*`, `MLFLOW_TRACKING_URI`, `RL_TRAINER_*`, and `ML_ADMIN_TOKEN`. A new
+  test asserts planted canaries are absent from the child env while kept vars
+  propagate; a static contract test pins the allow-list ⊇ the vars the six
+  `_ALLOWED_SCRIPTS` read. The X-002 parity suite is green. **Residual:**
+  `ML_ADMIN_TOKEN` is an overloaded alias for both `rl_trainer_service_token`
+  (RL needs it) and `mlflow_service_auth_token` (the promotion token) in
+  `config.py`, so it cannot be cleanly stripped by name yet — splitting that
+  alias is tracked as a follow-up.
+
 - Enforced mandatory cryptographic approval for production-scope promotions
   (ARC-011 **P0-020 / P0-021**, W18). `POST /research/{id}/promote/confirm`
   with `scope=production` now verifies the `approval.signature` as the hex
