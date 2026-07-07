@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+- Introduced the `StateStore` protocol and extracted `SQLiteStateStore`
+  (ARC-011 **P1-006** / **P1-007**; mirrors the P1-001/P1-002 LLM precedent).
+  New `src/core/state_store.py` declares the storage abstraction every consumer
+  reaches through (`SessionManager`, `AgentOrchestrator`, the API layer) and
+  hosts `SQLiteStateStore` — the 1:1 rename of the former `ResultsStore`. The
+  canonical home moved via `git mv results_store.py → state_store.py`
+  (blame/history preserved); `src/core/results_store.py` is now a back-compat
+  re-export shim so the ~45 test files and production consumers that import
+  `ResultsStore` keep working unchanged. `ResultsStore` is bound to
+  `SQLiteStateStore` via `import ... as` (the **same** class object, not a
+  subclass) so `tests/conftest.py`'s `monkeypatch.setattr(ResultsStore,
+  "initialize", ...)` keeps working. The protocol mirrors 48 of the 49 public
+  methods; schema DDL + `_MIGRATIONS` stay inside the SQLite impl (AC #4).
+  `connection()` is deliberately excluded (leaks `aiosqlite.Connection`).
+  **Three P1-007 AC deviations (the AC text predated grounding; recorded here
+  in the house-style of P1-002's D-retry callout):** **AC #2 ("`WEB_CONCURRENCY
+  > 1` guard remains here") is factually off** — the guard lives at
+  `src/main.py:_validate_runtime_configuration` (a service-lifecycle concern,
+  never inside the store); it stays in `main.py`, and the single-instance
+  *constraint* (W14) is documented on `SQLiteStateStore` instead. **AC #3 names
+  two methods that don't exist:** `record_iteration` → the real method is
+  `add_iteration`; `list_iterations` → `get_iterations`. **`connection()` is
+  excluded from the protocol** (leaks the SQLite backend type). Also preserved
+  the historical logger name `src.core.results_store` (hardcoded, not
+  `__name__`) so log-scraping/dashboards/tests keyed on it are unaffected.
+  Production construction (`SQLiteStateStore(settings.db_path)`) and consumer
+  type wiring land in P1-008; parity tests in P1-009. The X-002 parity suite is
+  green (17/17); full suite green except 2 pre-existing `test_deployment_inputs`
+  failures unrelated to storage. **Note:** migrating the ~45 test imports from
+  `ResultsStore` to `SQLiteStateStore` is a follow-up sweep; the alias is
+  intentionally permanent-ish until then. Wiki pages (`StateStore`,
+  `SQLiteStateStore`) deferred to after P1-008.
+
 - Extracted `AnthropicProvider` from the orchestrator and fully normalized
   the LLM consumption (ARC-011 **P1-002**; consumes the X-005 spike §6 and
   the P1-001 protocol). `src/core/llm_provider.py` now hosts the SDK adapter
