@@ -16,7 +16,6 @@ from src.config import settings
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig
 from src.core.pipeline_controller import PHASES, PipelineConfig, PipelineController
 from src.core.research_manifest import build_research_manifest, manifest_pretty_json
-from src.core.results_store import ResultsStore
 from src.core.service_preflight import (
     require_preflight_ready,
     run_service_preflight,
@@ -27,6 +26,7 @@ from src.core.state_machine import (
     SessionState,
     SessionStateMachine,
 )
+from src.core.state_store import StateStore
 from src.core.structured_hpo import build_structured_hpo_plan, hpo_plan_json
 from src.ws.events import broadcaster
 
@@ -51,7 +51,7 @@ class SessionManager:
 
     def __init__(
         self,
-        store: ResultsStore,
+        store: StateStore,
         *,
         state_machine: Optional[SessionStateMachine] = None,
     ) -> None:

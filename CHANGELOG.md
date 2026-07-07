@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Wired production consumers to the `StateStore` protocol type
+  (ARC-011 **P1-008**). `src/main.py` now constructs `SQLiteStateStore(...)`
+  concretely but holds it as `StateStore | None` (mirrors how the orchestrator's
+  `self._provider: LLMProvider` is typed as the protocol but constructed as
+  `AnthropicProvider`). The six core consumers (`SessionManager`,
+  `AgentOrchestrator`, `ConfigPromoter`, `PipelineController`,
+  `PromotionEvidenceCollector`, `SessionStateMachine`) widened their constructor
+  `store:` param from `ResultsStore` to `StateStore`. The API layer was already
+  untyped (`store` / `_store = None`) and is abstraction-agnostic, so it is
+  unchanged. The six defensive `getattr(store, "<method>", None)` probes in the
+  orchestrator/config_promoter are left untouched (they work against any object;
+  they become dead code only after P2-*). `grep ResultsStore src/` now returns
+  only the shim + historical docstring mentions — no live type annotations or
+  imports remain. Zero new ruff/mypy errors; full suite green except the 2
+  pre-existing `test_deployment_inputs` failures. The X-002 parity suite is
+  green.
+
 - Introduced the `StateStore` protocol and extracted `SQLiteStateStore`
   (ARC-011 **P1-006** / **P1-007**; mirrors the P1-001/P1-002 LLM precedent).
   New `src/core/state_store.py` declares the storage abstraction every consumer

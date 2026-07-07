@@ -33,7 +33,7 @@ from typing import Any, Dict, Optional, Tuple
 import httpx
 
 from src.config import secret_value, settings
-from src.core.results_store import ResultsStore
+from src.core.state_store import StateStore
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class PromotionEvidenceCollector:
 
     def __init__(
         self,
-        store: ResultsStore,
+        store: StateStore,
         *,
         http_client_factory=None,
         timeout_s: Optional[float] = None,

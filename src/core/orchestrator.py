@@ -86,13 +86,13 @@ from src.core.research_phase_plan import (
     phases_for_model,
 )
 from src.core.result_artifact import enrich_marker_from_result_artifact
-from src.core.results_store import ResultsStore
 from src.core.state_machine import (
     IllegalTransitionError,
     SessionEvent,
     SessionState,
     SessionStateMachine,
 )
+from src.core.state_store import StateStore
 from src.core.structured_hpo import materialize_planned_trials
 from src.ws.events import broadcaster
 
@@ -613,7 +613,7 @@ class AgentOrchestrator:
 
     def __init__(
         self,
-        store: ResultsStore,
+        store: StateStore,
         *,
         state_machine: Optional[SessionStateMachine] = None,
     ) -> None:

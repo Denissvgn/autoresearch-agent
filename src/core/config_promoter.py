@@ -37,7 +37,7 @@ from src.core.development_inference_validation import (
 from src.core.development_signal_health import build_development_signal_health
 from src.core.gate_status import training_gates_passed_from_iteration
 from src.core.research_phase_plan import build_phase_state
-from src.core.results_store import ResultsStore
+from src.core.state_store import StateStore
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +101,7 @@ QUALITY_BASELINE_BLOCKER = "best_metric_below_development_baseline"
 class ConfigPromoter:
     """Handles preview and confirmation of config promotion to host."""
 
-    def __init__(self, store: ResultsStore) -> None:
+    def __init__(self, store: StateStore) -> None:
         self._store = store
 
     async def preview(

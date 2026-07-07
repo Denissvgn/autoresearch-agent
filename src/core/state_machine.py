@@ -28,7 +28,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, AsyncIterator, Dict, FrozenSet, Optional, Tuple, Union
 
-from src.core.results_store import ResultsStore
+from src.core.state_store import StateStore
 from src.ws.events import EventBroadcaster
 
 logger = logging.getLogger(__name__)
@@ -317,7 +317,7 @@ class SessionLockRegistry:
 class SessionStateMachine:
     """The single legal writer of ``research_sessions.status``.
 
-    Composes a ``ResultsStore`` (read / write status, emit audit) and an
+    Composes a ``StateStore`` (read / write status, emit audit) and an
     ``EventBroadcaster`` (lifecycle broadcasts). Both are injected rather than
     imported as globals so the machine is unit-testable with a tmp SQLite DB
     and a capturing broadcaster, and so the W8 race tests (P0-005) can drive it
@@ -326,7 +326,7 @@ class SessionStateMachine:
 
     def __init__(
         self,
-        store: ResultsStore,
+        store: StateStore,
         broadcaster: EventBroadcaster,
         *,
         lock_registry: Optional[SessionLockRegistry] = None,

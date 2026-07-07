@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 from src.config import settings
 from src.core.config_promoter import ConfigPromoter
 from src.core.gate_status import training_gates_passed_from_iteration
-from src.core.results_store import ResultsStore
+from src.core.state_store import StateStore
 from src.ws.events import broadcaster
 
 logger = logging.getLogger(__name__)
@@ -174,7 +174,7 @@ class PipelineConfig:
 class PipelineController:
     """Orchestrates sequential direction → volatility → rl research."""
 
-    def __init__(self, store: ResultsStore, session_manager) -> None:
+    def __init__(self, store: StateStore, session_manager) -> None:
         self._store = store
         self._sm = session_manager
         self._stop_flags: Dict[str, bool] = {}

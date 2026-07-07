@@ -27,9 +27,9 @@ from src.core.observability import (
     empty_observability_snapshot,
     format_prometheus,
 )
-from src.core.results_store import ResultsStore
 from src.core.service_preflight import build_not_run_preflight, run_service_preflight
 from src.core.session_manager import SessionManager
+from src.core.state_store import SQLiteStateStore, StateStore
 from src.ws.events import broadcaster
 
 try:
@@ -51,7 +51,7 @@ except Exception:
     _ml_logger = None
 
 # Global instances (initialized in lifespan)
-_store: ResultsStore | None = None
+_store: StateStore | None = None
 _session_manager: SessionManager | None = None
 _promoter: ConfigPromoter | None = None
 
@@ -101,7 +101,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Workspace: %s", settings.workspace_root)
 
     # Initialize SQLite store
-    _store = ResultsStore(settings.db_path)
+    _store = SQLiteStateStore(settings.db_path)
     await _store.initialize()
     app.state.audit_store = _store
 
