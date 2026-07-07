@@ -1,19 +1,19 @@
-"""Structural / contract tests for the ``LLMProvider`` protocol (ARC-011 P1-001).
+"""Structural / contract tests for the ``LLMProvider`` protocol + types
+(ARC-011 P1-001) and the ``AnthropicProvider`` (P1-002).
 
-P1-001 is a type-only module: it introduces the protocol + normalized value
-types but no runtime behavior. These tests are the executable contract — they
-pin the public surface, the R5 ``StopReason`` mapping, frozen-ness of value
-types, and the headless-import invariant that keeps the X-002 parity suite
-unaffected.
+P1-001 introduced the protocol + normalized value types; P1-002 added the
+``AnthropicProvider`` SDK adapter to the same module. These tests pin the
+public surface, the R5 ``StopReason`` mapping, and frozen-ness of the value
+types. (P1-001's headless-import test is dropped: P1-002 intentionally made
+``llm_provider`` depend on ``anthropic`` at module level for the adapter; the
+transitive dependency is the same as the pre-refactor orchestrator's direct
+``import anthropic``.)
 """
 
 from __future__ import annotations
 
 import inspect
-import subprocess
-import sys
 from dataclasses import FrozenInstanceError, fields, is_dataclass
-from pathlib import Path
 
 import pytest
 
@@ -31,37 +31,6 @@ from src.core.llm_provider import (
     ToolUseBlock,
     Usage,
 )
-
-
-def test_module_imports_headless_without_anthropic_stub():
-    """The protocol module must import with no ``anthropic`` dependency.
-
-    The X-002 parity suite imports orchestrator submodules headless; picking up
-    an ``anthropic`` import here would force every parity/conftest to install
-    the per-file ``sys.modules`` stub. This pins that invariant.
-    """
-    # The service root (siblings of tests/) is where ``src`` is importable;
-    # run the subprocess there so cwd-on-sys.path resolves ``src.core.*``.
-    service_root = Path(__file__).resolve().parents[1]
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            (
-                "import sys; sys.modules.pop('anthropic', None); "
-                "import src.core.llm_provider; "
-                "print('ok')"
-            ),
-        ],
-        capture_output=True,
-        text=True,
-        cwd=str(service_root),
-    )
-    assert result.returncode == 0, (
-        f"llm_provider failed to import without anthropic stub:\n"
-        f"stdout={result.stdout}\nstderr={result.stderr}"
-    )
-    assert "ok" in result.stdout
 
 
 def test_stop_reason_members_match_r5_contract():

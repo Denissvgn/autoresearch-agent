@@ -17,18 +17,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
-import anthropic
-import httpx
 import yaml
 
 from src.config import secret_value, settings
+from src.core.artifact_reference import normalize_artifact_references_in_mapping
 from src.core.command_runner import (
     CommandProcessRegistry,
     GovernedCommandRunner,
     OutputCallback,
     redact_sensitive_text,
 )
-from src.core.artifact_reference import normalize_artifact_references_in_mapping
 from src.core.consistency_validator import (
     ACCEPTED_ADAPTIVE_NOOP_REASONS,
     build_consistency_report,
@@ -45,7 +43,11 @@ from src.core.gate_status import (
     normalize_training_gate_aliases,
     training_gates_passed_from_iteration,
 )
-from src.core.output_digest import digest_command_output
+from src.core.iteration_context import (
+    ITERATION_CONTEXT_DIGEST_MARKER,
+    build_iteration_context_digest,
+    derive_exploration_markers,
+)
 from src.core.iteration_snapshot import (
     build_iteration_attempt_snapshot,
     build_trial_identity,
@@ -53,32 +55,43 @@ from src.core.iteration_snapshot import (
     trial_identity_hash,
     write_iteration_attempt_snapshot,
 )
-from src.core.iteration_context import (
-    ITERATION_CONTEXT_DIGEST_MARKER,
-    build_iteration_context_digest,
-    derive_exploration_markers,
+from src.core.llm_provider import (
+    _CLAUDE_INPUT_USD_PER_TOKEN,
+    _CLAUDE_MAX_OUTPUT_TOKENS,
+    _CLAUDE_OUTPUT_USD_PER_TOKEN,
+    AnthropicProvider,
+    ContentBlock,
+    LLMProvider,
+    Message,
+    ProviderResponse,
+    RequestBlock,
+    StopReason,
+    TextBlock,
+    ToolDef,
+    ToolResultBlock,
+    ToolUseBlock,
+    Usage,
 )
 from src.core.log_writer import AgentLogWriter
+from src.core.output_digest import digest_command_output
 from src.core.research_phase_plan import (
+    _PHASE_ADVANCEMENT_KEYS,
+    EVIDENCE_INHERITABLE_PHASES,
+    NOOP_INHERITABLE_PHASES,
+    _is_rejected_duplicate,
     build_phase_state,
     incomplete_phase_ids,
     phase_cap_exceeded,
     phase_state_json,
     phases_for_model,
 )
-from src.core.research_phase_plan import (
-    _PHASE_ADVANCEMENT_KEYS,
-    EVIDENCE_INHERITABLE_PHASES,
-    NOOP_INHERITABLE_PHASES,
-    _is_rejected_duplicate,
-)
 from src.core.result_artifact import enrich_marker_from_result_artifact
 from src.core.results_store import ResultsStore
 from src.core.state_machine import (
     IllegalTransitionError,
     SessionEvent,
-    SessionStateMachine,
     SessionState,
+    SessionStateMachine,
 )
 from src.core.structured_hpo import materialize_planned_trials
 from src.ws.events import broadcaster
@@ -126,12 +139,9 @@ def _resolve_rl_source_model_ids(
     return resolved
 
 
-# Phase 2.2: Claude pricing constants (Sonnet 3.5 baseline). These mirror
-# the inline numbers used previously and are referenced both by the
-# post-call cost accounting and the pre-spend budget gate.
-_CLAUDE_INPUT_USD_PER_TOKEN = 3.0 / 1_000_000
-_CLAUDE_OUTPUT_USD_PER_TOKEN = 15.0 / 1_000_000
-_CLAUDE_MAX_OUTPUT_TOKENS = 8192
+# Pricing constants (_CLAUDE_INPUT_USD_PER_TOKEN / _CLAUDE_OUTPUT_USD_PER_TOKEN /
+# _CLAUDE_MAX_OUTPUT_TOKENS) moved to src.core.llm_provider (P1-002); imported
+# above. They back the pre-spend budget gate and post-call cost accounting.
 _COMMAND_OUTPUT_LOG_INTERVAL_S = 2.0
 _COMMAND_OUTPUT_LOG_MAX_CHARS = 2000
 
@@ -256,10 +266,10 @@ class ToolExecutionResult:
 # Tool definitions for the Claude agent
 # ---------------------------------------------------------------------------
 
-AGENT_TOOLS: List[Dict[str, Any]] = [
-    {
-        "name": "bash",
-        "description": (
+AGENT_TOOLS: list[ToolDef] = [
+    ToolDef(
+        name="bash",
+        description=(
             "Execute one governed command in the workspace. "
             "The working directory is the workspace root and shell syntax "
             "such as pipes, redirection, command substitution, and command "
@@ -268,7 +278,7 @@ AGENT_TOOLS: List[Dict[str, Any]] = [
             "Default timeout is 7200s (2 hours). Set timeout_s for "
             "shorter commands. Minimum enforced: 900s."
         ),
-        "input_schema": {
+        input_schema={
             "type": "object",
             "properties": {
                 "command": {
@@ -282,11 +292,11 @@ AGENT_TOOLS: List[Dict[str, Any]] = [
             },
             "required": ["command"],
         },
-    },
-    {
-        "name": "read_file",
-        "description": "Read the contents of a file in the workspace.",
-        "input_schema": {
+    ),
+    ToolDef(
+        name="read_file",
+        description="Read the contents of a file in the workspace.",
+        input_schema={
             "type": "object",
             "properties": {
                 "path": {
@@ -296,14 +306,14 @@ AGENT_TOOLS: List[Dict[str, Any]] = [
             },
             "required": ["path"],
         },
-    },
-    {
-        "name": "write_file",
-        "description": (
+    ),
+    ToolDef(
+        name="write_file",
+        description=(
             "Write content to a file in the workspace. "
             "Creates parent directories if needed."
         ),
-        "input_schema": {
+        input_schema={
             "type": "object",
             "properties": {
                 "path": {
@@ -317,11 +327,11 @@ AGENT_TOOLS: List[Dict[str, Any]] = [
             },
             "required": ["path", "content"],
         },
-    },
-    {
-        "name": "glob",
-        "description": "List files matching a glob pattern within the workspace.",
-        "input_schema": {
+    ),
+    ToolDef(
+        name="glob",
+        description="List files matching a glob pattern within the workspace.",
+        input_schema={
             "type": "object",
             "properties": {
                 "pattern": {
@@ -331,11 +341,11 @@ AGENT_TOOLS: List[Dict[str, Any]] = [
             },
             "required": ["pattern"],
         },
-    },
-    {
-        "name": "grep",
-        "description": "Search for a regex pattern in files within the workspace.",
-        "input_schema": {
+    ),
+    ToolDef(
+        name="grep",
+        description="Search for a regex pattern in files within the workspace.",
+        input_schema={
             "type": "object",
             "properties": {
                 "pattern": {
@@ -353,7 +363,7 @@ AGENT_TOOLS: List[Dict[str, Any]] = [
             },
             "required": ["pattern"],
         },
-    },
+    ),
 ]
 
 SERVER_OWNED_SETUP_INSTRUCTION = (
@@ -618,10 +628,13 @@ class AgentOrchestrator:
         # hard-timeout / operator-stop cancel can reap the process tree from
         # outside the to_thread worker that owns the Popen handle.
         self._command_procs = CommandProcessRegistry()
-        self._client = anthropic.AsyncAnthropic(
+        # ARC-011 P1-002: the LLM is reached only through the LLMProvider
+        # protocol (AnthropicProvider here; P1-004 makes this injectable).
+        # No direct anthropic.* / messages.create reference remains in this file.
+        self._provider: LLMProvider = AnthropicProvider(
             base_url=settings.anthropic_base_url,
             api_key=secret_value(settings.anthropic_auth_token),
-            timeout=httpx.Timeout(settings.anthropic_api_timeout_s, connect=30.0),
+            timeout_s=settings.anthropic_api_timeout_s,
         )
         self._stop_flags: Dict[str, bool] = {}
         self._pause_flags: Dict[str, bool] = {}
@@ -681,27 +694,30 @@ class AgentOrchestrator:
     def request_resume(self, research_id: str) -> None:
         self._pause_flags.pop(research_id, None)
 
-    # ── ML-68: Transient-error retry ─────────────────────────────────────
-    _TRANSIENT_EXCEPTIONS = (
-        anthropic.APITimeoutError,
-        anthropic.APIConnectionError,
-        anthropic.InternalServerError,
-    )
+    # ── ML-68 / ARC-011 P1-002: Loop-owned retry ─────────────────────────
+    # The transient decision now flows through provider.classify_error()
+    # (R4 / spike D-retry). Backoff (30·2^n), the budget-aware skip, and the
+    # transient exception set (APITimeout/APIConnection/InternalServer + HTTP
+    # 429/502/503/529) are preserved verbatim — the decision is identical to
+    # the pre-refactor _call_claude_with_retry; only the classification source
+    # moved into AnthropicProvider.
 
-    async def _call_claude_with_retry(
+    async def _call_llm_with_retry(
         self,
         *,
-        messages: List[Dict[str, Any]],
+        messages: list[Message],
         system_prompt: str,
         research_id: str,
         agent_log: AgentLogWriter,
         turn: int,
         remaining_budget_s: Optional[float] = None,
-    ) -> anthropic.types.Message:
-        """Call messages.create() with retry + backoff on transient errors.
+    ) -> ProviderResponse:
+        """Call ``provider.messages_create`` with loop-owned retry + backoff.
 
-        Retries on APITimeoutError, APIConnectionError, InternalServerError,
-        and RateLimitError (429) / 502 / 503 / 529 status codes.
+        Retries transient errors as classified by
+        ``self._provider.classify_error`` (the same set the pre-refactor
+        ``_call_claude_with_retry`` retried: connection/timeout/server errors
+        and HTTP 429 / 502 / 503 / 529).
 
         Phase 2.3: when ``remaining_budget_s`` is provided, the loop refuses
         to start a backoff sleep that would push the next attempt past the
@@ -711,75 +727,46 @@ class AgentOrchestrator:
         """
         max_retries = settings.max_api_retries
         backoff_base = 30  # seconds
-        last_exc: Optional[BaseException] = None
 
         for attempt in range(max_retries + 1):
             try:
-                return await self._client.messages.create(
+                return await self._provider.messages_create(
                     model=settings.anthropic_model,
-                    max_tokens=_CLAUDE_MAX_OUTPUT_TOKENS,
                     system=system_prompt,
-                    tools=AGENT_TOOLS,
                     messages=messages,
+                    tools=AGENT_TOOLS,
+                    max_tokens=_CLAUDE_MAX_OUTPUT_TOKENS,
                 )
-            except self._TRANSIENT_EXCEPTIONS as exc:
-                last_exc = exc
-                if attempt >= max_retries:
+            except Exception as exc:
+                err = self._provider.classify_error(exc)
+                if not err.transient or attempt >= max_retries:
                     raise
                 wait = backoff_base * (2 ** attempt)
                 if (
                     remaining_budget_s is not None
                     and wait >= remaining_budget_s
                 ):
+                    status = f"HTTP {err.status_code}" if err.status_code else type(exc).__name__
                     logger.warning(
-                        "Research %s turn %d: skipping retry — backoff %ds "
+                        "Research %s turn %d: skipping retry — %s backoff %ds "
                         "exceeds remaining budget %.0fs",
-                        research_id, turn, wait, remaining_budget_s,
+                        research_id, turn, status, wait, remaining_budget_s,
                     )
                     raise
+                status = f"HTTP {err.status_code}" if err.status_code else type(exc).__name__
                 logger.warning(
                     "Research %s turn %d: transient API error (%s), "
                     "retry %d/%d in %ds",
-                    research_id, turn, type(exc).__name__,
+                    research_id, turn, status,
                     attempt + 1, max_retries, wait,
                 )
                 await agent_log.append(
                     "warning",
-                    f"API {type(exc).__name__}: retry {attempt + 1}/{max_retries} "
+                    f"API {status}: retry {attempt + 1}/{max_retries} "
                     f"in {wait}s — {str(exc)[:200]}",
                     turn=turn,
                 )
                 await asyncio.sleep(wait)
-            except anthropic.APIStatusError as exc:
-                last_exc = exc
-                # Retry on 429 (rate-limit), 502, 503, 529 (overloaded)
-                if exc.status_code in (429, 502, 503, 529) and attempt < max_retries:
-                    wait = backoff_base * (2 ** attempt)
-                    if (
-                        remaining_budget_s is not None
-                        and wait >= remaining_budget_s
-                    ):
-                        logger.warning(
-                            "Research %s turn %d: skipping retry on HTTP %d "
-                            "— backoff %ds exceeds remaining budget %.0fs",
-                            research_id, turn, exc.status_code, wait,
-                            remaining_budget_s,
-                        )
-                        raise
-                    logger.warning(
-                        "Research %s turn %d: API %d, retry %d/%d in %ds",
-                        research_id, turn, exc.status_code,
-                        attempt + 1, max_retries, wait,
-                    )
-                    await agent_log.append(
-                        "warning",
-                        f"API HTTP {exc.status_code}: retry {attempt + 1}/{max_retries} "
-                        f"in {wait}s — {str(exc)[:200]}",
-                        turn=turn,
-                    )
-                    await asyncio.sleep(wait)
-                else:
-                    raise
 
         # Unreachable but satisfies type-checkers
         raise RuntimeError("Retry loop exited without return or raise")  # pragma: no cover
@@ -787,9 +774,9 @@ class AgentOrchestrator:
     # ── ML-68: Context compaction ────────────────────────────────────────
     @staticmethod
     def _compact_messages(
-        messages: List[Dict[str, Any]],
+        messages: list[Message],
         keep_recent: int = 40,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[Message]:
         """Bound retained conversation history to avoid unbounded memory growth.
 
         Keeps the first message (initial prompt) and the last *keep_recent*
@@ -803,16 +790,13 @@ class AgentOrchestrator:
 
         old_section = messages[1:-keep_recent]
         if old_section:
-            assistant_count = sum(1 for msg in old_section if msg.get("role") == "assistant")
-            user_count = sum(1 for msg in old_section if msg.get("role") == "user")
+            assistant_count = sum(1 for msg in old_section if msg.role == "assistant")
+            user_count = sum(1 for msg in old_section if msg.role == "user")
             tool_result_count = 0
             for msg in old_section:
-                content = msg.get("content")
-                if isinstance(content, list):
+                if isinstance(msg.content, list):
                     tool_result_count += sum(
-                        1
-                        for block in content
-                        if isinstance(block, dict) and block.get("type") == "tool_result"
+                        1 for block in msg.content if isinstance(block, ToolResultBlock)
                     )
             content = (
                 "[system] Earlier conversation compacted: "
@@ -826,29 +810,27 @@ class AgentOrchestrator:
             )
             if latest_digest:
                 content = f"{content}\n\n{latest_digest}"
-            compacted.append({"role": "user", "content": content})
+            compacted.append(Message(role="user", content=content))
 
         compacted.extend(messages[-keep_recent:])
         return compacted
 
     @staticmethod
     def _latest_iteration_context_digest(
-        messages: List[Dict[str, Any]],
+        messages: list[Message],
     ) -> Optional[str]:
         for message in reversed(messages):
-            content = message.get("content")
+            content = message.content
             if isinstance(content, str) and ITERATION_CONTEXT_DIGEST_MARKER in content:
                 return content
             if not isinstance(content, list):
                 continue
             for block in reversed(content):
                 if (
-                    isinstance(block, dict)
-                    and block.get("type") == "text"
-                    and isinstance(block.get("text"), str)
-                    and ITERATION_CONTEXT_DIGEST_MARKER in block["text"]
+                    isinstance(block, TextBlock)
+                    and ITERATION_CONTEXT_DIGEST_MARKER in block.text
                 ):
-                    return block["text"]
+                    return block.text
         return None
 
     def _should_stop(self, research_id: str) -> bool:
@@ -1623,16 +1605,13 @@ class AgentOrchestrator:
                 f"- gamma > 0.995 caused instability (OOS return went negative)"
             )
 
-            response = await self._client.messages.create(
+            # ARC-011 P1-002: one-shot completion via the provider (replaces the
+            # bare messages.create Haiku call). No tools, no retry.
+            insights = await self._provider.complete(
                 model=settings.anthropic_default_haiku_model,
+                prompt=prompt,
                 max_tokens=300,
-                messages=[{"role": "user", "content": prompt}],
             )
-
-            insights = ""
-            for block in response.content:
-                if block.type == "text":
-                    insights += block.text
 
             # Trim to 500 chars max
             insights = insights.strip()[:500]
@@ -2593,7 +2572,7 @@ class AgentOrchestrator:
         self,
         *,
         config: ResearchConfig,
-        tool_results: List[Dict[str, Any]],
+        tool_results: list[RequestBlock],
         turn_recorded_iteration: bool,
         total_cost: float,
     ) -> None:
@@ -2604,7 +2583,7 @@ class AgentOrchestrator:
             total_cost=total_cost,
         )
         if digest:
-            tool_results.append({"type": "text", "text": digest})
+            tool_results.append(TextBlock(text=digest))
 
     async def run(self, config: ResearchConfig) -> None:
         """Run the autonomous research loop for a single session."""
@@ -2627,9 +2606,9 @@ class AgentOrchestrator:
         else:
             user_prompt = self._build_prompt(config)
 
-        messages: List[Dict[str, Any]] = [
-            {"role": "user", "content": user_prompt},
-        ]
+            messages: list[Message] = [
+                Message(role="user", content=user_prompt),
+            ]
 
         iteration_count = 0
         # duplicate_rejected_count: audit records for duplicate training
@@ -2744,7 +2723,7 @@ class AgentOrchestrator:
                 _api_messages = self._compact_messages(
                     messages, keep_recent=settings.context_compaction_threshold // 2,
                 )
-                response = await self._call_claude_with_retry(
+                response = await self._call_llm_with_retry(
                     messages=_api_messages,
                     system_prompt=system_prompt,
                     research_id=research_id,
@@ -2753,32 +2732,32 @@ class AgentOrchestrator:
                     remaining_budget_s=max(0.0, _timeout - elapsed),
                 )
 
-                # Track cost (approximate from usage)
-                turn_cost = 0.0
-                if response.usage:
-                    last_input_tokens = response.usage.input_tokens
-                    turn_cost = (
-                        response.usage.input_tokens * _CLAUDE_INPUT_USD_PER_TOKEN
-                        + response.usage.output_tokens * _CLAUDE_OUTPUT_USD_PER_TOKEN
-                    )
-                    total_cost += turn_cost
-                    # P3: persist the running spend to the session row each turn so
-                    # total_api_cost_usd is visible mid-run (UI/API + any external
-                    # budget check) and survives a crash — the DB previously stayed
-                    # $0 until completion. Best-effort: a transient DB error must not
-                    # abort the research loop. The completion write remains the
-                    # authoritative final value.
-                    if turn_cost > 0:
-                        try:
-                            await self._store.update_session(
-                                research_id,
-                                total_api_cost_usd=round(total_cost, 4),
-                            )
-                        except Exception as exc:  # pragma: no cover — fail-open
-                            logger.warning(
-                                "Research %s: mid-run cost persist failed: %s",
-                                research_id, exc,
-                            )
+                # Track cost (approximate from usage). response.usage is a
+                # normalized Usage (always present post-P1-002); the truthiness
+                # guard is dropped since Usage is a frozen dataclass (always truthy).
+                last_input_tokens = response.usage.input_tokens
+                turn_cost = (
+                    response.usage.input_tokens * _CLAUDE_INPUT_USD_PER_TOKEN
+                    + response.usage.output_tokens * _CLAUDE_OUTPUT_USD_PER_TOKEN
+                )
+                total_cost += turn_cost
+                # P3: persist the running spend to the session row each turn so
+                # total_api_cost_usd is visible mid-run (UI/API + any external
+                # budget check) and survives a crash — the DB previously stayed
+                # $0 until completion. Best-effort: a transient DB error must not
+                # abort the research loop. The completion write remains the
+                # authoritative final value.
+                if turn_cost > 0:
+                    try:
+                        await self._store.update_session(
+                            research_id,
+                            total_api_cost_usd=round(total_cost, 4),
+                        )
+                    except Exception as exc:  # pragma: no cover — fail-open
+                        logger.warning(
+                            "Research %s: mid-run cost persist failed: %s",
+                            research_id, exc,
+                        )
 
                 # Process response content blocks
                 assistant_content = response.content
@@ -2789,7 +2768,7 @@ class AgentOrchestrator:
                 last_planned_trial_for_turn: Optional[Dict[str, Any]] = None
 
                 for block in assistant_content:
-                    if block.type == "text":
+                    if isinstance(block, TextBlock):
                         agent_text += block.text
                         if block.text.strip():
                             logger.info(
@@ -2797,7 +2776,7 @@ class AgentOrchestrator:
                                 research_id, turn, block.text[:200],
                             )
                             await agent_log.append("text", block.text, turn=turn)
-                    elif block.type == "tool_use":
+                    elif isinstance(block, ToolUseBlock):
                         logged_input = block.input
                         if block.name == "bash" and isinstance(block.input, dict):
                             logged_input = {
@@ -3102,11 +3081,10 @@ class AgentOrchestrator:
                                 research_id, turn,
                                 len(tool_result), len(agent_visible_result),
                             )
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": agent_visible_result,
-                        })
+                        tool_results.append(ToolResultBlock(
+                            tool_use_id=block.id,
+                            content=agent_visible_result,
+                        ))
                         _cmd_str = redact_sensitive_text(
                             str(block.input.get("command", ""))
                         )
@@ -3246,20 +3224,28 @@ class AgentOrchestrator:
                                 # Option-A meta/stacking knobs, no-data
                                 # lanes, non-winner roster removals).
                                 _metric_val = float(metrics.primary_metric)
-                                if _metric_val in seen_primary_metrics and tool_results:
-                                    tool_results[-1]["content"] = (
-                                        str(tool_results[-1]["content"])
-                                        + "\n\n⚠️ INERT CHANGE DETECTED: this run "
-                                        f"reproduced an earlier iteration's metric "
-                                        f"BIT-IDENTICALLY ({_metric_val:.6f}). "
-                                        "Training is deterministic — an identical "
-                                        "metric from a different config means the "
-                                        "knob(s) you changed do NOT affect the "
-                                        "scored artifact (e.g. Option-A-inert "
-                                        "meta/stacking knobs, feature lanes with "
-                                        "no data, removing non-winning roster "
-                                        "members). Do NOT count this as evidence; "
-                                        "switch to a different search dimension."
+                                if (
+                                    _metric_val in seen_primary_metrics
+                                    and tool_results
+                                    and isinstance(tool_results[-1], ToolResultBlock)
+                                ):
+                                    last = tool_results[-1]
+                                    tool_results[-1] = ToolResultBlock(
+                                        tool_use_id=last.tool_use_id,
+                                        content=(
+                                            str(last.content)
+                                            + "\n\n⚠️ INERT CHANGE DETECTED: this run "
+                                            f"reproduced an earlier iteration's metric "
+                                            f"BIT-IDENTICALLY ({_metric_val:.6f}). "
+                                            "Training is deterministic — an identical "
+                                            "metric from a different config means the "
+                                            "knob(s) you changed do NOT affect the "
+                                            "scored artifact (e.g. Option-A-inert "
+                                            "meta/stacking knobs, feature lanes with "
+                                            "no data, removing non-winning roster "
+                                            "members). Do NOT count this as evidence; "
+                                            "switch to a different search dimension."
+                                        ),
                                     )
                                     await agent_log.append(
                                         "system",
@@ -3574,8 +3560,8 @@ class AgentOrchestrator:
                     )
                     break
 
-                # If the model stopped (end_turn) and no tool calls → done
-                if response.stop_reason == "end_turn" and not tool_results:
+                # If the model stopped (END_TURN) and no tool calls → done
+                if response.stop_reason == StopReason.END_TURN and not tool_results:
                     terminate_request = self._extract_terminate_request(agent_text)
                     if terminate_request:
                         # DM-2: defer TERMINATE_REQUEST when the agent is
@@ -3608,16 +3594,14 @@ class AgentOrchestrator:
                                 ),
                                 turn=turn,
                             )
-                            messages.append({
-                                "role": "assistant",
-                                "content": assistant_content,
-                            })
-                            messages.append({
-                                "role": "user",
-                                "content": [
-                                    {"type": "text", "text": deferral["text"]}
-                                ],
-                            })
+                            messages.append(Message(
+                                role="assistant",
+                                content=assistant_content,
+                            ))
+                            messages.append(Message(
+                                role="user",
+                                content=[TextBlock(text=deferral["text"])],
+                            ))
                             continue
                         logger.info(
                             "Research %s turn %d: honoring TERMINATE_REQUEST",
@@ -3672,18 +3656,18 @@ class AgentOrchestrator:
                         "Research %s turn %d: rejecting end_turn — %s",
                         research_id, turn, continuation_kick["reason"],
                     )
-                    messages.append({
-                        "role": "assistant",
-                        "content": assistant_content,
-                    })
-                    messages.append({
-                        "role": "user",
-                        "content": [{"type": "text", "text": continuation_kick["text"]}],
-                    })
+                    messages.append(Message(
+                        role="assistant",
+                        content=assistant_content,
+                    ))
+                    messages.append(Message(
+                        role="user",
+                        content=[TextBlock(text=continuation_kick["text"])],
+                    ))
                     continue
 
                 # Append assistant message and tool results
-                messages.append({"role": "assistant", "content": assistant_content})
+                messages.append(Message(role="assistant", content=assistant_content))
 
                 if tool_results:
                     await self._append_iteration_context_digest(
@@ -3698,16 +3682,15 @@ class AgentOrchestrator:
                     # duplicate-rejected records consume a record number but
                     # not a budget slot.
                     _effective_for_msg = iteration_count - duplicate_rejected_count
-                    tool_results.append({
-                        "type": "text",
-                        "text": (
+                    tool_results.append(TextBlock(
+                        text=(
                             f"[system] Orchestrator iteration count: "
                             f"{_effective_for_msg}/{config.max_iterations} "
                             f"(real attempts; {duplicate_rejected_count} duplicate-rejected). "
                             f"Use iteration={iteration_count + 1} for your "
                             f"next experiment."
                         ),
-                    })
+                    ))
                     # F7: warn the LLM when the active phase has saturated its
                     # iteration cap. Forces the agent to advance instead of
                     # grinding the same phase with duplicate configs.
@@ -3715,10 +3698,7 @@ class AgentOrchestrator:
                         research_id=research_id,
                     )
                     if phase_cap_message:
-                        tool_results.append({
-                            "type": "text",
-                            "text": phase_cap_message,
-                        })
+                        tool_results.append(TextBlock(text=phase_cap_message))
                     # Fix D: once all phases are complete, force a clean stop
                     # immediately rather than letting the agent grind the
                     # terminal phase until the cap/stagnation guards trip.
@@ -3728,10 +3708,7 @@ class AgentOrchestrator:
                         )
                     )
                     if all_complete_message:
-                        tool_results.append({
-                            "type": "text",
-                            "text": all_complete_message,
-                        })
+                        tool_results.append(TextBlock(text=all_complete_message))
                     # AR-7: warn the LLM when no metric improvement has been
                     # recorded for global_stagnation_window consecutive
                     # iterations. Forces a TERMINATE_REQUEST instead of burning
@@ -3741,11 +3718,8 @@ class AgentOrchestrator:
                         iteration_count=(iteration_count - duplicate_rejected_count),
                     )
                     if stagnation_message:
-                        tool_results.append({
-                            "type": "text",
-                            "text": stagnation_message,
-                        })
-                    messages.append({"role": "user", "content": tool_results})
+                        tool_results.append(TextBlock(text=stagnation_message))
+                    messages.append(Message(role="user", content=tool_results))
                     messages = self._compact_messages(
                         messages,
                         keep_recent=settings.context_compaction_threshold // 2,

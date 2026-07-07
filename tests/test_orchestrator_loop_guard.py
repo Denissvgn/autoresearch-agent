@@ -45,9 +45,14 @@ except ModuleNotFoundError:
     )
     sys.modules["anthropic"] = _stub
 
+from src.core.llm_provider import (
+    ProviderResponse,
+    StopReason,
+    TextBlock,
+    Usage,
+)
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig
 from src.core.results_store import ResultsStore
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -150,10 +155,11 @@ def _incomplete_normal_state() -> Dict[str, Any]:
 
 
 def _fake_text_response(text: str) -> Any:
-    return types.SimpleNamespace(
-        content=[types.SimpleNamespace(type="text", text=text)],
-        usage=types.SimpleNamespace(input_tokens=1, output_tokens=1),
-        stop_reason="end_turn",
+    return ProviderResponse(
+        content=[TextBlock(text=text)],
+        usage=Usage(input_tokens=1, output_tokens=1),
+        stop_reason=StopReason.END_TURN,
+        raw_model="claude-test",
     )
 
 
@@ -204,7 +210,7 @@ async def test_run_honors_terminate_request_without_phase_kick(
         patch.object(orch, "_load_claude_md_async", new=AsyncMock(return_value="")),
         patch.object(
             orch,
-            "_call_claude_with_retry",
+            "_call_llm_with_retry",
             new=AsyncMock(return_value=_fake_text_response(
                 "TERMINATE_REQUEST: stagnation window exhausted"
             )),

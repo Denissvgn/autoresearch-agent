@@ -40,6 +40,7 @@ except ModuleNotFoundError:
     )
 
 from src.core.command_runner import CommandProcessRegistry, CommandRunResult, GovernedCommandRunner
+from src.core.llm_provider import ProviderResponse, StopReason, ToolUseBlock, Usage
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig, _tool_bash
 from src.core.results_store import ResultsStore
 
@@ -95,18 +96,18 @@ async def _seed_session(store: ResultsStore, config: ResearchConfig) -> None:
 
 
 def _fake_bash_tool_use(command: str, tool_id: str = "toolu_p006"):
-    """A minimal Anthropic-shaped response containing one bash tool_use block."""
-    return types.SimpleNamespace(
+    """A minimal ProviderResponse containing one bash tool_use block."""
+    return ProviderResponse(
         content=[
-            types.SimpleNamespace(
-                type="tool_use",
+            ToolUseBlock(
                 name="bash",
                 input={"command": command, "timeout_s": 7200},
                 id=tool_id,
             )
         ],
-        usage=types.SimpleNamespace(input_tokens=1, output_tokens=1),
-        stop_reason="tool_use",
+        usage=Usage(input_tokens=1, output_tokens=1),
+        stop_reason=StopReason.TOOL_USE,
+        raw_model="claude-test",
     )
 
 
@@ -173,7 +174,7 @@ async def test_capped_command_is_reaped_and_session_times_out(
         patch.object(orchestrator, "_update_research_resume", new=AsyncMock(return_value=None)),
         patch.object(
             orchestrator,
-            "_call_claude_with_retry",
+            "_call_llm_with_retry",
             new=AsyncMock(side_effect=lambda *a, **kw: _fake_bash_tool_use(_HANGING_COMMAND)),
         ),
     ):

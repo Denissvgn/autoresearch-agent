@@ -26,12 +26,16 @@ except ModuleNotFoundError:
 
 from src.core import orchestrator as orchestrator_module  # noqa: E402
 from src.core.iteration_context import ITERATION_CONTEXT_DIGEST_MARKER  # noqa: E402
+from src.core.llm_provider import (  # noqa: E402
+    Message,
+    TextBlock,
+    ToolResultBlock,
+)
 from src.core.orchestrator import (  # noqa: E402
-    AgentOrchestrator,
     PROMOTION_HANDOFF_INSTRUCTION,
+    AgentOrchestrator,
     ResearchConfig,
 )
-
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PROMPT_FILES = (
@@ -314,7 +318,7 @@ async def test_iteration_context_digest_appended_after_recorded_attempt(monkeypa
     monkeypatch.setattr(orchestrator_module.settings, "iteration_context_recent_attempts", 5)
     orchestrator = object.__new__(AgentOrchestrator)
     orchestrator._store = Store()
-    tool_results = [{"type": "tool_result", "tool_use_id": "tool-1", "content": "ok"}]
+    tool_results = [ToolResultBlock(tool_use_id="tool-1", content="ok")]
 
     await orchestrator._append_iteration_context_digest(
         config=_config("direction"),
@@ -324,8 +328,8 @@ async def test_iteration_context_digest_appended_after_recorded_attempt(monkeypa
     )
 
     assert any(
-        block.get("type") == "text"
-        and ITERATION_CONTEXT_DIGEST_MARKER in block.get("text", "")
+        isinstance(block, TextBlock)
+        and ITERATION_CONTEXT_DIGEST_MARKER in block.text
         for block in tool_results
     )
 
@@ -337,7 +341,7 @@ async def test_iteration_context_digest_not_appended_without_recorded_attempt(
     monkeypatch.setattr(orchestrator_module.settings, "iteration_context_enabled", True)
     orchestrator = object.__new__(AgentOrchestrator)
     orchestrator._store = object()
-    tool_results = [{"type": "tool_result", "tool_use_id": "tool-1", "content": "ok"}]
+    tool_results = [ToolResultBlock(tool_use_id="tool-1", content="ok")]
 
     await orchestrator._append_iteration_context_digest(
         config=_config("direction"),
@@ -354,7 +358,7 @@ async def test_iteration_context_digest_disabled(monkeypatch):
     monkeypatch.setattr(orchestrator_module.settings, "iteration_context_enabled", False)
     orchestrator = object.__new__(AgentOrchestrator)
     orchestrator._store = object()
-    tool_results = [{"type": "tool_result", "tool_use_id": "tool-1", "content": "ok"}]
+    tool_results = [ToolResultBlock(tool_use_id="tool-1", content="ok")]
 
     await orchestrator._append_iteration_context_digest(
         config=_config("direction"),
@@ -368,15 +372,16 @@ async def test_iteration_context_digest_disabled(monkeypatch):
 
 def test_compaction_retains_latest_iteration_context_digest():
     digest = f"{ITERATION_CONTEXT_DIGEST_MARKER}:\n- Best so far: iteration 2"
-    messages = [
-        {"role": "user", "content": "initial"},
-        {"role": "assistant", "content": "old assistant"},
-        {"role": "user", "content": [{"type": "text", "text": digest}]},
-        {"role": "assistant", "content": "recent assistant"},
-        {"role": "user", "content": "recent user"},
+    messages: list[Message] = [
+        Message(role="user", content="initial"),
+        Message(role="assistant", content="old assistant"),
+        Message(role="user", content=[TextBlock(text=digest)]),
+        Message(role="assistant", content="recent assistant"),
+        Message(role="user", content="recent user"),
     ]
 
     compacted = AgentOrchestrator._compact_messages(messages, keep_recent=2)
 
     assert len(compacted) == 4
-    assert ITERATION_CONTEXT_DIGEST_MARKER in compacted[1]["content"]
+    assert isinstance(compacted[1].content, str)
+    assert ITERATION_CONTEXT_DIGEST_MARKER in compacted[1].content

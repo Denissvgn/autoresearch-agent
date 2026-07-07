@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- Extracted `AnthropicProvider` from the orchestrator and fully normalized
+  the LLM consumption (ARC-011 **P1-002**; consumes the X-005 spike §6 and
+  the P1-001 protocol). `src/core/llm_provider.py` now hosts the SDK adapter
+  alongside the protocol; `orchestrator.py` reaches the model **only** through
+  `LLMProvider` (zero `messages.create` / `anthropic.*` / `httpx.*` references
+  remain — grep-verified). The provider translates at the SDK boundary:
+  `Message`/`ToolDef`/`system` → Anthropic kwargs (byte-identical to the
+  pre-refactor wire request), and the raw response → normalized
+  `ProviderResponse` (enforcing the R5 *"tool calls present ⇒ `TOOL_USE`"*
+  invariant regardless of native `stop_reason`). The orchestrator's
+  conversation is now `list[Message]` and the loop reads `StopReason` /
+  `ContentBlock` / `Usage` instead of raw SDK shapes; `AGENT_TOOLS` is
+  `list[ToolDef]`. **Retry placement follows the spike's D-retry decision
+  (loop-owned), not the literal P1-002 AC #2 wording:** `_call_claude_with_retry`
+  → `_call_llm_with_retry`, now using `provider.classify_error` (same transient
+  set: APITimeout/APIConnection/InternalServer + HTTP 429/502/503/529) with
+  backoff (30·2ⁿ) and the budget-aware skip preserved verbatim. The two
+  pre-refactor retry log lines are unified into one (decision/timing identical;
+  documented). Insights/Haiku call → `provider.complete()`. Added
+  `tests/test_anthropic_provider.py` (16 tests: translation, R5 invariant,
+  classify_error, estimate_cost). Updated fakes in test_orchestrator_{timeout,
+  loop_guard,terminal_reason} + test_prompt_promotion_policy to the normalized
+  shapes; dropped P1-001's now-invalid headless-import subprocess test. The
+  X-002 parity suite is green. **Note:** the ~30 per-file `anthropic` test
+  stubs are now dead-but-harmless (the orchestrator no longer imports
+  anthropic); cleanup is a follow-up. Wiki page deferred to after P1-004.
+
 - Introduced the `LLMProvider` protocol and normalized value types
   (ARC-011 **P1-001**, R4/R5; consumes `docs/adr/ARC-011-llm-provider-spike.md`
   §4 verbatim). New `src/core/llm_provider.py` declares the provider-agnostic

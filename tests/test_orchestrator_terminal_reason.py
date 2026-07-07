@@ -38,7 +38,6 @@ except ModuleNotFoundError:
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig
 from src.core.results_store import ResultsStore
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -84,7 +83,7 @@ async def test_run_failure_writes_terminal_reason_error_unrecoverable(
 ) -> None:
     """AR-2 core: crash inside the try block writes terminal_reason.
 
-    We inject a RuntimeError via _call_claude_with_retry so the exception
+    We inject a RuntimeError via _call_llm_with_retry so the exception
     propagates to the outer ``except Exception`` handler without touching
     the success path.  After run() returns (without re-raising), the
     session row must have:
@@ -114,7 +113,7 @@ async def test_run_failure_writes_terminal_reason_error_unrecoverable(
         ),
         patch.object(
             orchestrator,
-            "_call_claude_with_retry",
+            "_call_llm_with_retry",
             new=AsyncMock(side_effect=RuntimeError("injected failure for AR-2")),
         ),
     ):
@@ -150,7 +149,7 @@ async def test_run_failure_preserves_exc_class_name_for_different_exception_type
         patch.object(orchestrator, "_load_claude_md_async", new=AsyncMock(return_value="")),
         patch.object(
             orchestrator,
-            "_call_claude_with_retry",
+            "_call_llm_with_retry",
             new=AsyncMock(side_effect=ValueError("bad value")),
         ),
     ):
@@ -186,7 +185,7 @@ async def test_cancelled_error_does_not_write_terminal_reason(
         patch.object(orchestrator, "_load_claude_md_async", new=AsyncMock(return_value="")),
         patch.object(
             orchestrator,
-            "_call_claude_with_retry",
+            "_call_llm_with_retry",
             new=AsyncMock(side_effect=asyncio.CancelledError()),
         ),
     ):
@@ -218,7 +217,7 @@ async def test_run_failure_error_message_truncated_at_2000_chars(
         patch.object(orchestrator, "_load_claude_md_async", new=AsyncMock(return_value="")),
         patch.object(
             orchestrator,
-            "_call_claude_with_retry",
+            "_call_llm_with_retry",
             new=AsyncMock(side_effect=RuntimeError(long_msg)),
         ),
     ):

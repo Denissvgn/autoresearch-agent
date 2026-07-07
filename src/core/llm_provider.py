@@ -1,4 +1,5 @@
-"""``LLMProvider`` protocol + normalized value types (ARC-011 P1-001).
+"""``LLMProvider`` protocol + normalized value types + ``AnthropicProvider``
+(ARC-011 P1-001 / P1-002).
 
 This module adopts the X-005 LLM-provider normalization spike §4 *verbatim*
 (``docs/adr/ARC-011-llm-provider-spike.md``) as the canonical contract every
@@ -7,36 +8,38 @@ provider implementation must satisfy: ``messages_create`` (main agentic path),
 ``estimate_cost`` (→ P1-003), ``capabilities`` (→ P4-009 / router P4-010), and
 ``classify_error`` (→ loop-owned retry, R4).
 
-Why a separate, provider-agnostic module: today the orchestrator calls the
-Anthropic SDK directly (``orchestrator.py`` ``__init__`` builds
-``anthropic.AsyncAnthropic`` and ``_call_claude_with_retry`` wraps
-``messages.create``). P1-002 will extract an ``AnthropicProvider``; P1-004 will
-wire the orchestrator to accept any ``LLMProvider``. P1-001 only introduces the
-contract — no runtime behavior changes, so the X-002 parity suite is untouched.
+P1-002 extracts ``AnthropicProvider`` — the 1:1 SDK adapter — into this module.
+The orchestrator (P1-002) consumes ``ProviderResponse`` (normalized
+``StopReason``/``ContentBlock``/``Usage``) and holds its conversation as
+``list[Message]``. The provider translates at the SDK boundary only, so the
+Anthropic wire format is byte-identical to pre-refactor and the X-002 parity
+suite is preserved.
 
 Design decisions recorded by the spike and baked in here:
 
 * **Anthropic-shaped normalized types** (spike §4 note). ``ToolUseBlock.input``
   is a ``dict`` (Anthropic shape; OpenAI's JSON-string ``function.arguments``
   is parsed by the provider), ``ToolResultBlock`` is the Anthropic tool-result
-  block, and ``ToolDef`` matches today's ``AGENT_TOOLS`` entries. This keeps
-  P1-002 a 1:1 wrapper and preserves the parity suite.
+  block, and ``ToolDef`` matches the ``AGENT_TOOLS`` shape. This keeps
+  ``AnthropicProvider`` a 1:1 wrapper and preserves the parity suite.
 * **Loop-owned retry (R4 / D-retry).** The protocol exposes
   ``classify_error``; the loop owns backoff + the budget-aware skip
-  (``orchestrator.py`` ``_call_claude_with_retry`` becomes
-  ``_call_llm_with_retry`` in P1-002). ``ErrorClass.transient`` is the signal.
+  (``orchestrator.py`` ``_call_llm_with_retry``). ``ErrorClass.transient`` is
+  the signal. Retry does NOT live in the provider — the budget-aware skip
+  depends on session wall-clock state (``remaining_budget_s``), which is loop
+  policy, not provider state.
 * **Phase-contract enforcement is loop-level (R5 / §5).** The provider surfaces
   a normalized ``StopReason``; the loop reads ``StopReason.END_TURN`` to trigger
   phase continuation. The defensive invariant *"tool calls present ⇒
   TOOL_USE, regardless of the native finish_reason"* (Gemini can report
   ``STOP`` with function calls present) is the provider's responsibility —
-  documented on ``messages_create``.
+  enforced in ``AnthropicProvider._from_sdk_response``.
 * **Not ``@runtime_checkable``.** ``isinstance`` against a ``Protocol`` only
   checks attribute presence (false confidence on signatures). This is a
   typing-time contract; consumers accept it as a typed parameter.
 
-Three places where the spike §4 draft was incomplete (resolved here, the only
-deviations from a literal copy — see inline comments):
+Three places where the spike §4 draft was incomplete (resolved in P1-001, the
+only deviations from a literal copy — see inline comments):
 
 1. The draft references ``ContentBlock`` (in ``ProviderResponse.content``) and
    ``StreamDelta`` (in ``stream()``) without defining them.
@@ -48,9 +51,26 @@ deviations from a literal copy — see inline comments):
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from enum import Enum
 from typing import Any, Protocol
+
+import anthropic
+import httpx
+
+# Claude pricing constants (Sonnet 3.5 baseline) — moved here from
+# ``orchestrator.py`` (P1-002). Referenced by ``AnthropicProvider.estimate_cost``
+# and by the orchestrator's pre-spend budget gate + post-call accounting. The
+# flat-rate model ignores cache tokens (parity with pre-refactor; per-model
+# pricing is P1-003).
+_CLAUDE_INPUT_USD_PER_TOKEN = 3.0 / 1_000_000
+_CLAUDE_OUTPUT_USD_PER_TOKEN = 15.0 / 1_000_000
+_CLAUDE_MAX_OUTPUT_TOKENS = 8192
+
+# HTTP status codes the pre-refactor ``_call_claude_with_retry`` treated as
+# transient (rate-limit / overloaded / bad-gateway family). Used by
+# ``AnthropicProvider.classify_error``.
+_TRANSIENT_STATUS_CODES = frozenset({429, 502, 503, 529})
 
 
 class StopReason(str, Enum):
@@ -293,6 +313,7 @@ class LLMProvider(Protocol):
 
 
 __all__ = [
+    "AnthropicProvider",
     "ContentBlock",
     "ErrorClass",
     "LLMProvider",
@@ -308,3 +329,250 @@ __all__ = [
     "ToolUseBlock",
     "Usage",
 ]
+
+
+# ── Anthropic SDK adapter (P1-002) ─────────────────────────────────────────
+
+
+def _to_sdk_content(blocks: list[RequestBlock]) -> list[dict[str, Any]]:
+    """Translate normalized request blocks → Anthropic wire-format block dicts.
+
+    Byte-identical to the dicts the orchestrator constructed pre-refactor
+    (``TextBlock`` → ``{"type":"text","text"}``; ``ToolUseBlock`` →
+    ``{"type":"tool_use","id","name","input"}``; ``ToolResultBlock`` →
+    ``{"type":"tool_result","tool_use_id","content"}``).
+    """
+    sdk_blocks: list[dict[str, Any]] = []
+    for block in blocks:
+        if isinstance(block, TextBlock):
+            sdk_blocks.append({"type": "text", "text": block.text})
+        elif isinstance(block, ToolUseBlock):
+            sdk_blocks.append({
+                "type": "tool_use",
+                "id": block.id,
+                "name": block.name,
+                "input": block.input,
+            })
+        elif isinstance(block, ToolResultBlock):
+            sdk_blocks.append({
+                "type": "tool_result",
+                "tool_use_id": block.tool_use_id,
+                "content": block.content,
+            })
+    return sdk_blocks
+
+
+def _to_sdk_messages(messages: list[Message]) -> list[dict[str, Any]]:
+    """Translate the normalized conversation → Anthropic ``messages`` wire format.
+
+    ``Message.content: str`` (plain user prompts) stays a string content;
+    ``Message.content: list[RequestBlock]`` (assistant / tool-result turns)
+    becomes a list of block dicts. This preserves the exact shapes the
+    orchestrator built before P1-002.
+    """
+    sdk_messages: list[dict[str, Any]] = []
+    for msg in messages:
+        if isinstance(msg.content, str):
+            sdk_messages.append({"role": msg.role, "content": msg.content})
+        else:
+            sdk_messages.append({
+                "role": msg.role,
+                "content": _to_sdk_content(msg.content),
+            })
+    return sdk_messages
+
+
+def _to_sdk_tools(tools: list[ToolDef]) -> list[dict[str, Any]]:
+    """Translate ``ToolDef`` → the ``{name, description, input_schema}`` dicts
+    the SDK expects (the pre-refactor ``AGENT_TOOLS`` shape)."""
+    return [
+        {
+            "name": tool.name,
+            "description": tool.description,
+            "input_schema": tool.input_schema,
+        }
+        for tool in tools
+    ]
+
+
+def _from_sdk_response(raw: Any) -> ProviderResponse:
+    """Translate a raw ``anthropic.types.Message`` → normalized ``ProviderResponse``.
+
+    Enforces the R5 invariant: if any content block is a ``tool_use``, the
+    normalized ``stop_reason`` is ``TOOL_USE`` regardless of the native
+    ``stop_reason`` (Gemini reports ``STOP`` with function calls present;
+    defensive for all providers).
+    """
+    content: list[ContentBlock] = []
+    has_tool_use = False
+    for block in getattr(raw, "content", None) or []:
+        block_type = getattr(block, "type", None)
+        if block_type == "text":
+            content.append(TextBlock(text=block.text))
+        elif block_type == "tool_use":
+            has_tool_use = True
+            content.append(ToolUseBlock(
+                id=block.id,
+                name=block.name,
+                input=dict(block.input) if not isinstance(block.input, dict) else block.input,
+            ))
+
+    if has_tool_use:
+        stop_reason = StopReason.TOOL_USE
+    else:
+        raw_stop_reason = getattr(raw, "stop_reason", None)
+        stop_reason = (
+            _STOP_REASON_MAP.get(raw_stop_reason, StopReason.OTHER)
+            if isinstance(raw_stop_reason, str)
+            else StopReason.OTHER
+        )
+
+    raw_usage = getattr(raw, "usage", None)
+    usage = Usage(
+        input_tokens=getattr(raw_usage, "input_tokens", 0) or 0,
+        output_tokens=getattr(raw_usage, "output_tokens", 0) or 0,
+    )
+    return ProviderResponse(
+        content=content,
+        stop_reason=stop_reason,
+        usage=usage,
+        raw_model=getattr(raw, "model", "") or "",
+    )
+
+
+_STOP_REASON_MAP: dict[str, StopReason] = {
+    "end_turn": StopReason.END_TURN,
+    "tool_use": StopReason.TOOL_USE,
+    "max_tokens": StopReason.MAX_TOKENS,
+    "stop_sequence": StopReason.STOP_SEQUENCE,
+}
+
+
+class AnthropicProvider:
+    """``LLMProvider`` adapter over the Anthropic SDK (ARC-011 P1-002).
+
+    A 1:1 boundary translator: normalized ``Message``/``ToolDef``/``system``
+    become Anthropic ``messages.create`` kwargs (byte-identical to the
+    pre-refactor orchestrator call), and the raw ``anthropic.types.Message``
+    becomes a normalized ``ProviderResponse``. The provider owns no retry —
+    loop-owned retry (``orchestrator.py`` ``_call_llm_with_retry``) reads
+    ``classify_error`` and decides backoff + the budget-aware skip.
+    """
+
+    name = "anthropic"
+
+    def __init__(self, *, base_url: str, api_key: str, timeout_s: float) -> None:
+        # ``connect=30.0`` mirrors the pre-refactor orchestrator construction.
+        self._client = anthropic.AsyncAnthropic(
+            base_url=base_url,
+            api_key=api_key,
+            timeout=httpx.Timeout(timeout_s, connect=30.0),
+        )
+
+    async def messages_create(
+        self,
+        *,
+        model: str,
+        system: str,
+        messages: list[Message],
+        tools: list[ToolDef],
+        max_tokens: int,
+        temperature: float | None = None,
+        stop_sequences: list[str] | None = None,
+    ) -> ProviderResponse:
+        """One model turn via ``messages.create`` (replaces the orchestrator call).
+
+        ``temperature`` / ``stop_sequences`` are only forwarded when set — the
+        orchestrator never sets them today, so the wire request is unchanged.
+        """
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "system": system,
+            "tools": _to_sdk_tools(tools),
+            "messages": _to_sdk_messages(messages),
+        }
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        if stop_sequences is not None:
+            kwargs["stop_sequences"] = stop_sequences
+        raw = await self._client.messages.create(**kwargs)
+        return _from_sdk_response(raw)
+
+    async def complete(
+        self,
+        *,
+        model: str,
+        prompt: str,
+        max_tokens: int,
+        system: str | None = None,
+    ) -> str:
+        """One-shot text completion (insights / Haiku path).
+
+        Wraps the bare ``messages.create`` the orchestrator's
+        ``_extract_session_insights`` used: no tools, no retry, a single user
+        message. Returns only the joined text.
+        """
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if system is not None:
+            kwargs["system"] = system
+        raw = await self._client.messages.create(**kwargs)
+        return "".join(
+            block.text for block in raw.content if getattr(block, "type", None) == "text"
+        )
+
+    async def stream(self, **kwargs: Any) -> AsyncIterator[StreamDelta]:
+        """Token streaming (OPTIONAL in v1; D-stream). Not implemented for Anthropic."""
+        raise NotImplementedError(
+            "AnthropicProvider.stream is not implemented (ARC-011 D-stream)"
+        )
+        yield StreamDelta()  # pragma: no cover — makes this an async generator
+
+    def estimate_cost(self, model: str, usage: Usage) -> float:
+        """Flat Sonnet-3.5-baseline USD cost (parity with pre-refactor accounting).
+
+        Per-model pricing is P1-003; this preserves the cache-blind math the
+        orchestrator used before P1-002.
+        """
+        return (
+            usage.input_tokens * _CLAUDE_INPUT_USD_PER_TOKEN
+            + usage.output_tokens * _CLAUDE_OUTPUT_USD_PER_TOKEN
+        )
+
+    def capabilities(self) -> ProviderCapabilities:
+        return ProviderCapabilities(
+            native_tool_use=True,
+            streaming=False,
+            system_prompt=True,
+            max_context_tokens=200_000,
+        )
+
+    def classify_error(self, exc: Exception) -> ErrorClass:
+        """Classify an SDK exception for loop-owned retry.
+
+        ``transient`` mirrors the pre-refactor ``_call_claude_with_retry``
+        decision: the three connection/timeout/server exception types, plus
+        ``APIStatusError`` with a status code in ``_TRANSIENT_STATUS_CODES``
+        (429 / 502 / 503 / 529). Everything else is non-transient.
+        """
+        if isinstance(
+            exc,
+            (
+                anthropic.APITimeoutError,
+                anthropic.APIConnectionError,
+                anthropic.InternalServerError,
+            ),
+        ):
+            return ErrorClass(transient=True, status_code=None, retry_after_s=None)
+        if isinstance(exc, anthropic.APIStatusError):
+            status_code = getattr(exc, "status_code", None)
+            return ErrorClass(
+                transient=status_code in _TRANSIENT_STATUS_CODES,
+                status_code=status_code,
+                retry_after_s=None,
+            )
+        return ErrorClass(transient=False, status_code=None, retry_after_s=None)
