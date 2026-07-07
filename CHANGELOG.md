@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Added `tests/test_state_store.py` — structural / contract parity tests for
+  the `StateStore` protocol (ARC-011 **P1-009**; mirrors `test_llm_provider.py`
+  / P1-005). Four tests: (1) `StateStore` is a `Protocol` and is **not**
+  `@runtime_checkable` (typing-time contract, house style); (2) every method in
+  `StateStore.__protocol_attrs__` (48 of 49; `connection()` excluded) exists on
+  `SQLiteStateStore` and is async on both sides — the signature-drift guard;
+  (3) a minimal stub satisfies the protocol at the typing level; (4) the
+  back-compat alias `ResultsStore is SQLiteStateStore` (same class object, not a
+  subclass) — pins the invariant that `conftest.py`'s class-level monkeypatch
+  relies on. These are not behavioral tests; behavior is covered by the existing
+  `ResultsStore` suite (now exercising `SQLiteStateStore` via the alias) and the
+  X-002 parity fixtures. Full suite green (880 passed) except the 2 pre-existing
+  `test_deployment_inputs` failures.
+
 - Wired production consumers to the `StateStore` protocol type
   (ARC-011 **P1-008**). `src/main.py` now constructs `SQLiteStateStore(...)`
   concretely but holds it as `StateStore | None` (mirrors how the orchestrator's
