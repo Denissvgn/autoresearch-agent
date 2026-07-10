@@ -835,8 +835,11 @@ class ManifestSkillRuntime:
         self,
         config: "ResearchConfig",
     ) -> Optional[StructuredHPOPlan]:
-        if not self._manifest.structured_hpo.enabled:
-            return None
+        # The runtime toggle is config.enable_hpo (mirrors the transitional
+        # runtime). The manifest's structured_hpo.enabled is the default
+        # capability flag — overridden by the session opt-in. The manifest's
+        # max_trials / plan_generator feed build_structured_hpo_plan in a
+        # follow-up; today the builder reads the config values directly.
         if not getattr(config, "enable_hpo", False):
             return None
         from src.core.structured_hpo import build_structured_hpo_plan

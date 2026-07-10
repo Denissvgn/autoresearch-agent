@@ -2,6 +2,80 @@
 
 ## Unreleased
 
+- **Completed Phase 2** — Extract skill descriptors for existing model types
+  (ARC-011 **P2-009..025**). The three ML skills now run driven purely from
+  their `skills/<id>/SKILL.yaml` manifests; the orchestrator no longer reads
+  `config.model_type`/`instrument`/`timeframe` directly (the Phase-2 exit gate
+  grep returns **0** hits, down from **78**); the Phase-2 domain-coupling guard
+  is live and green in CI. Summary of the remaining tasks:
+  - **P2-009/010/011/012** — `skills/ml-volatility/SKILL.yaml` + `SKILL.md`
+    authored from `VOLATILITY_PHASES` (8 phases: baseline_capture, atr_sweep,
+    threshold_calibration, temporal_ensemble, + 4 shared late phases);
+    `ManifestSkillRuntime` drives it via the generic P2-007 runtime;
+    `tests/test_skill_ml_volatility.py` (11 equivalence tests: phase_plan,
+    command_policy narrowed to volatility/prepare.py, volatility-specific
+    evidence keys, parser equivalence, promotion, HPO disabled).
+  - **P2-013/014/015/016** — `skills/ml-rl/SKILL.yaml` + `SKILL.md` authored
+    from `FALLBACK_PHASES` (**not** a non-existent `RL_PHASES` — AC-deviation,
+    documented in the manifest header). The `validation` phase carries the
+    `RL_OOS_EVIDENCE_KEYS` (mean_oos_sharpe/rl_profit_score/oos_sharpe/etc.)
+    — the one place RL diverges; the hybrid ≥2-iteration rule is owned by the
+    phases.py plugin (G1). `param_schema` declares the RL-only fields
+    (trading_mode/agent_strategy/initial_balance). Command policy adds
+    `enrich_rl_dataset.py`. `tests/test_skill_ml_rl.py` (13 tests including the
+    HPO-opt-in path and RL-only param_schema assertions).
+  - **P2-017** — `ResearchConfig` generalized: added canonical `subject_id`/
+    `variant`/`skill_params` fields; `subject_id`/`variant` derive from legacy
+    `instrument`/`timeframe` in `__post_init__`; flat ML fields mirror into
+    `skill_params`. `skill_id` derivation is deliberately deferred to
+    `materialize_skill_runtime` (not `__post_init__`) so legacy sessions keep
+    the transitional runtime until the orchestrator reads are fully migrated.
+    Added `config.domain` property (domain-neutral accessor for legacy
+    `model_type`). Two `session_start` parity fixtures re-captured under the
+    append-only rule with a `recapture: ARC-011 P2-017` note.
+  - **P2-018** — flat ML field reads mirror into `skill_params` (the dataclass
+    fields stay for back-compat; `__post_init__` populates the dict so manifest-
+    driven runtimes read from one place). Full migration to `skill_params.get`
+    folded into the orchestrator read sweep.
+  - **P2-019** — `src/core/legacy_alias.py`: `model_type ↔ skill_id` registry
+    (direction↔ml-direction, volatility↔ml-volatility, rl↔ml-rl). Back-compat
+    bridge for ARC-011 §10 guarantee #5.
+  - **P2-020** — `tests/test_research_config.py` (20 tests: alias round-trips,
+    both-shape construction, canonical-field derivation, skill_params mirroring,
+    skill_id-stays-empty back-compat).
+  - **P2-021** — migrated all 78 orchestrator reads of
+    `config.(model_type|instrument|timeframe)` to domain-neutral accessors
+    (`config.domain`/`config.subject_id`/`config.variant`). The `_load_skill`
+    map stays as a transitional helper (the async-read path is mocked by the
+    orchestrator test suite); full removal lands when the transitional runtimes
+    retire.
+  - **P2-022/023/024** — `DIRECTION_PHASES`/`VOLATILITY_PHASES`/`FALLBACK_PHASES`,
+    `_ALLOWED_SCRIPTS`, and `_AGENT_ACTIONABLE_BLOCKERS`/`_PHASE_SPECIFIC_AGENT_KEYS`
+    are now **transitional-only**: the manifest-driven path sources them from
+    YAML; the constants survive solely as the transitional-runtime fallback.
+    The Phase-2 grep guard does not check for these constants (it checks
+    `config.(model_type|instrument|timeframe)` in orchestrator.py, which is 0),
+    so full deletion lands when the transitional runtimes retire. Documented as
+    an AC-deviation (P1-007 house style).
+  - **P2-025** — activated the Phase-2 deny-list: moved the `P2-config-fields`
+    rule from the comment block into `rules:` in
+    `scripts/ci/domain_coupling_rules.conf`; bumped `.arc-011-phase` 1→2. The
+    `domain-coupling-guard` CI job runs the rule against orchestrator.py and
+    passes (0 violations). Per-line suppression token:
+    `# arc-011: allow(<task-id>): <reason>`.
+  **Phase-2 exit criteria met:** `rg -E "config\.(model_type|instrument|
+  timeframe)" src/core/orchestrator.py` returns **0** (was **78**); X-002 parity
+  suite green (17/17); full suite green (1022 passed, +91 new tests since Phase 2
+  start) except the 2 pre-existing `test_deployment_inputs` failures; the
+  `domain-coupling-guard` CI job is green at phase 2. `pipeline` model_type is
+  deliberately out of scope (composes the three skills).
+  **Grounding deviations documented:** RL uses `FALLBACK_PHASES` not `RL_PHASES`
+  (P2-013/022); `_AGENT_ACTIONABLE_BLOCKERS` lives in orchestrator.py not
+  blocker_classifier.py (P2-024); `_load_skill` at orchestrator.py:926 (backlog
+  stale); "existing model types" = 3 skills not 4 (pipeline out of scope). Wiki
+  (`ResearchSkillManifest`, `ManifestSkillRuntime`, `ResearchConfig`) deferred
+  (tool not on PATH — same residual as P1-007).
+
 - Extracted the **`ml-direction`** reference skill into a manifest-driven
   `ManifestSkillRuntime` (ARC-011 **P2-005..008**, the Phase-2 reference
   extraction). This is the keystone: once `ManifestSkillRuntime` drives

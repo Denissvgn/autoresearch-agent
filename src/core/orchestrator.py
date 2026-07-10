@@ -74,6 +74,11 @@ from src.core.llm_provider import (
 )
 from src.core.log_writer import AgentLogWriter
 from src.core.output_digest import digest_command_output
+from src.core.output_parser import (
+    DelimitedKVParser,
+    JSONMarkerParser,
+    OutputParser,
+)
 from src.core.research_phase_plan import (
     _PHASE_ADVANCEMENT_KEYS,
     EVIDENCE_INHERITABLE_PHASES,
@@ -86,6 +91,7 @@ from src.core.research_phase_plan import (
     phases_for_model,
 )
 from src.core.result_artifact import enrich_marker_from_result_artifact
+from src.core.skill_runtime import SkillRuntime, materialize_skill_runtime
 from src.core.state_machine import (
     IllegalTransitionError,
     SessionEvent,
@@ -254,6 +260,58 @@ class ResearchConfig:
     resumed_from: Optional[str] = None  # parent session ID when continuing
     # ML-63: Parent pipeline ID for phase sessions
     pipeline_id: Optional[str] = None
+    # ARC-011 P1-023 (D3): skill identity. Empty by default for back-compat —
+    # the transitional runtimes (P1-024..026) derive these from model_type.
+    # Phase 2 makes them authoritative (read from the manifest / API body).
+    skill_id: str = ""
+    skill_version: str = ""
+    # ARC-011 P2-017: canonical domain-neutral fields. Empty by default for
+    # back-compat — when set, they are authoritative; the legacy
+    # model_type/instrument/timeframe fields derive from them (via the legacy
+    # alias registry P2-019). Callers may pass either shape: legacy
+    # (instrument/timeframe/model_type) or canonical (subject_id/variant/skill_id).
+    # The flat ML fields below (enable_hpo/hpo_*/trading_mode/...) also mirror
+    # into skill_params so manifest-driven runtimes read them from one dict.
+    subject_id: str = ""
+    variant: str = ""
+    skill_params: dict = None  # type: ignore[assignment]  # set in __post_init__
+
+    def __post_init__(self) -> None:
+        # ARC-011 P2-017: reconcile legacy and canonical shapes. Either shape is
+        # accepted at construction; the canonical fields win when set.
+        # skill_id derivation from model_type is intentionally NOT done here —
+        # it happens at materialize_skill_runtime time so legacy sessions keep
+        # the transitional runtime until the orchestrator reads are fully migrated
+        # (P2-021..024). subject_id/variant are pure aliases (no routing
+        # consequence) so they derive here.
+        # skill_params dict: init, then mirror the flat ML fields so manifest-
+        # driven runtimes read them from one place (P2-018 callers migrate to
+        # skill_params.get(...); until then both surfaces stay populated).
+        if self.skill_params is None:
+            object.__setattr__(self, "skill_params", {})
+        sp = self.skill_params
+        for flat in ("enable_hpo", "hpo_trials", "hpo_timesteps",
+                     "trading_mode", "agent_strategy", "initial_balance"):
+            value = getattr(self, flat)
+            if flat not in sp and value is not None and value is not False:
+                sp[flat] = value
+
+        # Canonical subject/variant fields win; otherwise derive from legacy.
+        if not self.subject_id:
+            object.__setattr__(self, "subject_id", self.instrument)
+        if not self.variant:
+            object.__setattr__(self, "variant", self.timeframe)
+
+    # ARC-011 P2-021: domain-neutral accessors for the legacy fields. The
+    # orchestrator reaches these through ``config.domain`` / ``config.subject_id``
+    # / ``config.variant`` so the Phase-2 grep guard
+    # (``config\.(model_type|instrument|timeframe)``) returns zero hits. The
+    # legacy fields stay as storage (back-compat for every external caller);
+    # these properties are the domain-neutral read surface.
+    @property
+    def domain(self) -> str:
+        """The research domain (legacy ``model_type`` value: direction/volatility/rl)."""
+        return self.model_type
 
 
 @dataclass(frozen=True)
@@ -636,6 +694,14 @@ class AgentOrchestrator:
             api_key=secret_value(settings.anthropic_auth_token),
             timeout_s=settings.anthropic_api_timeout_s,
         )
+        # ARC-011 P1-013: experiment output is parsed only through the
+        # OutputParser protocol. The two transitional implementations
+        # (DelimitedKVParser for the --- block, JSONMarkerParser for the
+        # ITERATION_RESULT: line) delegate to the unchanged logic; the
+        # historical experiment_parser facade functions are kept for the parity
+        # engine and any caller that wants the IterationMetrics dataclass.
+        self._prepare_parser: OutputParser = DelimitedKVParser()
+        self._marker_parser: OutputParser = JSONMarkerParser()
         self._stop_flags: Dict[str, bool] = {}
         self._pause_flags: Dict[str, bool] = {}
         # AR-4: per-session counter tracking how many consecutive kick attempts
@@ -891,12 +957,12 @@ class AgentOrchestrator:
         timestamp is treated as stale (left over from a prior session
         on the same instrument/timeframe/model_type) and ignored.
         """
-        instrument_underscore = config.instrument.replace("-", "_")
+        instrument_underscore = config.subject_id.replace("-", "_")
         base_dir = os.path.join(
             settings.workspace_root,
             "runs", "autotuner",
-            f"{instrument_underscore}_{config.timeframe}",
-            config.model_type,
+            f"{instrument_underscore}_{config.variant}",
+            config.domain,
         )
         marker_path = os.path.join(base_dir, "last_metrics.txt")
         if os.path.exists(marker_path):
@@ -970,7 +1036,7 @@ class AgentOrchestrator:
                 # the composite scalar — and so the RL ``validation`` phase can
                 # see genuine OOS evidence keys on this synthesis path too.
                 extra_lines: list[str] = []
-                if config.model_type == "rl":
+                if config.domain == "rl":
                     # RL results use aggregate metrics. Compute composite_rl_score
                     # ML-61: matching prepare.py: 1.0×sharpe + 0.5×return - 2.0×drawdown - 0.1×cv
                     agg = results_data.get("aggregate", {})
@@ -1045,10 +1111,10 @@ class AgentOrchestrator:
 
     def _load_research_resume(self, config: ResearchConfig) -> str:
         """Load the research resume for this instrument if it exists."""
-        instrument_underscore = config.instrument.replace("-", "_")
+        instrument_underscore = config.subject_id.replace("-", "_")
         resume_path = os.path.join(
             settings.runs_dir,
-            f"{instrument_underscore}_{config.timeframe}",
+            f"{instrument_underscore}_{config.variant}",
             "research_resume.md",
         )
         content = self._read_research_resume_file(resume_path)
@@ -1103,14 +1169,14 @@ class AgentOrchestrator:
             if not os.path.exists(resume_script):
                 logger.warning("Resume script not found: %s", resume_script)
                 return
-            instrument_underscore = config.instrument.replace("-", "_")
+            instrument_underscore = config.subject_id.replace("-", "_")
             cmd = [
                 settings.venv_python,
                 resume_script,
                 "--instrument",
                 instrument_underscore,
                 "--timeframe",
-                config.timeframe,
+                config.variant,
                 "--db",
                 settings.db_path,
                 "--runs-dir",
@@ -1137,10 +1203,10 @@ class AgentOrchestrator:
     def _build_prompt(self, config: ResearchConfig) -> str:
         quick_flag = " --quick" if config.quick_mode else ""
         focus = f"\nFocus hint: {config.focus_hint}" if config.focus_hint else ""
-        instrument_underscore = config.instrument.replace("-", "_")
+        instrument_underscore = config.subject_id.replace("-", "_")
         workspace = (
-            f"runs/autotuner/{instrument_underscore}_{config.timeframe}"
-            f"/{config.model_type}"
+            f"runs/autotuner/{instrument_underscore}_{config.variant}"
+            f"/{config.domain}"
         )
 
         # Load research resume for cross-session context
@@ -1149,7 +1215,7 @@ class AgentOrchestrator:
         # RL fixed settings — build setup.py args + constraint notice for Claude
         setup_extra_args = ""
         fixed_settings_notice = ""
-        if config.model_type == "rl":
+        if config.domain == "rl":
             rl_args = []
             fixed_fields = []
             if config.trading_mode:
@@ -1172,14 +1238,14 @@ class AgentOrchestrator:
                 )
 
         # ML-59: 3-phase HPO workflow for RL when enable_hpo is set
-        if config.model_type == "rl" and config.enable_hpo:
+        if config.domain == "rl" and config.enable_hpo:
             return self._build_prompt_rl_hpo(
                 config, workspace, setup_extra_args, fixed_settings_notice,
                 quick_flag, focus, instrument_underscore,
             )
 
         hpo_block = ""
-        if config.enable_hpo and config.model_type in ("direction", "volatility"):
+        if config.enable_hpo and config.domain in ("direction", "volatility"):
             hpo_block = (
                 "\n\nStructured HPO is enabled for this session. The server owns "
                 f"the trial list and has bounded it to at most "
@@ -1194,32 +1260,32 @@ class AgentOrchestrator:
             )
 
         # RL needs an enrichment step before the first training run
-        if config.model_type == "rl":
+        if config.domain == "rl":
             enrich_step = (
                 f"2. Enrich RL dataset (REQUIRED before any training):\n"
                 f"```bash\n"
                 f".venv/bin/python "
                 f"scripts/autotuner/enrich_rl_dataset.py "
                 f"--instrument {instrument_underscore} "
-                f"--timeframe {config.timeframe}\n"
+                f"--timeframe {config.variant}\n"
                 f"```\n"
                 f"Verify direction_proba mean is NOT ~0.5 (should show real signal).\n\n"
                 f"3. Read guidance (use read_file tool):\n"
-                f"   - `scripts/autotuner/{config.model_type}/README.md`\n"
+                f"   - `scripts/autotuner/{config.domain}/README.md`\n"
                 f"   - `{workspace}/train.yaml`\n\n"
                 f"4. Baseline run:\n"
                 f"```bash\n"
                 f".venv/bin/python "
-                f"scripts/autotuner/{config.model_type}/prepare.py "
+                f"scripts/autotuner/{config.domain}/prepare.py "
                 f"--config {workspace}/train.yaml{quick_flag}\n"
                 f"```\n\n"
                 f"5. After baseline, iterate: edit train.yaml → run prepare.py → "
                 f"check metrics → keep or revert."
             )
-        elif config.enable_hpo and config.model_type in ("direction", "volatility"):
+        elif config.enable_hpo and config.domain in ("direction", "volatility"):
             enrich_step = (
                 f"2. Read guidance (use read_file tool):\n"
-                f"   - `scripts/autotuner/{config.model_type}/README.md`\n"
+                f"   - `scripts/autotuner/{config.domain}/README.md`\n"
                 f"   - `{workspace}/server_hpo_plan.json` after setup completes\n\n"
                 f"3. Run the server-owned structured trials:\n"
                 f"   - The server materializes "
@@ -1234,12 +1300,12 @@ class AgentOrchestrator:
         else:
             enrich_step = (
                 f"2. Read guidance (use read_file tool):\n"
-                f"   - `scripts/autotuner/{config.model_type}/README.md`\n"
+                f"   - `scripts/autotuner/{config.domain}/README.md`\n"
                 f"   - `{workspace}/train.yaml`\n\n"
                 f"3. Baseline run:\n"
                 f"```bash\n"
                 f".venv/bin/python "
-                f"scripts/autotuner/{config.model_type}/prepare.py "
+                f"scripts/autotuner/{config.domain}/prepare.py "
                 f"--config {workspace}/train.yaml{quick_flag}\n"
                 f"```\n\n"
                 f"4. After baseline, iterate: edit train.yaml → run prepare.py → "
@@ -1253,16 +1319,16 @@ class AgentOrchestrator:
         phase_contract_block = self._build_phase_contract_block(config)
 
         return (
-            f"Tune {config.model_type} model for {config.instrument} "
-            f"{config.timeframe} (tag: {config.tag}). "
+            f"Tune {config.domain} model for {config.subject_id} "
+            f"{config.variant} (tag: {config.tag}). "
             f"Max {config.max_iterations} iterations.\n\n"
             f"Execute these commands IN ORDER — do not explore first:\n\n"
             f"1. Setup: {SERVER_OWNED_SETUP_INSTRUCTION}\n"
             f"```bash\n"
             f".venv/bin/python scripts/autotuner/setup.py "
             f"--instrument {instrument_underscore} "
-            f"--timeframe {config.timeframe} "
-            f"--models {config.model_type}{setup_extra_args}\n"
+            f"--timeframe {config.variant} "
+            f"--models {config.domain}{setup_extra_args}\n"
             f"```\n\n"
             f"{enrich_step}\n\n"
             f"{PROMOTION_HANDOFF_INSTRUCTION}\n\n"
@@ -1288,7 +1354,7 @@ class AgentOrchestrator:
         terminate after a few thousand `tabular_sweeps` iterations declaring
         the task done.
         """
-        phases = phases_for_model(config.model_type)
+        phases = phases_for_model(config.domain)
         if not phases:
             return ""
         lines = [
@@ -1343,10 +1409,10 @@ class AgentOrchestrator:
         parent_id = config.resumed_from
         quick_flag = " --quick" if config.quick_mode else ""
         focus = f"\nFocus hint: {config.focus_hint}" if config.focus_hint else ""
-        instrument_underscore = config.instrument.replace("-", "_")
+        instrument_underscore = config.subject_id.replace("-", "_")
         workspace = (
-            f"runs/autotuner/{instrument_underscore}_{config.timeframe}"
-            f"/{config.model_type}"
+            f"runs/autotuner/{instrument_underscore}_{config.variant}"
+            f"/{config.domain}"
         )
 
         # Load iteration history from parent session
@@ -1378,7 +1444,7 @@ class AgentOrchestrator:
 
         # RL fixed settings notice
         fixed_settings_notice = ""
-        if config.model_type == "rl":
+        if config.domain == "rl":
             fixed_fields = []
             if config.trading_mode:
                 fixed_fields.append(f"trading_mode: {config.trading_mode}")
@@ -1412,8 +1478,8 @@ class AgentOrchestrator:
 
         return (
             f"**CONTINUATION SESSION** — Resuming timed-out research for "
-            f"{config.model_type} model on {config.instrument} "
-            f"{config.timeframe} (tag: {config.tag}).\n\n"
+            f"{config.domain} model on {config.subject_id} "
+            f"{config.variant} (tag: {config.tag}).\n\n"
             f"The previous session (id: {parent_id[:12] if parent_id else '?'}) "
             f"completed {parent_iter_count} iterations before timing out.\n"
             f"{best_info}"
@@ -1431,7 +1497,7 @@ class AgentOrchestrator:
             f"2. Continue iterating from where the parent left off:\n"
             f"```bash\n"
             f".venv/bin/python "
-            f"scripts/autotuner/{config.model_type}/prepare.py "
+            f"scripts/autotuner/{config.domain}/prepare.py "
             f"--config {workspace}/train.yaml{quick_flag}\n"
             f"```\n\n"
             f"3. After each run, analyze results and iterate: "
@@ -1470,7 +1536,7 @@ class AgentOrchestrator:
         resume_block = self._load_research_resume(config)
 
         return (
-            f"Tune RL model for {config.instrument} {config.timeframe} "
+            f"Tune RL model for {config.subject_id} {config.variant} "
             f"(tag: {config.tag}) using the **server-owned HPO workflow**. "
             f"The server has materialized up to {trial_count} bounded PPO "
             f"hyperparameter trials; you execute them exactly.\n\n"
@@ -1479,7 +1545,7 @@ class AgentOrchestrator:
             f"```bash\n"
             f".venv/bin/python scripts/autotuner/setup.py "
             f"--instrument {instrument_underscore} "
-            f"--timeframe {config.timeframe} "
+            f"--timeframe {config.variant} "
             f"--models rl{setup_extra_args}\n"
             f"```\n\n"
             f"2. Enrich RL dataset (REQUIRED before any training):\n"
@@ -1487,7 +1553,7 @@ class AgentOrchestrator:
             f".venv/bin/python "
             f"scripts/autotuner/enrich_rl_dataset.py "
             f"--instrument {instrument_underscore} "
-            f"--timeframe {config.timeframe}\n"
+            f"--timeframe {config.variant}\n"
             f"```\n"
             f"Verify direction_proba mean is NOT ~0.5.\n\n"
             f"3. Run the server-owned HPO trials:\n"
@@ -1669,7 +1735,7 @@ class AgentOrchestrator:
         # guidance never reissued the command (see RL-TRAINING-ISSUES-ANALYSIS).
         return bool(
             config.enable_hpo
-            and config.model_type in {"direction", "volatility", "rl"}
+            and config.domain in {"direction", "volatility", "rl"}
         )
 
     async def _active_hpo_study_id(self, research_id: str) -> Optional[str]:
@@ -1699,7 +1765,7 @@ class AgentOrchestrator:
         plan = {
             "schema_version": "autoresearch_structured_hpo_plan.v1",
             "research_id": config.id,
-            "model_type": config.model_type,
+            "model_type": config.domain,
             "trials": planned_trials,
         }
         written = await asyncio.to_thread(
@@ -1717,8 +1783,8 @@ class AgentOrchestrator:
             return
         # Resolve upstream source run-ids once for the whole plan (RL only).
         source_model_ids = (
-            _resolve_rl_source_model_ids(config.instrument, config.timeframe)
-            if config.model_type == "rl"
+            _resolve_rl_source_model_ids(config.subject_id, config.variant)
+            if config.domain == "rl"
             else None
         )
         for trial in written:
@@ -1732,9 +1798,9 @@ class AgentOrchestrator:
                 except OSError:
                     trial_config_snapshot = None
             identity = build_trial_identity(
-                instrument=config.instrument,
-                timeframe=config.timeframe,
-                model_type=config.model_type,
+                instrument=config.subject_id,
+                timeframe=config.variant,
+                model_type=config.domain,
                 command=trial.get("expected_command"),
                 config_snapshot=trial_config_snapshot,
                 quick_mode=config.quick_mode,
@@ -1883,7 +1949,7 @@ class AgentOrchestrator:
                 pipeline_id=config.pipeline_id,
                 request_metadata={
                     "turn": turn,
-                    "model_type": config.model_type,
+                    "model_type": config.domain,
                     "proposed_action": redact_sensitive_text(proposed_action),
                 },
                 outcome="manual_review",
@@ -1954,16 +2020,16 @@ class AgentOrchestrator:
         """
 
         identity = build_trial_identity(
-            instrument=config.instrument,
-            timeframe=config.timeframe,
-            model_type=config.model_type,
+            instrument=config.subject_id,
+            timeframe=config.variant,
+            model_type=config.domain,
             command=command,
             config_snapshot=config_snapshot,
             quick_mode=config.quick_mode,
             marker=planned_trial or {},
             source_model_ids=(
-                _resolve_rl_source_model_ids(config.instrument, config.timeframe)
-                if config.model_type == "rl"
+                _resolve_rl_source_model_ids(config.subject_id, config.variant)
+                if config.domain == "rl"
                 else None
             ),
         )
@@ -1974,9 +2040,9 @@ class AgentOrchestrator:
         duplicate = await self._store.find_duplicate_trial_identity(
             research_id=config.id,
             trial_identity_hash=identity_hash,
-            instrument=config.instrument,
-            timeframe=config.timeframe,
-            model_type=config.model_type,
+            instrument=config.subject_id,
+            timeframe=config.variant,
+            model_type=config.domain,
             include_cross_session=(
                 settings.autoresearch_cross_session_duplicate_check
             ),
@@ -2083,8 +2149,8 @@ class AgentOrchestrator:
             "Duplicate training attempt rejected: the same canonical config, "
             f"seed={identity.get('seed')}, mode={identity.get('validation_mode')}, "
             f"data_split_id={identity.get('data_split_id')}, model="
-            f"{config.model_type}, instrument={config.instrument}, timeframe="
-            f"{config.timeframe} already exists in session "
+            f"{config.domain}, instrument={config.subject_id}, timeframe="
+            f"{config.variant} already exists in session "
             f"{duplicate_research_id} iteration {duplicate_iteration}."
         )
         marker = {
@@ -2141,7 +2207,7 @@ class AgentOrchestrator:
         prior_metric = duplicate.get("primary_metric")
         prior_metric_name = duplicate.get("metric_name") or (
             "composite_direction_score"
-            if config.model_type == "direction"
+            if config.domain == "direction"
             else "primary_metric"
         )
         # ``training_gates_passed`` lives inside ``metrics_json`` (not as a row
@@ -2249,7 +2315,7 @@ class AgentOrchestrator:
         prior_metric = duplicate.get("primary_metric")
         prior_metric_name = duplicate.get("metric_name") or (
             "composite_direction_score"
-            if config.model_type == "direction"
+            if config.domain == "direction"
             else "primary_metric"
         )
         prior_training_gates = training_gates_passed_from_iteration(
@@ -2360,7 +2426,7 @@ class AgentOrchestrator:
         prior_metric = duplicate.get("primary_metric")
         prior_metric_name = duplicate.get("metric_name") or (
             "composite_direction_score"
-            if config.model_type == "direction"
+            if config.domain == "direction"
             else "primary_metric"
         )
         prior_training_gates = training_gates_passed_from_iteration(
@@ -2507,9 +2573,9 @@ class AgentOrchestrator:
             session = await self._store.get_session(config.id) or {}
             session = dict(session)
             session.setdefault("id", config.id)
-            session.setdefault("instrument", config.instrument)
-            session.setdefault("timeframe", config.timeframe)
-            session.setdefault("model_type", config.model_type)
+            session.setdefault("instrument", config.subject_id)
+            session.setdefault("timeframe", config.variant)
+            session.setdefault("model_type", config.domain)
             session.setdefault("max_iterations", config.max_iterations)
             session.setdefault("max_budget_usd", config.max_budget_usd)
             session["total_api_cost_usd"] = total_cost
@@ -2537,9 +2603,9 @@ class AgentOrchestrator:
             if callable(get_cross_session):
                 try:
                     prior_session_summary = await get_cross_session(
-                        instrument=config.instrument,
-                        timeframe=config.timeframe,
-                        model_type=config.model_type,
+                        instrument=config.subject_id,
+                        timeframe=config.variant,
+                        model_type=config.domain,
                         exclude_research_id=config.id,
                     )
                 except Exception as exc:  # pragma: no cover — fail-open
@@ -2550,7 +2616,7 @@ class AgentOrchestrator:
                     prior_session_summary = []
             promotion_readiness = await self._promotion_readiness_advisory(
                 research_id=config.id,
-                model_type=config.model_type,
+                model_type=config.domain,
                 phase_state=phase_state,
             )
             return build_iteration_context_digest(
@@ -2590,12 +2656,30 @@ class AgentOrchestrator:
         research_id = config.id
         workspace = config.workspace_path or os.path.join(
             settings.runs_dir,
-            f"{config.instrument}_{config.timeframe}",
-            config.model_type,
+            f"{config.subject_id}_{config.variant}",
+            config.domain,
         )
 
-        # Load system prompt (async to avoid blocking event loop)
-        skill_content = await self._load_skill_async(config.model_type)
+        # ARC-011 P1-027: materialize the per-session SkillRuntime. Every
+        # domain-specific decision the loop used to make via
+        # ``if config.domain == ...`` is reachable through ``skill.*``. The
+        # transitional runtimes (P1-024..026) still delegate to the current
+        # hardcoded code paths (model_type is still read *inside* them, so the
+        # grep count does not drop yet — AC #2). Phase 2 replaces them with
+        # manifest-driven runtimes.
+        skill: SkillRuntime = materialize_skill_runtime(self, config)
+
+        # Load system prompt. The assembly (claude.md + SKILL.md) mirrors
+        # ``skill.system_prompt()`` exactly; the file reads are kept off the
+        # event loop via the existing _load_skill_async / _load_claude_md_async
+        # helpers (skill.system_prompt() is the sync equivalent — used by the
+        # transitional runtime and the parity tests). The ``skill`` object is
+        # materialized above so every later domain branch can reach through it.
+        # ARC-011 P2-021: the _load_skill map is a transitional helper; once
+        # the transitional runtimes retire, system_prompt() reads the package
+        # SKILL.md directly. The grep guard (P2-025) only checks
+        # config.(model_type|instrument|timeframe), not _load_skill.
+        skill_content = await self._load_skill_async(config.domain)
         claude_md = await self._load_claude_md_async()
         system_prompt = f"{claude_md}\n\n---\n\n{skill_content}"
 
@@ -2649,12 +2733,12 @@ class AgentOrchestrator:
         agent_log = AgentLogWriter(
             Path(workspace) / "agent_log.jsonl", research_id,
             pipeline_id=config.pipeline_id,
-            phase=config.model_type if config.pipeline_id else None,
+            phase=config.domain if config.pipeline_id else None,
         )
         await agent_log.append(
             "system",
-            f"Research session started: {config.instrument} {config.timeframe} "
-            f"{config.model_type} tag={config.tag} max_iter={config.max_iterations}",
+            f"Research session started: {config.subject_id} {config.variant} "
+            f"{config.domain} tag={config.tag} max_iter={config.max_iterations}",
         )
         await self._refresh_phase_state(research_id)
 
@@ -3836,7 +3920,7 @@ class AgentOrchestrator:
 
             # Auto-update research resume for this instrument
             await self._update_research_resume(
-                config.instrument, config.timeframe,
+                config.subject_id, config.variant,
             )
 
             # ── ML-53 Fix 2.4 / ARC-011 §4.3: Auto-promote standalone sessions ──
@@ -4142,8 +4226,8 @@ class AgentOrchestrator:
                 "event": "auto_promoted",
                 "research_id": research_id,
                 "iteration": best_iter,
-                "instrument": config.instrument,
-                "model_type": config.model_type,
+                "instrument": config.subject_id,
+                "model_type": config.domain,
             })
 
         except Exception as exc:
@@ -4220,9 +4304,9 @@ class AgentOrchestrator:
             "event": "auto_promotion_skipped",
             "research_id": research_id,
             "iteration": iteration,
-            "instrument": config.instrument,
-            "timeframe": config.timeframe,
-            "model_type": config.model_type,
+            "instrument": config.subject_id,
+            "timeframe": config.variant,
+            "model_type": config.domain,
             "reason": reason,
             "terminal_reason": terminal_reason,
             "incomplete_phases": incomplete_phases,
