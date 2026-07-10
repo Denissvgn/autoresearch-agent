@@ -1,0 +1,319 @@
+# ARC-011 P2-005 — the live `ml-direction` skill descriptor.
+#
+# Lifted from docs/adr/arc-011-manifest-spike/ml-direction.yaml (X-003 draft)
+# and reworked to the canonical research_skill.v1 section names (P2-001).
+# Every literal reproduces an existing hardcoded value; citations in the spike's
+# Appendix A. This manifest is the authoritative source the ManifestSkillRuntime
+# (P2-007) reads — no Python constant drives ml-direction behavior after P2-021..024.
+#
+# category: optimization (price-direction prediction autotuner)
+# Sections present: all eight required + trial_identity, blocker_classification,
+# structured_hpo, insights, prompt, ui.
+# Gaps exercised (spike §6): G1, G2, G3, G4, G5, G6, G7, G8.
+
+schema_version: research_skill.v1
+id: ml-direction
+version: 1.0.0
+category: optimization
+display_name: "ML Direction Model Tuning"
+description: "Tune price-direction prediction models via walk-forward training."
+
+# ── LLM tier routing ──────────────────────────────────────────────────────────
+llm:
+  provider: anthropic
+  primary_model: claude-sonnet-4-20250514
+  insight_model: claude-haiku-4-20250514
+  max_output_tokens: 8192
+  system_prompt: SKILL.md
+
+# ── Workspace layout ──────────────────────────────────────────────────────────
+workspace:
+  session_path_template: "runs/{skill_id}/{subject_id}/{variant}"
+
+# ── Subject / variant enumeration (G12) ───────────────────────────────────────
+subjects:
+  enumerator: scripts/list_subjects.py
+  cache_ttl_s: 60
+variants:
+  static: ["5m", "15m", "1h", "4h"]
+
+# ── 1/8 param_schema ──────────────────────────────────────────────────────────
+# Sources: ResearchConfig (orchestrator.py:238-267) + StartResearchRequest
+# bounds (api/research.py:189-248). RL-only fields (trading_mode / agent_strategy
+# / initial_balance) are intentionally NOT declared here.
+param_schema:
+  type: object
+  additionalProperties: false
+  properties:
+    enable_hpo:      { type: boolean, default: false }
+    hpo_trials:      { type: integer, minimum: 5,    maximum: 200,    default: 20 }
+    hpo_timesteps:   { type: integer, minimum: 10000, maximum: 500000, default: 50000 }
+  required: []
+
+# ── 2/8 metric_schema ─────────────────────────────────────────────────────────
+# primary_metric = walkforward_mean_auc (orchestrator.py:984); direction literal
+# "higher_is_better" (orchestrator.py:993).
+metric_schema:
+  primary:
+    field: primary_metric
+    label: "Walkforward Mean AUC"
+    direction: higher_is_better
+    format: ".4f"
+    # G7: where to read it from results.json when the --- block is absent.
+    primary_metric_jsonpath: ["walkforward.walkforward_mean_auc", "metrics.auc"]
+  gates:
+    - { field: all_gates_passed,       label: "All Gates",  kind: boolean_badge }
+    - { field: training_gates_passed,  label: "Train Gates", kind: boolean_badge }
+  chart_series:
+    - { field: walkforward_mean_auc, label: "OOS AUC" }
+    - { field: walkforward_auc_cv,   label: "AUC CV",   axis: right }
+    - { field: sharpe,               label: "Sharpe",   axis: right }
+  iteration_table_columns:
+    - { field: primary_metric,   label: "Metric" }
+    - { field: all_gates_passed, label: "Gates", kind: icon }
+    - { field: folds_passed,     label: "Folds" }
+    - { field: training_time_s,  label: "Time",  format: duration_seconds }
+  # G11: optimization domain → single winner.
+  goal: optimize
+
+# ── 3/8 decision_vocabulary (G8 adds success_values) ──────────────────────────
+# Observed set derived from usage; "successful" = {keep, improve, hpo_screening}
+# (results_store.py:341, iteration_context.py:323).
+decision_vocabulary:
+  base:          [keep, discard, improve, unknown]
+  extensions:    [hpo_screening]
+  success_values: [keep, improve, hpo_screening]
+
+# ── 4/8 phase_plan (G1: hybrid advancement → phases.py plugin) ────────────────
+# Phase literals reproduce DIRECTION_PHASES (research_phase_plan.py:31-126).
+# advancement.mode=plugin because completion is hybrid (evidence keys + cardinality
+# floors + dwell gates + inheritable/noop phases + synthetic-iter guard), encoded
+# today in _completed_phase_ids (research_phase_plan.py:491-645).
+phase_plan:
+  - id: baseline_capture
+    label: "Baseline Capture"
+    min_iterations: 1
+    max_iterations: 3
+    evidence_keys: []
+    next_action: "Run the immutable baseline config and record the first server-owned attempt."
+    stagnation_exempt: false
+  - id: tabular_sweeps
+    label: "Tabular Sweeps"
+    min_iterations: 6
+    max_iterations: 40
+    evidence_keys: [tabular_sweep_variant]
+    next_action: >
+      Sweep bounded tabular roster, horizon, dead-zone, calibration, and threshold
+      settings — including direction_pct_threshold (try 0.015 / 0.040 / 0.050) and
+      sample_weight_halflife (try 1000 / 1500 / 2000). Emit metrics.tabular_sweep_variant
+      on each attempt so the phase advances.
+    stagnation_exempt: false
+  - id: adaptive_feature_sweeps
+    label: "Adaptive Feature Sweeps"
+    min_iterations: 4
+    max_iterations: 30
+    evidence_keys: [adaptive_features, adaptive_feature_noop_reason]
+    next_action: >
+      Compare adaptive support/resistance and cycle feature variants against the
+      tabular baseline. Emit metrics.adaptive_features with active selected features
+      and a changed schema/count, or an accepted adaptive_feature_noop_reason.
+    stagnation_exempt: false
+  - id: tsfm_sweeps
+    label: "TS-FM Sweeps"
+    min_iterations: 2
+    max_iterations: 15
+    evidence_keys: [tsfm, tsfm_adapter, tsfm_fallback_validation]
+    next_action: >
+      Evaluate allowed TS-FM probability adapter candidates with tabular fallback
+      preserved. Emit metrics.tsfm_adapter_json or metrics.tsfm_fallback_validation_json
+      so the phase advances.
+    stagnation_exempt: true
+  - id: calibration_replay_gates
+    label: "Calibration/Replay Gates"
+    min_iterations: 2
+    max_iterations: 8
+    evidence_keys: [calibration_full_validation, economic_replay]
+    next_action: >
+      Run full calibration diagnostics and post-cost replay gates on finalists.
+      Vary calibration_method (isotonic / sigmoid / temperature / beta — calibrates
+      the SERVED best-base model) as the primary search dimension. Do NOT vary
+      meta_model, stacking_calibration_*, horizon_ensemble_*, meta_label_*,
+      min_cal_samples / cal_fraction (score-inert under Option A serving), or
+      threshold_strategy. Emit metrics.calibration_full_validation and
+      metrics.economic_replay.
+    stagnation_exempt: true
+  - id: multi_seed_robustness
+    label: "Multi-Seed Robustness"
+    min_iterations: 3
+    max_iterations: 6
+    evidence_keys: [seed_trials, n_seed_trials, seeds_passed_gates]
+    next_action: >
+      Confirm finalist stability via the walk-forward fold metrics (walkforward_auc_cv,
+      fold gates) the best config's run already emitted — this pipeline is deterministic,
+      so do NOT vary seeds or n_seed_trials (inert) and do NOT re-run an unchanged
+      config (dedup rejects it).
+    stagnation_exempt: true
+  - id: inference_parity_replay
+    label: "Inference Parity Replay"
+    min_iterations: 2
+    max_iterations: 4
+    evidence_keys: [inference_parity, inference_reload_validation]
+    next_action: >
+      Validate feature parity, adapter loading, composite reload, latency, and
+      rollback readiness. Emit metrics.inference_parity or inference_reload_validation.
+    stagnation_exempt: true
+  - id: promotion_proposal
+    label: "Promotion Proposal"
+    min_iterations: 0
+    max_iterations: 4
+    evidence_keys:
+      [development_promotion_metadata, promotion_allowed, promotion_consistency_report,
+       promotion_decision, promotion_metadata, promotion_preview_ready, promotion_scope,
+       scoped_promotion_metadata]
+    next_action: "Prepare a development-scoped promotion proposal with ownership and rollback metadata."
+    stagnation_exempt: true
+phase_advancement:
+  mode: plugin
+  plugin: phases.py
+  # phases.py exposes phase_completed(phase_id, iterations, evidence) -> bool and
+  # runs under the X-004 plugin trust boundary. The declarative fields above are
+  # the inputs; the plugin owns the hybrid completion rule.
+
+# ── 5/8 command_policy ────────────────────────────────────────────────────────
+# Reproduces command_policy.py:11-61 verbatim, narrowed to direction's scripts.
+command_policy:
+  allowed_python: [".venv/bin/python", "./.venv/bin/python"]
+  allowed_scripts:
+    - scripts/autotuner/setup.py
+    - scripts/autotuner/direction/prepare.py
+    - scripts/autotuner/resume.py
+  allowed_executables: [cp, cat]
+  copyable_files: [train.yaml, best_train.yaml]
+  readable_files: [train.yaml, best_train.yaml, results.json, last_metrics.txt, hpo_results.json]
+  forbidden_tokens: ["|", "||", "&&", ";", "&"]
+  forbidden_substrings: ["`", "$", ">", "<", "\n", "\r"]
+  secret_markers: [.env, /proc/, /run/secrets, authorization, bearer, credential, id_rsa, password, secret, token]
+
+# ── 6/8 output_parser (G7: marker_dir_template + primary_metric_jsonpath) ─────
+# Parser contract reproduces experiment_parser.py:19-34.
+output_parser:
+  format: delimited_kv
+  block_delimiter: "---"
+  iteration_marker: "ITERATION_RESULT:"
+  nonce_field: server_nonce              # W11 anti-forgery (Phase 4)
+  required_fields: [status, primary_metric, metric_name, all_gates_passed]
+  field_types:
+    primary_metric: float
+    training_time_s: float
+    all_gates_passed: bool
+    training_gates_passed: bool
+  failure_statuses: [crash, timeout, failed, error, pruned, auth_failed, gpu_busy]
+  fallback:
+    read_marker_file: last_metrics.txt
+    read_results_file: results.json
+    # G7: orchestrator.py:865-871 dir layout; instrument "-" → "_".
+    marker_dir_template: "{workspace_root}/runs/autotuner/{subject_id_underscore}_{variant}/direction/"
+
+# ── 7/8 preflight (G6: {settings.*} interpolation) ────────────────────────────
+# 6 services required for direction (service_preflight.py:62-129). inference /
+# admin / vdmc / nats are NOT required for plain direction and are omitted.
+preflight:
+  - { name: mlflow_tracking,  kind: http_health, url: "{settings.mlflow_tracking_uri}", health_paths: ["/health", "/"], required: true,  timeout_s: 3.0 }
+  - { name: mlflow_service,   kind: http_health, url: "{settings.mlflow_service_url}",   required: true }
+  - { name: data_ingest,      kind: http_health, url: "{settings.data_ingest_url}",      health_paths: ["/readiness", "/health"], required: true }
+  - { name: ensemble_trainer, kind: http_health, url: "{settings.ensemble_trainer_url}", health_paths: ["/health/ready", "/health"], required: true }
+  - { name: rl_trainer,       kind: http_health, url: "{settings.rl_trainer_url}",       health_paths: ["/health/ready", "/health"], required: true }
+  - { name: feature_service,  kind: http_health, url: "{settings.feature_service_url}",  required: true }
+
+# ── 8/8 promotion_target (G4 gate bundles, G5 registry_api enrichment) ────────
+# Development → file_path (config_promoter.py:3126-3151); production → registry_api
+# inline REST to mlflow-service (config_promoter.py:804-923).
+promotion_target:
+  primary:
+    kind: file_path
+    # G6: host_configs_path is a server setting.
+    path_template: "{settings.host_configs_path}/instrument_configs/{subject_id}_{variant}.yaml"
+    sidecar_extensions: [".development-promotion.iter-{iteration}.json"]
+    rollback_template: "{target_path}.development-rollback.{research_id}.iter-{iteration}.yaml"
+    atomic_write: true
+  # G4: per-scope promotion gate bundles + per-instrument overrides
+  # (development_gate_bundle.py:15-91).
+  gate_bundles:
+    development:        "reports/direction-tuning/promotion/development_gate_bundle_v1.yaml"
+    production:         "reports/direction-tuning/promotion/production_gate_bundle_v1.yaml"
+    overrides_location: "configs/instrument_configs/{subject_id}_{variant}.yaml#gates_overrides"
+  scopes:
+    - { id: development, approval_required: false }
+    - { id: paper,       approval_required: true,  prior_scopes: [development] }
+    - { id: canary,      approval_required: true,  prior_scopes: [development, paper] }
+    - id: production
+      approval_required: true
+      prior_scopes: [development, paper, canary]
+      # G5: production delegates to the composite registry (config_promoter.py:804-923).
+      delegate:
+        kind: registry_api
+        registry: mlflow-service
+        endpoint: "{settings.mlflow_service_url}/api/v1/composites/{composite_id}/promote"
+        lookup:
+          by: serving_model_version            # match composite.direction_model_version
+          query_endpoint: "{settings.mlflow_service_url}/api/v1/composites?instrument={subject_id}&page_size=100"
+        auth_secret: AUTORESEARCH_MLFLOW_SERVICE_AUTH_TOKEN
+        rollup_metric: rollup_score
+
+# ── Trial identity (G2: resolve_identity.py plugin) ───────────────────────────
+# hash_fields covers the common case; the plugin owns data_split_id synthesis
+# (iteration_snapshot.py:363-422) and seed/validation_mode resolution (:313-345).
+trial_identity:
+  hash_fields: [skill_id, subject_id, variant, canonical_config_hash, quick_mode, data_split_id]
+  resolve:
+    mode: plugin
+    plugin: resolve_identity.py
+
+# ── Blocker classification (G3) ───────────────────────────────────────────────
+# Reproduces _AGENT_ACTIONABLE_BLOCKERS (orchestrator.py:176-196) and
+# _PHASE_SPECIFIC_AGENT_KEYS (orchestrator.py:196). Pure sets → declarative.
+blocker_classification:
+  actionable_blockers:
+    [signal_saturation, weak_calibration, unstable_fold_thresholds,
+     direction_auc_below_gate_or_missing, best_metric_below_development_baseline,
+     missing_brier_score, missing_reliability_diagram,
+     missing_threshold_stability_by_fold, missing_signal_rate_distribution,
+     missing_per_regime_calibration_status,
+     tsfm_adapter_load_failure_without_tabular_fallback]
+  phase_evidence_keys:
+    tsfm_sweeps:              [tsfm, tsfm_adapter]
+    calibration_replay_gates: [calibration_full_validation, economic_replay]
+    multi_seed_robustness:    [seed_trials, n_seed_trials, seeds_passed_gates]
+    inference_parity_replay:  [inference_parity, inference_reload_validation]
+    promotion_proposal:       [development_promotion_metadata, promotion_allowed, smoke_validation, signal_health]
+
+# ── Structured HPO (optional) ─────────────────────────────────────────────────
+structured_hpo:
+  enabled: false                  # toggled by skill_params.enable_hpo
+  plan_generator: scripts/generate_hpo_plan.py
+  max_trials: 200
+
+# ── Insights (G9: per-skill template; slot already in §9) ─────────────────────
+insights:
+  prompt_template: insights.md
+  model: claude-haiku-4-20250514
+  max_chars: 500
+
+# ── Prompt templates ──────────────────────────────────────────────────────────
+prompt:
+  setup_command: |
+    .venv/bin/python scripts/autotuner/setup.py --subject {subject_id} --variant {variant} --models direction
+  experiment_command: |
+    .venv/bin/python scripts/autotuner/direction/prepare.py --config {workspace}/train.yaml{quick_flag}
+  continuation_enabled: true
+  anti_waste_rules: CLAUDE.md
+
+# ── UI hints ──────────────────────────────────────────────────────────────────
+ui:
+  form_fields:
+    - { name: enable_hpo,    type: boolean, default: false, group: "Advanced" }
+    - { name: hpo_trials,    type: integer, default: 20,    min: 5, max: 200, group: "Advanced" }
+    - { name: hpo_timesteps, type: integer, default: 50000, min: 10000, max: 500000, group: "Advanced" }
+  chart:
+    primary_metric_label: "Walkforward AUC"
+    gates_badge: true
