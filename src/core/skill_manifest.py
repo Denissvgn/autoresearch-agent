@@ -55,7 +55,7 @@ Section names are canonicalized per spike §4: ``metric_schema`` (not
 
 from __future__ import annotations
 
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Mapping, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -444,7 +444,9 @@ class PreflightEntry(BaseModel):
 
     name: str
     kind: PreflightKind = "http_health"
-    url: Optional[str] = Field(default=None, description="http_health / tcp endpoint (G6 placeholders ok).")
+    url: Optional[str] = Field(
+        default=None, description="http_health/tcp endpoint (G6 placeholders ok)."
+    )
     path: Optional[str] = Field(default=None, description="local_file path (G6 placeholders ok).")
     health_paths: list[str] = Field(default_factory=lambda: ["/health"])
     required: bool = True
@@ -505,7 +507,9 @@ class RegistryLookup(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    by: str = Field(description="Composite version field to match (e.g. ``serving_model_version``).")
+    by: str = Field(
+        description="Composite version field to match (e.g. ``serving_model_version``)."
+    )
     query_endpoint: str
 
 
@@ -550,7 +554,9 @@ class GitBranchTarget(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["git_branch"] = "git_branch"
-    repository: Optional[str] = Field(default=None, description="Repo URL/identifier (G6 placeholders ok).")
+    repository: Optional[str] = Field(
+        default=None, description="Repo URL/identifier (G6 placeholders ok)."
+    )
     base_branch: str
     #: Alias accepted: ``proposed_branch_template`` (code-refactor draft).
     target_branch_template: Optional[str] = Field(
@@ -783,9 +789,16 @@ class ManifestValidationError(ValueError):
     ``ValidationError`` with a field-specific, human-readable summary (P2-001
     AC #3)."""
 
-    def __init__(self, message: str, *, errors: Optional[list[dict[str, Any]]] = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        errors: Optional[list[Mapping[str, Any]]] = None,
+    ) -> None:
         super().__init__(message)
-        self.errors = errors or []
+        # ``Mapping`` is covariant, so callers may pass pydantic's
+        # ``list[ErrorDetails]`` (a TypedDict) as well as ``list[dict]``.
+        self.errors: list[Mapping[str, Any]] = list(errors) if errors else []
 
 
 class ManifestVersionError(ManifestValidationError):

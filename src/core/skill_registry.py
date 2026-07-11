@@ -80,8 +80,10 @@ class SkillRegistry:
     ) -> None:
         self._root: Path = Path(root) if root is not None else DEFAULT_SKILLS_ROOT
         self._settings_obj = settings_obj
-        # skill_id -> (manifest, manifest_path, mtime_at_load)
-        self._cache: dict[str, tuple[ResearchSkillManifest, Path, float]] = {}
+        # skill_id -> (manifest | None placeholder, manifest_path, mtime_at_load).
+        # ``None`` marks a slot registered via ``register_path`` but not yet
+        # loaded; ``get()`` lazily materializes it on first access.
+        self._cache: dict[str, tuple[Optional[ResearchSkillManifest], Path, float]] = {}
         # Ids discovered on disk (lazy-loaded; not yet in ``_cache``).
         self._discovered: set[str] = set()
         self._scanned = False
@@ -115,7 +117,7 @@ class SkillRegistry:
         layouts). Validated lazily on first ``get()``."""
         self._cache.pop(skill_id, None)  # force reload
         # Store a placeholder mtime so get() loads it fresh.
-        self._cache[skill_id] = (None, Path(manifest_path), -1.0)  # type: ignore[arg-type]
+        self._cache[skill_id] = (None, Path(manifest_path), -1.0)
         self._discovered.add(skill_id)
         self._scanned = True
 
@@ -153,7 +155,7 @@ class SkillRegistry:
         Useful in tests after mutating a manifest on disk."""
         count = 0
         for skill_id in list(self._cache):
-            self._cache[skill_id] = (None, self._cache[skill_id][1], -1.0)  # type: ignore[assignment]
+            self._cache[skill_id] = (None, self._cache[skill_id][1], -1.0)
             self.get(skill_id)  # triggers reload
             count += 1
         return count

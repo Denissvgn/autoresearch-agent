@@ -2,6 +2,137 @@
 
 ## Unreleased
 
+- Closed Phase-2 DoD gaps (lint / typecheck / exit-bookkeeping) found in review.
+  The Phase-2 functional code was already committed and passing (115 skill
+  tests + 17 parity; grep guard at 0). This entry closes the residual
+  §0.4 Definition-of-Done items the "done" marks left open.
+  - **ruff** — fixed 3× E501 (line > 100) in `src/core/skill_manifest.py`
+    (P2-001: `Field(description=...)` strings at lines 447/508/553). The CI
+    ruff gate (`ruff check --config pyproject.toml src tests`) now passes
+    clean on the Phase-2 modules. *(The errors only surfaced in path-mode
+    ruff; stdin-mode silently skips config discovery.)*
+  - **mypy** — `ManifestValidationError.errors` param widened from
+    `list[dict[str, Any]]` to `list[Mapping[str, Any]]` (P2-001,
+    `skill_manifest.py`) so pydantic's `list[ErrorDetails]` (a TypedDict) is
+    accepted without a cast — `Mapping` is covariant. `SkillRegistry._cache`
+    type widened to `tuple[Optional[ResearchSkillManifest], Path, float]`
+    (P2-003, `skill_registry.py`) making the lazy placeholder honest and
+    removing two wrong `# type: ignore[...]` comments (at `register_path`
+    and `reload_all`) that were suppressing the wrong error code
+    (`arg-type`/`assignment`) while the real `assignment` error leaked
+    through. Behavior byte-identical — `get()` already handled the
+    `manifest is None` placeholder path.
+  - **wiki** — sync for `ResearchSkillManifest` / `ManifestSkillRuntime` /
+    `ResearchConfig` remains deferred (`llm-wiki` not on PATH in this
+    environment; same residual as P1-007/P1-023). To be run when the tool is
+    available.
+  - **exit bookkeeping** — recorded the Phase-2 completion date in ADR §12
+    (Rollout Plan). The `arc-011/phase-2-done` rollback tag is deferred to the
+    commit that lands these changes (working tree carries interleaved Phase-0/1
+    edits; tag cut deferred per the Phase-0/1 precedent).
+
+- Closed Phase-1 abstraction gaps found in the P1 code review.
+  - **P1-013** — the orchestrator now routes its three experiment-output parse
+    call sites through the held ``OutputParser`` instances
+    (``self._prepare_parser`` / ``self._marker_parser``, declared at
+    `orchestrator.py:703-704`), instead of the module-level facades which each
+    constructed a fresh parser per call. The ``IterationMetrics``
+    reconstruction was extracted from ``parse_prepare_output`` into a shared
+    ``metrics_from_flat(flat)`` helper (`experiment_parser.py`) so both the
+    orchestrator and the facade use it. The facades stay (external callers +
+    the parity engine depend on them). Behavior byte-identical; the typed
+    fields are no longer dead code.
+  - **P1-017** — the six ``ConfigPromoter`` ``@staticmethod`` helpers that
+    form the file-write surface (``_metadata_sidecar_path``,
+    ``_rollback_snapshot_path``, ``_rollback_metadata_sidecar_path``,
+    ``_write_text_file``, ``_extract_strategy_market``, ``_get_target_path``)
+    are now instance methods that delegate to ``self._target`` (the injected
+    ``PromotionTarget``, default ``FilePathPromotionTarget``). Previously they
+    constructed a fresh ``FilePathPromotionTarget()`` each call, making the DI
+    wired-but-inert. ``test_promotion_target.py`` strengthened: a recording
+    stub now proves the injected target is actually dispatched through, not
+    just stored. Production behavior unchanged (every construction site uses
+    the default target).
+  - **P1-029 / P1-030** — migrated the ``grep`` tool from a synchronous
+    ``subprocess.run`` (inside ``asyncio.to_thread``) to
+    ``asyncio.create_subprocess_exec``. ``_execute_tool`` is now ``async``;
+    the ``bash`` branch stays on its worker thread via an internal
+    ``asyncio.to_thread`` wrap, while ``read_file`` / ``write_file`` / ``glob``
+    stay direct (pure-Python). The single production call site no longer
+    wraps the whole dispatch in ``to_thread``. **Security delta:** the grep
+    child now runs with ``_build_child_env()`` (the P0-023 allow-list
+    scrubber), closing the same secret-inheritance gap on the previously-
+    ungoverned grep path. Timeout (30s) and cancellation reap the child via
+    ``_kill_async_proc_tree`` (process-group kill + ``proc.wait()``). New
+    `tests/test_async_tool_path.py` (12 tests: dispatch shape, happy-path
+    output, truncation, include-filter, timeout reap, cancellation reap, env
+    scrubbing). Four sync ``_execute_tool`` calls in `test_command_policy.py`
+    converted to async.
+  - **Lint** — fixed an ``E501`` line-length violation in
+    `src/core/state_store.py:2111` (introduced by the P1-007 extraction
+    commit; the SQL ``VALUES`` clause was rewrapped).
+
+
+  - **P0-011** — atomic promotion write (temp + `os.replace` + `fsync` of file
+    and parent dir, closed-before-rename, cleanup-on-failure) lives in
+    `src/core/promotion_target.py:_atomic_write_text` and is the write path for
+    every promoted config + metadata sidecar; `src/core/config_promoter.py`
+    keeps a back-compat re-export.
+  - **P0-012** — added `tests/test_config_promoter_atomic.py` (6 tests):
+    failure injection at each stage of the atomic write (write / fsync /
+    os.replace) proves the target file's prior content is preserved and no
+    half-written temp is visible; plus a concurrent-reader test confirming
+    `os.replace`'s atomicity guarantee.
+  - **P0-013** — `EventBroadcaster.broadcast` now wraps each `send_text` in
+    `asyncio.wait_for(timeout=_BROADCAST_SEND_TIMEOUT_S)` (5s) so a stuck /
+    half-open WebSocket is pruned as dead instead of stalling the fan-out
+    indefinitely. The existing lock + snapshot-before-iterate hardening is
+    unchanged.
+  - **P0-014** — added `tests/test_event_broadcaster_concurrency.py` (5 tests):
+    fakes that `await asyncio.sleep(0)` inside `send_text` force real event-loop
+    interleaving so concurrent broadcast + connect/disconnect/churn and a
+    broadcast storm are genuine race tests (the prior `_FakeWS` had no
+    suspension point). Includes the P0-013 slow-client timeout test.
+  - **P0-022** — documented the CORS policy under
+    `docs/adr/ARC-011-cors-policy.md` (W17). Code hardening in `src/main.py`
+    was already correct (explicit origin allowlist by default; `*`+credentials
+    auto-defused); the deliverable doc was missing.
+  - **P0-005 delta** — `_try_auto_promote` now re-checks
+    `session["status"] == "completed"` before promoting (defense-in-depth per
+    ARC-011 §4.3). Terminal-finality makes this unreachable in normal flow, but
+    the design requires the belt-and-suspenders re-check. Also added a genuine
+    concurrent `stop_session` ⇄ exit-path `COMPLETE` race test through the
+    shared state machine in `tests/test_session_status_routing.py` (the prior
+    W8-A/B/C tests were sequential pre-seeds).
+  - **P0-006/007 delta** — added a direct hard `asyncio.wait_for` timeout-path
+    test in `tests/test_orchestrator_timeout.py` (a hanging LLM call that never
+    reaches a bash command, so the soft cap cannot fire; the session-level
+    `wait_for` is the only bound). Closes the gap where only the soft-cap path
+    was tested.
+  - **P0-020 delta** — fixed a whitespace-bypass vector in the production-
+    approval gate: `" production"` / `"production "` / `"\tproduction\n"`
+    previously skipped the production gate entirely (silent downgrade to
+    development, no approval). Added a `field_validator` on `PromotionScopeRequest.scope`
+    that strips whitespace once so every downstream consumer (the structural
+    gate, the HMAC message, audit metadata, promoter args) sees the canonical
+    value. Canonicalization tests added to `tests/test_promotion_approval.py`.
+  - **P0-023 delta** — split the `ML_ADMIN_TOKEN` alias out of
+    `mlflow_service_auth_token` in `src/config.py`. `ML_ADMIN_TOKEN` was aliased
+    to BOTH `rl_trainer_service_token` (needed by RL scripts in the governed
+    child) AND `mlflow_service_auth_token` (the production-promotion secret),
+    so it could not be forbidden by name without breaking RL auth — the
+    promotion secret leaked into every governed child in single-token
+    deployments. After the split, `ML_ADMIN_TOKEN` populates only
+    `rl_trainer_service_token`; promotion requires a dedicated
+    `AUTORESEARCH_MLFLOW_SERVICE_AUTH_TOKEN` / `MLFLOW_SERVICE_AUTH_TOKEN` /
+    `SERVICE_AUTH_TOKEN`. **Standard compose is unaffected**
+    (`compose/autoresearch.yml` already injects via the dedicated
+    `AUTORESEARCH_MLFLOW_SERVICE_AUTH_TOKEN` name). Deployments that inject only
+    `ML_ADMIN_TOKEN` into the autoresearch-agent container must set the
+    dedicated name for promotion. Regression test added to
+    `tests/test_command_policy.py`; the Prometheus-token canary is now planted
+    in the env-leak test (all four named secrets asserted stripped).
+
 - **Completed Phase 2** — Extract skill descriptors for existing model types
   (ARC-011 **P2-009..025**). The three ML skills now run driven purely from
   their `skills/<id>/SKILL.yaml` manifests; the orchestrator no longer reads
