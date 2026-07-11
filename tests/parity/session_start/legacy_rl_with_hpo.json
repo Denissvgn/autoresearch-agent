@@ -39,7 +39,20 @@
     "hpo_trials": 20,
     "hpo_timesteps": 50000,
     "resumed_from": null,
-    "pipeline_id": null
+    "pipeline_id": null,
+    "skill_id": "",
+    "skill_version": "",
+    "subject_id": "BTC_USDT",
+    "variant": "1h",
+    "skill_params": {
+      "enable_hpo": true,
+      "hpo_trials": 20,
+      "hpo_timesteps": 50000,
+      "trading_mode": "margin",
+      "agent_strategy": "BALA",
+      "initial_balance": 10000.0
+    }
   },
-  "source_sha": "a0de1205b8f7283fccfade1dc63b0e23f707052e"
+  "source_sha": "a0de1205b8f7283fccfade1dc63b0e23f707052e",
+  "recapture": "ARC-011 P2-017: ResearchConfig gained canonical subject_id/variant/skill_params fields (derived from legacy instrument/timeframe in __post_init__; flat ML fields mirror into skill_params). skill_id stays \"\" by default (derived at materialize_skill_runtime, not construction, to preserve the transitional-runtime back-compat). Re-captured under the append-only-with-linked-task rule."
 }

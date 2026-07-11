@@ -203,14 +203,23 @@ async def run_service_preflight(
     )
     owns_client = client is None
     active_client = client or httpx.AsyncClient(timeout=timeout, follow_redirects=True)
+    # ARC-011 P1-021: dispatch via the PreflightCheck protocol instead of the
+    # inline ``if target.transport == "tcp"`` fork. Each descriptor is converted
+    # to an HTTPHealthCheck / TCPConnectCheck; the check's ``check(client)``
+    # method delegates to the unchanged _check_target / _check_tcp_target. The
+    # import is local to avoid a module-load cycle (preflight.py imports from
+    # this module for the check bodies).
+    from src.core.preflight import preflight_check_from_target
+
+    preflight_checks = [
+        preflight_check_from_target(
+            target, timeout_s=settings_obj.preflight_timeout_s
+        )
+        for target in targets
+    ]
     try:
         checks = await asyncio.gather(
-            *(
-                _check_tcp_target(target, settings_obj.preflight_timeout_s)
-                if target.transport == "tcp"
-                else _check_target(active_client, target)
-                for target in targets
-            )
+            *(pc.check(active_client) for pc in preflight_checks)
         )
     finally:
         if owns_client:

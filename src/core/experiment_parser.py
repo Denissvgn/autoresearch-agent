@@ -1,4 +1,27 @@
-"""Parse prepare.py stdout output into structured metrics."""
+"""Parse prepare.py stdout output into structured metrics.
+
+The ``---`` delimited KV-block parsing (``parse_prepare_output``) and the
+``ITERATION_RESULT:`` JSON-line scanning (``parse_iteration_marker``) now live
+behind the ``OutputParser`` protocol (ARC-011 P1-010..012) in
+``src/core/output_parser.py`` (``DelimitedKVParser`` / ``JSONMarkerParser``).
+This module keeps the four historical module-level functions as **thin facades**
+over the new classes so:
+
+* the parity engine (``tests/parity/_engine.py``) — which dispatches by string
+  function name and imports ``from src.core.experiment_parser import ...`` —
+  keeps resolving without a fixture re-capture (the X-002 suite is append-only
+  within a phase);
+* ``parse_prepare_output`` keeps returning an ``IterationMetrics`` (callers and
+  the parity engine call ``.to_dict()`` on it), reconstructed from the flat
+  dict the new ``DelimitedKVParser`` produces;
+* ``is_hpo_study_output`` / ``parse_hpo_study_output`` stay here (they are
+  HPO-specific and not part of the ``OutputParser`` surface); the
+  ``HpoTrialResult`` / ``HpoStudyResult`` dataclasses and the ``_KV_PATTERN``
+  they share stay here too.
+
+``IterationMetrics`` / ``FAILURE_STATUSES`` are re-exported here for back-compat.
+Mirrors the P1-007 ``results_store.py`` re-export shim pattern.
+"""
 
 from __future__ import annotations
 
@@ -8,30 +31,17 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from src.core.artifact_reference import (
-    ARTIFACT_REFERENCE_KEYS,
-    normalize_optional_artifact_ref,
+from src.core.output_parser import (
+        FAILURE_STATUSES,
+        DelimitedKVParser,
+        JSONMarkerParser,
 )
-from src.core.gate_status import coerce_bool, normalize_training_gate_aliases
 
 logger = logging.getLogger(__name__)
 
 # prepare.py outputs a --- delimited block of key: value pairs
 _KV_PATTERN = re.compile(r"^\s*(\w[\w_]*)\s*:\s*(.*?)\s*$")
 _ITERATION_MARKER = "ITERATION_RESULT:"
-
-# Statuses prepare.py emits when a run did NOT produce a valid model. The
-# failure blocks (auth_failed / gpu_busy / timeout / crash / generic failure)
-# print a placeholder ``primary_metric: 0.000000`` so the --- block stays
-# well-formed — but that 0.0 is NOT a result. Without nulling it, the phantom
-# 0.0 surfaces as the iteration's metric and can even register as an
-# "improvement" over a prior failure (observed for RL on res_76d405b8caf9,
-# where a failed HPO study reported composite_rl_score=0.0). Keep this aligned
-# with the failure-status set the orchestrator uses to record discard
-# iterations and with research_phase_plan.FAILED_ITERATION_STATUSES.
-FAILURE_STATUSES = frozenset(
-    {"crash", "timeout", "failed", "error", "pruned", "auth_failed", "gpu_busy"}
-)
 
 
 @dataclass
@@ -108,6 +118,11 @@ class HpoStudyResult:
 def parse_prepare_output(stdout: str) -> IterationMetrics:
     """Parse the --- delimited key-value block from prepare.py stdout.
 
+    Facade (ARC-011 P1-011) over ``DelimitedKVParser.parse``; reconstructs an
+    ``IterationMetrics`` from the flat dict the parser returns so callers (and
+    the parity engine, which calls ``.to_dict()``) keep working unchanged. The
+    parsing logic now lives in ``src/core/output_parser.py``.
+
     Expected format:
         ---
         status:             completed
@@ -119,125 +134,45 @@ def parse_prepare_output(stdout: str) -> IterationMetrics:
         training_time_s:    342.1
         ...
     """
-    metrics = IterationMetrics()
-    saw_training_gates = False
-    saw_legacy_gates = False
-
-    # Find the --- delimited section
-    in_block = False
-    for line in stdout.splitlines():
-        stripped = line.strip()
-        if stripped == "---":
-            if in_block:
-                break  # End of block
-            in_block = True
-            continue
-        if not in_block:
-            continue
-
-        match = _KV_PATTERN.match(line)
-        if not match:
-            continue
-
-        key, value = match.group(1), match.group(2).strip()
-
-        if key == "status":
-            metrics.status = value
-        elif key == "primary_metric":
-            try:
-                metrics.primary_metric = float(value)
-            except ValueError:
-                logger.warning("Could not parse primary_metric: %s", value)
-        elif key == "metric_name":
-            metrics.metric_name = value
-        elif key == "direction":
-            metrics.direction = value
-        elif key == "training_gates_passed":
-            metrics.training_gates_passed = coerce_bool(value)
-            saw_training_gates = True
-        elif key == "all_gates_passed":
-            metrics.all_gates_passed = coerce_bool(value)
-            saw_legacy_gates = True
-        elif key == "training_time_s":
-            try:
-                metrics.training_time_s = float(value)
-            except ValueError:
-                pass
-        elif key == "gate_failures":
-            # Semicolon-separated list of gate failure reasons
-            metrics.extra[key] = [
-                s.strip() for s in value.split(";") if s.strip()
-            ]
-        elif key in ARTIFACT_REFERENCE_KEYS:
-            metrics.extra[key] = normalize_optional_artifact_ref(value)
-        elif key in {"is_tsfm_candidate", "tsfm_candidate", "auto_phase_evidence"}:
-            metrics.extra[key] = coerce_bool(value)
-        elif key.endswith("_json"):
-            try:
-                parsed = json.loads(value)
-            except json.JSONDecodeError:
-                metrics.extra[key] = value
-            else:
-                metrics.extra[key] = parsed
-                metrics.extra[key[: -len("_json")]] = parsed
-        else:
-            # Store any extra metrics
-            try:
-                metrics.extra[key] = float(value)
-            except ValueError:
-                metrics.extra[key] = value
-
-    if saw_training_gates:
-        if saw_legacy_gates and metrics.all_gates_passed != metrics.training_gates_passed:
-            logger.warning(
-                "Conflicting prepare.py gate aliases: "
-                "training_gates_passed=%s all_gates_passed=%s; "
-                "using training_gates_passed",
-                metrics.training_gates_passed,
-                metrics.all_gates_passed,
-            )
-        metrics.all_gates_passed = metrics.training_gates_passed
-    elif saw_legacy_gates:
-        metrics.training_gates_passed = metrics.all_gates_passed
-
-    # A failed run has no meaningful primary metric. prepare.py's failure
-    # blocks emit a placeholder ``primary_metric: 0.000000`` to keep the ---
-    # block parseable; null it here so the 0.0 cannot masquerade as a result
-    # (phantom metric / false "improvement" over a prior failure).
-    if metrics.primary_metric is not None and metrics.status.lower() in FAILURE_STATUSES:
-        metrics.primary_metric = None
-
-    return metrics
+    flat = DelimitedKVParser().parse(stdout)
+    # ``parse`` never returns None today (mirrors the old behavior); guard for
+    # type-safety only.
+    if flat is None:
+        return IterationMetrics()
+    # Reconstruct the IterationMetrics from the flat dict. The seven canonical
+    # fields are pulled out; everything else is splatted back into ``extra``.
+    known = {
+        "status",
+        "primary_metric",
+        "metric_name",
+        "direction",
+        "training_gates_passed",
+        "all_gates_passed",
+        "training_time_s",
+    }
+    extra = {k: v for k, v in flat.items() if k not in known}
+    return IterationMetrics(
+        status=flat.get("status", "unknown"),
+        primary_metric=flat.get("primary_metric"),
+        metric_name=flat.get("metric_name"),
+        direction=flat.get("direction", "higher_is_better"),
+        training_gates_passed=flat.get("training_gates_passed", False),
+        all_gates_passed=flat.get("all_gates_passed", False),
+        training_time_s=flat.get("training_time_s"),
+        extra=extra,
+    )
 
 
 def parse_iteration_marker(text: str) -> Optional[Dict[str, Any]]:
     """Parse an ITERATION_RESULT: JSON line from agent output.
 
+    Facade (ARC-011 P1-012) over ``JSONMarkerParser.parse_marker``; the scanning
+    logic now lives in ``src/core/output_parser.py``.
+
     The agent is instructed to output:
         ITERATION_RESULT: {"iteration": N, "primary_metric": X, ...}
     """
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith(_ITERATION_MARKER):
-            json_str = stripped[len(_ITERATION_MARKER) :].strip()
-            try:
-                payload = json.loads(json_str)
-            except json.JSONDecodeError:
-                logger.warning("Failed to parse iteration marker JSON: %s", json_str)
-                continue
-            if isinstance(payload, dict):
-                if (
-                    "training_gates_passed" in payload
-                    or "all_gates_passed" in payload
-                ):
-                    normalize_training_gate_aliases(
-                        payload,
-                        logger=logger,
-                        context="ITERATION_RESULT",
-                    )
-                return payload
-            logger.warning("Iteration marker JSON was not an object: %s", json_str)
-    return None
+    return JSONMarkerParser().parse_marker(text)  # type: ignore[return-value]
 
 
 def is_hpo_study_output(stdout: str) -> bool:

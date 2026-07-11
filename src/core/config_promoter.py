@@ -36,6 +36,10 @@ from src.core.development_inference_validation import (
 )
 from src.core.development_signal_health import build_development_signal_health
 from src.core.gate_status import training_gates_passed_from_iteration
+from src.core.promotion_target import (
+        FilePathPromotionTarget,
+        PromotionTarget,
+)
 from src.core.research_phase_plan import build_phase_state
 from src.core.state_store import StateStore
 
@@ -101,8 +105,21 @@ QUALITY_BASELINE_BLOCKER = "best_metric_below_development_baseline"
 class ConfigPromoter:
     """Handles preview and confirmation of config promotion to host."""
 
-    def __init__(self, store: StateStore) -> None:
+    def __init__(
+        self,
+        store: StateStore,
+        target: Optional["PromotionTarget"] = None,
+    ) -> None:
         self._store = store
+        # ARC-011 P1-017: the file-write surface (path derivation + atomic
+        # write) is reached only through the PromotionTarget protocol. The
+        # historical @staticmethod helpers (_get_target_path,
+        # _metadata_sidecar_path, _rollback_*_path, _extract_strategy_market,
+        # _write_text_file) now delegate to this target. Defaults to
+        # FilePathPromotionTarget for back-compat — all three construction sites
+        # (main.py, orchestrator auto-promote, pipeline_controller) pass only
+        # the store and get the default.
+        self._target: "PromotionTarget" = target or FilePathPromotionTarget()
 
     async def preview(
         self,
@@ -2076,11 +2093,10 @@ class ConfigPromoter:
         *,
         scope: str = DEVELOPMENT_PROMOTION_SCOPE,
     ) -> str:
-        path = Path(target_path)
-        return str(
-            path.with_name(
-                f"{path.name}.{scope}-promotion.iter-{iteration}.json"
-            )
+        # ARC-011 P1-017: delegates to the PromotionTarget impl. Kept as a
+        # @staticmethod for back-compat with internal self.* call sites.
+        return FilePathPromotionTarget().metadata_sidecar_path(
+            target_path, iteration, scope=scope,
         )
 
     @staticmethod
@@ -2090,25 +2106,16 @@ class ConfigPromoter:
         research_id: str,
         iteration: int,
     ) -> str:
-        path = Path(target_path)
-        safe_research_id = "".join(
-            char if char.isalnum() or char in {"-", "_"} else "_"
-            for char in research_id
-        )
-        return str(
-            path.with_name(
-                f"{path.name}.development-rollback."
-                f"{safe_research_id}.iter-{iteration}.yaml"
-            )
+        return FilePathPromotionTarget().rollback_snapshot_path(
+            target_path=target_path,
+            research_id=research_id,
+            iteration=iteration,
         )
 
     @staticmethod
     def _rollback_metadata_sidecar_path(target_path: str, promotion_id: int) -> str:
-        path = Path(target_path)
-        return str(
-            path.with_name(
-                f"{path.name}.development-rollback.promotion-{promotion_id}.json"
-            )
+        return FilePathPromotionTarget().rollback_metadata_sidecar_path(
+            target_path, promotion_id,
         )
 
     @staticmethod
@@ -2125,7 +2132,7 @@ class ConfigPromoter:
         complete content or the new complete content. The directory is also
         fsync'd so the rename itself survives a power loss.
         """
-        await asyncio.to_thread(_atomic_write_text, path, content)
+        await FilePathPromotionTarget().write(path, content)
 
     def _build_rollback_readiness(
         self,
@@ -3109,19 +3116,10 @@ class ConfigPromoter:
     def _extract_strategy_market(yaml_str: str) -> tuple:
         """Extract agent_strategy and trading_mode from a YAML config string.
 
-        Returns (strategy, market_type) with defaults if not found.
+        ARC-011 P1-017: delegates to the PromotionTarget impl. Returns
+        (strategy, market_type) with defaults if not found.
         """
-        try:
-            import yaml as _yaml
-            cfg = _yaml.safe_load(yaml_str)
-            if not isinstance(cfg, dict):
-                return "BALA", "stock"
-            strategy = (cfg.get("agent_strategy") or "BALA").upper()
-            env = cfg.get("environment") or {}
-            market = (env.get("trading_mode") or cfg.get("trading_mode") or "stock").lower()
-            return strategy, market
-        except Exception:
-            return "BALA", "stock"
+        return FilePathPromotionTarget().extract_strategy_market(yaml_str)
 
     @staticmethod
     def _get_target_path(
@@ -3130,22 +3128,13 @@ class ConfigPromoter:
     ) -> str:
         """Determine the host config file path for promotion.
 
-        ML-67: RL configs include strategy + market_type in the filename.
+        ARC-011 P1-017: delegates to the PromotionTarget impl. ML-67: RL
+        configs include strategy + market_type in the filename.
         """
-        host_configs = settings.host_configs_path
-        if model_type in ("direction", "volatility"):
-            return os.path.join(
-                host_configs,
-                "instrument_configs",
-                f"{instrument}_{timeframe}.yaml",
-            )
-        elif model_type == "rl":
-            strat = strategy.upper()
-            mkt = market_type.lower()
-            return os.path.join(
-                host_configs,
-                "rl",
-                f"{instrument}_{timeframe}_{strat}_{mkt}_production.yaml",
-            )
-        else:
-            raise ValueError(f"Unknown model type: {model_type}")
+        return FilePathPromotionTarget().target_path(
+            model_type=model_type,
+            instrument=instrument,
+            timeframe=timeframe,
+            strategy=strategy,
+            market_type=market_type,
+        )
