@@ -4,13 +4,23 @@ from __future__ import annotations
 
 import hashlib
 import json
+import secrets
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.config import settings
+from src.core.legacy_alias import model_type_to_skill_id
 from src.core.service_preflight import build_not_run_preflight, sanitize_service_url
+
+#: Current manifest artifact schema version (ARC-011 P3-019). v2 adds the
+#: canonical ``skill_id``/``subject_id``/``variant`` derived fields alongside
+#: the legacy ``model_type``/``instrument``/``timeframe`` so the persisted
+#: manifest artifact carries the same dual shape as the API responses (§7.7).
+#: v1 manifests are accepted on read and normalized to v2 (forward-compat).
+CURRENT_SCHEMA_VERSION = "research_session_manifest.v2"
+_KNOWN_SCHEMA_VERSIONS = {"research_session_manifest.v1", CURRENT_SCHEMA_VERSION}
 
 
 class ResearchSessionManifest(BaseModel):
@@ -18,7 +28,7 @@ class ResearchSessionManifest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: str = "research_session_manifest.v1"
+    schema_version: str = CURRENT_SCHEMA_VERSION
     research_id: str
     created_at: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
@@ -47,6 +57,42 @@ class ResearchSessionManifest(BaseModel):
     hpo: Dict[str, Any] = Field(default_factory=dict)
     focus_hint: Optional[str] = None
     manifest_hash: Optional[str] = None
+    # ARC-011 P4-002: per-session anti-forgery nonce (W11). Generated at manifest
+    # write time, persisted in the manifest, and delivered to the sanctioned eval
+    # script via subprocess env (AUTORESEARCH_SESSION_NONCE). The parser
+    # validates the echoed nonce when the skill's ``require_signed_metrics`` is
+    # true (P4-003). Optional so legacy manifests without it still load.
+    session_nonce: Optional[str] = None
+    # ARC-011 P3-019 (manifest v2): the canonical dual-shape fields. They mirror
+    # the API's dual-shape session responses (§7.7) so the persisted artifact is
+    # self-describing without a read-time projection. ``model_type`` →
+    # ``skill_id`` via the legacy_alias registry; ``instrument`` → ``subject_id``;
+    # ``timeframe`` → ``variant`` (the ResearchConfig derivation rules, P2-017).
+    # Optional + derived in ``_derive_canonical_fields`` so v1 manifests (which
+    # never carried these) load and back-fill cleanly.
+    skill_id: Optional[str] = None
+    subject_id: Optional[str] = None
+    variant: Optional[str] = None
+
+    @field_validator("schema_version", mode="before")
+    @classmethod
+    def _accept_known_schema_versions(cls, value: Any) -> Any:
+        """Forward-compat read: accept v1 manifests, normalize to v2.
+
+        Persisted v1 manifests (written before P3-019) carry
+        ``schema_version = "research_session_manifest.v1"``. They are loaded
+        unchanged and re-stamped as v2 on the round-trip so a migrated artifact
+        carries the canonical fields. Unknown prefixes raise a field-located
+        error rather than silently degrading (R3 back-compat).
+        """
+        if value is None:
+            return CURRENT_SCHEMA_VERSION
+        if isinstance(value, str) and value in _KNOWN_SCHEMA_VERSIONS:
+            return CURRENT_SCHEMA_VERSION
+        raise ValueError(
+            f"unsupported manifest schema_version {value!r}; expected one of "
+            f"{sorted(_KNOWN_SCHEMA_VERSIONS)}"
+        )
 
     @field_validator("instrument", "timeframe", "objective", "model_family")
     @classmethod
@@ -75,6 +121,19 @@ class ResearchSessionManifest(BaseModel):
         missing = [name for name in required if not getattr(self, name)]
         if missing:
             raise ValueError(f"manifest missing required section(s): {missing}")
+        # P3-019: back-fill canonical dual-shape fields from the legacy trio so a
+        # v1 manifest (which never carried skill_id/subject_id/variant) round-
+        # trips through read → v2 with the canonical surface populated. The
+        # derivation rules mirror ResearchConfig (P2-017): model_type → skill_id
+        # via legacy_alias; instrument → subject_id; timeframe → variant.
+        if not self.skill_id:
+            object.__setattr__(
+                self, "skill_id", model_type_to_skill_id(self.model_type)
+            )
+        if not self.subject_id:
+            object.__setattr__(self, "subject_id", self.instrument)
+        if not self.variant:
+            object.__setattr__(self, "variant", self.timeframe)
         return self
 
     def canonical_json(self, *, include_hash: bool = True) -> str:
@@ -119,6 +178,12 @@ def build_research_manifest(
         "instrument": instrument,
         "timeframe": timeframe,
         "model_type": model_type,
+        # P3-019: canonical dual-shape fields, populated alongside the legacy
+        # trio so the persisted manifest artifact is self-describing. The model
+        # validator back-fills these if absent (v1 round-trip path).
+        "skill_id": model_type_to_skill_id(model_type),
+        "subject_id": instrument,
+        "variant": timeframe,
         "objective": _default_objective(model_type),
         "model_family": _default_model_family(model_type),
         "data_window": {
@@ -206,6 +271,11 @@ def build_research_manifest(
             "timesteps": hpo_timesteps if enable_hpo else None,
         },
         "focus_hint": focus_hint,
+        # ARC-011 P4-002: per-session anti-forgery nonce (W11). 32 bytes,
+        # hex-encoded. Delivered to the eval script via subprocess env
+        # (AUTORESEARCH_SESSION_NONCE) and validated by the parser when the
+        # skill's require_signed_metrics is true (P4-003).
+        "session_nonce": secrets.token_hex(32),
     }
     payload = _deep_merge(defaults, overrides or {})
     if payload.get("research_id") != research_id:

@@ -271,6 +271,35 @@ def _enrich_iteration(row: Dict[str, Any], model_type: str) -> Dict[str, Any]:
     )
     enriched["feature_readiness_metrics"] = _feature_readiness_metrics(metrics)
 
+    # P3-015 / P3-016: canonical skill fields — additive, derived from legacy.
+    # ``skill_id`` ← ``model_type`` via the alias registry; ``skill_phase`` ←
+    # the legacy ``search_phase`` column; ``evidence_keys`` ← the metrics dict's
+    # known phase-evidence keys. These mirror the WS enrichment (P3-018) so API
+    # and WebSocket payloads carry the same canonical surface (§10 guarantee #4).
+    #
+    # AC-deviation (P1-007 house style): the P3-016 AC names
+    # ``src/core/state_store.py`` and reads as if ``skill_phase``/``evidence_keys``
+    # were persisted columns on the iteration row. They are NOT persisted — the
+    # canonical fields are synthesized here at read time because they derive
+    # deterministically from existing columns (``search_phase``) and existing
+    # metrics payload keys (``phase_evidence``). Persisting them would require a
+    # v7 migration + write-path changes for no semantic gain and would couple the
+    # storage layer to the skill vocabulary. The contract is fixed by GEN-010
+    # (``test_generalization_falsifiability.py``) which asserts these fields are
+    # present and additive on every enriched iteration row.
+    from src.core.legacy_alias import model_type_to_skill_id
+
+    if not enriched.get("skill_id"):
+        enriched["skill_id"] = model_type_to_skill_id(model_type) if model_type else ""
+    if not enriched.get("skill_phase"):
+        enriched["skill_phase"] = enriched.get("search_phase")
+    if "evidence_keys" not in enriched:
+        phase_evidence = metrics.get("phase_evidence")
+        if isinstance(phase_evidence, dict):
+            enriched["evidence_keys"] = list(phase_evidence.keys())
+        else:
+            enriched["evidence_keys"] = []
+
     return enriched
 
 

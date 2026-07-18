@@ -15,6 +15,9 @@
     "model_type": "direction",
     "instrument": "DOGE_USDT",
     "timeframe": "15m",
+    "skill_id": "ml-direction",
+    "subject_id": "DOGE_USDT",
+    "variant": "15m",
     "scope": "development",
     "promotion_scope": "development",
     "target_path": "<host_configs>/instrument_configs/DOGE_USDT_15m.yaml",
@@ -876,5 +879,6 @@
       }
     ]
   },
-  "source_sha": "a0de1205b8f7283fccfade1dc63b0e23f707052e"
+  "source_sha": "f2300939d6fb3252f2dd2f714dce0c4efcd0ec3e",
+  "recapture": "ARC-011 P3-019: promotion preview now carries the additive canonical skill_id/subject_id/variant fields (P3-017 enrichment, sourced from the manifest's canonical fields which the v2 manifest model back-fills from model_type/instrument/timeframe). Re-captured under the append-only-with-linked-task rule (§1.5). All other fields unchanged."
 }

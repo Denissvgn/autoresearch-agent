@@ -2,6 +2,73 @@
 
 ## Unreleased
 
+- **ARC-011 Phase 3 — gap close (BE).** Closes the residual Phase-3 AC gaps
+  found by a post-implementation audit against `ARC-011-backlog.md` §6.
+  - **P3-008** `POST /skills/reload` now refuses to run when
+    `settings.environment == "production"` (403
+    `skills_reload_prod_disabled` with a hint). The router already required
+    a valid API token; this adds the dev-only constraint the AC names. The
+    denial is audited as `skills.reload` / `outcome=denied`. Non-production
+    environments keep the dev convenience.
+  - **P3-019 (manifest v2)** `ResearchSessionManifest.schema_version` bumped
+    `research_session_manifest.v1 → v2`. v1 manifests are accepted on read
+    and normalized to v2 (forward-compat); unknown prefixes raise a clear
+    error (R3 back-compat). The v2 artifact carries the canonical
+    `skill_id`/`subject_id`/`variant` fields alongside the legacy trio
+    (populated in `build_research_manifest` and back-filled by a
+    `model_validator` for v1 round-trips), matching the dual-shape session
+    API contract. The DB schema was already at v6 from the prior entry.
+    New `tests/test_research_manifest.py` covers v1→v2 load, canonical-field
+    derivation for all three model types, and the round-trip hash stability;
+    `tests/test_results_store_migrations.py` adds a v1-era → latest forward
+    migration test (seed v1 row → `initialize()` → dual-shape read) and a
+    per-migration log assertion.
+  - **P3-015/016/017 (HTTP-level coverage)** new
+    `tests/test_research_api_integration.py` exercises the live router path
+    for `GET /research/{id}/iterations` (canonical `skill_id`/`skill_phase`/
+    `evidence_keys` synthesized additively) and `POST /research/{id}/promote/preview`
+    (`target_kind` from the manifest registry, defaulting to `file_path` for
+    legacy sessions; parametrized over all four ARC-011 §7 promotion kinds).
+    These previously had helper-unit coverage only.
+  - **P3-016 (AC-deviation, recorded)** the AC names
+    `src/core/state_store.py` and reads as if `skill_phase`/`evidence_keys`
+    were persisted columns on the iteration row. They are NOT persisted:
+    `_enrich_iteration` synthesizes them at read time from the existing
+    `search_phase` column and the metrics `phase_evidence` keys. Persisting
+    them would require a v7 migration + write-path changes for no semantic
+    gain and would couple storage to the skill vocabulary. The contract is
+    fixed by GEN-010 in `test_generalization_falsifiability.py`.
+
+- **ARC-011 Phase 3 — gap close (FE).**
+  - **P3-025** `IterationsTable` is now wired into `ResearchDetail`'s
+    iterations tab (previously dead code — the page rendered an inline
+    table). Manifest-driven `iteration_table_columns` flow through from the
+    skill's `metric_schema`, so extra columns render generically.
+  - **P3-022/023** `DynamicFormFields` hardened: `options_url` is now parsed
+    generically with `URL` and dispatched by pathname (`/subjects` →
+    `getSubjects`, `/subjects/{id}/variants` → `getSubjectVariants`), and the
+    integer/number `0` value no longer coerces to `''` (nullish-check fix).
+  - **P3-028** new `ui/src/skill-plugins/` renderer registry
+    (`registry.ts` / `types.ts` / `index.ts` + README). `DynamicFormFields`
+    consults the registry before its built-in switch; a future skill ships a
+    renderer instead of forcing a new form branch. The generic text-fallback
+    is retained for unmatched field types.
+  - **P3-029** stood up a vitest component-test harness
+    (`vitest.config.ts`, `vitest.setup.ts`, `test:unit`/`test:watch` scripts)
+    with 35 contract tests covering DynamicFormFields (field types,
+    `visible_when`, `options_url`, plugin registry, the `0`-coercion
+    regression), MetricsChart (manifest-wins / fallback series selection),
+    IterationsTable (default + manifest columns, best-row highlight), and
+    PromotionModal (`target_kind` branching for all four promotion kinds).
+
+- **ARC-011 Phase 3 — parity fixture re-capture.** Re-captured
+  `tests/parity/promotion_preview/development_scope_basic.json` under the
+  §1.5 append-only-with-linked-task rule: the preview response now carries
+  the additive canonical `skill_id`/`subject_id`/`variant` fields (P3-017,
+  sourced from the v2 manifest). The two `session_start` fixtures only had
+  their `source_sha` bumped — their `expected` output is unchanged, confirming
+  the manifest v2 bump did not alter session-start behavior.
+
 - **ARC-011 Phase 3 — Generic session API, dual-shape responses (BE).**
   Implemented the P3-013/P3-014/P3-015/P3-018 backend features that the
   Phase-3 test suite (`test_research_api_compat.py`,

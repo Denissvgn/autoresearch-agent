@@ -11,9 +11,10 @@ import {
   useResearchState,
   useResumeSession,
   useSession,
+  useSkillMetricSchema,
   useStopSession,
 } from '../hooks/useResearch';
-import { api, Iteration, ResearchState } from '../api/client';
+import { api, Iteration, MetricColumn, ResearchState } from '../api/client';
 import {
   Icon,
   PhaseBar,
@@ -21,6 +22,7 @@ import {
   StatusBadge,
 } from '../components/hifi/primitives';
 import AgentLog from '../components/AgentLog';
+import IterationsTable from '../components/IterationsTable';
 import MetricsTrendChart from '../components/MetricsChart';
 import { useWebSocket } from '../hooks/useWebSocket';
 
@@ -76,6 +78,9 @@ export default function ResearchDetail() {
   const { data: session, isLoading } = useSession(id!);
   const { data: iterations } = useIterations(id!);
   const { data: state } = useResearchState(id!);
+  // P3-024: fetch the session's skill metric schema for manifest-driven chart series.
+  const skillId = session?.skill_id || null;
+  const { data: skillMetricSchema } = useSkillMetricSchema(skillId);
   const isRunning = session?.status === 'running';
   const isActive = session?.status === 'running' || session?.status === 'paused';
   const { data: agentLog } = useAgentLog(id!, isActive);
@@ -322,8 +327,8 @@ export default function ResearchDetail() {
           isPaused={session.status === 'paused'}
         />
       )}
-      {tab === 'metrics' && <MetricsTab iterations={iterations ?? []} modelType={session.model_type} />}
-      {tab === 'iterations' && <IterationsTab iterations={iterations ?? []} bestIteration={session.best_iteration} researchId={id!} />}
+      {tab === 'metrics' && <MetricsTab iterations={iterations ?? []} modelType={session.model_type} chartSeries={skillMetricSchema?.chart_series} />}
+      {tab === 'iterations' && <IterationsTab iterations={iterations ?? []} bestIteration={session.best_iteration} researchId={id!} tableColumns={skillMetricSchema?.iteration_table_columns} />}
       {tab === 'log' && <AgentLog researchId={id!} isActive={isActive} />}
     </div>
   );
@@ -877,7 +882,7 @@ function IterationDetails({
   );
 }
 
-function MetricsTab({ iterations, modelType }: { iterations: Iteration[]; modelType: string }) {
+function MetricsTab({ iterations, modelType, chartSeries }: { iterations: Iteration[]; modelType: string; chartSeries?: MetricColumn[] }) {
   const orderedIterations = useMemo(
     () => [...iterations].sort((a, b) => a.iteration - b.iteration),
     [iterations],
@@ -973,6 +978,7 @@ function MetricsTab({ iterations, modelType }: { iterations: Iteration[]; modelT
           iterations={orderedIterations}
           selectedIteration={selectedIterationNumber}
           onSelectIteration={selectIteration}
+          chartSeries={chartSeries}
         />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
@@ -1035,10 +1041,13 @@ function IterationsTab({
   iterations,
   bestIteration,
   researchId,
+  tableColumns,
 }: {
   iterations: Iteration[];
   bestIteration: number | null;
   researchId: string;
+  /** P3-025: manifest-driven columns from metric_schema.iteration_table_columns. */
+  tableColumns?: MetricColumn[];
 }) {
   const [filter, setFilter] = useState('');
   const filtered = useMemo(() => {
@@ -1083,56 +1092,7 @@ function IterationsTab({
       </div>
       <div className="card">
         <div className="scroll" style={{ maxHeight: 560 }}>
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Iter</th>
-                <th className="num">Metric</th>
-                <th>Gates</th>
-                <th>Decision</th>
-                <th>Phase</th>
-                <th className="num">Train</th>
-                <th>MLflow</th>
-                <th>Snap</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((it) => {
-                const isBest = bestIteration != null && it.iteration === bestIteration;
-                return (
-                  <tr key={it.id} className={isBest ? 'is-selected' : ''}>
-                    <td className="mono">
-                      #{it.iteration}{isBest && <span className="success-text"> ★</span>}
-                    </td>
-                    <td className="num">{it.primary_metric != null ? it.primary_metric.toFixed(4) : '—'}</td>
-                    <td>
-                      <span className={`pill ${it.all_gates_passed ? 'pill--green' : 'pill--red'}`}>
-                        <Icon name={it.all_gates_passed ? 'check' : 'x'} size={10} />
-                        {it.all_gates_passed ? 'pass' : 'fail'}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`pill ${it.decision === 'keep' ? 'pill--green' : it.decision === 'discard' ? 'pill--red' : 'pill--ghost'}`}>
-                        {it.decision || '—'}
-                      </span>
-                    </td>
-                    <td className="mono subtle">{it.search_phase || '—'}</td>
-                    <td className="num">{it.training_time_s != null ? `${it.training_time_s.toFixed(1)}s` : '—'}</td>
-                    <td>
-                      {it.mlflow_url ? (
-                        <a href={it.mlflow_url} target="_blank" rel="noreferrer" className="lnk mono">
-                          {(it.mlflow_run_id || '').slice(0, 8) || 'open'}
-                        </a>
-                      ) : (
-                        <span className="faint">—</span>
-                      )}
-                    </td>
-                    <td className="mono subtle">{(it.attempt_snapshot_hash || it.artifact_hash || '').slice(0, 8) || '—'}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <IterationsTable iterations={filtered} bestIteration={bestIteration} tableColumns={tableColumns} />
         </div>
       </div>
     </div>
