@@ -2,6 +2,74 @@
 
 ## Unreleased
 
+- **ARC-011 Phase 3 — Generic session API, dual-shape responses (BE).**
+  Implemented the P3-013/P3-014/P3-015/P3-018 backend features that the
+  Phase-3 test suite (`test_research_api_compat.py`,
+  `test_ws_event_enrichment.py`, `test_generalization_falsifiability.py`)
+  encodes as executable contracts.
+  - **P3-013** `POST /research/start` now accepts the canonical
+    `{skill_id, subject_id, variant, skill_params}` shape alongside the
+    legacy `{model_type, instrument, timeframe}` shape. Canonical wins
+    unconditionally when both are present; conflicts are audited
+    (`research.shape_conflict`). Unknown `skill_id` → 404 with an
+    installable-skills hint. `skill_params` validated against the skill's
+    `param_schema` → 422 with field pointers on violation.
+  - **P3-014/P3-015** `start_research`, `list_research`, and
+    `get_research` now return dual-shape responses: canonical
+    (`skill_id`/`subject_id`/`variant`) alongside legacy
+    (`model_type`/`instrument`/`timeframe`), both always populated, plus
+    a `links` block per ARC-011 §7.7.
+  - **P3-015/016** Iteration responses (`get_iterations`, `get_results`)
+    now carry canonical `skill_id`, `skill_phase`, and `evidence_keys`
+    alongside the legacy `model_type`/`search_phase` — additive, derived
+    via the `legacy_alias` registry so API and WS payloads share the same
+    canonical surface (§10 guarantee #4).
+  - **P3-017** Promotion preview/confirm responses now carry `target_kind`
+    (from the skill manifest's `promotion_target.primary.kind`) and
+    canonical `skill_id`/`subject_id`/`variant` so the UI PromotionModal
+    can branch generically. Defaults to `file_path` for legacy sessions.
+  - **P3-018** `EventBroadcaster.broadcast` now enriches WebSocket
+    payloads with `skill_id`, `skill_phase`, `evidence_keys`, and a
+    `metrics` summary — strictly additive (§10 #5).
+  - **P3-019** DB schema bumped to v6: `skill_id`, `subject_id`, `variant`
+    columns added to `research_sessions` (idempotent `ALTER TABLE`).
+    Existing rows get empty-string defaults; the dual-shape helper
+    back-fills canonical from legacy on read.
+  - **P3-001..011** `GET /skills`, `GET /subjects` and related endpoints
+    are now mounted in the production app (previously only available in
+    test apps). `main.py` lifespan discovers installed skill manifests
+    and wires the skill/subject/promotion modules with a shared registry.
+  - **P0-013** Added `_BROADCAST_SEND_TIMEOUT_S` per-send timeout so a
+    stuck/half-open WebSocket is pruned instead of stalling the fan-out.
+  - **§1.7** Phase-3 grep guard activated: `DIRECTION_PHASES`,
+    `VOLATILITY_PHASES`, `RL_PHASES`, `_ALLOWED_SCRIPTS` added to the
+    deny-list in `domain_coupling_rules.conf`; `.arc-011-phase` bumped
+    to 3. Guard passes clean (0 violations).
+
+- **ARC-011 Phase 3 — Skill-aware UI (FE).**
+  - **P3-021** `SkillPicker` component on NewResearch — fetches skills
+    from `GET /skills` and replaces the hardcoded model-type selector.
+    Falls back to the legacy selector when no skills are available.
+  - **P3-022/P3-023** `DynamicFormFields` component renders any skill's
+    form from `GET /skills/{id}/form-fields` with `visible_when` conditional
+    support and `options_url` lazy fetch. Unknown field types fall back
+    to text + warning (P3-028).
+  - **P3-024** `MetricsChart` now accepts an optional `chartSeries` prop
+    from `metric_schema.chart_series`; falls back to the hardcoded
+    per-model-type series when no manifest is available.
+  - **P3-025** `IterationsTable` now accepts an optional `tableColumns`
+    prop from `metric_schema.iteration_table_columns`; extra columns
+    render from iteration metrics data.
+  - **P3-026** `PromotionModal` branches on `target_kind` to show
+    target-specific UI (file_path / registry_api / git_branch /
+    artifact_store).
+  - **P3-027** Dashboard search now filters by `skill_id` alongside
+    `instrument`/`model_type`/`tag`/`id`.
+  - **API client** Added `SkillSummary`, `FormField`, `MetricColumn`,
+    `MetricSchema`, `SubjectInfo` types and `getSkills`, `getSkill`,
+    `getSkillFormFields`, `getSkillMetricSchema`, `getSubjects`,
+    `getSubjectVariants`, `reloadSkills` API methods.
+
 - Closed Phase-2 DoD gaps (lint / typecheck / exit-bookkeeping) found in review.
   The Phase-2 functional code was already committed and passing (115 skill
   tests + 17 parity; grep guard at 0). This entry closes the residual

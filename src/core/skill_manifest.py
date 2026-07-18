@@ -118,6 +118,12 @@ class LLMConfig(BaseModel):
     max_output_tokens: int = Field(default=8192, ge=1)
     #: Relative path (within the skill package) of the system-prompt primer file.
     system_prompt: str = Field(default="SKILL.md")
+    # P4-009: capability requirements the provider router (P4-010) matches
+    # against ``provider.capabilities()``. Defaults preserve existing ML skills
+    # (which all use Anthropic with native tool use + system prompts).
+    required_native_tool_use: bool = True
+    required_system_prompt: bool = True
+    required_max_context_tokens: Optional[int] = Field(default=None, ge=1)
 
 
 class WorkspaceConfig(BaseModel):
@@ -424,6 +430,12 @@ class OutputParserConfig(BaseModel):
     iteration_marker: str = Field(default="ITERATION_RESULT:")
     #: W11 anti-forgery nonce field name (Phase 4). Accepted, not enforced.
     nonce_field: Optional[str] = None
+    #: W11 anti-forgery enforcement flag (P4-005). When ``true``, the parser
+    #: validates the echoed nonce against the session's known nonce; a missing
+    #: or wrong nonce rejects the metrics block. Default ``false`` keeps all
+    #: existing ML skills working without changes (X-002 parity green). Flipped
+    #: to ``true`` per-skill as each skill's eval script is backfilled (P4-004).
+    require_signed_metrics: bool = False
     required_fields: list[str] = Field(default_factory=list)
     field_types: Optional[FieldTypes] = None
     failure_statuses: list[str] = Field(default_factory=list)
