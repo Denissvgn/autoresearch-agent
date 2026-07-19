@@ -50,6 +50,8 @@ only deviations from a literal copy — see inline comments):
 
 from __future__ import annotations
 
+import json
+import logging
 from collections.abc import AsyncIterator
 from dataclasses import asdict, dataclass
 from enum import Enum
@@ -57,6 +59,8 @@ from typing import Any, Protocol
 
 import anthropic
 import httpx
+
+logger = logging.getLogger(__name__)
 
 # Claude pricing constants (Sonnet 3.5 baseline) — moved here from
 # ``orchestrator.py`` (P1-002). Referenced by ``AnthropicProvider.estimate_cost``
@@ -314,10 +318,12 @@ class LLMProvider(Protocol):
 
 __all__ = [
     "AnthropicProvider",
+    "build_provider",
     "ContentBlock",
     "ErrorClass",
     "LLMProvider",
     "Message",
+    "OpenAIProvider",
     "ProviderCapabilities",
     "ProviderResponse",
     "RequestBlock",
@@ -576,3 +582,326 @@ class AnthropicProvider:
                 retry_after_s=None,
             )
         return ErrorClass(transient=False, status_code=None, retry_after_s=None)
+
+
+# ── OpenAI SDK adapter (P4-007 / P4-008) ────────────────────────────────────
+#
+# Implements ``LLMProvider`` over the OpenAI Chat Completions API (spike
+# D-openai). System → ``role:"system"`` message; tools → ``{type:"function",
+# function:{name,description,parameters}}``; tool results → ``role:"tool"``
+# messages keyed by ``tool_call_id``; ``function.arguments`` JSON-parsed into
+# ``ToolUseBlock.input``; R5 invariant enforced in ``_from_openai_response``;
+# ``max_retries=0`` so loop-owned retry is authoritative.
+
+_OPENAI_PRICING: dict[str, tuple[float, float]] = {
+    "gpt-4o": (5.0 / 1_000_000, 15.0 / 1_000_000),
+    "gpt-4o-mini": (0.15 / 1_000_000, 0.60 / 1_000_000),
+    "gpt-4-turbo": (10.0 / 1_000_000, 30.0 / 1_000_000),
+    "gpt-4.1": (2.0 / 1_000_000, 8.0 / 1_000_000),
+    "gpt-4.1-mini": (0.40 / 1_000_000, 1.60 / 1_000_000),
+}
+_OPENAI_DEFAULT_INPUT_USD_PER_TOKEN = 5.0 / 1_000_000
+_OPENAI_DEFAULT_OUTPUT_USD_PER_TOKEN = 15.0 / 1_000_000
+_OPENAI_MAX_CONTEXT_TOKENS = 128_000
+_OPENAI_TRANSIENT_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+
+_OPENAI_STOP_REASON_MAP: dict[str, StopReason] = {
+    "stop": StopReason.END_TURN,
+    "tool_calls": StopReason.TOOL_USE,
+    "length": StopReason.MAX_TOKENS,
+    "stop_sequence": StopReason.STOP_SEQUENCE,
+}
+
+
+def _to_openai_messages(
+    messages: list[Message], system: str,
+) -> list[dict[str, Any]]:
+    """Translate the normalized conversation → OpenAI Chat Completions messages.
+
+    The Anthropic top-level ``system`` becomes a leading ``role:"system"``
+    message. Assistant turns carry ``tool_calls``; tool-result turns become
+    ``role:"tool"`` messages keyed by ``tool_call_id`` (one per result block).
+    """
+    oai_messages: list[dict[str, Any]] = []
+    if system:
+        oai_messages.append({"role": "system", "content": system})
+    for msg in messages:
+        if isinstance(msg.content, str):
+            oai_messages.append({"role": msg.role, "content": msg.content})
+            continue
+        if msg.role == "assistant":
+            text_parts: list[str] = []
+            tool_calls: list[dict[str, Any]] = []
+            for block in msg.content:
+                if isinstance(block, TextBlock):
+                    text_parts.append(block.text)
+                elif isinstance(block, ToolUseBlock):
+                    tool_calls.append({
+                        "id": block.id,
+                        "type": "function",
+                        "function": {
+                            "name": block.name,
+                            "arguments": json.dumps(block.input),
+                        },
+                    })
+            entry: dict[str, Any] = {"role": "assistant"}
+            if text_parts:
+                entry["content"] = "".join(text_parts)
+            if tool_calls:
+                entry["tool_calls"] = tool_calls
+            if "content" not in entry and "tool_calls" not in entry:
+                entry["content"] = ""
+            oai_messages.append(entry)
+        else:
+            for block in msg.content:
+                if isinstance(block, ToolResultBlock):
+                    oai_messages.append({
+                        "role": "tool",
+                        "tool_call_id": block.tool_use_id,
+                        "content": block.content,
+                    })
+                elif isinstance(block, TextBlock):
+                    oai_messages.append({"role": msg.role, "content": block.text})
+    return oai_messages
+
+
+def _to_openai_tools(tools: list[ToolDef]) -> list[dict[str, Any]]:
+    """Translate ``ToolDef`` → OpenAI function-tool definitions."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": tool.input_schema,
+            },
+        }
+        for tool in tools
+    ]
+
+
+def _from_openai_response(raw: Any) -> ProviderResponse:
+    """Translate a raw OpenAI ``ChatCompletion`` → normalized ``ProviderResponse``.
+
+    Enforces the R5 invariant: if ``message.tool_calls`` is non-empty, the
+    normalized ``stop_reason`` is ``TOOL_USE`` regardless of native
+    ``finish_reason`` (spike §5).
+    """
+    content: list[ContentBlock] = []
+    has_tool_use = False
+
+    choices = getattr(raw, "choices", None) or []
+    if choices:
+        message = getattr(choices[0], "message", None)
+        if message is not None:
+            text = getattr(message, "content", None)
+            if text:
+                content.append(TextBlock(text=text))
+            tool_calls = getattr(message, "tool_calls", None) or []
+            for tc in tool_calls:
+                has_tool_use = True
+                fn = getattr(tc, "function", None)
+                tc_id = getattr(tc, "id", "") or ""
+                name = getattr(fn, "name", "") if fn else ""
+                args_str = getattr(fn, "arguments", "{}") if fn else "{}"
+                try:
+                    args = json.loads(args_str) if isinstance(args_str, str) else dict(args_str)
+                except (json.JSONDecodeError, TypeError):
+                    logger.warning(
+                        "OpenAI tool-call arguments were not valid JSON: %s; "
+                        "degrading to empty dict", args_str,
+                    )
+                    args = {}
+                content.append(ToolUseBlock(id=tc_id, name=name, input=dict(args)))
+
+    if has_tool_use:
+        stop_reason = StopReason.TOOL_USE
+    else:
+        finish_reason = ""
+        if choices:
+            finish_reason = getattr(choices[0], "finish_reason", "") or ""
+        stop_reason = (
+            _OPENAI_STOP_REASON_MAP.get(finish_reason, StopReason.OTHER)
+            if isinstance(finish_reason, str)
+            else StopReason.OTHER
+        )
+
+    raw_usage = getattr(raw, "usage", None)
+    usage = Usage(
+        input_tokens=getattr(raw_usage, "prompt_tokens", 0) or 0,
+        output_tokens=getattr(raw_usage, "completion_tokens", 0) or 0,
+    )
+    return ProviderResponse(
+        content=content,
+        stop_reason=stop_reason,
+        usage=usage,
+        raw_model=getattr(raw, "model", "") or "",
+    )
+
+
+class OpenAIProvider:
+    """``LLMProvider`` adapter over the OpenAI Chat Completions API (P4-007).
+
+    A boundary translator: normalized ``Message``/``ToolDef``/``system`` become
+    ``chat.completions.create`` kwargs, and the raw ``ChatCompletion`` becomes a
+    normalized ``ProviderResponse``. The provider owns no retry — loop-owned
+    retry reads ``classify_error`` and decides backoff + the budget-aware skip.
+
+    The ``openai`` SDK is imported **lazily** in ``__init__`` so this module
+    imports without the package installed (tests that only exercise
+    ``AnthropicProvider`` are unaffected). Constructing an ``OpenAIProvider``
+    requires ``openai >= 1.0``.
+    """
+
+    name = "openai"
+
+    def __init__(self, *, base_url: str, api_key: str, timeout_s: float) -> None:
+        import openai as _openai
+
+        self._openai_mod = _openai
+        # ``max_retries=0`` — loop-owned retry is authoritative (spike D-retry).
+        self._client = _openai.AsyncOpenAI(
+            base_url=base_url,
+            api_key=api_key,
+            timeout=httpx.Timeout(timeout_s, connect=30.0),
+            max_retries=0,
+        )
+
+    async def messages_create(
+        self,
+        *,
+        model: str,
+        system: str,
+        messages: list[Message],
+        tools: list[ToolDef],
+        max_tokens: int,
+        temperature: float | None = None,
+        stop_sequences: list[str] | None = None,
+    ) -> ProviderResponse:
+        """One model turn via ``chat.completions.create``."""
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "messages": _to_openai_messages(messages, system),
+        }
+        if tools:
+            kwargs["tools"] = _to_openai_tools(tools)
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        if stop_sequences is not None:
+            kwargs["stop"] = stop_sequences
+        raw = await self._client.chat.completions.create(**kwargs)
+        return _from_openai_response(raw)
+
+    async def complete(
+        self,
+        *,
+        model: str,
+        prompt: str,
+        max_tokens: int,
+        system: str | None = None,
+    ) -> str:
+        """One-shot text completion (insights / Haiku path)."""
+        oai_messages: list[dict[str, Any]] = []
+        if system:
+            oai_messages.append({"role": "system", "content": system})
+        oai_messages.append({"role": "user", "content": prompt})
+        raw = await self._client.chat.completions.create(
+            model=model, max_tokens=max_tokens, messages=oai_messages,
+        )
+        choices = getattr(raw, "choices", None) or []
+        if choices:
+            return getattr(choices[0].message, "content", None) or ""
+        return ""
+
+    async def stream(self, **kwargs: Any) -> AsyncIterator[StreamDelta]:
+        """Token streaming (OPTIONAL in v1; D-stream). Not implemented for OpenAI."""
+        raise NotImplementedError(
+            "OpenAIProvider.stream is not implemented (ARC-011 D-stream)"
+        )
+        yield StreamDelta()  # pragma: no cover — makes this an async generator
+
+    def estimate_cost(self, model: str, usage: Usage) -> float:
+        """Per-model USD cost for an OpenAI call.
+
+        Uses a per-model pricing table with a gpt-4o-class default. Cache-blind
+        (parity with ``AnthropicProvider.estimate_cost``).
+        """
+        in_rate, out_rate = _OPENAI_PRICING.get(
+            model, (_OPENAI_DEFAULT_INPUT_USD_PER_TOKEN, _OPENAI_DEFAULT_OUTPUT_USD_PER_TOKEN),
+        )
+        return usage.input_tokens * in_rate + usage.output_tokens * out_rate
+
+    def capabilities(self) -> ProviderCapabilities:
+        return ProviderCapabilities(
+            native_tool_use=True,
+            streaming=False,
+            system_prompt=True,
+            max_context_tokens=_OPENAI_MAX_CONTEXT_TOKENS,
+        )
+
+    def classify_error(self, exc: Exception) -> ErrorClass:
+        """Classify an OpenAI SDK exception for loop-owned retry.
+
+        ``transient`` mirrors the Anthropic decision: connection/timeout/server
+        errors plus HTTP status codes in ``_OPENAI_TRANSIENT_STATUS_CODES``
+        (429 / 500 / 502 / 503 / 504). Everything else is non-transient.
+        """
+        openai = self._openai_mod
+        if isinstance(
+            exc,
+            (
+                openai.APITimeoutError,
+                openai.APIConnectionError,
+                openai.InternalServerError,
+            ),
+        ):
+            return ErrorClass(transient=True, status_code=None, retry_after_s=None)
+        if isinstance(exc, openai.APIStatusError):
+            status_code = getattr(exc, "status_code", None)
+            return ErrorClass(
+                transient=status_code in _OPENAI_TRANSIENT_STATUS_CODES,
+                status_code=status_code,
+                retry_after_s=None,
+            )
+        return ErrorClass(transient=False, status_code=None, retry_after_s=None)
+
+
+# ── Provider router (P4-010) ─────────────────────────────────────────────────
+
+
+def build_provider(provider_id: str, *, settings_obj: Any = None) -> LLMProvider:
+    """Construct a ``LLMProvider`` by id (ARC-011 P4-010 router).
+
+    Maps a skill manifest's ``llm.provider`` (``"anthropic"`` / ``"openai"``) to
+    a concrete provider instance, reading API credentials from ``settings``.
+    The orchestrator calls this per-session (or at init for the default) so each
+    skill can select its provider declaratively. Anthropic remains the default
+    for ML skills that do not declare a provider override.
+
+    The ``settings_obj`` is injectable for tests; production passes ``None`` and
+    the function falls back to the singleton ``src.config.settings``.
+    """
+    from src.config import secret_value
+
+    if settings_obj is None:
+        from src.config import settings as _settings
+
+        settings_obj = _settings
+
+    if provider_id == "anthropic":
+        return AnthropicProvider(
+            base_url=settings_obj.anthropic_base_url,
+            api_key=secret_value(settings_obj.anthropic_auth_token) or "",
+            timeout_s=settings_obj.anthropic_api_timeout_s,
+        )
+    if provider_id == "openai":
+        key = getattr(settings_obj, "openai_api_key", None)
+        return OpenAIProvider(
+            base_url=settings_obj.openai_base_url,
+            api_key=secret_value(key) if key is not None else "",
+            timeout_s=settings_obj.openai_api_timeout_s,
+        )
+    raise ValueError(
+        f"unknown LLM provider {provider_id!r}; expected 'anthropic' or 'openai'"
+    )

@@ -1,10 +1,13 @@
 import { useState } from 'react';
-import type { Iteration } from '../api/client';
+import type { Iteration, MetricColumn } from '../api/client';
 import { calculateCompositeRLScore, RL_COMPOSITE_COEFFICIENTS } from '../utils/formulas';
 
 interface Props {
   iterations: Iteration[];
   bestIteration?: number | null;
+  /** P3-025: manifest-driven columns from metric_schema.iteration_table_columns.
+   * When provided, extra columns are rendered from iteration metrics data. */
+  tableColumns?: MetricColumn[];
 }
 
 function formatDuration(seconds: number | null | undefined): string {
@@ -28,8 +31,9 @@ function trainingGatesPassed(iteration: Iteration): boolean {
   return iteration.training_gates_passed ?? iteration.all_gates_passed;
 }
 
-export default function IterationsTable({ iterations, bestIteration }: Props) {
+export default function IterationsTable({ iterations, bestIteration, tableColumns }: Props) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const extraCols = tableColumns ?? [];
 
   if (iterations.length === 0) {
     return <div className="text-gray-500 text-sm py-4 text-center">No iterations recorded</div>;
@@ -56,6 +60,9 @@ export default function IterationsTable({ iterations, bestIteration }: Props) {
             <th className="py-2 px-3">Decision</th>
             <th className="py-2 px-3">Duration</th>
             <th className="py-2 px-3">Time</th>
+            {extraCols.map((col) => (
+              <th key={col.field} className="py-2 px-3">{col.label}</th>
+            ))}
           </tr>
         </thead>
         <tbody>
@@ -112,10 +119,15 @@ export default function IterationsTable({ iterations, bestIteration }: Props) {
                     {formatDuration(it.training_time_s)}
                   </td>
                   <td className="py-2 px-3 text-gray-500 text-xs">{new Date(it.created_at).toLocaleTimeString()}</td>
+                  {extraCols.map((col) => (
+                    <td key={col.field} className="py-2 px-3 font-mono text-xs text-gray-400">
+                      {formatValue(it.metrics?.[col.field])}
+                    </td>
+                  ))}
                 </tr>
                 {isExpanded && (
                   <tr key={`${it.iteration}-detail`} className="border-b border-gray-800 bg-gray-900/50">
-                    <td colSpan={8} className="py-3 px-6">
+                    <td colSpan={8 + extraCols.length} className="py-3 px-6">
                       {/* Formula breakdown for composite_rl_score */}
                       {it.metric_name === 'composite_rl_score' &&
                         it.secondary_metrics?.mean_oos_sharpe &&

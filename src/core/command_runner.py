@@ -204,6 +204,7 @@ class GovernedCommandRunner:
         output_callback: OutputCallback | None = None,
         proc_registry: CommandProcessRegistry | None = None,
         research_id: str | None = None,
+        extra_env: Mapping[str, str] | None = None,
     ) -> CommandRunResult:
         decision = evaluate_command_policy(
             command,
@@ -217,10 +218,18 @@ class GovernedCommandRunner:
                 decision=decision,
             )
 
+        # ARC-011 P4-002: build the governed env, then merge session-scoped
+        # extra_env (e.g. AUTORESEARCH_SESSION_NONCE) AFTER the forbidden-
+        # secret subtraction so the nonce can never be stripped. The extra_env
+        # is per-call (per-session) so it never bleeds across concurrent
+        # sessions (the static _CHILD_ENV_ALLOWLIST would bleed).
+        child_env = _build_child_env()
+        if extra_env:
+            child_env.update(extra_env)
         proc = subprocess.Popen(
             decision.argv,
             cwd=self._workspace_root,
-            env=_build_child_env(),
+            env=child_env,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,

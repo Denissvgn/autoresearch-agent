@@ -12,11 +12,16 @@ from typing import Any, Dict, Mapping, Optional
 
 import yaml
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.api.audit import record_api_audit_event
 from src.api.auth import require_api_auth
 from src.config import settings
+from src.core.legacy_alias import (
+    is_known_model_type,
+    model_type_to_skill_id,
+    skill_id_to_model_type,
+)
 from src.core.pagination import (
     DEFAULT_PAGE_SIZE,
     MAX_PAGE_SIZE,
@@ -24,6 +29,7 @@ from src.core.pagination import (
     compute_next_cursor,
     decode_cursor,
 )
+from src.core.skill_registry import SkillNotRegisteredError, default_registry
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +132,218 @@ def _validate_phase_budgets(value: Optional[Dict[str, int]]) -> Optional[Dict[st
     return {phase: int(budget) for phase, budget in value.items()}
 
 
+def _dual_shape_session(session: Dict[str, Any]) -> Dict[str, Any]:
+    """Augment a session dict with canonical (skill_id/subject_id/variant)
+    and legacy (model_type/instrument/timeframe) fields (§10 guarantee #4:
+    dual-shape responses).
+
+    Legacy fields are the source of truth in the DB today; canonical fields are
+    derived via the ``legacy_alias`` registry. When the DB gains native
+    ``skill_id``/``subject_id``/``variant`` columns (P3-019), those become the
+    source and legacy fields are derived — the response shape stays the same.
+
+    Canonical fields are always populated **for skill-backed sessions**. A
+    pipeline row is a multi-skill container, not itself a skill, so its
+    ``model_type="pipeline"`` has no alias entry and ``skill_id``/``subject_id``/
+    ``variant`` come back empty by design (a pipeline does not belong to one
+    skill). Legacy fields remain populated for every row. GEN-009 (the
+    falsifiability suite) iterates the 3 ML model types and asserts uniformity
+    there; pipelines are documented as the documented empty-canonical case.
+    """
+    augmented = dict(session)
+    model_type = session.get("model_type", "") or ""
+    instrument = session.get("instrument", "") or ""
+    timeframe = session.get("timeframe", "") or ""
+
+    # Canonical fields — derived from legacy via the alias registry.
+    if "skill_id" not in augmented or not augmented.get("skill_id"):
+        augmented["skill_id"] = model_type_to_skill_id(model_type) if model_type else ""
+    if "subject_id" not in augmented or not augmented.get("subject_id"):
+        augmented["subject_id"] = instrument
+    if "variant" not in augmented or not augmented.get("variant"):
+        augmented["variant"] = timeframe
+
+    # Legacy fields — always populated (guarantee #4).
+    augmented.setdefault("model_type", model_type)
+    augmented.setdefault("instrument", instrument)
+    augmented.setdefault("timeframe", timeframe)
+
+    # Links block (ARC-011 §7.7).
+    sid = session.get("id")
+    if sid:
+        augmented["links"] = {
+            "self": f"/research/{sid}",
+            "results": f"/research/{sid}/results",
+            "iterations": f"/research/{sid}/iterations",
+            "best": f"/research/{sid}/best",
+            "stop": f"/research/{sid}/stop",
+            "promote_preview": f"/research/{sid}/promote/preview",
+        }
+    return augmented
+
+
+def _translate_canonical_request(
+    req: "StartResearchRequest",
+) -> list[dict[str, Any]]:
+    """Translate a canonical request (skill_id/subject_id/variant) to the
+    legacy fields (model_type/instrument/timeframe) the session_manager expects.
+
+    Mutates ``req`` in place. Called only when ``req.skill_id`` is set (canonical
+    shape). Raises ``HTTPException(404)`` for an unknown ``skill_id`` (P3-013 AC).
+
+    Canonical wins unconditionally when both shapes are present (P3-013 risk:
+    "a client sending both shapes with conflicting values — canonical wins;
+    warn in audit"). Returns a list of conflict records (one per legacy field
+    that was present but differed from the canonical value) so the caller can
+    audit them.
+    """
+    conflicts: list[dict[str, Any]] = []
+    if not req.skill_id:
+        return conflicts
+    # Validate skill_id exists in the registry (404 with hint).
+    try:
+        default_registry.get(req.skill_id)
+    except SkillNotRegisteredError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "skill_not_found",
+                "skill_id": req.skill_id,
+                "available": exc.available,
+                "hint": "Install the skill under skills/<id>/ and reload.",
+            },
+        ) from exc
+
+    # Canonical → legacy translation. Canonical wins unconditionally — the
+    # legacy field is always overwritten from the canonical value so a
+    # conflicting legacy value can never silently win (P3-013 risk).
+    mt = skill_id_to_model_type(req.skill_id)
+    if not mt:
+        # Phase-4 prep (non-ML skills): today every installed skill has a
+        # legacy model_type alias, so this branch is unreachable. When a
+        # non-ML skill ships (no alias entry), set model_type to "" so the
+        # session-start path routes to the manifest-driven session builder
+        # instead of the legacy ML trio. instrument/timeframe are derived
+        # from subject_id/variant so the dual-shape response still carries
+        # the legacy fields. P3-013 keeps the unknown-skill 404 above as
+        # the only rejection path.
+        req.model_type = ""
+    else:
+        if req.model_type and req.model_type != mt:
+            conflicts.append(
+                {"field": "model_type", "canonical": mt, "legacy": req.model_type}
+            )
+        req.model_type = mt
+
+    canonical_instrument = req.subject_id or ""
+    if req.instrument and req.instrument != canonical_instrument:
+        conflicts.append(
+            {
+                "field": "instrument",
+                "canonical": canonical_instrument,
+                "legacy": req.instrument,
+            }
+        )
+    req.instrument = canonical_instrument
+
+    canonical_timeframe = req.variant or ""
+    if req.timeframe and req.timeframe != canonical_timeframe:
+        conflicts.append(
+            {
+                "field": "timeframe",
+                "canonical": canonical_timeframe,
+                "legacy": req.timeframe,
+            }
+        )
+    req.timeframe = canonical_timeframe
+
+    return conflicts
+
+
+# P3-013: JSON-Schema subset types → Python types for lightweight validation.
+_PARAM_TYPE_MAP: dict[str, type | tuple[type, ...]] = {
+    "string": str,
+    "integer": int,
+    "number": (int, float),
+    "boolean": bool,
+}
+
+
+def _validate_skill_params(
+    skill_id: str,
+    params: Dict[str, Any] | None,
+    schema: Any,
+) -> None:
+    """Validate ``skill_params`` against the skill's ``param_schema`` (P3-013 AC).
+
+    Lightweight validator for the ``ParamSchema`` subset — no ``jsonschema``
+    dependency needed: checks required keys, rejects unknown keys (honors
+    ``additionalProperties: false``), and checks ``type`` annotations.
+
+    Raises ``HTTPException(422)`` with field pointers on violation.
+    """
+    if params is None:
+        params = {}
+    violations: list[dict[str, str]] = []
+
+    # Required keys.
+    for key in getattr(schema, "required", []) or []:
+        if key not in params:
+            violations.append(
+                {"field": f"skill_params.{key}", "message": "required field is missing"}
+            )
+
+    # Unknown keys (additionalProperties: false).
+    allowed = set((getattr(schema, "properties", {}) or {}).keys())
+    for key in params:
+        if key not in allowed:
+            violations.append(
+                {
+                    "field": f"skill_params.{key}",
+                    "message": (
+                        "unknown field (not in param_schema; "
+                        "additionalProperties is false)"
+                    ),
+                }
+            )
+
+    # Type checking (bool is a subclass of int in Python — guard explicitly).
+    properties = getattr(schema, "properties", {}) or {}
+    for key, value in params.items():
+        prop = properties.get(key)
+        if prop is None:
+            continue  # already reported as unknown
+        expected_type = getattr(prop, "type", None)
+        if expected_type and expected_type in _PARAM_TYPE_MAP:
+            py_type = _PARAM_TYPE_MAP[expected_type]
+            if isinstance(value, bool) and expected_type in ("integer", "number"):
+                violations.append(
+                    {
+                        "field": f"skill_params.{key}",
+                        "message": f"expected {expected_type}, got boolean",
+                    }
+                )
+            elif not isinstance(value, py_type):
+                violations.append(
+                    {
+                        "field": f"skill_params.{key}",
+                        "message": (
+                            f"expected {expected_type}, got {type(value).__name__}"
+                        ),
+                    }
+                )
+
+    if violations:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "skill_params_invalid",
+                "skill_id": skill_id,
+                "violations": violations,
+            },
+        )
+
+
 def _json_hash(payload: Any) -> str:
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -203,9 +421,23 @@ async def _run_idempotent(
 
 
 class StartResearchRequest(BaseModel):
-    instrument: str = Field(..., examples=["DOGE_USDT"])
-    timeframe: str = Field(..., examples=["15m"])
-    model_type: str = Field(..., pattern="^(direction|volatility|rl|pipeline)$")
+    # Legacy shape (§10 #1: still accepted identically).
+    instrument: Optional[str] = Field(default=None, examples=["DOGE_USDT"])
+    timeframe: Optional[str] = Field(default=None, examples=["15m"])
+    model_type: Optional[str] = Field(
+        default=None, pattern="^(direction|volatility|rl|pipeline)$"
+    )
+    # Canonical shape (ARC-011 §7.7 / P3-013).
+    skill_id: Optional[str] = Field(default=None, examples=["ml-direction"])
+    subject_id: Optional[str] = Field(default=None, examples=["DOGE_USDT"])
+    variant: Optional[str] = Field(default=None, examples=["15m"])
+    skill_params: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Canonical skill parameters, validated against the skill's "
+            "param_schema. Sent alongside skill_id; ignored for legacy shape."
+        ),
+    )
     tag: Optional[str] = Field(default=None, examples=["doge-apr01"])
     quick_mode: Optional[bool] = Field(
         default=None,
@@ -268,6 +500,18 @@ class StartResearchRequest(BaseModel):
     def validate_phase_budgets(cls, value: Optional[Dict[str, int]]) -> Optional[Dict[str, int]]:
         return _validate_phase_budgets(value)
 
+    @model_validator(mode="after")
+    def _validate_shape_presence(self) -> "StartResearchRequest":
+        """P3-013: at least one request shape must be present — either the
+        legacy ``{model_type, instrument, timeframe}`` or the canonical
+        ``{skill_id, subject_id, variant}``. Sending neither is a 422."""
+        if not self.model_type and not self.skill_id:
+            raise ValueError(
+                "Either legacy {model_type, instrument, timeframe} or "
+                "canonical {skill_id, subject_id, variant} must be provided"
+            )
+        return self
+
 
 # ------------------------------------------------------------------
 # Endpoints
@@ -276,6 +520,22 @@ class StartResearchRequest(BaseModel):
 
 @router.post("/research/start", status_code=201)
 async def start_research(request: Request, req: StartResearchRequest):
+    # P3-013: translate canonical {skill_id, subject_id, variant} → legacy
+    # {model_type, instrument, timeframe} the session_manager expects.
+    if req.skill_id:
+        conflicts = _translate_canonical_request(req)
+        if conflicts:
+            await _audit(
+                request,
+                action="research.shape_conflict",
+                outcome="warning",
+                metadata={"skill_id": req.skill_id, "conflicts": conflicts},
+            )
+        # P3-013 AC: validate skill_params against the skill's param_schema.
+        if req.skill_params is not None:
+            manifest = default_registry.get(req.skill_id)
+            _validate_skill_params(req.skill_id, req.skill_params, manifest.param_schema)
+
     metadata = _start_metadata(req)
     try:
         # ML-63: Route pipeline requests to the pipeline controller
@@ -304,7 +564,7 @@ async def start_research(request: Request, req: StartResearchRequest):
                 pipeline_id=pipeline.get("id"),
                 metadata=metadata,
             )
-            return pipeline
+            return _dual_shape_session(pipeline)
         session = await _session_manager.start_session(
             instrument=req.instrument,
             timeframe=req.timeframe,
@@ -330,7 +590,7 @@ async def start_research(request: Request, req: StartResearchRequest):
             research_id=session.get("id"),
             metadata=metadata,
         )
-        return session
+        return _dual_shape_session(session)
     except RuntimeError as e:
         await _audit(
             request,
@@ -374,6 +634,7 @@ async def list_research(
             status=status, model_type=model_type, instrument=instrument,
             limit=limit, cursor=decoded,
         )
+        items = [_dual_shape_session(s) for s in items]
         return build_cursor_page(items, limit, _started_at_id_cursor)
     if offset > 0:
         logger.warning(
@@ -390,7 +651,7 @@ async def list_research(
     # Legacy offset envelope, with an additive ``next_cursor`` so clients can
     # transparently upgrade to cursor pagination on the next request.
     return {
-        "items": items,
+        "items": [_dual_shape_session(s) for s in items],
         "total": total,
         "limit": limit,
         "offset": offset,
@@ -449,11 +710,11 @@ async def get_research(research_id: str):
                     if session:
                         payload["workspace_path"] = session.get("workspace_path", "")
                         payload["active_phase_session_id"] = session.get("id")
-            return payload
+            return _dual_shape_session(payload)
     session = await _store.get_session(research_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    return session
+    return _dual_shape_session(session)
 
 
 @router.post("/research/{research_id}/stop")

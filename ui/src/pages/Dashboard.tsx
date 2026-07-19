@@ -66,6 +66,8 @@ export default function Dashboard() {
       (s) =>
         s.instrument.toLowerCase().includes(q) ||
         s.model_type.toLowerCase().includes(q) ||
+        // P3-027: filter by canonical skill_id (dual-shape, §10 guarantee #4).
+        (s.skill_id || '').toLowerCase().includes(q) ||
         (s.tag || '').toLowerCase().includes(q) ||
         s.id.toLowerCase().includes(q),
     );

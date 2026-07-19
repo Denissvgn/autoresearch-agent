@@ -25,6 +25,7 @@ from src.core.command_runner import (
     CommandProcessRegistry,
     GovernedCommandRunner,
     OutputCallback,
+    _build_child_env,
     redact_sensitive_text,
 )
 from src.core.consistency_validator import (
@@ -71,6 +72,7 @@ from src.core.llm_provider import (
     ToolResultBlock,
     ToolUseBlock,
     Usage,
+    build_provider,
 )
 from src.core.log_writer import AgentLogWriter
 from src.core.output_digest import digest_command_output
@@ -649,9 +651,20 @@ def _tool_grep(input_data: Dict[str, Any], workspace: str) -> str:
     # main agent loop, so blocking work here runs on a worker thread and
     # cannot stall the event loop. Switching to asyncio.create_subprocess_*
     # would force every tool call site to await individually.
+    #
+    # P0-023 / P1-029 security delta: pass ``_build_child_env()`` as ``env=``
+    # so the grep child runs with the same control-plane-secret-stripped
+    # allow-list the governed runner enforces. Without this, ``subprocess.run``
+    # defaults to inheriting the full parent env (ANTHROPIC_AUTH_TOKEN,
+    # AUTORESEARCH_API_TOKEN, AUTORESEARCH_PROMETHEUS_TOKEN, …) — exactly the
+    # leak the governed-runner path was hardened against.
     try:
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=30,
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=_build_child_env(),
         )
         output = result.stdout
         if len(output) > 60_000:
@@ -686,14 +699,18 @@ class AgentOrchestrator:
         # hard-timeout / operator-stop cancel can reap the process tree from
         # outside the to_thread worker that owns the Popen handle.
         self._command_procs = CommandProcessRegistry()
-        # ARC-011 P1-002: the LLM is reached only through the LLMProvider
-        # protocol (AnthropicProvider here; P1-004 makes this injectable).
-        # No direct anthropic.* / messages.create reference remains in this file.
-        self._provider: LLMProvider = AnthropicProvider(
-            base_url=settings.anthropic_base_url,
-            api_key=secret_value(settings.anthropic_auth_token),
-            timeout_s=settings.anthropic_api_timeout_s,
-        )
+        # ARC-011 P1-002/P4-010: the LLM is reached only through the LLMProvider
+        # protocol. The default provider is constructed via the provider router
+        # (build_provider); per-skill provider selection (P4-010) overrides it
+        # per-session via _session_providers. No direct anthropic.* reference
+        # remains in this file.
+        self._provider: LLMProvider = build_provider("anthropic")
+        # P4-010: per-session provider/model overrides (keyed by research_id).
+        # Populated in run() when the skill manifest declares a non-anthropic
+        # provider; _call_llm_with_retry and the insights path fall back to
+        # self._provider / settings.anthropic_model when no override is set.
+        self._session_providers: Dict[str, LLMProvider] = {}
+        self._session_models: Dict[str, str] = {}
         # ARC-011 P1-013: experiment output is parsed only through the
         # OutputParser protocol. The two transitional implementations
         # (DelimitedKVParser for the --- block, JSONMarkerParser for the
@@ -793,18 +810,22 @@ class AgentOrchestrator:
         """
         max_retries = settings.max_api_retries
         backoff_base = 30  # seconds
+        # P4-010: use the per-session provider/model if the skill declared a
+        # non-anthropic provider; fall back to the default otherwise.
+        provider = self._session_providers.get(research_id, self._provider)
+        model = self._session_models.get(research_id, settings.anthropic_model)
 
         for attempt in range(max_retries + 1):
             try:
-                return await self._provider.messages_create(
-                    model=settings.anthropic_model,
+                return await provider.messages_create(
+                    model=model,
                     system=system_prompt,
                     messages=messages,
                     tools=AGENT_TOOLS,
                     max_tokens=_CLAUDE_MAX_OUTPUT_TOKENS,
                 )
             except Exception as exc:
-                err = self._provider.classify_error(exc)
+                err = provider.classify_error(exc)
                 if not err.transient or attempt >= max_retries:
                     raise
                 wait = backoff_base * (2 ** attempt)
@@ -1671,9 +1692,11 @@ class AgentOrchestrator:
                 f"- gamma > 0.995 caused instability (OOS return went negative)"
             )
 
-            # ARC-011 P1-002: one-shot completion via the provider (replaces the
-            # bare messages.create Haiku call). No tools, no retry.
-            insights = await self._provider.complete(
+            # ARC-011 P1-002/P4-010: one-shot completion via the provider (replaces
+            # the bare messages.create Haiku call). No tools, no retry. Uses the
+            # per-session provider when the skill declared a non-anthropic one.
+            insights_provider = self._session_providers.get(research_id, self._provider)
+            insights = await insights_provider.complete(
                 model=settings.anthropic_default_haiku_model,
                 prompt=prompt,
                 max_tokens=300,
@@ -2668,6 +2691,18 @@ class AgentOrchestrator:
         # grep count does not drop yet — AC #2). Phase 2 replaces them with
         # manifest-driven runtimes.
         skill: SkillRuntime = materialize_skill_runtime(self, config)
+
+        # ARC-011 P4-010: per-skill provider selection. If the skill manifest
+        # declares a non-anthropic provider, construct it via the router and
+        # store it per-session. _call_llm_with_retry and the insights path read
+        # from _session_providers / _session_models (falling back to the default
+        # self._provider / settings.anthropic_model).
+        manifest = getattr(skill, "_manifest", None)
+        if manifest is not None:
+            llm_cfg = manifest.llm
+            if llm_cfg.provider != "anthropic":
+                self._session_providers[config.id] = build_provider(llm_cfg.provider)
+                self._session_models[config.id] = llm_cfg.primary_model
 
         # Load system prompt. The assembly (claude.md + SKILL.md) mirrors
         # ``skill.system_prompt()`` exactly; the file reads are kept off the

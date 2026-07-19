@@ -6,6 +6,10 @@ export interface ResearchSession {
   instrument: string;
   timeframe: string;
   model_type: string;
+  /** P3-014: canonical skill fields (dual-shape, §10 guarantee #4). */
+  skill_id?: string;
+  subject_id?: string;
+  variant?: string;
   tag: string;
   skill_name: string;
   status: string;
@@ -71,6 +75,10 @@ export interface Iteration {
   attempt_snapshot?: Record<string, unknown> | null;
   // ML-59: HPO search phase
   search_phase: string | null;
+  /** P3-015/016: canonical skill fields (dual-shape, §10 guarantee #4). */
+  skill_id?: string;
+  skill_phase?: string | null;
+  evidence_keys?: string[];
   attempt_snapshot_hash?: string | null;
   attempt_snapshot_path?: string | null;
   artifact_hash?: string | null;
@@ -135,6 +143,11 @@ export interface PromotionPreview {
   model_type?: string;
   instrument?: string;
   timeframe?: string;
+  /** P3-017: canonical skill fields + promotion target kind discriminator. */
+  skill_id?: string;
+  subject_id?: string;
+  variant?: string;
+  target_kind?: string;
   scope?: PromotionScope;
   promotion_scope?: PromotionScope;
   promotion_allowed?: boolean;
@@ -188,6 +201,11 @@ export interface StartResearchRequest {
   instrument: string;
   timeframe: string;
   model_type: string;
+  /** P3-013: canonical skill fields (sent alongside legacy for dual-shape). */
+  skill_id?: string;
+  subject_id?: string;
+  variant?: string;
+  skill_params?: Record<string, unknown>;
   tag?: string;
   quick_mode?: boolean;
   max_iterations?: number;
@@ -442,6 +460,55 @@ export interface ModelInfo {
   skill: string;
 }
 
+// ── Skill API types (ARC-011 P3-001..011) ──────────────────────────────
+
+export interface SkillSummary {
+  id: string;
+  version: string;
+  category: string;
+  display_name: string;
+  description: string;
+  schema_version: string;
+  /** Legacy alias — empty string for non-ML skills (§10 guarantee #5). */
+  model_type: string;
+  has_subjects: boolean;
+  has_variants: boolean;
+}
+
+export interface FormField {
+  name: string;
+  type: string;
+  description?: string;
+  default?: unknown;
+  min?: number;
+  max?: number;
+  enum?: string[];
+  options_url?: string;
+  visible_when?: { field: string; equals: string };
+  required?: boolean;
+}
+
+export interface MetricColumn {
+  field: string;
+  label: string;
+  kind?: string;
+  axis?: 'left' | 'right';
+  format?: string;
+}
+
+export interface MetricSchema {
+  primary: { field: string; label: string; direction: string; format?: string };
+  gates: MetricColumn[];
+  chart_series: MetricColumn[];
+  iteration_table_columns: MetricColumn[];
+  goal: string;
+}
+
+export interface SubjectInfo {
+  id: string;
+  label: string;
+}
+
 export function getAutoresearchApiToken(): string | null {
   const envToken = import.meta.env.VITE_AUTORESEARCH_API_TOKEN as string | undefined;
   if (envToken?.trim()) return envToken.trim();
@@ -624,4 +691,31 @@ export const api = {
   getModels: () => request<ModelInfo[]>('/models'),
 
   getStatus: () => request<SystemStatus>('/status'),
+
+  // Skills (ARC-011 P3-001..008)
+  getSkills: (category?: string) =>
+    request<SkillSummary[]>(`/skills${category ? `?category=${category}` : ''}`),
+
+  getSkill: (id: string) => request<Record<string, unknown>>(`/skills/${id}`),
+
+  getSkillFormFields: (id: string) =>
+    request<{ skill_id: string; form_fields: FormField[] }>(`/skills/${id}/form-fields`),
+
+  getSkillMetricSchema: (id: string) =>
+    request<MetricSchema>(`/skills/${id}/metric-schema`),
+
+  getSkillVersions: (id: string) =>
+    request<{ skill_id: string; versions: Array<{ version: string; schema_version: string; current: boolean }> }>(`/skills/${id}/versions`),
+
+  reloadSkills: () =>
+    request<{ status: string; reloaded: number; available: string[] }>('/skills/reload', { method: 'POST' }),
+
+  // Subjects (ARC-011 P3-009, P3-010)
+  getSubjects: (skillId: string) =>
+    request<SubjectInfo[]>(`/subjects?skill_id=${encodeURIComponent(skillId)}`),
+
+  getSubjectVariants: (subjectId: string, skillId: string) =>
+    request<{ skill_id: string; subject_id: string; variants: string[] }>(
+      `/subjects/${encodeURIComponent(subjectId)}/variants?skill_id=${encodeURIComponent(skillId)}`,
+    ),
 };

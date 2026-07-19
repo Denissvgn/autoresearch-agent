@@ -53,6 +53,13 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["skills"], dependencies=[Depends(require_api_auth)])
 
+#: Hard cap on the size of a skill's ``CHANGELOG.md`` surfaced via
+#: ``GET /skills/{id}/changelog``. A skill's changelog is operator-facing
+#: documentation; a runaway file should not be slurped into a single JSON
+#: response or block the event loop on read. 64 KiB comfortably fits the
+#: largest realistic skill changelog while bounding the response.
+_MAX_CHANGELOG_BYTES: int = 64 * 1024
+
 # Injected by main.py; falls back to the module-level default_registry so the
 # endpoints work in tests without explicit wiring.
 _registry: SkillRegistry = default_registry
@@ -251,11 +258,32 @@ async def get_skill_versions(skill_id: str):
 
 @router.get("/skills/{skill_id}/changelog")
 async def get_skill_changelog(skill_id: str):
-    """The skill's ``CHANGELOG.md`` content (P3-007)."""
+    """The skill's ``CHANGELOG.md`` content (P3-007).
+
+    Capped at ``_MAX_CHANGELOG_BYTES`` to keep the response bounded — a skill
+    whose changelog has outgrown that ceiling returns 413 with a structured
+    detail so the operator knows to read the file directly rather than through
+    the API."""
     _get_or_404(skill_id)  # validate the skill exists
     changelog_path = _skill_dir(skill_id) / "CHANGELOG.md"
     if not changelog_path.is_file():
         return {"skill_id": skill_id, "changelog": None}
+    size = changelog_path.stat().st_size
+    if size > _MAX_CHANGELOG_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail={
+                "error": "changelog_too_large",
+                "skill_id": skill_id,
+                "size_bytes": size,
+                "max_bytes": _MAX_CHANGELOG_BYTES,
+                "hint": (
+                    f"CHANGELOG.md for skill {skill_id!r} is {size} bytes "
+                    f"(>{_MAX_CHANGELOG_BYTES}); read the file directly "
+                    f"instead of through this endpoint."
+                ),
+            },
+        )
     return {"skill_id": skill_id, "changelog": changelog_path.read_text(encoding="utf-8")}
 
 

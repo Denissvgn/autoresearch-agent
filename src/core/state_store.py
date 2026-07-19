@@ -733,12 +733,37 @@ async def _migrate_to_v5(db: aiosqlite.Connection) -> None:
         await db.execute(statement)
 
 
+async def _migrate_to_v6(db: aiosqlite.Connection) -> None:
+    """P3-019: native canonical skill columns on ``research_sessions``.
+
+    Adds ``skill_id``, ``subject_id``, and ``variant`` so the canonical shape
+    is persisted (not just synthesized at read time by ``_dual_shape_session``).
+    Legacy ``model_type``/``instrument``/``timeframe`` remain the source of
+    truth for existing rows; the API layer's ``_dual_shape_session`` helper
+    populates canonical fields from legacy when the native column is empty, and
+    vice-versa, so the dual-shape response is stable before and after the
+    migration (§10 guarantee #4). New sessions written by the canonical
+    ``POST /research/start`` path (P3-013) populate both shapes.
+
+    ``ALTER TABLE ADD COLUMN … DEFAULT ''`` is idempotent via
+    ``_add_column_if_missing``; existing rows get the empty-string default and
+    are back-filled on first read by the dual-shape helper.
+    """
+    for column_def in (
+        'skill_id TEXT NOT NULL DEFAULT ""',
+        'subject_id TEXT NOT NULL DEFAULT ""',
+        'variant TEXT NOT NULL DEFAULT ""',
+    ):
+        await _add_column_if_missing(db, "research_sessions", column_def)
+
+
 _MIGRATIONS = (
     (1, _migrate_to_v1),
     (2, _migrate_to_v2),
     (3, _migrate_to_v3),
     (4, _migrate_to_v4),
     (5, _migrate_to_v5),
+    (6, _migrate_to_v6),
 )
 _LATEST_SCHEMA_VERSION = _MIGRATIONS[-1][0]
 

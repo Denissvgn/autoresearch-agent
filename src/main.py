@@ -113,11 +113,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     _promoter = ConfigPromoter(_store)
 
     # Wire API modules
-    from src.api import promotion, research, results
+    from src.api import promotion, research, results, skills, subjects
+    from src.core.skill_registry import SkillRegistry
+
+    # P3-001..011: discover installed skill manifests and wire the skill /
+    # subject endpoint modules with the same registry instance.
+    _skill_registry = SkillRegistry()
+    _skill_registry.discover()
+    skills.init(registry=_skill_registry, store=_store)
+    subjects.init(registry=_skill_registry)
 
     research.init(_session_manager, _store)  # type: ignore[no-untyped-call]
     results.init(_store, mlflow_external_url=settings.mlflow_external_url)
-    promotion.init(_promoter, _store)  # type: ignore[no-untyped-call]
+    promotion.init(_promoter, _store, skill_registry=_skill_registry)  # type: ignore[no-untyped-call]
 
     logger.info("Autoresearch-agent ready")
 
@@ -167,6 +175,8 @@ app.add_middleware(
 from src.api.promotion import router as promotion_router
 from src.api.research import router as research_router
 from src.api.results import router as results_router
+from src.api.skills import router as skills_router
+from src.api.subjects import router as subjects_router
 
 
 def _normalise_api_prefix(prefix: str) -> str:
@@ -181,6 +191,8 @@ def _include_api_routers(prefix: str, *, include_in_schema: bool = True) -> None
     app.include_router(research_router, prefix=prefix, include_in_schema=include_in_schema)
     app.include_router(results_router, prefix=prefix, include_in_schema=include_in_schema)
     app.include_router(promotion_router, prefix=prefix, include_in_schema=include_in_schema)
+    app.include_router(skills_router, prefix=prefix, include_in_schema=include_in_schema)
+    app.include_router(subjects_router, prefix=prefix, include_in_schema=include_in_schema)
 
 
 _include_api_routers(_API_V1_PREFIX)
@@ -439,7 +451,7 @@ if os.path.isdir(_ui_dist):
     # SPA catch-all: any non-API path returns index.html for client-side routing
     _index_html = os.path.join(_ui_dist, "index.html")
 
-    @app.get("/{full_path:path}")
+    @app.get("/{full_path:path}", include_in_schema=False)
     async def spa_fallback(full_path: str) -> FileResponse:
         # Serve actual files if they exist (favicon.ico, etc.)
         file_path = os.path.join(_ui_dist, full_path)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-from typing import Any
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, model_validator
@@ -17,12 +17,33 @@ router = APIRouter(tags=["promotion"], dependencies=[Depends(require_api_auth)])
 
 _promoter = None
 _store = None
+#: P3-017: skill registry injected by main.py so preview/confirm results can
+#: carry ``target_kind`` from the session's skill manifest.
+_registry: Any = None
 
 
-def init(promoter, store):
-    global _promoter, _store
+def init(promoter, store, *, skill_registry: Any = None):
+    """Wire the promoter, store, and optional skill registry (P3-017)."""
+    global _promoter, _store, _registry
     _promoter = promoter
     _store = store
+    if skill_registry is not None:
+        _registry = skill_registry
+
+
+def reset() -> None:
+    """Clear all module globals to their uninitialised state.
+
+    Test-only: prevents module-global state (``_promoter``/``_store``/
+    ``_registry``) set by one suite from leaking into another. Production
+    never un-wires a service once its lifespan has started. Mirrors the
+    ``reset()`` pattern in ``ui/src/skill-plugins/registry.ts`` (same
+    Phase-3 vintage).
+    """
+    global _promoter, _store, _registry
+    _promoter = None
+    _store = None
+    _registry = None
 
 
 async def _audit(
@@ -43,6 +64,36 @@ async def _audit(
         metadata=metadata,
         error_message=error_message,
     )
+
+
+def _inject_target_kind(result: Dict[str, Any]) -> Dict[str, Any]:
+    """P3-017: add ``target_kind`` to a promotion preview/confirm result.
+
+    Derives the promotion target kind from the session's skill manifest so the
+    UI PromotionModal can branch generically (``file_path`` vs ``registry_api``
+    vs ``git_branch`` …). Additive — existing fields are never overwritten.
+    When the skill is unknown or the registry is not wired, defaults to
+    ``file_path`` (the incumbent ML target) so behavior is unchanged for legacy
+    sessions.
+    """
+    if not isinstance(result, dict) or result.get("target_kind"):
+        return result
+    skill_id = result.get("skill_id") or ""
+    if not skill_id:
+        model_type = result.get("model_type") or ""
+        if model_type:
+            from src.core.legacy_alias import model_type_to_skill_id
+
+            skill_id = model_type_to_skill_id(model_type)
+    if skill_id and _registry is not None:
+        try:
+            manifest = _registry.get(skill_id)
+            result["target_kind"] = manifest.promotion_target.primary.kind
+            return result
+        except Exception:
+            pass  # fall through to default
+    result.setdefault("target_kind", "file_path")
+    return result
 
 
 class PromotionRollbackRequest(BaseModel):
@@ -179,7 +230,7 @@ async def promote_preview(
             research_id=research_id,
             metadata={"scope": payload.scope},
         )
-        return result
+        return _inject_target_kind(result)
     except ValueError as e:
         await _audit(
             request,
@@ -230,7 +281,7 @@ async def promote_confirm(
             research_id=research_id,
             metadata=audit_metadata,
         )
-        return result
+        return _inject_target_kind(result)
     except ValueError as e:
         await _audit(
             request,

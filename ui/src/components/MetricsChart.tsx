@@ -1,15 +1,19 @@
 import { useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer, Legend } from 'recharts';
-import type { Iteration } from '../api/client';
+import type { Iteration, MetricColumn } from '../api/client';
 
 interface Props {
   iterations: Iteration[];
   selectedIteration?: number | null;
   onSelectIteration?: (iteration: number) => void;
+  /** P3-024: manifest-driven chart series from metric_schema.chart_series.
+   * When provided, overrides the hardcoded per-model-type series. */
+  chartSeries?: MetricColumn[];
 }
 
 // Key secondary metrics worth charting per model type.
 // These are the most important signals for visual trend analysis.
+// Used as fallback when no manifest chart_series is provided (P3-024).
 const CHART_METRICS: Record<string, { key: string; label: string; color: string }[]> = {
   direction: [
     { key: 'walkforward_auc', label: 'WF AUC', color: '#34D399' },
@@ -27,6 +31,8 @@ const CHART_METRICS: Record<string, { key: string; label: string; color: string 
     { key: 'mean_oos_drawdown', label: 'OOS Drawdown', color: '#F87171' },
   ],
 };
+
+const DEFAULT_COLORS = ['#34D399', '#FBBF24', '#F472B6', '#60A5FA', '#F87171', '#A78BFA'];
 
 function detectModelType(iterations: Iteration[]): string {
   for (const it of iterations) {
@@ -46,9 +52,20 @@ function trainingGatesPassed(iteration: Iteration): boolean {
   return iteration.training_gates_passed ?? iteration.all_gates_passed;
 }
 
-export default function MetricsChart({ iterations, selectedIteration = null, onSelectIteration }: Props) {
+export default function MetricsChart({ iterations, selectedIteration = null, onSelectIteration, chartSeries }: Props) {
   const modelType = detectModelType(iterations);
-  const secondaryDefs = CHART_METRICS[modelType] || [];
+
+  // P3-024: manifest-driven chart series take priority over the hardcoded
+  // per-model-type fallback. When chartSeries is provided (from
+  // metric_schema.chart_series via the skill descriptor), use it; otherwise
+  // fall back to the legacy detection so existing sessions still render.
+  const secondaryDefs = chartSeries && chartSeries.length > 0
+    ? chartSeries.map((col, i) => ({
+        key: col.field,
+        label: col.label,
+        color: DEFAULT_COLORS[i % DEFAULT_COLORS.length],
+      }))
+    : (CHART_METRICS[modelType] || []);
   const [enabledLines, setEnabledLines] = useState<Set<string>>(new Set(['metric']));
 
   const data = iterations.map((it) => {

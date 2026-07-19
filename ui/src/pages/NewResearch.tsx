@@ -1,10 +1,14 @@
 // New research wizard — 720px centered layout per hifi/screen-new.jsx.
-// Required (instrument, timeframe, model type) + optional (tag, iterations,
-// budget, focus, RL knobs) + preview row + actions.
-import { useMemo, useState } from 'react';
+// Skill-aware: uses SkillPicker (P3-021) + DynamicFormFields (P3-022) when
+// skills are available from GET /skills; falls back to legacy model-type
+// selector + hardcoded instrument/timeframe for backward compat.
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useInstruments, useModels, useStartResearch } from '../hooks/useResearch';
+import { useInstruments, useModels, useStartResearch, useSkills, useSkillFormFields } from '../hooks/useResearch';
 import { Field, Icon, Segmented } from '../components/hifi/primitives';
+import SkillPicker from '../components/SkillPicker';
+import DynamicFormFields from '../components/DynamicFormFields';
+import type { SkillSummary, FormField } from '../api/client';
 
 const TIMEFRAMES = ['5m', '15m', '1h', '4h'];
 
@@ -46,6 +50,37 @@ export default function NewResearch() {
   const [tradingMode, setTradingMode] = useState<'stock' | 'margin'>('stock');
   const [agentStrategy, setAgentStrategy] = useState<'AGGR' | 'CONS' | 'BALA' | 'SCAL'>('BALA');
   const [initialBalance, setInitialBalance] = useState(10000);
+
+  // P3-021 / P3-022: skill-aware form state.
+  const { data: skills } = useSkills();
+  const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
+  const { data: skillFormFieldsData } = useSkillFormFields(selectedSkillId);
+  const [skillParams, setSkillParams] = useState<Record<string, unknown>>({});
+  const skillFormFields: FormField[] = skillFormFieldsData?.form_fields ?? [];
+
+  // Sync modelType from the selected skill's legacy alias.
+  useEffect(() => {
+    if (!selectedSkillId || !skills) return;
+    const skill = skills.find((s) => s.id === selectedSkillId);
+    if (skill?.model_type) {
+      setModelType(skill.model_type);
+    }
+  }, [selectedSkillId, skills]);
+
+  // When form fields include instrument/timeframe, sync them into the legacy state.
+  useEffect(() => {
+    if (skillFormFields.length === 0) return;
+    const instrumentField = skillFormFields.find((f) => f.name === 'instrument' || f.name === 'subject_id');
+    const timeframeField = skillFormFields.find((f) => f.name === 'timeframe' || f.name === 'variant');
+    if (instrumentField) {
+      const val = skillParams[instrumentField.name];
+      if (typeof val === 'string' && val) setInstrument(val);
+    }
+    if (timeframeField) {
+      const val = skillParams[timeframeField.name];
+      if (typeof val === 'string' && val) setTimeframe(val);
+    }
+  }, [skillFormFields, skillParams]);
 
   const instrumentOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -90,6 +125,11 @@ export default function NewResearch() {
         instrument,
         timeframe,
         model_type: modelType,
+        // P3-013: canonical skill fields (dual-shape — both shapes sent).
+        skill_id: selectedSkillId ?? undefined,
+        subject_id: instrument || undefined,
+        variant: timeframe || undefined,
+        skill_params: Object.keys(skillParams).length > 0 ? skillParams : undefined,
         tag: tag || undefined,
         quick_mode: quickMode,
         max_iterations: maxIterations,
@@ -135,64 +175,92 @@ export default function NewResearch() {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 16 }}>
-              <Field label="Instrument" required>
-                {instrumentOptions.length > 0 ? (
-                  <select className="select mono" value={instrument} onChange={(e) => setInstrument(e.target.value)} required>
-                    <option value="">Select…</option>
-                    {instrumentOptions.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    className="input mono"
-                    value={instrument}
-                    onChange={(e) => setInstrument(e.target.value)}
-                    placeholder="e.g. DOGE_USDT"
-                    required
+              {skillFormFields.length > 0 ? (
+                /* P3-022: dynamic form fields from the selected skill's manifest */
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <DynamicFormFields
+                    fields={skillFormFields}
+                    values={skillParams}
+                    onChange={(name, value) => setSkillParams((prev) => ({ ...prev, [name]: value }))}
+                    skillId={selectedSkillId ?? undefined}
                   />
-                )}
-              </Field>
-              <Field label="Timeframe" required>
-                <Segmented options={TIMEFRAMES} value={timeframe} onChange={setTimeframe} />
-              </Field>
+                </div>
+              ) : (
+                <>
+                  <Field label="Instrument" required>
+                    {instrumentOptions.length > 0 ? (
+                      <select className="select mono" value={instrument} onChange={(e) => setInstrument(e.target.value)} required>
+                        <option value="">Select…</option>
+                        {instrumentOptions.map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        className="input mono"
+                        value={instrument}
+                        onChange={(e) => setInstrument(e.target.value)}
+                        placeholder="e.g. DOGE_USDT"
+                        required
+                      />
+                    )}
+                  </Field>
+                  <Field label="Timeframe" required>
+                    <Segmented options={TIMEFRAMES} value={timeframe} onChange={setTimeframe} />
+                  </Field>
+                </>
+              )}
             </div>
 
-            <Field label="Model type" required>
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${modelCards.length}, 1fr)`, gap: 12 }}>
-                {modelCards.map((m) => {
-                  const on = modelType === m.id;
-                  return (
-                    <button
-                      type="button"
-                      key={m.id}
-                      onClick={() => setModelType(m.id)}
-                      className="card"
-                      style={{
-                        padding: 14,
-                        textAlign: 'left',
-                        background: on ? 'var(--surface-2)' : 'var(--surface)',
-                        borderColor: on ? 'var(--fg)' : 'var(--line-soft)',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-                        <Icon name={m.icon} color={on ? 'var(--fg)' : 'var(--muted)'} />
-                        {on && <Icon name="check" color="var(--green)" />}
-                      </div>
-                      <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
-                        {m.name}
-                      </div>
-                      <div className="subtle" style={{ fontSize: 11, marginTop: 4 }}>
-                        {m.desc}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </Field>
+            {/* P3-021: skill picker replaces the hardcoded model-type selector. */}
+            {skills && skills.length > 0 ? (
+              <Field label="Skill" required>
+                <SkillPicker
+                  skills={skills}
+                  selected={selectedSkillId}
+                  onSelect={(id) => {
+                    setSelectedSkillId(id);
+                    setSkillParams({});
+                  }}
+                />
+              </Field>
+            ) : (
+              <Field label="Model type" required>
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${modelCards.length}, 1fr)`, gap: 12 }}>
+                  {modelCards.map((m) => {
+                    const on = modelType === m.id;
+                    return (
+                      <button
+                        type="button"
+                        key={m.id}
+                        onClick={() => setModelType(m.id)}
+                        className="card"
+                        style={{
+                          padding: 14,
+                          textAlign: 'left',
+                          background: on ? 'var(--surface-2)' : 'var(--surface)',
+                          borderColor: on ? 'var(--fg)' : 'var(--line-soft)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+                          <Icon name={m.icon} color={on ? 'var(--fg)' : 'var(--muted)'} />
+                          {on && <Icon name="check" color="var(--green)" />}
+                        </div>
+                        <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
+                          {m.name}
+                        </div>
+                        <div className="subtle" style={{ fontSize: 11, marginTop: 4 }}>
+                          {m.desc}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </Field>
+            )}
           </div>
 
           {/* Optional card */}

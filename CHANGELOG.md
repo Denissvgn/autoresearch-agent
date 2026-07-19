@@ -2,6 +2,85 @@
 
 ## Unreleased
 
+- **ARC-011 Phase 3 — review-findings close (BE/FE).** Closes the seven
+  findings from the Phase-3 code review. No behavior change for ML sessions;
+  additive-only public-surface changes.
+  - **Critical: `openapi.yaml` drift.** The Phase-3 commit `63e817466`
+    shipped with `openapi.yaml` not regenerated, so
+    `tests/test_openapi_contract.py::test_checked_openapi_yaml_matches_app_schema`
+    was red on HEAD. Regenerated from `main.app.openapi()` so the contract
+    test passes; the regenerated file now documents the `/api/v1/skills*` and
+    `/api/v1/subjects*` paths (10 new paths) and the dual-shape
+    `StartResearchRequest` fields (`skill_id`/`subject_id`/`variant`/
+    `skill_params`).
+  - **`spa_fallback` excluded from OpenAPI.** `main.py`'s SPA catch-all
+    (`GET /{full_path:path}`) is now registered with
+    `include_in_schema=False`. It is a file-serving fallback, not part of
+    the API contract; previously it leaked into the live schema whenever
+    `ui/dist/` was built (dev boxes, full image builds), making the contract
+    test environment-dependent.
+  - **`subjects._get_manifest_or_404` parity with `skills._get_or_404`.**
+    `/subjects?skill_id=<unknown>` now returns the same structured 404
+    detail (`error`/`skill_id`/`available`/`hint`) as `/skills/{id}` for an
+    unknown skill, instead of a bare string. The two skill-id-bearing
+    endpoints are now consistent. `test_subjects_unknown_skill_returns_404`
+    tightened to assert the structured detail.
+  - **`GET /skills/{id}/changelog` size cap.** Returns 413
+    `changelog_too_large` (with `size_bytes`/`max_bytes`/`hint`) when the
+    skill's `CHANGELOG.md` exceeds 64 KiB, instead of slurping the whole
+    file into the JSON response. Forward-looking — no skill ships a
+    `CHANGELOG.md` today. New test
+    `test_get_changelog_too_large_returns_413`.
+  - **`_dual_shape_session` pipeline contract documented.** Pipeline rows
+    (`model_type="pipeline"`) are multi-skill containers, not skills, so
+    their canonical `skill_id` is empty by design (only `subject_id`/
+    `variant` derive from the legacy fields). The docstring now states this
+    explicitly; `test_pipeline_row_dual_shape_has_empty_canonical_fields`
+    pins the contract.
+  - **`promotion.reset()` test-isolation helper.** New `reset()` clears
+    `_promoter`/`_store`/`_registry` to their uninitialised state. The
+    `_wire` fixture in `test_research_api_integration.py` now calls
+    `promotion.reset()` at teardown instead of hand-snapshotting the triple
+    — semantically equivalent, robust to new globals being added. Mirrors
+    the `reset()` pattern in `ui/src/skill-plugins/registry.ts`.
+  - **Code-comment / docstring correctness.** `research.py`'s
+    `_translate_canonical_request` no longer cites a non-existent `P4-017`
+    task (Phase 4 IDs only run to P4-016); the comment now accurately
+    describes the branch as Phase-4 prep for non-ML skills.
+    `ui/src/skill-plugins/index.ts`'s header no longer claims the barrel
+    registers seed renderers (it is a pure re-export; the generic fallback
+    lives in `DynamicFormFields.tsx`).
+  - **`_tool_grep` secret-leak closed (P0-023 / P1-029 delta).** The sync
+    `_tool_grep` in `orchestrator.py` was calling `subprocess.run(cmd, ...)`
+    with no `env=` parameter, so the grep child inherited the full parent
+    env including server control-plane secrets (`ANTHROPIC_AUTH_TOKEN`,
+    `AUTORESEARCH_API_TOKEN`, `AUTORESEARCH_PROMETHEUS_TOKEN`). This is
+    exactly the gap the governed-runner path was hardened against in P0-023
+    and that P1-029's reverted async migration was supposed to close on the
+    grep path. `subprocess.run` now passes `env=_build_child_env()` (the
+    same allow-list the governed runner uses), so the grep child sees only
+    PATH/HOME/PYTHON*/mlflow-tracking-URI/etc. — never the server secrets.
+    No behavior change for approved workflows (PATH and the experiment-
+    legitimate vars are in the allow-list).
+  - **Broken WIP tests repaired.** Four test files that had been broken in
+    the working tree (verified red at HEAD `63e817466`, unrelated to the
+    Phase-3 review fixes) are now green:
+    - `tests/test_async_tool_path.py` — rewritten to match the sync
+      `_tool_grep` / `_execute_tool` API (P1-029's async migration was
+      reverted; the test was the orphan). 12 tests pin the sync contract
+      including the new env-scrubbing delta and a companion PATH-still-
+      present guard.
+    - `tests/test_pagination.py::test_v5_indexes_present_after_initialize` —
+      schema-version assertion now reads `_LATEST_SCHEMA_VERSION` (currently
+      v6, bumped from v5 in ARC-011 Phase 3) instead of hard-coded `5`.
+    - `tests/test_hardening_phase1_to_5.py::test_results_store_records_schema_version`
+      — same `_LATEST_SCHEMA_VERSION` fix.
+    - `tests/test_deployment_inputs.py::test_autoresearch_dockerfile_matches_ml_service_runtime_contract`
+      — Dockerfile assertions updated for the parameterized `APP_UID`/`APP_GID`
+      build args (PR-9: UID/GID 1000 to match the host user owning the
+      bind-mounted `configs/`); the old hard-coded `groupadd -g 1001 appuser`
+      assertions no longer held.
+
 - **ARC-011 Phase 3 — gap close (BE).** Closes the residual Phase-3 AC gaps
   found by a post-implementation audit against `ARC-011-backlog.md` §6.
   - **P3-008** `POST /skills/reload` now refuses to run when

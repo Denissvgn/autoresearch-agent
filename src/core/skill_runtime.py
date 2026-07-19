@@ -659,16 +659,26 @@ class ManifestSkillRuntime:
         session_nonce: Optional[bytes] = None,
         config_snapshot: Optional[str] = None,
     ) -> Optional[dict[str, Any]]:
-        # D2: session_nonce ignored. Format selection mirrors the transitional
-        # runtime: json_marker when the marker is present, else delimited_kv.
+        # P4-003: thread the manifest's nonce config (nonce_field +
+        # require_signed_metrics) to the parser. When require_signed_metrics is
+        # true, the parser validates the echoed nonce and rejects forged blocks.
         from src.core.output_parser import DelimitedKVParser, JSONMarkerParser
 
-        marker = self._manifest.output_parser.iteration_marker or "ITERATION_RESULT:"
+        op = self._manifest.output_parser
+        marker = op.iteration_marker or "ITERATION_RESULT:"
         if marker in raw_output:
             return JSONMarkerParser().parse_iteration(
-                raw_output, session_nonce=session_nonce
+                raw_output,
+                session_nonce=session_nonce,
+                nonce_field=op.nonce_field,
+                require_signed_metrics=op.require_signed_metrics,
             )
-        return DelimitedKVParser().parse(raw_output)
+        return DelimitedKVParser().parse_iteration(
+            raw_output,
+            session_nonce=session_nonce,
+            nonce_field=op.nonce_field,
+            require_signed_metrics=op.require_signed_metrics,
+        )
 
     def marker_file_paths(self, config: "ResearchConfig") -> list[Path]:
         """Fallback iteration sources from the manifest's

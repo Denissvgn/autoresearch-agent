@@ -137,18 +137,15 @@ def _wire(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "autoresearch_api_token", API_TOKEN)
     _store = _Store()
     results_module.init(_store, mlflow_external_url="http://localhost:5000")
-    # Snapshot the promotion module globals so per-test registry wiring does
-    # not leak into other suites (the falsifiability suite reads _registry).
-    saved = (
-        promotion_module._promoter,
-        promotion_module._store,
-        promotion_module._registry,
-    )
     # Promotion router: no skill registry wired by default → target_kind must
     # default to file_path (the legacy-session path). Per-test wiring overrides.
     promotion_module.init(_FakePromoter(), _store, skill_registry=None)
     yield
-    promotion_module._promoter, promotion_module._store, promotion_module._registry = saved
+    # Clear module globals so per-test registry wiring does not leak into other
+    # suites (the falsifiability suite reads _registry). Uses the dedicated
+    # reset() helper rather than hand-snapshotting the triple — semantically
+    # equivalent (all three end at None) and robust to new globals being added.
+    promotion_module.reset()
 
 
 @pytest.fixture

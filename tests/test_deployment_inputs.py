@@ -119,8 +119,14 @@ def test_autoresearch_dockerfile_matches_ml_service_runtime_contract():
     assert "2>/dev/null" not in dockerfile
     assert "services/autoresearch-agent/src/ /app/src/" in dockerfile
     assert 'CMD ["uvicorn", "src.main:app"' in dockerfile
-    assert "groupadd -g 1001 appuser" in dockerfile
-    assert "useradd -u 1001" in dockerfile
+    # Non-root user creation. PR-9: UID/GID were hard-coded 1001 originally;
+    # the Dockerfile now parameterizes them via APP_UID/APP_GID build args
+    # (defaulting to 1000 to match the host user that owns the bind-mounted
+    # configs/ dir, so promotion can write atomic temp/rollback files there).
+    assert "ARG APP_UID=" in dockerfile
+    assert "ARG APP_GID=" in dockerfile
+    assert "groupadd -g ${APP_GID} appuser" in dockerfile
+    assert "useradd -u ${APP_UID} -g appuser -m appuser" in dockerfile
     assert "services/shared /app/services/shared" in dockerfile
     assert "-e ./libs/ml_artifacts" in dockerfile
     assert '"--workers", "1"' in dockerfile

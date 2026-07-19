@@ -211,6 +211,25 @@ class Settings(BaseSettings):
         description="Opus-tier model alias",
     )
 
+    # --- OpenAI (ARC-011 P4-007 / P4-010) ---
+    # Required when a skill manifest declares ``llm.provider: openai``. The
+    # provider router (``llm_provider.build_provider``) reads these to construct
+    # an ``OpenAIProvider``; the Anthropic settings remain the default for ML
+    # skills that do not declare a provider override.
+    openai_base_url: str = Field(
+        default="https://api.openai.com/v1",
+        description="OpenAI API base URL",
+    )
+    openai_api_key: SecretStr | None = Field(
+        default=None,
+        repr=False,
+        description="OpenAI API key (required when a skill selects provider: openai)",
+    )
+    openai_api_timeout_s: int = Field(
+        default=600,
+        description="OpenAI API timeout in seconds",
+    )
+
     # --- Workspace ---
     workspace_root: str = Field(
         default="/app/workspace",

@@ -113,18 +113,14 @@ class OutputParser(Protocol):
     ``OutputParser``.
 
     ``parse`` covers the ``---`` delimited KV-block form; ``parse_iteration``
-    covers the JSON-line-scan form with a (forward-compat, currently ignored)
-    ``session_nonce`` forgery hook.
+    covers the JSON-line-scan form. P4-003/P4-005 add ``nonce_field`` and
+    ``require_signed_metrics`` parameters for the W11 anti-forgery contract:
+    when ``require_signed_metrics`` is true, the parser validates the echoed
+    nonce against ``session_nonce`` and rejects forged blocks.
     """
 
     def parse(self, raw_output: str) -> Optional[IterationResult]:
-        """Parse a ``---`` delimited key:value block into a result dict.
-
-        Returns ``None`` if no ``---`` block is present (delegates to the
-        ``parse_prepare_output`` logic; never returns ``None`` today — it
-        returns an ``IterationMetrics`` with defaults — but the protocol
-        permits ``None`` so a future parser can signal "no parseable block").
-        """
+        """Parse a ``---`` delimited key:value block into a result dict."""
         ...
 
     def parse_iteration(
@@ -133,12 +129,16 @@ class OutputParser(Protocol):
         *,
         session_nonce: Optional[bytes] = None,
         config_snapshot: Optional[str] = None,
+        nonce_field: Optional[str] = None,
+        require_signed_metrics: bool = False,
     ) -> Optional[IterationResult]:
         """Scan agent text for an ``ITERATION_RESULT:`` JSON marker.
 
-        ``session_nonce`` is accepted for forward-compatibility with the P4
-        anti-forgery work but **ignored** by the transitional parsers (no nonce
-        validation exists today — see module docstring deviation note).
+        When ``require_signed_metrics`` is true, validates the echoed nonce
+        (under ``nonce_field``) against ``session_nonce``. A missing or wrong
+        nonce rejects the block (returns ``None``). A verified result carries
+        ``metrics_verification: "metrics_verified"``; an unverified one (flag
+        false or legacy session) carries ``"metrics_unverified"`` (P4-005).
         """
         ...
 
@@ -176,15 +176,24 @@ class DelimitedKVParser:
         *,
         session_nonce: Optional[bytes] = None,
         config_snapshot: Optional[str] = None,
+        nonce_field: Optional[str] = None,
+        require_signed_metrics: bool = False,
     ) -> Optional[IterationResult]:
         """``DelimitedKVParser`` does not scan for ``ITERATION_RESULT:`` markers.
 
         Provided to satisfy the ``OutputParser`` protocol; delegates to
         :meth:`parse` so a caller that hands arbitrary text to a KV parser gets
         the same behavior as the old ``parse_prepare_output`` (block absent →
-        defaults). ``session_nonce`` is ignored (see module docstring).
+        defaults). P4-003: when ``require_signed_metrics`` is true, validates
+        the echoed nonce in the ``---`` block.
         """
-        return self.parse(text)
+        result = self.parse(text)
+        return _verify_nonce(
+            result,
+            session_nonce=session_nonce,
+            nonce_field=nonce_field,
+            require_signed_metrics=require_signed_metrics,
+        )
 
 
 class JSONMarkerParser:
@@ -214,15 +223,24 @@ class JSONMarkerParser:
         *,
         session_nonce: Optional[bytes] = None,
         config_snapshot: Optional[str] = None,
+        nonce_field: Optional[str] = None,
+        require_signed_metrics: bool = False,
     ) -> Optional[IterationResult]:
         """Scan ``text`` line-by-line for an ``ITERATION_RESULT:`` JSON marker.
 
-        ``session_nonce`` is accepted for forward-compatibility with the P4
-        anti-forgery work but **ignored** (no nonce validation exists today —
-        see module docstring). Returns the parsed dict (gate-alias-normalized
-        in place) or ``None`` if no well-formed marker dict is found.
+        P4-003: when ``require_signed_metrics`` is true, validates the echoed
+        nonce (under ``nonce_field``) against ``session_nonce``. A missing or
+        wrong nonce rejects the marker (returns ``None``). Returns the parsed
+        dict (gate-alias-normalized in place) or ``None`` if no well-formed
+        marker dict is found.
         """
-        return _scan_iteration_marker(text)
+        result = _scan_iteration_marker(text)
+        return _verify_nonce(
+            result,
+            session_nonce=session_nonce,
+            nonce_field=nonce_field,
+            require_signed_metrics=require_signed_metrics,
+        )
 
     def parse_marker(self, text: str) -> Optional[IterationResult]:
         """Historical alias for :meth:`parse_iteration` (no nonce kwarg)."""
@@ -373,6 +391,64 @@ def _scan_iteration_marker(text: str) -> Optional[IterationResult]:
                 return payload  # type: ignore[return-value]
             logger.warning("Iteration marker JSON was not an object: %s", json_str)
     return None
+
+
+def _verify_nonce(
+    result: Optional[IterationResult],
+    *,
+    session_nonce: Optional[bytes],
+    nonce_field: Optional[str],
+    require_signed_metrics: bool,
+) -> Optional[IterationResult]:
+    """Verify the W11 anti-forgery nonce in a parsed result (P4-003/P4-005).
+
+    Returns the result (possibly annotated) or ``None`` (rejected as forged).
+
+    * ``require_signed_metrics=False`` (default): no validation; the result is
+      returned **unchanged** (no ``metrics_verification`` key) so the X-002
+      parity fixtures for ML skills stay byte-identical.
+    * ``require_signed_metrics=True`` + nonce matches: the result gains
+      ``metrics_verification: "metrics_verified"``.
+    * ``require_signed_metrics=True`` + nonce missing/wrong: returns ``None``
+      (forged — the iteration is not recorded).
+    * ``require_signed_metrics=True`` but ``session_nonce`` is ``None`` (legacy
+      session without a nonce): graceful downgrade — the result gains
+      ``metrics_verification: "metrics_unverified"`` and a warning is logged.
+    """
+    if result is None:
+        return None
+
+    if not require_signed_metrics:
+        return result
+
+    # Normalize the session nonce to a hex string for comparison.
+    if session_nonce is None:
+        logger.warning(
+            "require_signed_metrics=true but session has no nonce; "
+            "downgrading to metrics_unverified (legacy session)"
+        )
+        result["metrics_verification"] = "metrics_unverified"
+        return result
+
+    expected = session_nonce.hex() if isinstance(session_nonce, bytes) else str(session_nonce)
+    field = nonce_field or "server_nonce"
+    echoed = result.get(field)
+
+    if echoed is None:
+        logger.warning(
+            "Iteration marker rejected: nonce field %r is absent (forged)", field,
+        )
+        return None
+
+    if str(echoed) != expected:
+        logger.warning(
+            "Iteration marker rejected: nonce mismatch (expected %s, got %s) — forged",
+            expected[:8] + "...", str(echoed)[:8] + "...",
+        )
+        return None
+
+    result["metrics_verification"] = "metrics_verified"
+    return result
 
 
 __all__ = [

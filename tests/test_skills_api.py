@@ -155,6 +155,35 @@ def test_get_changelog(client: TestClient):
     assert "changelog" in body
 
 
+def test_get_changelog_too_large_returns_413(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+):
+    """A skill whose ``CHANGELOG.md`` exceeds the cap returns 413 with a
+    structured detail (``error``/``skill_id``/``size_bytes``/``max_bytes``/
+    ``hint``) instead of slurping the whole file into the response."""
+    # Write an oversized CHANGELOG.md into a fake skill package directory.
+    skill_id = "ml-direction"  # any registered skill id; we override the dir
+    skill_dir = tmp_path / skill_id
+    skill_dir.mkdir()
+    oversized = "x" * (skills_module._MAX_CHANGELOG_BYTES + 1)
+    (skill_dir / "CHANGELOG.md").write_text(oversized, encoding="utf-8")
+    # Point the module's _skill_dir resolver at our temp dir.
+    monkeypatch.setattr(skills_module, "_skill_dir", lambda sid: tmp_path / sid)
+
+    response = client.get(
+        f"/api/v1/skills/{skill_id}/changelog", headers=auth_headers()
+    )
+    assert response.status_code == 413
+    detail = response.json()["detail"]
+    assert detail["error"] == "changelog_too_large"
+    assert detail["skill_id"] == skill_id
+    assert detail["size_bytes"] == skills_module._MAX_CHANGELOG_BYTES + 1
+    assert detail["max_bytes"] == skills_module._MAX_CHANGELOG_BYTES
+    assert "hint" in detail
+
+
 # --- POST /skills/reload ---
 
 def test_reload_skills(client: TestClient):
@@ -210,8 +239,16 @@ def test_list_subject_variants(client: TestClient):
 
 
 def test_subjects_unknown_skill_returns_404(client: TestClient):
+    """An unknown ``skill_id`` returns the same structured 404 detail shape as
+    ``GET /skills/{id}`` (``error``/``skill_id``/``available``/``hint``) so the
+    two skill-id-bearing endpoints are consistent (P3-009 ↔ P3-002 parity)."""
     response = client.get("/api/v1/subjects?skill_id=nonexistent", headers=auth_headers())
     assert response.status_code == 404
+    detail = response.json()["detail"]
+    assert detail["error"] == "skill_not_found"
+    assert detail["skill_id"] == "nonexistent"
+    assert "available" in detail
+    assert "hint" in detail
 
 
 # --- Auth enforcement ---

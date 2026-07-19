@@ -36,6 +36,7 @@ from src.core.development_inference_validation import (
 )
 from src.core.development_signal_health import build_development_signal_health
 from src.core.gate_status import training_gates_passed_from_iteration
+from src.core.legacy_alias import model_type_to_skill_id
 from src.core.promotion_target import (
         FilePathPromotionTarget,
         PromotionTarget,
@@ -360,6 +361,10 @@ class ConfigPromoter:
             "model_type": model_type,
             "instrument": instrument,
             "timeframe": timeframe,
+            # P3-017: canonical skill fields (dual-shape, §10 guarantee #4).
+            "skill_id": model_type_to_skill_id(model_type) if model_type else "",
+            "subject_id": instrument,
+            "variant": timeframe,
             "scope": DEVELOPMENT_PROMOTION_SCOPE,
             "promotion_scope": DEVELOPMENT_PROMOTION_SCOPE,
             "target_path": target_path,

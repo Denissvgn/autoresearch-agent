@@ -163,6 +163,30 @@ export function useModels() {
   return useQuery({ queryKey: ['models'], queryFn: api.getModels, staleTime: 60_000 });
 }
 
+// ── Skill hooks (ARC-011 P3-021..025) ──────────────────────────────────
+
+export function useSkills() {
+  return useQuery({ queryKey: ['skills'], queryFn: () => api.getSkills(), staleTime: 60_000 });
+}
+
+export function useSkillFormFields(skillId: string | null) {
+  return useQuery({
+    queryKey: ['skill-form-fields', skillId],
+    queryFn: () => api.getSkillFormFields(skillId!),
+    enabled: Boolean(skillId),
+    staleTime: 60_000,
+  });
+}
+
+export function useSkillMetricSchema(skillId: string | null) {
+  return useQuery({
+    queryKey: ['skill-metric-schema', skillId],
+    queryFn: () => api.getSkillMetricSchema(skillId!),
+    enabled: Boolean(skillId),
+    staleTime: 60_000,
+  });
+}
+
 export function useStatus() {
   return useQuery({ queryKey: ['status'], queryFn: api.getStatus, refetchInterval: 30_000 });
 }

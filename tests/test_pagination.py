@@ -470,15 +470,23 @@ class TestApiEnvelopeSelection:
 
 
 # ---------------------------------------------------------------------------
-# 7. v5 indexes + schema version
+# 7. Pagination indexes + schema version
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_v5_indexes_present_after_initialize(tmp_path: Path) -> None:
+    """After ``initialize()``, the store reports the latest schema version
+    (currently v6 — bumped from v5 in ARC-011 Phase 3) and the v5-era
+    pagination indexes are present. The version assertion uses the
+    ``_LATEST_SCHEMA_VERSION`` constant rather than a hard-coded ``5`` so the
+    test stays correct across future schema bumps; the v5 name is retained
+    because the indexes the test pins were introduced by the v5 migration."""
+    from src.core.state_store import _LATEST_SCHEMA_VERSION
+
     s = ResultsStore(str(tmp_path / "idx.db"))
     await s.initialize()
-    assert await s.get_schema_version() == 5
+    assert await s.get_schema_version() == _LATEST_SCHEMA_VERSION
     async with s.connection() as db:
         cur = await db.execute("SELECT name FROM sqlite_master WHERE type='index'")
         names = {row[0] for row in await cur.fetchall()}
