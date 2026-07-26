@@ -1,0 +1,201 @@
+# ARC-011 P4-012 — the live `prompt-engineering` skill descriptor.
+#
+# The first non-ML skill (category: generative). Lifted from
+# docs/adr/arc-011-manifest-spike/prompt-engineering.yaml (X-003 draft) and
+# reconciled to the canonical research_skill.v1 schema (P2-001).
+#
+# Key Phase-4 properties:
+# * llm.provider: openai — proves cross-provider (P4-007/P4-010).
+# * output_parser.require_signed_metrics: true — enforces the W11 anti-forgery
+#   nonce contract from day one (P4-003/P4-005).
+# * promotion_target.primary.kind: registry_api — a non-file-path promotion
+#   target (G5), proving the generic promotion surface.
+# * No {skill_params.*} placeholders — the registry loads this manifest at
+#   startup without session context; session-supplied URLs arrive via
+#   skill_params at session-build time and are not baked into the manifest.
+
+schema_version: research_skill.v1
+id: prompt-engineering
+version: 0.3.0
+category: generative
+display_name: "Prompt Engineering Research"
+description: "Iterate prompt variants against an eval set and promote the winner."
+
+# ── LLM tier routing ──────────────────────────────────────────────────────────
+llm:
+  provider: openai
+  primary_model: gpt-4o
+  insight_model: gpt-4o-mini
+  max_output_tokens: 8192
+  system_prompt: SKILL.md
+
+# ── Workspace layout ──────────────────────────────────────────────────────────
+workspace:
+  session_path_template: "runs/{skill_id}/{subject_id}/{variant}"
+
+# ── Subject / variant enumeration (G12) ───────────────────────────────────────
+subjects:
+  static:
+    - { id: default, label: "Default prompt task" }
+variants:
+  static: ["production"]
+
+# ── 1/8 param_schema ──────────────────────────────────────────────────────────
+param_schema:
+  type: object
+  additionalProperties: false
+  properties:
+    eval_set:      { type: string,  description: "path to the labeled eval set (JSONL)" }
+    scorer_url:    { type: string,  description: "endpoint that scores a candidate prompt" }
+    registry_url:  { type: string,  description: "prompt registry base URL" }
+    target_metric: { type: string, enum: [composite_eval_score, precision, f1], default: composite_eval_score }
+    cost_ceiling_per_run_usd: { type: number, minimum: 0, default: 0.50 }
+  required: [eval_set]
+
+# ── 2/8 metric_schema ─────────────────────────────────────────────────────────
+metric_schema:
+  primary:
+    field: primary_metric
+    label: "Composite Eval Score"
+    direction: higher_is_better
+    format: ".4f"
+  gates:
+    - { field: passes_min_precision, label: "Min Precision", kind: boolean_badge }
+    - { field: within_cost_budget,   label: "Cost Budget",    kind: boolean_badge }
+  chart_series:
+    - { field: composite_eval_score, label: "Score" }
+    - { field: precision,            label: "Precision" }
+    - { field: mean_cost_usd,        label: "$/run", axis: right }
+  iteration_table_columns:
+    - { field: primary_metric,        label: "Score" }
+    - { field: passes_min_precision,  label: "Prec", kind: icon }
+    - { field: within_cost_budget,    label: "Cost", kind: icon }
+    - { field: n_eval_examples,       label: "N" }
+  goal: optimize
+
+# ── 3/8 decision_vocabulary (G8 success_values) ───────────────────────────────
+decision_vocabulary:
+  base:           [keep, discard, improve, unknown]
+  extensions:     []
+  success_values: [keep, improve]
+
+# ── 4/8 phase_plan (declarative advancement suffices for generative) ──────────
+phase_plan:
+  - id: baseline_capture
+    label: "Baseline Capture"
+    min_iterations: 1
+    max_iterations: 2
+    evidence_keys: [baseline_score]
+    stagnation_exempt: false
+  - id: strategy_sweep
+    label: "Strategy Sweep"
+    min_iterations: 4
+    max_iterations: 20
+    evidence_keys: [prompt_strategy]
+    stagnation_exempt: false
+    next_action: "Try few-shot, chain-of-thought, role, and self-critique variants."
+  - id: robustness
+    label: "Robustness"
+    min_iterations: 2
+    max_iterations: 8
+    evidence_keys: [robustness_check]
+    stagnation_exempt: false
+    next_action: "Paraphrase and adversarial eval."
+  - id: cost_precision_tradeoff
+    label: "Cost/Precision Tradeoff"
+    min_iterations: 2
+    max_iterations: 6
+    evidence_keys: [cost_curve_point]
+    stagnation_exempt: false
+  - id: promotion_proposal
+    label: "Promotion Proposal"
+    min_iterations: 1
+    max_iterations: 2
+    evidence_keys: [promotion_proposal]
+    stagnation_exempt: false
+    next_action: "Prepare a development-scoped promotion proposal for the winning prompt."
+phase_advancement:
+  mode: declarative
+
+# ── 5/8 command_policy ────────────────────────────────────────────────────────
+command_policy:
+  allowed_python: [".venv/bin/python", "./.venv/bin/python"]
+  allowed_scripts:
+    - eval/run.py
+    - bootstrap.py
+  allowed_executables: [cp, cat, jq]
+  copyable_files: [prompt.yaml, best_prompt.yaml]
+  readable_files: [prompt.yaml, best_prompt.yaml, eval_result.json]
+  forbidden_tokens: ["|", "||", "&&", ";", "&"]
+  forbidden_substrings: ["`", "$", ">", "<", "\n", "\r"]
+  secret_markers: [.env, /proc/, /run/secrets, authorization, bearer, credential, id_rsa, password, secret, token]
+
+# ── 6/8 output_parser (json_marker + W11 anti-forgery) ────────────────────────
+output_parser:
+  format: json_marker
+  iteration_marker: "ITERATION_RESULT:"
+  nonce_field: server_nonce
+  require_signed_metrics: true
+  required_fields: [status, primary_metric, metric_name, n_eval_examples]
+  failure_statuses: [eval_error, timeout]
+  fallback:
+    read_results_file: eval_result.json
+    marker_dir_template: "{workspace_root}/runs/{skill_id}/{subject_id}/{variant}/"
+
+# ── 7/8 preflight ─────────────────────────────────────────────────────────────
+preflight:
+  - { name: eval-set, kind: local_file, path: "eval_set.jsonl", required: false }
+
+# ── 8/8 promotion_target (G5 registry_api) ────────────────────────────────────
+promotion_target:
+  primary:
+    kind: registry_api
+    registry: prompt-registry
+    register_endpoint: "http://prompt-registry.local/api/v1/prompts"
+    atomic_write: true
+  scopes:
+    - { id: development, approval_required: false }
+    - { id: staging,     approval_required: false, prior_scopes: [development] }
+    - id: production
+      approval_required: true
+      prior_scopes: [development, staging]
+      delegate:
+        kind: registry_api
+        registry: prompt-registry
+        endpoint: "http://prompt-registry.local/api/v1/prompts/{prompt_id}/promote"
+        auth_secret: PROMPT_REGISTRY_AUTH_TOKEN
+
+# ── Trial identity (declarative — no plugin needed for generative) ────────────
+trial_identity:
+  hash_fields: [skill_id, subject_id, variant, prompt_template_hash, eval_set_hash]
+  resolve:
+    mode: declarative
+
+# ── Blocker classification (G3) ───────────────────────────────────────────────
+blocker_classification:
+  actionable_blockers: [below_min_precision, cost_budget_exceeded, scorer_unavailable]
+  phase_evidence_keys: {}
+
+# ── Structured HPO (disabled for generative) ──────────────────────────────────
+structured_hpo:
+  enabled: false
+
+# ── Insights ──────────────────────────────────────────────────────────────────
+insights:
+  prompt_template: insights.md
+  model: gpt-4o-mini
+  max_chars: 500
+
+# ── Prompt assembly ───────────────────────────────────────────────────────────
+prompt:
+  experiment_command: |
+    .venv/bin/python eval/run.py --prompt prompt.yaml --eval eval_set.jsonl
+  continuation_enabled: true
+
+# ── UI hints ──────────────────────────────────────────────────────────────────
+ui:
+  form_fields:
+    - { name: eval_set,      type: string, required: true, label: "Eval set path (JSONL)" }
+    - { name: scorer_url,    type: string, required: false }
+    - { name: registry_url,  type: string, required: false }
+    - { name: target_metric, type: enum, options: [composite_eval_score, precision, f1], default: composite_eval_score }
