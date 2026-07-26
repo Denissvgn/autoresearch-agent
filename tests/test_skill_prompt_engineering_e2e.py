@@ -131,6 +131,35 @@ class TestManifestSkillRuntimeNonceValidation:
         result = runtime.parse_iteration(marker, session_nonce=nonce)
         assert result is None
 
+    def test_valid_nonce_accepted_as_bytes(self, runtime):
+        """P4-003 wiring: the orchestrator passes ``session_nonce`` as ``bytes``
+        (derived from ``bytes.fromhex(config.session_nonce)``). The runtime's
+        ``parse_iteration`` must hex-encode the bytes for comparison — this is
+        the exact shape the hot-path call at orchestrator.py uses."""
+        nonce_hex = "aabbccdd" * 8
+        nonce_bytes = bytes.fromhex(nonce_hex)
+        marker = (
+            'ITERATION_RESULT: {"status":"completed","primary_metric":0.82,'
+            f'"metric_name":"composite_eval_score","server_nonce":"{nonce_hex}"}}'
+        )
+        result = runtime.parse_iteration(marker, session_nonce=nonce_bytes)
+        assert result is not None
+        assert result["metrics_verification"] == "metrics_verified"
+        assert result["primary_metric"] == 0.82
+
+    def test_forged_marker_rejected_as_bytes(self, runtime):
+        """P4-003 wiring: a forged nonce (bytes session nonce, wrong echoed
+        value) is rejected. This is the path that, in the orchestrator, makes
+        the ``if marker:`` branch treat the marker as absent and emits the
+        ``metrics.forged`` audit event."""
+        nonce_bytes = bytes.fromhex("aabbccdd" * 8)
+        marker = (
+            'ITERATION_RESULT: {"status":"completed","primary_metric":0.99,'
+            '"server_nonce":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}'
+        )
+        result = runtime.parse_iteration(marker, session_nonce=nonce_bytes)
+        assert result is None  # forged → rejected (orchestrator won't record it)
+
 
 class TestCanonicalRequestTranslation:
     """P4-017: non-ML skills are accepted (no longer 422)."""

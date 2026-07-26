@@ -260,3 +260,107 @@ class TestBuildProvider:
         provider = build_provider("openai", settings_obj=stub)
         assert isinstance(provider, OpenAIProvider)
         assert provider.name == "openai"
+
+
+# ── ARC-011 P4-009: capability matching (fail-closed) ────────────────────────
+
+
+class TestCapabilityMatching:
+    """P4-009: ``build_provider(required_capabilities=...)`` validates the
+    provider's ``capabilities()`` against the skill's requirements and raises
+    ``ProviderCapabilityMismatch`` on mismatch (fail-closed at session start)."""
+
+    @staticmethod
+    def _settings():
+        return types.SimpleNamespace(
+            openai_base_url="http://oai.invalid",
+            openai_api_key=None,
+            openai_api_timeout_s=30,
+        )
+
+    def test_satisfied_requirements_accepted(self):
+        from src.core.llm_provider import RequiredCapabilities, build_provider
+
+        # OpenAI's caps: native_tool_use=True, system_prompt=True, 128k ctx.
+        req = RequiredCapabilities(
+            native_tool_use=True, system_prompt=True, max_context_tokens=128_000,
+        )
+        provider = build_provider(
+            "openai", settings_obj=self._settings(), required_capabilities=req,
+        )
+        assert provider.capabilities().native_tool_use is True
+
+    def test_missing_native_tool_use_raises(self):
+        from src.core.llm_provider import (
+            ProviderCapabilityMismatch,
+            RequiredCapabilities,
+            build_provider,
+        )
+
+        req = RequiredCapabilities(native_tool_use=True)
+        # Force a mismatch by overriding capabilities to lack native tool use.
+        with pytest.raises(ProviderCapabilityMismatch, match="native_tool_use"):
+            caps = ProviderCapabilities(
+                native_tool_use=False, streaming=False,
+                system_prompt=True, max_context_tokens=128_000,
+            )
+            req.check(caps, "openai")
+
+    def test_missing_system_prompt_raises(self):
+        from src.core.llm_provider import (
+            ProviderCapabilityMismatch,
+            RequiredCapabilities,
+        )
+
+        req = RequiredCapabilities(system_prompt=True)
+        with pytest.raises(ProviderCapabilityMismatch, match="system_prompt"):
+            caps = ProviderCapabilities(
+                native_tool_use=True, streaming=False,
+                system_prompt=False, max_context_tokens=128_000,
+            )
+            req.check(caps, "openai")
+
+    def test_insufficient_context_raises(self):
+        from src.core.llm_provider import (
+            ProviderCapabilityMismatch,
+            RequiredCapabilities,
+        )
+
+        req = RequiredCapabilities(max_context_tokens=200_000)
+        with pytest.raises(ProviderCapabilityMismatch, match="max_context_tokens"):
+            caps = ProviderCapabilities(
+                native_tool_use=True, streaming=False,
+                system_prompt=True, max_context_tokens=128_000,
+            )
+            req.check(caps, "openai")
+
+    def test_no_requirements_skips_check(self):
+        """``required_capabilities=None`` (the orchestrator init path) must not
+        validate — the default Anthropic provider is constructed without a
+        skill scope."""
+        from src.core.llm_provider import build_provider
+
+        provider = build_provider("openai", settings_obj=self._settings())
+        assert provider.name == "openai"
+
+    def test_from_llm_config_reads_required_fields(self):
+        """P4-009: ``RequiredCapabilities.from_llm_config`` reads the manifest's
+        ``required_*`` fields and tolerates an older manifest lacking them."""
+        from src.core.llm_provider import RequiredCapabilities
+
+        full = types.SimpleNamespace(
+            required_native_tool_use=True,
+            required_system_prompt=True,
+            required_max_context_tokens=100_000,
+        )
+        req = RequiredCapabilities.from_llm_config(full)
+        assert req.native_tool_use is True
+        assert req.system_prompt is True
+        assert req.max_context_tokens == 100_000
+
+        # Older manifest without the fields → unconstrained (no check fires).
+        legacy = types.SimpleNamespace()
+        req2 = RequiredCapabilities.from_llm_config(legacy)
+        assert req2.native_tool_use is None
+        assert req2.system_prompt is None
+        assert req2.max_context_tokens is None

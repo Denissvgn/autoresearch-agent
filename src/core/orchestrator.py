@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Mapping, Optional
 
 import yaml
 
@@ -64,8 +64,10 @@ from src.core.llm_provider import (
     ContentBlock,
     LLMProvider,
     Message,
+    ProviderCapabilityMismatch,
     ProviderResponse,
     RequestBlock,
+    RequiredCapabilities,
     StopReason,
     TextBlock,
     ToolDef,
@@ -277,6 +279,13 @@ class ResearchConfig:
     subject_id: str = ""
     variant: str = ""
     skill_params: dict = None  # type: ignore[assignment]  # set in __post_init__
+    # ARC-011 P4-002: per-session anti-forgery nonce (W11). Populated by the
+    # session_manager from the built session manifest before the orchestrator
+    # runs, then (a) delivered to the sanctioned eval subprocess via env
+    # (AUTORESEARCH_SESSION_NONCE) and (b) threaded to parse_iteration for
+    # nonce verification (P4-003). Empty for legacy sessions without a nonce —
+    # the parser's graceful-downgrade path handles that (metrics_unverified).
+    session_nonce: str = ""
 
     def __post_init__(self) -> None:
         # ARC-011 P2-017: reconcile legacy and canonical shapes. Either shape is
@@ -530,6 +539,7 @@ def _execute_tool(
     command_deadline_mono: float | None = None,
     proc_registry: CommandProcessRegistry | None = None,
     research_id: str | None = None,
+    extra_env: Mapping[str, str] | None = None,
 ) -> ToolExecutionResult:
     """Execute a tool call and return the text result."""
     try:
@@ -539,6 +549,7 @@ def _execute_tool(
                 command_deadline_mono=command_deadline_mono,
                 proc_registry=proc_registry,
                 research_id=research_id,
+                extra_env=extra_env,
             )
         elif name == "read_file":
             return ToolExecutionResult(_tool_read_file(input_data, workspace))
@@ -563,6 +574,7 @@ def _tool_bash(
     command_deadline_mono: float | None = None,
     proc_registry: CommandProcessRegistry | None = None,
     research_id: str | None = None,
+    extra_env: Mapping[str, str] | None = None,
 ) -> ToolExecutionResult:
     command = input_data["command"]
     timeout = input_data.get("timeout_s", 7200)
@@ -584,6 +596,7 @@ def _tool_bash(
     result = runner.run(
         command, timeout_s=timeout, output_callback=output_callback,
         proc_registry=proc_registry, research_id=research_id,
+        extra_env=extra_env,
     )
     decision = result.decision
     return ToolExecutionResult(
@@ -2692,6 +2705,27 @@ class AgentOrchestrator:
         # manifest-driven runtimes.
         skill: SkillRuntime = materialize_skill_runtime(self, config)
 
+        # ARC-011 P4-002: derive the per-session anti-forgery env + nonce bytes.
+        # config.session_nonce is a 64-char hex string (32 bytes) populated by
+        # the session_manager from the built session manifest. extra_env reaches
+        # the sanctioned eval subprocess via GovernedCommandRunner.run (P4-002
+        # delivery); nonce_bytes is passed to skill.parse_iteration for W11
+        # verification (P4-003). Empty for legacy sessions → the parser's
+        # graceful-downgrade path returns metrics_unverified.
+        nonce_extra_env: Optional[Mapping[str, str]] = None
+        nonce_bytes: Optional[bytes] = None
+        if config.session_nonce:
+            nonce_extra_env = {"AUTORESEARCH_SESSION_NONCE": config.session_nonce}
+            try:
+                nonce_bytes = bytes.fromhex(config.session_nonce)
+            except ValueError:
+                # Malformed nonce → treat as legacy (unverified), log loudly.
+                logger.warning(
+                    "Research %s: session_nonce is not valid hex — "
+                    "downgrading to metrics_unverified", research_id,
+                )
+                nonce_bytes = None
+
         # ARC-011 P4-010: per-skill provider selection. If the skill manifest
         # declares a non-anthropic provider, construct it via the router and
         # store it per-session. _call_llm_with_retry and the insights path read
@@ -2701,7 +2735,15 @@ class AgentOrchestrator:
         if manifest is not None:
             llm_cfg = manifest.llm
             if llm_cfg.provider != "anthropic":
-                self._session_providers[config.id] = build_provider(llm_cfg.provider)
+                # ARC-011 P4-009: validate the skill's required capabilities
+                # against the provider's advertisement. build_provider raises
+                # ProviderCapabilityMismatch (fail-closed) if the selected
+                # provider cannot serve this skill — surfacing the misconfig at
+                # session start, before any LLM call.
+                self._session_providers[config.id] = build_provider(
+                    llm_cfg.provider,
+                    required_capabilities=RequiredCapabilities.from_llm_config(llm_cfg),
+                )
                 self._session_models[config.id] = llm_cfg.primary_model
 
         # Load system prompt. The assembly (claude.md + SKILL.md) mirrors
@@ -3099,6 +3141,7 @@ class AgentOrchestrator:
                                 command_deadline_mono=_command_deadline_mono,
                                 proc_registry=self._command_procs,
                                 research_id=research_id,
+                                extra_env=nonce_extra_env,
                             )
                         tool_result = tool_execution.content
                         tool_meta = tool_execution.meta
@@ -3612,13 +3655,43 @@ class AgentOrchestrator:
                 # auto-detected one.  If this turn already recorded an
                 # iteration from bash output, overwrite it with the richer
                 # marker instead of creating a duplicate.
+                #
+                # ARC-011 P4-003: route through ``skill.parse_iteration`` (not
+                # the bare ``parse_iteration_marker`` facade) so the W11 nonce
+                # is verified for skills with ``require_signed_metrics=true``.
+                # For ML skills (default false) and the transitional runtimes,
+                # parse_iteration returns the same result the facade did, so
+                # the X-002 parity fixtures stay byte-identical. A forged
+                # marker (wrong/missing nonce) returns None here → the existing
+                # ``if marker`` branch treats it as "no marker" and the
+                # iteration is not recorded.
                 if agent_text:
-                    marker = parse_iteration_marker(agent_text)
+                    marker = skill.parse_iteration(
+                        agent_text, session_nonce=nonce_bytes,
+                    )
                     if marker:
                         self._attach_planned_trial_metadata(
                             marker,
                             last_planned_trial_for_turn,
                         )
+                        # ARC-011 P4-003: record the verification outcome so a
+                        # metrics_verified/unverified row is auditable. For
+                        # enforced skills the key is set by _verify_nonce; its
+                        # absence means the skill runs unverified (legacy /
+                        # require_signed_metrics=false).
+                        if "metrics_verification" in marker:
+                            await self._store.record_audit_event(
+                                actor_id="autoresearch-agent",
+                                action="metrics.verify",
+                                research_id=research_id,
+                                pipeline_id=config.pipeline_id,
+                                request_metadata={
+                                    "turn": turn,
+                                    "iteration": iteration_count,
+                                    "outcome": marker["metrics_verification"],
+                                },
+                                outcome="success",
+                            )
                         if turn_recorded_iteration:
                             # Overwrite last iteration with richer marker
                             await self._attach_consistency_report(
@@ -3664,6 +3737,50 @@ class AgentOrchestrator:
                                 workspace=workspace,
                                 turn=turn,
                             )
+                    else:
+                        # ARC-011 P4-003: marker was rejected. Distinguish a
+                        # forged marker (a raw ITERATION_RESULT: block existed
+                        # but failed nonce verification → require_signed_metrics
+                        # is true) from a genuinely absent one. Only enforced
+                        # skills can return None for a present marker, so this
+                        # audit fires exclusively on real forgery attempts.
+                        raw_marker_present = parse_iteration_marker(agent_text) is not None
+                        if raw_marker_present:
+                            logger.warning(
+                                "Research %s turn %d: rejected forged "
+                                "ITERATION_RESULT marker (nonce missing or "
+                                "mismatch) — not recorded",
+                                research_id, turn,
+                            )
+                            await agent_log.append(
+                                "system",
+                                (
+                                    "ITERATION_RESULT marker was rejected: the "
+                                    "anti-forgery nonce was missing or did not "
+                                    "match. Emit markers only from the sanctioned "
+                                    "eval script, which receives the nonce via the "
+                                    "AUTORESEARCH_SESSION_NONCE environment variable."
+                                ),
+                                turn=turn,
+                            )
+                            try:
+                                await self._store.record_audit_event(
+                                    actor_id="autoresearch-agent",
+                                    action="metrics.forged",
+                                    research_id=research_id,
+                                    pipeline_id=config.pipeline_id,
+                                    request_metadata={"turn": turn},
+                                    outcome="failure",
+                                    error_message=(
+                                        "Iteration marker rejected: nonce missing "
+                                        "or mismatch (forged)"
+                                    ),
+                                )
+                            except Exception as exc:
+                                logger.warning(
+                                    "Research %s: failed to record metrics_forged "
+                                    "audit event: %s", research_id, exc,
+                                )
 
                 # Check if we've hit max iterations (real attempts only —
                 # duplicate-rejected audit records do not consume budget).

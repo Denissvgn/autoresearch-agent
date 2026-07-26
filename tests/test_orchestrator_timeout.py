@@ -269,12 +269,14 @@ class _CapturingRunner:
         output_callback: object = None,
         proc_registry: object = None,
         research_id: object = None,
+        extra_env: object = None,
     ) -> CommandRunResult:
         type(self).captures.append(
             {
                 "timeout_s": timeout_s,
                 "proc_registry": proc_registry,
                 "research_id": research_id,
+                "extra_env": extra_env,
             }
         )
         decision = MagicMock()

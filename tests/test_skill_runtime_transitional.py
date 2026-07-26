@@ -382,3 +382,48 @@ def test_research_config_has_skill_identity_fields():
     )
     assert cfg.skill_id == ""
     assert cfg.skill_version == ""
+
+
+# ---------------------------------------------------------------------------
+# ARC-011 P4-003: hot-path swap parity. The orchestrator now calls
+# ``skill.parse_iteration(text, session_nonce=...)`` instead of the bare
+# ``parse_iteration_marker`` facade. For the transitional (ML) runtimes,
+# D2 documents that session_nonce is ignored — so the result must be identical
+# to the facade's, with NO ``metrics_verification`` key (the X-002 parity
+# guarantee). A regression here would byte-shift the golden fixtures.
+# ---------------------------------------------------------------------------
+
+
+def test_transitional_parse_iteration_ignores_session_nonce_for_parity():
+    """The new hot-path call shape preserves ML parity: passing a session_nonce
+    (even a non-None one) does not alter the transitional runtime's result and
+    never adds a ``metrics_verification`` key."""
+    from src.core.experiment_parser import parse_iteration_marker
+
+    runtime = DirectionSkillRuntime(_FakeOrchestrator())
+    marker = (
+        'ITERATION_RESULT: {"status":"completed","primary_metric":0.7,'
+        '"metric_name":"composite_eval_score"}'
+    )
+    # The new call shape (orchestrator passes bytes from config.session_nonce).
+    nonce_bytes = bytes.fromhex("aabbccdd" * 8)
+    result = runtime.parse_iteration(marker, session_nonce=nonce_bytes)
+    # The old call shape (the facade the hot path used before the swap).
+    facade_result = parse_iteration_marker(marker)
+
+    assert result is not None
+    assert result == facade_result, (
+        "transitional parse_iteration diverged from the facade — parity broken"
+    )
+    assert "metrics_verification" not in result, (
+        "transitional runtime must not annotate verification (ML is unverified)"
+    )
+
+
+def test_research_config_session_nonce_defaults_empty():
+    """P4-002: ``ResearchConfig.session_nonce`` defaults to empty (legacy
+    sessions) — the parser's graceful-downgrade path handles this."""
+    cfg = ResearchConfig(
+        id="x", instrument="X", timeframe="1m", model_type="direction"
+    )
+    assert cfg.session_nonce == ""

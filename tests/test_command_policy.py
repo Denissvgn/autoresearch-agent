@@ -370,3 +370,95 @@ def test_build_child_env_allowlist_covers_approved_script_inventory():
     assert not missing, (
         f"_CHILD_ENV_ALLOWLIST dropped a var an approved script reads: {sorted(missing)}"
     )
+
+
+# ── ARC-011 P4-002: nonce delivery via extra_env (W11 anti-forgery) ─────────
+
+
+def _nonce_dump_script(workspace: Path) -> tuple[Path, Path]:
+    """Create a sanctioned script that dumps AUTORESEARCH_SESSION_NONCE to a
+    file, plus the .venv/bin/python symlink the policy expects.
+
+    Mirrors the env-dump pattern in ``test_governed_runner_strips_*`` but
+    asserts the nonce reaches the child via the ``extra_env`` channel.
+    """
+    python_path = workspace / ".venv" / "bin" / "python"
+    python_path.parent.mkdir(parents=True)
+    python_path.symlink_to(sys.executable)
+    dump_path = workspace / "nonce_seen.txt"
+    script = workspace / "scripts" / "autotuner" / "enrich_rl_dataset.py"
+    script.parent.mkdir(parents=True)
+    script.write_text(
+        "import os, pathlib\n"
+        f"pathlib.Path({str(dump_path)!r}).write_text("
+        "os.environ.get('AUTORESEARCH_SESSION_NONCE', ''))\n",
+        encoding="utf-8",
+    )
+    return script, dump_path
+
+
+def test_governed_runner_extra_env_delivers_nonce(tmp_path: Path):
+    """P4-002: ``GovernedCommandRunner.run(extra_env=...)`` injects the nonce
+    into the child subprocess env (merged AFTER the forbidden-secret
+    subtraction so it can't be stripped). This is the W11 anti-forgery delivery
+    channel — without it the eval script always echoes an empty nonce.
+    """
+    workspace, session = _workspace(tmp_path)
+    script, dump_path = _nonce_dump_script(Path(workspace))
+
+    runner = GovernedCommandRunner(workspace_root=workspace, session_workspace=session)
+    nonce = "deadbeef" * 8
+    result = runner.run(
+        ".venv/bin/python scripts/autotuner/enrich_rl_dataset.py "
+        "--instrument DOGE_USDT --timeframe 15m",
+        timeout_s=60,
+        extra_env={"AUTORESEARCH_SESSION_NONCE": nonce},
+    )
+
+    assert result.returncode == 0, result.output
+    assert dump_path.read_text(encoding="utf-8") == nonce, (
+        "AUTORESEARCH_SESSION_NONCE did not reach the subprocess via extra_env"
+    )
+
+
+def test_governed_runner_without_extra_env_has_no_nonce(tmp_path: Path, monkeypatch):
+    """Companion: without ``extra_env`` the nonce is absent — confirming the
+    channel is opt-in (the runner never injects the nonce on its own)."""
+    # Ensure the var is not inherited from the parent env accidentally.
+    monkeypatch.delenv("AUTORESEARCH_SESSION_NONCE", raising=False)
+    workspace, session = _workspace(tmp_path)
+    script, dump_path = _nonce_dump_script(Path(workspace))
+
+    runner = GovernedCommandRunner(workspace_root=workspace, session_workspace=session)
+    result = runner.run(
+        ".venv/bin/python scripts/autotuner/enrich_rl_dataset.py "
+        "--instrument DOGE_USDT --timeframe 15m",
+        timeout_s=60,
+    )
+    assert result.returncode == 0, result.output
+    assert dump_path.read_text(encoding="utf-8") == "", (
+        "nonce leaked into the child without extra_env being passed"
+    )
+
+
+def test_execute_tool_threads_extra_env_to_bash(tmp_path: Path):
+    """P4-002 wiring: ``_execute_tool("bash", ..., extra_env=...)`` forwards the
+    nonce through ``_tool_bash`` to ``GovernedCommandRunner.run``. This is the
+    full delivery chain the orchestrator relies on (the call site at
+    orchestrator.py passes ``extra_env=nonce_extra_env``)."""
+    workspace, session = _workspace(tmp_path)
+    script, dump_path = _nonce_dump_script(Path(workspace))
+
+    nonce = "cafebabe" * 8
+    result = _execute_tool(
+        "bash",
+        {"command": ".venv/bin/python scripts/autotuner/enrich_rl_dataset.py "
+                    "--instrument DOGE_USDT --timeframe 15m"},
+        workspace,
+        session,
+        extra_env={"AUTORESEARCH_SESSION_NONCE": nonce},
+    )
+    assert result.meta["returncode"] == 0, result.content
+    assert dump_path.read_text(encoding="utf-8") == nonce, (
+        "_execute_tool did not forward extra_env to the subprocess"
+    )

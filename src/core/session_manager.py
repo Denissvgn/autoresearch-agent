@@ -293,9 +293,12 @@ class SessionManager:
         hpo_plan = self._build_hpo_plan(config)
         manifest_overrides = self._merge_manifest_overrides(manifest, hpo_plan)
         manifest_overrides["preflight"] = preflight
-        manifest_json, manifest_hash = self._build_manifest_payload(
+        manifest_json, manifest_hash, session_nonce = self._build_manifest_payload(
             config, overrides=manifest_overrides,
         )
+        # ARC-011 P4-002: carry the nonce into the orchestrator so it reaches
+        # the eval subprocess env and the marker verifier.
+        config.session_nonce = session_nonce
 
         # Archive any stale workspace from a previous session before writing
         # the new manifest so DB session boundaries match artifact boundaries.
@@ -473,7 +476,7 @@ class SessionManager:
         config: ResearchConfig,
         *,
         overrides: Optional[Dict[str, Any]] = None,
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, str]:
         manifest = build_research_manifest(
             research_id=config.id,
             instrument=config.instrument,
@@ -493,7 +496,14 @@ class SessionManager:
             hpo_timesteps=config.hpo_timesteps,
             overrides=overrides,
         )
-        return manifest_pretty_json(manifest), manifest.manifest_hash or ""
+        # ARC-011 P4-002: surface the per-session anti-forgery nonce so the
+        # caller can populate config.session_nonce before the orchestrator runs
+        # (the nonce is generated inside build_research_manifest).
+        return (
+            manifest_pretty_json(manifest),
+            manifest.manifest_hash or "",
+            manifest.session_nonce or "",
+        )
 
     def _build_hpo_plan(self, config: ResearchConfig) -> Dict[str, Any]:
         return build_structured_hpo_plan(
@@ -652,12 +662,14 @@ class SessionManager:
             "runtime": {"resumed_from": parent_id},
             "preflight": preflight,
         }
-        manifest_json, manifest_hash = self._build_manifest_payload(
+        manifest_json, manifest_hash, session_nonce = self._build_manifest_payload(
             config,
             overrides=self._merge_manifest_overrides(
                 manifest_overrides, hpo_plan,
             ),
         )
+        # ARC-011 P4-002: carry the nonce into the orchestrator (continue path).
+        config.session_nonce = session_nonce
         manifest_path = await self._write_manifest(config, manifest_json)
 
         # Persist session to DB with resumed_from link
@@ -925,12 +937,14 @@ class SessionManager:
             "runtime": {"pipeline_id": pipeline_id},
             "preflight": preflight,
         }
-        manifest_json, manifest_hash = self._build_manifest_payload(
+        manifest_json, manifest_hash, session_nonce = self._build_manifest_payload(
             config,
             overrides=self._merge_manifest_overrides(
                 manifest_overrides, hpo_plan,
             ),
         )
+        # ARC-011 P4-002: carry the nonce into the orchestrator (pipeline path).
+        config.session_nonce = session_nonce
 
         await self._archive_stale_workspace(workspace_path)
         manifest_path = await self._write_manifest(config, manifest_json)

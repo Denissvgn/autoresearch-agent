@@ -55,7 +55,7 @@ import logging
 from collections.abc import AsyncIterator
 from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import Any, Protocol
+from typing import Any, Optional, Protocol
 
 import anthropic
 import httpx
@@ -870,7 +870,76 @@ class OpenAIProvider:
 # ── Provider router (P4-010) ─────────────────────────────────────────────────
 
 
-def build_provider(provider_id: str, *, settings_obj: Any = None) -> LLMProvider:
+class ProviderCapabilityMismatch(ValueError):
+    """Raised (ARC-011 P4-009) when a skill manifest's required capabilities
+    are not satisfied by the selected provider's ``capabilities()``.
+
+    Fail-closed: a session whose skill demands (e.g.) native tool use but is
+    routed to a provider that lacks it must be rejected at session start,
+    before any LLM call — mirroring the codebase's existing fail-closed posture
+    (production-approval HMAC, command policy default-deny).
+    """
+
+
+# Capability requirements, expressed in the same terms as ProviderCapabilities.
+# Built from a skill manifest's ``LLMConfig.required_*`` fields. ``None`` means
+# "the manifest does not constrain this dimension" (skip the check).
+class RequiredCapabilities:
+    """Subset of :class:`ProviderCapabilities` a skill demands (P4-009)."""
+
+    def __init__(
+        self,
+        *,
+        native_tool_use: Optional[bool] = None,
+        system_prompt: Optional[bool] = None,
+        max_context_tokens: Optional[int] = None,
+    ) -> None:
+        self.native_tool_use = native_tool_use
+        self.system_prompt = system_prompt
+        self.max_context_tokens = max_context_tokens
+
+    @classmethod
+    def from_llm_config(cls, llm_cfg: Any) -> "RequiredCapabilities":
+        """Build from a skill manifest's ``LLMConfig`` (P4-009).
+
+        Reads ``required_native_tool_use`` / ``required_system_prompt`` /
+        ``required_max_context_tokens``. Tolerates an older manifest that
+        lacks the fields (treats absent fields as unconstrained).
+        """
+        return cls(
+            native_tool_use=getattr(llm_cfg, "required_native_tool_use", None),
+            system_prompt=getattr(llm_cfg, "required_system_prompt", None),
+            max_context_tokens=getattr(llm_cfg, "required_max_context_tokens", None),
+        )
+
+    def check(self, caps: ProviderCapabilities, provider_id: str) -> None:
+        """Raise :class:`ProviderCapabilityMismatch` if ``caps`` is insufficient."""
+        problems: list[str] = []
+        if self.native_tool_use and not caps.native_tool_use:
+            problems.append("native_tool_use")
+        if self.system_prompt and not caps.system_prompt:
+            problems.append("system_prompt")
+        if (
+            self.max_context_tokens is not None
+            and caps.max_context_tokens < self.max_context_tokens
+        ):
+            problems.append(
+                f"max_context_tokens (need >= {self.max_context_tokens}, "
+                f"have {caps.max_context_tokens})"
+            )
+        if problems:
+            raise ProviderCapabilityMismatch(
+                f"provider {provider_id!r} does not satisfy the skill's required "
+                f"capabilities: {', '.join(problems)}"
+            )
+
+
+def build_provider(
+    provider_id: str,
+    *,
+    settings_obj: Any = None,
+    required_capabilities: Optional[RequiredCapabilities] = None,
+) -> LLMProvider:
     """Construct a ``LLMProvider`` by id (ARC-011 P4-010 router).
 
     Maps a skill manifest's ``llm.provider`` (``"anthropic"`` / ``"openai"``) to
@@ -890,18 +959,28 @@ def build_provider(provider_id: str, *, settings_obj: Any = None) -> LLMProvider
         settings_obj = _settings
 
     if provider_id == "anthropic":
-        return AnthropicProvider(
+        provider: LLMProvider = AnthropicProvider(
             base_url=settings_obj.anthropic_base_url,
             api_key=secret_value(settings_obj.anthropic_auth_token) or "",
             timeout_s=settings_obj.anthropic_api_timeout_s,
         )
-    if provider_id == "openai":
+    elif provider_id == "openai":
         key = getattr(settings_obj, "openai_api_key", None)
-        return OpenAIProvider(
+        provider = OpenAIProvider(
             base_url=settings_obj.openai_base_url,
             api_key=secret_value(key) if key is not None else "",
             timeout_s=settings_obj.openai_api_timeout_s,
         )
-    raise ValueError(
-        f"unknown LLM provider {provider_id!r}; expected 'anthropic' or 'openai'"
-    )
+    else:
+        raise ValueError(
+            f"unknown LLM provider {provider_id!r}; expected 'anthropic' or 'openai'"
+        )
+
+    # ARC-011 P4-009: fail-closed capability check. When the caller supplies
+    # the skill's required capabilities, validate them against the provider's
+    # advertisement before returning — so a mismatch fails the session at
+    # start, before any LLM call. Default provider construction (orchestrator
+    # init) passes no requirements and skips the check.
+    if required_capabilities is not None:
+        required_capabilities.check(provider.capabilities(), provider_id)
+    return provider

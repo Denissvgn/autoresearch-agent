@@ -62,6 +62,27 @@ def test_build_research_manifest_has_required_runtime_sections():
     assert payload["runtime"]["db_path"].endswith("/db/experiments.db")
 
 
+def test_build_research_manifest_emits_per_session_nonce():
+    """ARC-011 P4-002: every built manifest carries a fresh per-session
+    anti-forgery nonce (32 bytes, hex-encoded → 64 chars). It is unique per
+    build (not a constant) so two sessions cannot share a nonce."""
+    manifest = _build_manifest()
+    assert manifest.session_nonce is not None
+    assert len(manifest.session_nonce) == 64, (
+        "session_nonce must be 32 bytes hex-encoded (64 chars)"
+    )
+    # Valid hex.
+    bytes.fromhex(manifest.session_nonce)
+    # Uniqueness across builds.
+    other = _build_manifest()
+    assert other.session_nonce != manifest.session_nonce, (
+        "session_nonce must be freshly generated per build (replay defense)"
+    )
+    # Serialized into the artifact.
+    payload = json.loads(manifest_pretty_json(manifest))
+    assert payload["session_nonce"] == manifest.session_nonce
+
+
 def test_manifest_identity_overrides_must_match_request():
     with pytest.raises(ValueError, match="instrument must match"):
         _build_manifest(instrument="BTC_USDT")

@@ -2,6 +2,47 @@
 
 ## Unreleased
 
+- **ARC-011 Phase 4 — Anti-forgery and cross-provider close-out (BE).** Closes
+  the three wiring gaps that left the Phase-4 exit guarantee dormant, and runs
+  the phase close-out (§0.4 DoD). P4-004 (ML eval nonce backfill) is deferred —
+  ML skills remain on the graceful-downgrade path (`require_signed_metrics =
+  false`); the milestone is the non-ML `prompt-engineering` skill. No behavior
+  change for ML sessions (X-002 parity green).
+  - **P4-002 (nonce delivery, GAP #2):** `session_manager` now populates
+    `ResearchConfig.session_nonce` from the built session manifest; the
+    orchestrator threads it through `_execute_tool` → `_tool_bash` →
+    `GovernedCommandRunner.run(extra_env={"AUTORESEARCH_SESSION_NONCE": ...})`.
+    The delivery channel (`command_runner.py`) already merged `extra_env` after
+    the forbidden-secret subtraction — it was simply never called. Covered by
+    `tests/test_command_policy.py` (runner + full `_execute_tool` chain).
+  - **P4-003 (hot-path wiring, GAP #1):** the orchestrator's marker-parse hot
+    path now calls `skill.parse_iteration(text, session_nonce=...)` instead of
+    the bare `parse_iteration_marker` facade, so `_verify_nonce` actually fires
+    for skills with `require_signed_metrics = true`. Forged markers (wrong /
+    missing nonce) return `None` → the iteration is not recorded, and a
+    `metrics.forged` audit event + agent-log message make the rejection
+    visible. `metrics_verified` / `metrics_unverified` outcomes are audited via
+    `metrics.verify`. ML/transitional runtimes ignore the nonce (D2), so the
+    X-002 parity fixtures stay byte-identical.
+  - **P4-009 / P4-010 (capability matching, GAP #3):** `build_provider`
+    accepts `required_capabilities` (built from the manifest's
+    `LLMConfig.required_*` via `RequiredCapabilities.from_llm_config`) and
+    validates them against `provider.capabilities()`, raising
+    `ProviderCapabilityMismatch` (fail-closed) on mismatch. The orchestrator's
+    per-session provider selection passes the skill's requirements so a
+    mismatch fails the session at start, before any LLM call. Covered by
+    `tests/test_llm_provider_openai.py::TestCapabilityMatching`.
+  - **Tests:** new/extended tests for all three gaps; parity suite (17
+    fixtures) green after teaching the parity engine to DROP the
+    non-deterministic `session_nonce` secret from snapshots
+    (`_engine._DROP_KEY_RE`) rather than baking it into a golden fixture.
+    `.arc-011-phase` bumped 3 → 4; the `P4-anthropic-import` /
+    `P4-openai-import` domain-coupling rule activated (0 violations).
+  - **Deferred:** P4-004 (ML skills' eval scripts echo the nonce) — ML stays on
+    `require_signed_metrics = false`; HMAC over the metrics payload and a
+    within-session replay counter remain future work (ADR §2.5). Wiki sync
+    remains deferred (`llm-wiki` not on PATH — same residual as P1/P2/P3).
+
 - **ARC-011 Phase 3 — review-findings close (BE/FE).** Closes the seven
   findings from the Phase-3 code review. No behavior change for ML sessions;
   additive-only public-surface changes.

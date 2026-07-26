@@ -37,6 +37,13 @@ HOST_CONFIGS_TOKEN = "<host_configs>"
 # Keys whose values are redacted before comparison (volatile / non-deterministic).
 _REDACT_KEY_RE = re.compile(r"(sha256|_sha\d*$|_at$|^at$|timestamp|run_id$)", re.IGNORECASE)
 
+# Keys dropped entirely before comparison. These are non-deterministic secrets
+# whose mere presence (let alone value) is not part of the behavioral parity
+# contract. ``session_nonce`` (ARC-011 P4-002) is a fresh 32-byte hex value
+# generated per manifest build — it must never be baked into a golden fixture
+# (a captured value would be stale on the next run and a replay risk if shared).
+_DROP_KEY_RE = re.compile(r"^session_nonce$", re.IGNORECASE)
+
 
 # =============================================================================
 # Discovery / load
@@ -92,10 +99,13 @@ def _detokenize(obj: Any, mapping: dict[str, str]) -> Any:
 
 
 def _redact(obj: Any) -> Any:
-    """Redact values of volatile keys (hashes, timestamps, run ids)."""
+    """Redact values of volatile keys (hashes, timestamps, run ids) and drop
+    non-deterministic secret keys entirely (e.g. session_nonce)."""
     if isinstance(obj, dict):
         out = {}
         for k, v in obj.items():
+            if _DROP_KEY_RE.match(k):
+                continue  # drop the key entirely (non-deterministic secret)
             if v and isinstance(v, str) and _REDACT_KEY_RE.search(k):
                 out[k] = "<redacted>"
             else:
