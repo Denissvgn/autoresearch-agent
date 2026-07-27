@@ -27,15 +27,17 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from src.core.skill_loader import load_skill_manifest
+from src.core.skill_loader import load_layout, load_skill_manifest
 from src.core.skill_manifest import (
     SCHEMA_VERSION,
     ManifestValidationError,
     ManifestVersionError,
+    PluginCaps,
     ResearchSkillManifest,
 )
 from src.core.skill_registry import (
     DEFAULT_SKILLS_ROOT,
+    DRAFTS_SUBDIR,
     SKILL_MANIFEST_FILENAME,
     SkillNotRegisteredError,
     SkillRegistry,
@@ -353,3 +355,233 @@ def test_registry_default_root_points_at_service_skills_dir():
     # DEFAULT_SKILLS_ROOT resolves to <service>/skills
     expected = Path(__file__).resolve().parents[1] / "skills"
     assert DEFAULT_SKILLS_ROOT == expected
+
+
+# ===========================================================================
+# P5-001 — full skill-package layout (SkillLayout, PluginCaps, drafts discovery)
+# ===========================================================================
+
+
+def test_schema_accepts_minimal_manifest_without_plugins():
+    """Back-compat: existing skills (no ``plugins`` block) still validate."""
+    data = _minimal_manifest_dict()
+    manifest = ResearchSkillManifest.model_validate(data)
+    assert manifest.plugins.entries == []
+
+
+def test_schema_accepts_declared_plugins_block():
+    data = _minimal_manifest_dict()
+    data["plugins"] = {
+        "entries": [
+            {"kind": "bootstrap", "path": "bootstrap.py"},
+            {"kind": "parser", "path": "parser.py"},
+        ]
+    }
+    manifest = ResearchSkillManifest.model_validate(data)
+    kinds = {e.kind for e in manifest.plugins.entries}
+    assert kinds == {"bootstrap", "parser"}
+
+
+def test_schema_rejects_duplicate_plugin_kind():
+    data = _minimal_manifest_dict()
+    data["plugins"] = {
+        "entries": [
+            {"kind": "bootstrap", "path": "bootstrap.py"},
+            {"kind": "bootstrap", "path": "bootstrap2.py"},
+        ]
+    }
+    with pytest.raises(ValidationError) as exc:
+        ResearchSkillManifest.model_validate(data)
+    assert "duplicate plugin kind" in str(exc.value)
+
+
+def test_schema_rejects_duplicate_plugin_path():
+    data = _minimal_manifest_dict()
+    data["plugins"] = {
+        "entries": [
+            {"kind": "bootstrap", "path": "x.py"},
+            {"kind": "parser", "path": "x.py"},
+        ]
+    }
+    with pytest.raises(ValidationError) as exc:
+        ResearchSkillManifest.model_validate(data)
+    assert "duplicate plugin path" in str(exc.value)
+
+
+def test_plugin_caps_defaults_are_default_deny():
+    """X-004 §6: a bare ``PluginCaps()`` is default-deny (read-only, no net)."""
+    caps = PluginCaps()
+    assert caps.fs_write == "none"
+    assert caps.network_egress == []
+    assert caps.env == []
+
+
+def test_load_layout_reports_minimal_package(tmp_path: Path):
+    """A skill with only SKILL.yaml/SKILL.md resolves to an empty layout."""
+    skill_dir = tmp_path / "bare"
+    skill_dir.mkdir()
+    (skill_dir / SKILL_MANIFEST_FILENAME).write_text(
+        yaml.safe_dump(_minimal_manifest_dict())
+    )
+    layout = load_layout(skill_dir)
+    assert layout.has_bootstrap is False
+    assert layout.has_scaffold is False
+    assert layout.has_knowledge is False
+    assert layout.has_eval is False
+    assert layout.plugins == {}
+    assert layout.missing_plugin_paths == []
+
+
+def test_load_layout_detects_full_directory_tree(tmp_path: Path):
+    """All optional layout slots are detected from on-disk presence."""
+    skill_dir = tmp_path / "full"
+    skill_dir.mkdir()
+    (skill_dir / SKILL_MANIFEST_FILENAME).write_text(
+        yaml.safe_dump(_minimal_manifest_dict())
+    )
+    (skill_dir / "bootstrap.py").write_text("# noop\n")
+    (skill_dir / "scaffold").mkdir()
+    (skill_dir / "knowledge").mkdir()
+    (skill_dir / "eval").mkdir()
+    (skill_dir / "tools").mkdir()
+    layout = load_layout(skill_dir)
+    assert layout.has_bootstrap is True
+    assert layout.has_scaffold is True
+    assert layout.has_knowledge is True
+    assert layout.has_eval is True
+    assert layout.has_tools is True
+
+
+def test_load_layout_backfills_bootstrap_from_disk_presence(tmp_path: Path):
+    """A skill shipping ``bootstrap.py`` without a manifest ``plugins`` block
+    gets a default-capped bootstrap entry (X-004 per-kind defaults)."""
+    skill_dir = tmp_path / "implicit"
+    skill_dir.mkdir()
+    (skill_dir / SKILL_MANIFEST_FILENAME).write_text(
+        yaml.safe_dump(_minimal_manifest_dict())
+    )
+    (skill_dir / "bootstrap.py").write_text("# noop\n")
+    layout = load_layout(skill_dir)
+    assert "bootstrap" in layout.plugins
+    entry = layout.plugins["bootstrap"]
+    assert entry.path == "bootstrap.py"
+    # X-004 §6 default for bootstrap: workspace write, no egress.
+    assert entry.caps is not None
+    assert entry.caps.fs_write == "workspace"
+    assert entry.caps.network_egress == []
+
+
+def test_load_layout_resolves_declared_plugin_caps_to_default(tmp_path: Path):
+    """A declared plugin with ``caps: None`` takes the per-kind default."""
+    skill_dir = tmp_path / "declared"
+    skill_dir.mkdir()
+    data = _minimal_manifest_dict()
+    data["plugins"] = {"entries": [{"kind": "parser", "path": "parser.py"}]}
+    (skill_dir / SKILL_MANIFEST_FILENAME).write_text(yaml.safe_dump(data))
+    (skill_dir / "parser.py").write_text("# noop\n")
+    layout = load_layout(skill_dir)
+    entry = layout.plugins["parser"]
+    assert entry.caps is not None
+    # parser default: read-only, no egress (X-004 §6).
+    assert entry.caps.fs_write == "none"
+    assert entry.caps.network_egress == []
+
+
+def test_load_layout_rejects_caps_widening_beyond_kind_default(tmp_path: Path):
+    """R10: a manifest may narrow but not widen plugin caps. A parser declaring
+    ``fs_write: workspace`` widens the per-kind default (none) and is rejected."""
+    skill_dir = tmp_path / "wide"
+    skill_dir.mkdir()
+    data = _minimal_manifest_dict()
+    data["plugins"] = {
+        "entries": [
+            {
+                "kind": "parser",
+                "path": "parser.py",
+                "caps": {"fs_write": "workspace"},
+            }
+        ]
+    }
+    (skill_dir / SKILL_MANIFEST_FILENAME).write_text(yaml.safe_dump(data))
+    (skill_dir / "parser.py").write_text("# noop\n")
+    with pytest.raises(ManifestValidationError) as exc:
+        load_layout(skill_dir)
+    assert "widens" in str(exc.value).lower() or "widen" in str(exc.value).lower()
+
+
+def test_load_layout_allows_caps_narrowing(tmp_path: Path):
+    """A manifest may legitimately tighten resource caps (smaller = safer)."""
+    skill_dir = tmp_path / "narrow"
+    skill_dir.mkdir()
+    data = _minimal_manifest_dict()
+    data["plugins"] = {
+        "entries": [
+            {
+                "kind": "bootstrap",
+                "path": "bootstrap.py",
+                "caps": {"timeout_s": 10.0, "max_rss_mb": 128},
+            }
+        ]
+    }
+    (skill_dir / SKILL_MANIFEST_FILENAME).write_text(yaml.safe_dump(data))
+    (skill_dir / "bootstrap.py").write_text("# noop\n")
+    layout = load_layout(skill_dir)
+    entry = layout.plugins["bootstrap"]
+    assert entry.caps is not None
+    assert entry.caps.timeout_s == 10.0
+    assert entry.caps.max_rss_mb == 128
+
+
+def test_load_layout_reports_missing_declared_plugin_paths(tmp_path: Path):
+    """A plugin declared in the manifest but absent on disk is flagged."""
+    skill_dir = tmp_path / "missing"
+    skill_dir.mkdir()
+    data = _minimal_manifest_dict()
+    data["plugins"] = {"entries": [{"kind": "parser", "path": "ghost.py"}]}
+    (skill_dir / SKILL_MANIFEST_FILENAME).write_text(yaml.safe_dump(data))
+    layout = load_layout(skill_dir)
+    assert "ghost.py" in layout.missing_plugin_paths
+
+
+# --- Registry drafts discovery (P5-001) -----------------------------------
+
+
+def test_registry_discover_skips_drafts_subdir(tmp_path: Path):
+    """``_drafts/`` is not enumerated as a top-level skill package."""
+    root = tmp_path
+    (root / "real-skill").mkdir()
+    (root / "real-skill" / SKILL_MANIFEST_FILENAME).write_text(
+        yaml.safe_dump(_minimal_manifest_dict())
+    )
+    drafts = root / DRAFTS_SUBDIR
+    drafts.mkdir()
+    (drafts / "draft-skill").mkdir()
+    (drafts / "draft-skill" / SKILL_MANIFEST_FILENAME).write_text(
+        yaml.safe_dump(_minimal_manifest_dict())
+    )
+    reg = SkillRegistry(root=root, settings_obj=STUB_SETTINGS)
+    assert reg.discover() == ["real-skill"]
+    assert DRAFTS_SUBDIR not in reg.available()
+
+
+def test_registry_discover_drafts_enumerates_drafts_dir(tmp_path: Path):
+    """``discover_drafts()`` returns ids under ``_drafts/``."""
+    root = tmp_path
+    drafts = root / DRAFTS_SUBDIR
+    drafts.mkdir()
+    (drafts / "alpha").mkdir()
+    (drafts / "alpha" / SKILL_MANIFEST_FILENAME).write_text(
+        yaml.safe_dump({**_minimal_manifest_dict(), "id": "alpha"})
+    )
+    (drafts / "beta").mkdir()
+    (drafts / "beta" / SKILL_MANIFEST_FILENAME).write_text(
+        yaml.safe_dump({**_minimal_manifest_dict(), "id": "beta"})
+    )
+    reg = SkillRegistry(root=root, settings_obj=STUB_SETTINGS)
+    assert reg.discover_drafts() == ["alpha", "beta"]
+
+
+def test_registry_discover_drafts_empty_when_no_dir(tmp_path: Path):
+    reg = SkillRegistry(root=tmp_path, settings_obj=STUB_SETTINGS)
+    assert reg.discover_drafts() == []
+    assert reg.drafts_root == tmp_path / DRAFTS_SUBDIR

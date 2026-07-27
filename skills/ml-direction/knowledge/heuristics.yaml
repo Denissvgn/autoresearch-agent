@@ -1,0 +1,26 @@
+# ML Direction — tuning heuristics (declarative hints for the agent).
+# These are advisory starting points, not hard constraints; the metric is the
+# ground truth. Appended-to by the feedback loop (P5-027).
+primary_metric: composite_direction_score
+direction: higher_is_better
+
+# Typical healthy ranges (out-of-sample). A candidate outside these is likely
+# overfit or broken — investigate before keeping.
+healthy_ranges:
+  walkforward_mean_auc: [0.52, 0.65]
+  stacking_holdout_auc: [0.52, 0.65]
+  brier: [0.18, 0.24]   # lower is better; above 0.25 ≈ random
+
+# Levers that most often move the needle, in rough priority order.
+priority_levers:
+  - feature_config.lanes        # richer features lift both AUC + prob quality
+  - direction_pct_threshold     # label cleanliness
+  - prediction_horizon
+  - sample_weight_halflife
+  - base_model_keys
+
+# Anti-patterns the agent should avoid.
+anti_patterns:
+  - tuning meta_model / stacking_calibration_* (not served; wasted budget)
+  - raising cv_folds past 8 (diminishing returns, longer runtime)
+  - ignoring brier (a high-AUC/low-quality-prob config scores poorly overall)

@@ -98,6 +98,12 @@ PreflightKind = Literal["http_health", "tcp", "local_file"]
 #: ``artifact_store`` / ``git_branch`` are v1 slots enriched by G5 / G10.
 PromotionKind = Literal["file_path", "registry_api", "artifact_store", "git_branch"]
 
+#: Skill-plugin kinds (ARC-011 §5.3 / X-004 §6). Each maps to an optional
+#: on-disk Python file in the skill package, executed via the governed
+#: ``PluginRunner`` subprocess (P5-005). ``bootstrap`` runs once at session
+#: start; the others run on demand per the runtime contract.
+PluginKind = Literal["parser", "preflight", "resolve_identity", "bootstrap"]
+
 
 # ---------------------------------------------------------------------------
 # Top-level identity / routing sections
@@ -386,6 +392,104 @@ class CommandPolicy(BaseModel):
     forbidden_tokens: list[str] = Field(default_factory=list)
     forbidden_substrings: list[str] = Field(default_factory=list)
     secret_markers: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# 5b/8 plugin_caps (X-004 §6 — the plugin capability contract)
+# ---------------------------------------------------------------------------
+
+
+class PluginCaps(BaseModel):
+    """Capability block for one skill plugin (ARC-011 X-004 §6).
+
+    The governed ``PluginRunner`` (P5-005) reads these per-plugin caps to
+    build the subprocess environment / filesystem confinement before spawning.
+    Default-deny: anything not declared here is withheld. The contract is the
+    load-bearing input to P5-005 and P5-021 (generator safety).
+
+    Per-kind defaults are applied by the registry/loader when a skill omits a
+    ``plugin`` entry but the corresponding file is present on disk
+    (X-004 §6 ``Default caps per kind``)::
+
+        parser / resolve_identity → {fs_write: none, network_egress: [], env: []}
+        preflight                 → {network_egress: [manifest health URLs]}
+        bootstrap                 → {fs_write: workspace}
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: ``"workspace"`` = may write inside the session workspace only; ``"none"``
+    #: = read-only. Matches X-004 §6 ``fs_write``.
+    fs_write: Literal["workspace", "none"] = "none"
+    #: Explicit network endpoints the plugin may reach (``host:port`` strings).
+    #: Empty list = default-deny (the X-004 plugin posture).
+    network_egress: list[str] = Field(default_factory=list)
+    #: Additional env var names the plugin may read beyond the strict default
+    #: allow-list (PATH/LANG/HOME/venv PYTHONPATH). Default none.
+    env: list[str] = Field(default_factory=list)
+    #: Hard wall-clock cap (seconds). Breach fails closed.
+    timeout_s: float = Field(default=30.0, gt=0)
+    #: Max resident set size in MB. Breach → psutil tree kill (D6).
+    max_rss_mb: int = Field(default=512, ge=1)
+    #: Max CPU time in seconds (D6).
+    max_cpu_s: float = Field(default=30.0, gt=0)
+
+
+class PluginEntry(BaseModel):
+    """One declared skill plugin with its capability grant (X-004 §6).
+
+    ``path`` is relative to the skill package root (e.g. ``"bootstrap.py"``,
+    ``"parser.py"``). ``caps`` defaults to the X-004 per-kind default applied
+    by the loader/registry at materialization time; a manifest may override
+    any cap to *narrow* it (never widen beyond the kind default — defense in
+    depth for R10 generated skills).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: PluginKind
+    path: str = Field(description="Relative path of the plugin within the skill package.")
+    caps: Optional[PluginCaps] = Field(
+        default=None,
+        description=(
+            "Capability grant. Omit to take the X-004 per-kind default; the "
+            "loader applies it. A manifest may narrow but not widen the default."
+        ),
+    )
+
+
+class PluginsConfig(BaseModel):
+    """Declared skill plugins + their capability grants (ARC-011 §5.3 / X-004).
+
+    Optional in v1: skills with only ``SKILL.yaml``/``SKILL.md`` have no
+    plugins. The loader (P5-001) cross-checks declared paths against the
+    package's on-disk files; the registry surfaces the resolved layout via
+    ``SkillLayout`` (P5-001). The ``PluginRunner`` (P5-005) is the sole
+    consumer at runtime.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Declared plugins, keyed by ``kind`` for at-most-one-per-kind ergonomics.
+    #: A list (not a dict) keeps the YAML authoring shape flat and lets the
+    #: loader report duplicates with a clear pointer.
+    entries: list[PluginEntry] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _unique_kinds_and_paths(self) -> "PluginsConfig":
+        seen_kinds: set[str] = set()
+        seen_paths: set[str] = set()
+        for entry in self.entries:
+            if entry.kind in seen_kinds:
+                raise ValueError(
+                    f"plugins: duplicate plugin kind {entry.kind!r} "
+                    f"(at most one per kind per skill)"
+                )
+            if entry.path in seen_paths:
+                raise ValueError(f"plugins: duplicate plugin path {entry.path!r}")
+            seen_kinds.add(entry.kind)
+            seen_paths.add(entry.path)
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -758,6 +862,10 @@ class ResearchSkillManifest(BaseModel):
     insights: Optional[InsightsConfig] = None
     prompt: Optional[PromptConfig] = None
     ui: Optional[UIConfig] = None
+    #: P5-001 / X-004: declared plugins + capability grants. Optional; the
+    #: loader cross-checks paths against the package layout and the registry
+    #: surfaces a resolved ``SkillLayout``. Consumed by ``PluginRunner`` (P5-005).
+    plugins: PluginsConfig = Field(default_factory=PluginsConfig)
 
     @field_validator("schema_version")
     @classmethod
@@ -826,6 +934,10 @@ __all__ = [
     "ParserFormat",
     "PreflightKind",
     "PromotionKind",
+    "PluginKind",
+    "PluginCaps",
+    "PluginEntry",
+    "PluginsConfig",
     # Sections
     "LLMConfig",
     "WorkspaceConfig",

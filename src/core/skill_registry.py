@@ -45,6 +45,13 @@ SKILL_MANIFEST_FILENAME = "SKILL.yaml"
 #: relative to this file so it's correct regardless of the process CWD.
 DEFAULT_SKILLS_ROOT = Path(__file__).resolve().parents[2] / "skills"
 
+#: Reserved subdirectory names under ``skills/`` that are NOT skill packages.
+#: ``_drafts/`` holds generator output (P5-023) — drafts load with
+#: ``lifecycle_state="draft"`` (P5-010) and are filtered out of production
+#: session selection. ``meta-skill-generator/`` is the generator descriptor
+#: package (P5-021). Both are surfaced by ``discover_drafts()`` separately.
+_DRAFTS_SUBDIR = "_drafts"
+
 
 class SkillNotRegisteredError(KeyError):
     """Raised when a skill id is not present in the registry."""
@@ -94,14 +101,43 @@ class SkillRegistry:
 
         Does not load the manifests (lazy); only records which ids exist so
         ``available()`` is cheap. ``get()`` loads on demand.
+
+        The reserved ``_drafts/`` subdirectory (P5-023 generator output) is
+        skipped here — drafts are enumerated by ``discover_drafts()`` and load
+        with ``lifecycle_state="draft"`` (P5-010 gating keeps them out of
+        production session selection).
         """
         self._discovered = set()
         if self._root.is_dir():
             for entry in sorted(self._root.iterdir()):
+                if entry.name == _DRAFTS_SUBDIR:
+                    continue  # drafts enumerated separately (P5-001/P5-023)
                 if entry.is_dir() and (entry / SKILL_MANIFEST_FILENAME).is_file():
                     self._discovered.add(entry.name)
         self._scanned = True
         return sorted(self._discovered)
+
+    def discover_drafts(self) -> list[str]:
+        """Enumerate generator drafts under ``skills/_drafts/<id>/`` (P5-023).
+
+        Drafts are loaded with ``lifecycle_state="draft"``; production session
+        selection filters them out (P5-010). Returns sorted draft ids; empty
+        if ``_drafts/`` is absent.
+        """
+        drafts_root = self._root / _DRAFTS_SUBDIR
+        if not drafts_root.is_dir():
+            return []
+        ids = [
+            entry.name
+            for entry in sorted(drafts_root.iterdir())
+            if entry.is_dir() and (entry / SKILL_MANIFEST_FILENAME).is_file()
+        ]
+        return sorted(ids)
+
+    @property
+    def drafts_root(self) -> Path:
+        """Absolute path of the ``skills/_drafts/`` directory (created lazily)."""
+        return self._root / _DRAFTS_SUBDIR
 
     def available(self) -> list[str]:
         """Ids known to the registry (scans once, then caches the listing)."""
@@ -169,7 +205,11 @@ default_registry = SkillRegistry()
 __all__ = [
     "SKILL_MANIFEST_FILENAME",
     "DEFAULT_SKILLS_ROOT",
+    "DRAFTS_SUBDIR",
     "SkillNotRegisteredError",
     "SkillRegistry",
     "default_registry",
 ]
+
+#: Re-exported alias for tests / callers that need to know the drafts dir name.
+DRAFTS_SUBDIR = _DRAFTS_SUBDIR

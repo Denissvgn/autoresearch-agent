@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+- **ARC-011 Phase 5 (in progress) — Auto-initialization, skill lifecycle,
+  generator.** First batch: full skill-package layout, governed plugin/bootstrap
+  runners, and the three ML skills backfilled with `bootstrap.py` + `knowledge/`.
+  No behavior change for existing ML sessions yet (the orchestrator migration
+  that wires the bootstrap runner lands in P5-007; X-002 parity green).
+  - **P5-001 (full layout):** new `SkillLayout` model
+    (`src/core/skill_loader.py`) resolves the ARC-011 §5.3 directory tree
+    (`bootstrap.py`, `scaffold/`, `knowledge/{primer,heuristics,prior_findings}`,
+    `eval/`, optional `tools`/`parser`/`preflight`/`resolve_identity`). New
+    `PluginCaps` / `PluginEntry` / `PluginsConfig` models
+    (`src/core/skill_manifest.py`) carry the X-004 §6 capability contract
+    (`fs_write` / `network_egress` / `env` / `timeout_s` / `max_rss_mb` /
+    `max_cpu_s`); per-kind defaults from X-004 §6 apply when omitted, and a
+    manifest may *narrow* but never *widen* a cap (R10 defense in depth).
+    `SkillRegistry.discover()` now skips the reserved `_drafts/` subdir;
+    `discover_drafts()` enumerates generator drafts separately (P5-023).
+    Back-compat: existing skills with only `SKILL.yaml`/`SKILL.md` resolve to a
+    valid minimal layout.
+  - **P5-005 / P5-006 / P5-008 / P5-009 (bootstrap runner epic):** new
+    `src/core/plugin_runner.py` (`PluginRunner` — the X-004 §6 governed
+    subprocess for all skill-supplied Python; JSON-in/JSON-out ABI, strict env
+    allow-list narrower than the agent path, psutil RSS/CPU caps, fail-closed on
+    crash/timeout/bad-JSON/non-zero, path confinement) and
+    `src/core/bootstrap_runner.py` (`BootstrapRunner` — the first `PluginRunner`
+    consumer; writes the `session_bootstrap.v1` artifact with rendered file
+    hashes; `--dry-bootstrap` overlay mode (X-004 D5(b)) for draft/generated
+    skill review; idempotency check). The T6 invariant is preserved: a plugin
+    parser's output is untrusted candidate data — trust is established
+    downstream by `_verify_nonce`, never by the runner.
+  - **P5-002 / P5-003 / P5-004 (ML skill backfill):** `skills/ml-direction`,
+    `ml-volatility`, `ml-rl` each gain a `bootstrap.py` (thin shim delegating
+    to the proven `scripts/autotuner/setup.py` with the right `--models` flag)
+    + `knowledge/{primer.md,heuristics.yaml,prior_findings/}` corpus. Live
+    execution wired in P5-007; the dry-mode path is tested end-to-end.
+  - **Tests:** 60 new tests (`test_plugin_runner.py` 23, `test_bootstrap_runner.py`
+    11, `test_ml_skill_bootstraps.py` 15, `test_skill_loader.py` +11 for
+    layout/caps/drafts). Full suite 1223 green; ruff clean; mypy 0 new errors
+    (pre-existing orchestrator/session_manager/state_store/skill_runtime debt
+    is prior-phase and out of scope).
+
 - **ARC-011 Phase 4 — Anti-forgery and cross-provider close-out (BE).** Closes
   the three wiring gaps that left the Phase-4 exit guarantee dormant, and runs
   the phase close-out (§0.4 DoD). P4-004 (ML eval nonce backfill) is deferred —

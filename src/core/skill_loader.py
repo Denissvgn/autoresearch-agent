@@ -40,12 +40,15 @@ from pathlib import Path
 from typing import Any, Mapping, Optional, Union
 
 import yaml
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from src.core.skill_manifest import (
     SCHEMA_VERSION,
     ManifestValidationError,
     ManifestVersionError,
+    PluginCaps,
+    PluginEntry,
+    PluginKind,
     ResearchSkillManifest,
 )
 
@@ -63,6 +66,175 @@ _SKILL_PARAMS_PATTERN = re.compile(r"\{skill_params\.([A-Za-z_]\w*)\}")
 #: namespace (e.g. ``{foo.bar}``) is left untouched and surfaces later as a
 #: validation error or a runtime ``KeyError`` — surfaced loudly, not silently.
 _KNOWN_NAMESPACES = ("settings", "skill_params")
+
+
+# ---------------------------------------------------------------------------
+# Full skill-package layout (ARC-011 §5.3 / P5-001)
+# ---------------------------------------------------------------------------
+
+#: The canonical plugin filename for each kind (ARC-011 §5.3). When a skill
+#: omits ``plugins.entries`` in the manifest but the file exists on disk, the
+#: loader materializes a default-capped entry for it (X-004 §6 per-kind caps).
+_DEFAULT_PLUGIN_FILES: dict[PluginKind, str] = {
+    "bootstrap": "bootstrap.py",
+    "parser": "parser.py",
+    "preflight": "preflight.py",
+    "resolve_identity": "resolve_identity.py",
+}
+
+#: X-004 §6 ``Default caps per kind`` — applied by ``load_layout`` when a skill
+#: declares a plugin via file presence (no explicit ``plugins.entries``) or
+#: when a manifest entry omits ``caps``.
+_DEFAULT_CAPS_BY_KIND: dict[PluginKind, PluginCaps] = {
+    "parser": PluginCaps(fs_write="none", network_egress=[], env=[]),
+    "resolve_identity": PluginCaps(fs_write="none", network_egress=[], env=[]),
+    "preflight": PluginCaps(fs_write="none", network_egress=[], env=[]),
+    "bootstrap": PluginCaps(fs_write="workspace", network_egress=[], env=[]),
+}
+
+
+class SkillLayout(BaseModel):
+    """Resolved on-disk layout of a skill package (ARC-011 §5.3, P5-001).
+
+    Pure metadata: which optional files/dirs exist, which plugins are declared,
+    and the resolved capability grant per plugin. Produces *no* side effects —
+    nothing is executed here. The ``BootstrapRunner`` (P5-005) and the
+    ``PluginRunner`` consume the resolved layout + caps at session start.
+
+    Design decisions (P1-007 house style):
+    * **Path-existence checks only.** Resolution reads the filesystem; it never
+      imports or runs the discovered modules. Trust boundary enforced at the
+      ``PluginRunner`` subprocess (X-004 D2/D4).
+    * **Back-compat.** Every optional field defaults to absent; existing skills
+      with only ``SKILL.yaml``/``SKILL.md`` produce a valid (minimal) layout.
+    * **Caps are resolved, not authored.** The manifest's ``plugins.entries``
+      may omit ``caps``; resolution back-fills the X-004 per-kind default. A
+      manifest that *narrows* a default keeps its narrower grant; one that
+      *widens* beyond the kind default is rejected (R10 defense in depth).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Absolute path of the skill package directory (``skills/<id>/``).
+    skill_dir: Path
+    #: ``bootstrap.py`` present? (P5-005 runs it once at session start.)
+    has_bootstrap: bool = False
+    #: ``scaffold/`` template dir present? (rendered into the workspace by the
+    #: bootstrap plugin.)
+    has_scaffold: bool = False
+    #: ``knowledge/`` corpus present? (RAG primer / heuristics / prior findings.)
+    has_knowledge: bool = False
+    #: ``eval/`` harness present? (the skill-local evaluation runner.)
+    has_eval: bool = False
+    #: ``tools/`` optional domain-tool plugins present?
+    has_tools: bool = False
+    #: Resolved plugins keyed by kind, with caps materialized to the X-004
+    #: per-kind default when the manifest omitted them.
+    plugins: dict[PluginKind, PluginEntry] = Field(default_factory=dict)
+    #: Plugin paths that are declared in the manifest but absent on disk
+    #: (an authoring/deployment error; the loader surfaces it but does not raise
+    #: — the caller decides whether missing plugins are fatal).
+    missing_plugin_paths: list[str] = Field(default_factory=list)
+
+
+def _resolve_caps(
+    kind: PluginKind,
+    declared: Optional[PluginCaps],
+) -> PluginCaps:
+    """Return the effective capability grant for a plugin, honoring the X-004
+    "narrow but never widen" rule (R10)."""
+    default = _DEFAULT_CAPS_BY_KIND[kind]
+    if declared is None:
+        return default
+    # Narrow-but-never-widen checks (R10): the manifest grant must be a subset
+    # of (or equal to) the per-kind default.
+    if declared.fs_write == "workspace" and default.fs_write == "none":
+        raise ManifestValidationError(
+            f"plugins.{kind}: fs_write=workspace widens the per-kind default "
+            f"(none) — manifests may narrow, not widen, plugin caps"
+        )
+    extra_env = set(declared.env) - set(default.env)
+    if extra_env:
+        raise ManifestValidationError(
+            f"plugins.{kind}: env {sorted(extra_env)} not permitted by the "
+            f"per-kind default (allowed: {sorted(default.env) or '<none>'})"
+        )
+    extra_egress = set(declared.network_egress) - set(default.network_egress)
+    if extra_egress:
+        raise ManifestValidationError(
+            f"plugins.{kind}: network_egress {sorted(extra_egress)} not permitted "
+            f"by the per-kind default (allowed: {sorted(default.network_egress) or '<none>'})"
+        )
+    # Caps the manifest may legitimately tighten (smaller is safer):
+    return PluginCaps(
+        fs_write=declared.fs_write,
+        network_egress=list(declared.network_egress),
+        env=list(declared.env),
+        timeout_s=min(declared.timeout_s, default.timeout_s),
+        max_rss_mb=min(declared.max_rss_mb, default.max_rss_mb),
+        max_cpu_s=min(declared.max_cpu_s, default.max_cpu_s),
+    )
+
+
+def load_layout(
+    skill_dir: Union[str, Path],
+    manifest: Optional[ResearchSkillManifest] = None,
+) -> SkillLayout:
+    """Resolve the on-disk layout of a skill package (ARC-011 §5.3, P5-001).
+
+    ``skill_dir`` is the package root containing ``SKILL.yaml``. If ``manifest``
+    is omitted, it is loaded from ``skill_dir/SKILL.yaml``. Plugin entries
+    declared in the manifest are cross-checked against the files on disk; any
+    plugin file present but undeclared is materialized with the X-004 per-kind
+    default caps (so a skill that ships ``bootstrap.py`` without a manifest
+    ``plugins`` block still bootstraps).
+
+    Does NOT execute anything — pure path/capability resolution. The
+    ``PluginRunner`` (P5-005) is the runtime consumer.
+    """
+    root = Path(skill_dir)
+    layout = SkillLayout(
+        skill_dir=root,
+        has_bootstrap=(root / "bootstrap.py").is_file(),
+        has_scaffold=(root / "scaffold").is_dir(),
+        has_knowledge=(root / "knowledge").is_dir(),
+        has_eval=(root / "eval").is_dir(),
+        has_tools=(root / "tools").is_dir(),
+    )
+
+    if manifest is None:
+        manifest_path = root / "SKILL.yaml"
+        if manifest_path.is_file():
+            manifest = load_skill_manifest(manifest_path)
+
+    # Start from manifest-declared plugins (caps resolved to defaults).
+    resolved: dict[PluginKind, PluginEntry] = {}
+    missing: list[str] = []
+    if manifest is not None:
+        for entry in manifest.plugins.entries:
+            resolved_caps = _resolve_caps(entry.kind, entry.caps)
+            resolved[entry.kind] = PluginEntry(
+                kind=entry.kind, path=entry.path, caps=resolved_caps
+            )
+            if not (root / entry.path).is_file():
+                missing.append(entry.path)
+
+    # Back-fill from on-disk presence: a skill shipping ``bootstrap.py`` etc.
+    # without a manifest declaration still gets a default-capped entry.
+    for kind, filename in _DEFAULT_PLUGIN_FILES.items():
+        if kind in resolved:
+            continue
+        if (root / filename).is_file():
+            resolved[kind] = PluginEntry(
+                kind=kind, path=filename, caps=_DEFAULT_CAPS_BY_KIND[kind]
+            )
+
+    layout.plugins = resolved
+    layout.missing_plugin_paths = sorted(set(missing))
+    return layout
+
+
+
 
 
 def _interpolate_string(
@@ -261,5 +433,7 @@ def load_skill_manifest(
 
 
 __all__ = [
+    "SkillLayout",
+    "load_layout",
     "load_skill_manifest",
 ]
