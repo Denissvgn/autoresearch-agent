@@ -174,6 +174,54 @@ def test_schema_phase_advancement_plugin_requires_plugin_path():
     assert "plugin" in str(exc.value).lower()
 
 
+# --- P5-014 / P5-028 / P5-029 manifest field additions --------------------
+
+
+@pytest.mark.parametrize("cat", ["optimization", "generative", "exploratory", "validation", "design"])
+def test_schema_accepts_all_five_categories(cat: str):
+    """P5-014: the Category literal covers all five ARC-011 §13 values."""
+    data = _minimal_manifest_dict()
+    data["category"] = cat
+    manifest = ResearchSkillManifest.model_validate(data)
+    assert manifest.category == cat
+
+
+def test_schema_rejects_unknown_category():
+    data = _minimal_manifest_dict()
+    data["category"] = "bogus"
+    with pytest.raises(ValidationError) as exc:
+        ResearchSkillManifest.model_validate(data)
+    assert "category" in str(exc.value)
+
+
+def test_schema_accepts_feedback_loop_fields():
+    """P5-028/029: auto_absorb_insights + knowledge_last_reviewed +
+    refresh_cadence_days are optional, default-off/None."""
+    data = _minimal_manifest_dict()
+    data["auto_absorb_insights"] = True
+    data["knowledge_last_reviewed"] = "2026-07-27T00:00:00Z"
+    data["refresh_cadence_days"] = 30
+    manifest = ResearchSkillManifest.model_validate(data)
+    assert manifest.auto_absorb_insights is True
+    assert manifest.knowledge_last_reviewed == "2026-07-27T00:00:00Z"
+    assert manifest.refresh_cadence_days == 30
+
+
+def test_schema_feedback_fields_default_off():
+    data = _minimal_manifest_dict()
+    manifest = ResearchSkillManifest.model_validate(data)
+    assert manifest.auto_absorb_insights is False
+    assert manifest.knowledge_last_reviewed is None
+    assert manifest.refresh_cadence_days is None
+
+
+def test_schema_rejects_zero_refresh_cadence():
+    data = _minimal_manifest_dict()
+    data["refresh_cadence_days"] = 0
+    with pytest.raises(ValidationError):
+        ResearchSkillManifest.model_validate(data)
+
+
 def test_schema_declarative_trial_identity_requires_hash_fields():
     data = _minimal_manifest_dict()
     data["trial_identity"] = {"hash_fields": [], "resolve": {"mode": "declarative"}}

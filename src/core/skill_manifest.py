@@ -68,9 +68,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 #: clear ``ManifestVersionError``.
 SCHEMA_VERSION = "research_skill.v1"
 
-#: Advisory category values (ARC-011 §8.4, spike G13). Drives UI grouping and
-#: category-derived defaults. Advisory only — not behaviorally load-bearing.
-Category = Literal["optimization", "generative", "exploratory"]
+#: Advisory category values (ARC-011 §8.4 / §13, spike G13). Drives UI grouping
+#: and category-derived defaults. Advisory only — not behaviorally load-bearing.
+#: P5-014 widened from the original three to all five named in ARC-011 §13.
+Category = Literal["optimization", "generative", "exploratory", "validation", "design"]
 
 #: Metric-optimization semantics (G11). ``optimize`` = a single best iteration
 #: wins; ``satisfice`` = meet a threshold, no single winner.
@@ -866,6 +867,22 @@ class ResearchSkillManifest(BaseModel):
     #: loader cross-checks paths against the package layout and the registry
     #: surfaces a resolved ``SkillLayout``. Consumed by ``PluginRunner`` (P5-005).
     plugins: PluginsConfig = Field(default_factory=PluginsConfig)
+    #: P5-028: when ``true``, completed-session insights are auto-fed into the
+    #: system prompt on the next session. When ``false`` (default), insights
+    #: land in ``knowledge/prior_findings/`` but require operator review first.
+    auto_absorb_insights: bool = False
+    #: P5-029: timestamp of the last operator review of the knowledge corpus.
+    #: Drives the UI "knowledge stale" badge against ``refresh_cadence_days``.
+    knowledge_last_reviewed: Optional[str] = Field(
+        default=None,
+        description="ISO-8601 timestamp of the last knowledge-corpus review.",
+    )
+    #: P5-029: max age (days) before the knowledge corpus is flagged stale.
+    refresh_cadence_days: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description="Days before the UI flags the knowledge corpus as stale.",
+    )
 
     @field_validator("schema_version")
     @classmethod

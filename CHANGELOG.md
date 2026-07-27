@@ -3,10 +3,12 @@
 ## Unreleased
 
 - **ARC-011 Phase 5 (in progress) — Auto-initialization, skill lifecycle,
-  generator.** First batch: full skill-package layout, governed plugin/bootstrap
-  runners, and the three ML skills backfilled with `bootstrap.py` + `knowledge/`.
-  No behavior change for existing ML sessions yet (the orchestrator migration
-  that wires the bootstrap runner lands in P5-007; X-002 parity green).
+  generator.** Lays the structural foundation for the "universal research agent"
+  inflection: full skill-package layout, governed plugin/bootstrap runners,
+  skill lifecycle + promotion, lexical domain classifier, insights feedback
+  loop, and the skill generator. No behavior change for existing ML sessions
+  (X-002 parity green); P5-007 (orchestrator prompt migration) is deferred as a
+  tracked follow-up.
   - **P5-001 (full layout):** new `SkillLayout` model
     (`src/core/skill_loader.py`) resolves the ARC-011 §5.3 directory tree
     (`bootstrap.py`, `scaffold/`, `knowledge/{primer,heuristics,prior_findings}`,
@@ -35,12 +37,56 @@
     `ml-volatility`, `ml-rl` each gain a `bootstrap.py` (thin shim delegating
     to the proven `scripts/autotuner/setup.py` with the right `--models` flag)
     + `knowledge/{primer.md,heuristics.yaml,prior_findings/}` corpus. Live
-    execution wired in P5-007; the dry-mode path is tested end-to-end.
-  - **Tests:** 60 new tests (`test_plugin_runner.py` 23, `test_bootstrap_runner.py`
-    11, `test_ml_skill_bootstraps.py` 15, `test_skill_loader.py` +11 for
-    layout/caps/drafts). Full suite 1223 green; ruff clean; mypy 0 new errors
-    (pre-existing orchestrator/session_manager/state_store/skill_runtime debt
-    is prior-phase and out of scope).
+    execution wiring is the deferred P5-007; the dry-mode path is tested
+    end-to-end.
+  - **P5-010..013 (skill lifecycle epic):** new `src/core/skill_lifecycle.py`
+    (`SkillLifecycleState` draft/reviewed/stable/deprecated + the transition
+    table + per-skill `asyncio.Lock` machine; production gating predicate —
+    drafts never auto-select for production). New
+    `SkillRegistryPromotionTarget` (`src/core/promotion_target.py`) moves a
+    draft from `skills/_drafts/<id>/` → `skills/<id>/` atomically + rolls back
+    on failure; reuses the P0-020 production-approval machinery at the API
+    layer. The HTTP endpoints (P5-012) land in a follow-up wiring the FastAPI
+    router.
+  - **P5-014 (domain taxonomy):** `Category` literal widened from 3 to all 5
+    ARC-011 §13 values (`optimization|generative|exploratory|validation|design`).
+  - **P5-016..020 (auto-domain detection):** new `src/core/domain_classifier.py`
+    — lexical-first (TF-IDF over hashed word + char n-grams, cosine, stdlib +
+    numpy only) behind a swappable `EmbeddingBackend` Protocol so an
+    LLM-embeddings backend can drop in later. `DomainClassifier.classify(goal)`
+    ranks installed skills; embeddings cached (persisted JSON, invalidated on
+    install/reload); cold-start degrades to "list all"; threshold + high/medium/
+    low confidence logic; `ClassificationResult.to_audit_dict()` for the
+    `skill.classify` audit row.
+  - **P5-021..026 (skill generator epic):** new `src/core/skill_generator.py`
+    — dedicated codegen module (per Phase-5 plan decision) calling the
+    configured `LLMProvider.complete()` directly with a structured JSON-output
+    prompt. Drafts land in `skills/_drafts/<id>/` as `draft` status; manifest
+    validated against `research_skill.v1`, Python `ast.parse`-linted; the
+    command-policy over-permissiveness audit (`audit_command_policy`) flags
+    `rm -rf` / `sudo` / `eval` / shell metacharacters as critical/warning
+    findings attached to the draft for reviewer visibility. Safety posture:
+    drafts are untrusted code, never production-selectable until promoted
+    (P5-010 gating), feature-flagged (P5-025), operator-initiated only.
+  - **P5-027..030 (feedback loop):** new `src/core/insights_feedback.py`
+    (`append_findings` writes completed-session insights to
+    `knowledge/prior_findings/<subject>_<variant>_<research_id>.md`,
+    idempotent on research_id, safe filenames). New manifest fields
+    `auto_absorb_insights` (default off), `knowledge_last_reviewed`,
+    `refresh_cadence_days` drive the stale-knowledge UI badge (P5-029).
+  - **P5-007 (orchestrator migration) — DEFERRED:** the 61 `prepare.py` /
+    `train.yaml` references in `orchestrator.py` are overwhelmingly behavioral
+    command-detection / snapshot / parsing logic (not clean prompt-text
+    coupling), interwoven through the ~5500-line hot path. A full migration to
+    skill-driven command-identifiers is correctly an 8+ SP refactor that would
+    risk the parity suite; it is tracked as a follow-up
+    (`P5-007-full-behavioral-migration`). The `P5-ml-literals` grep-guard rule
+    stays documented-but-inactive (phase stays at 4) until that migration lands.
+  - **Tests:** 132 new tests across 8 files (plugin/bootstrap runners, ML skill
+    bootstraps, lifecycle + promotion, domain classifier, skill generator,
+    insights feedback, manifest-field additions). Full suite 1295 green; ruff
+    clean; mypy 0 new errors (15 baseline errors unchanged — all in prior-phase
+    modules).
 
 - **ARC-011 Phase 4 — Anti-forgery and cross-provider close-out (BE).** Closes
   the three wiring gaps that left the Phase-4 exit guarantee dormant, and runs

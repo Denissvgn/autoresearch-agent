@@ -46,8 +46,9 @@ from __future__ import annotations
 import asyncio
 import os
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Optional, Protocol
 
 from src.config import settings
 
@@ -262,7 +263,112 @@ class FilePathPromotionTarget:
         await asyncio.to_thread(_atomic_write_text, path, content)
 
 
+class SkillRegistryPromotionTarget:
+    """Promote a draft skill into the live registry (ARC-011 P5-011).
+
+    The Phase-1 ``PromotionTarget`` protocol is a *file-write* surface for config
+    promotion; skill promotion is a different shape (a directory move +
+    lifecycle transition), so this target does NOT implement that protocol.
+    Instead it is consumed directly by the ``POST /skills/{id}/promote/confirm``
+    endpoint (P5-012), which orchestrates the move + lifecycle update + audit.
+
+    The move is atomic per skill: ``skills/_drafts/<id>/`` → ``skills/<id>/``
+    via ``shutil.move`` (a rename when on the same filesystem, else a copy
+    tree). The caller wraps this in the lifecycle machine's per-skill lock and
+    writes the audit row from the returned ``SkillPromotionResult``.
+
+    Reuses the P0-020 production-approval machinery: skill → stable is a
+    production-scope act (X-004 D1 — production sessions require ``stable``), so
+    the API endpoint gate-keeps the approval signature before calling this.
+    """
+
+    def __init__(self, *, skills_root: Optional[Path] = None) -> None:
+        from src.core.skill_registry import DEFAULT_SKILLS_ROOT, DRAFTS_SUBDIR
+
+        self._skills_root = Path(skills_root) if skills_root is not None else DEFAULT_SKILLS_ROOT
+        self._drafts_subdir = DRAFTS_SUBDIR
+
+    def draft_path(self, skill_id: str) -> Path:
+        return self._skills_root / self._drafts_subdir / skill_id
+
+    def stable_path(self, skill_id: str) -> Path:
+        return self._skills_root / skill_id
+
+    def draft_exists(self, skill_id: str) -> bool:
+        return (self.draft_path(skill_id) / "SKILL.yaml").is_file()
+
+    def stable_exists(self, skill_id: str) -> bool:
+        return (self.stable_path(skill_id) / "SKILL.yaml").is_file()
+
+    async def promote(self, skill_id: str) -> "SkillPromotionResult":
+        """Move ``skills/_drafts/<id>/`` → ``skills/<id>/`` atomically.
+
+        Returns a ``SkillPromotionResult``; raises ``SkillPromotionError`` on
+        any precondition failure (missing draft, existing stable, IO error).
+        The caller handles audit + lifecycle transition.
+        """
+        draft = self.draft_path(skill_id)
+        stable = self.stable_path(skill_id)
+        if not draft.is_dir():
+            raise SkillPromotionError(
+                f"draft not found: {draft} (skill {skill_id!r} has no _drafts/ package)"
+            )
+        if stable.exists():
+            raise SkillPromotionError(
+                f"a skill package already exists at {stable} "
+                f"(remove it before promoting draft {skill_id!r})"
+            )
+        import shutil
+
+        try:
+            await asyncio.to_thread(shutil.move, str(draft), str(stable))
+        except OSError as exc:
+            raise SkillPromotionError(
+                f"failed to move {draft} → {stable}: {exc}"
+            ) from exc
+        return SkillPromotionResult(
+            skill_id=skill_id,
+            draft_path=str(draft),
+            stable_path=str(stable),
+        )
+
+    async def rollback(self, skill_id: str) -> None:
+        """Best-effort move a just-promoted skill back to ``_drafts/``.
+
+        Used when a post-move step (lifecycle transition, audit) fails after
+        the file move succeeded. No-op if the stable path is already gone.
+        """
+        import shutil
+
+        stable = self.stable_path(skill_id)
+        draft = self.draft_path(skill_id)
+        if not stable.is_dir():
+            return
+        draft.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            await asyncio.to_thread(shutil.move, str(stable), str(draft))
+        except OSError:
+            # Best-effort; the caller has already logged the primary failure.
+            pass
+
+
+@dataclass(frozen=True)
+class SkillPromotionResult:
+    """Outcome of a successful ``SkillRegistryPromotionTarget.promote`` call."""
+
+    skill_id: str
+    draft_path: str
+    stable_path: str
+
+
+class SkillPromotionError(ValueError):
+    """Raised when a skill promotion precondition fails (P5-011)."""
+
+
 __all__ = [
     "FilePathPromotionTarget",
     "PromotionTarget",
+    "SkillPromotionError",
+    "SkillPromotionResult",
+    "SkillRegistryPromotionTarget",
 ]
