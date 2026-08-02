@@ -2,6 +2,89 @@
 
 ## Unreleased
 
+- **ARC-011 Phase 6 (in progress) — Distributed storage (R6 / W14).** Adds the
+  optional Postgres backend that lifts the single-worker ceiling so
+  `WEB_CONCURRENCY > 1` is supported with correct concurrency semantics
+  (ADR §8.1 line 359 exit criterion). **Gated (R6):** the default deployment is
+  unchanged — `database_url=None` ⇒ `SQLiteStateStore` (byte-identical, the
+  WEB_CONCURRENCY>1 guard stays active); set `AUTORESEARCH_DATABASE_URL` to a
+  postgresql:// DSN to opt into multi-worker. Driven by raw `asyncpg` (mirrors
+  SQLiteStateStore's hand-written-SQL shape for parity; `pg_advisory_xact_lock`
+  is first-class), NOT SQLAlchemy — deviates from the platform convention but
+  matches the existing StateStore style (parity wins).
+  - **P6-001 (design):** `docs/adr/ARC-011-postgres-state-store.md` — the
+    four-hazard concurrency model (H1 idempotency / H2 transition critical
+    section / H3 cross-worker stop / H4 stale writes), the ContextVar
+    connection-sharing design, the fencing-token contract, and the
+    SQLite→Postgres locking-site transition table.
+  - **P6-002a/b (impl):** new `src/core/postgres_state_store.py` — a 1:1 port
+    of all 48 `StateStore` protocol methods to raw asyncpg. P6-002 is split per
+    §0.5 (8 SP): 002a = skeleton + schema + writes + factory; 002b = reads +
+    the dual-backend parity sweep. The schema is one canonical Postgres DDL
+    (all SQLite base + v1–v6 columns, including the missing `insights`/
+    `resumed_from`/`pipeline_id`/`hpo_study_id` the parity sweep surfaced) plus
+    a `pg_schema_version` row + the Phase-6 `research_sessions.lock_epoch`
+    fencing column. `Settings.database_url` + `build_state_store(settings)`
+    select the backend; `main.py` uses the factory (SQLite default unchanged).
+    Fold-in: `results_store.py` shim re-exports `_migrate_to_v6` (was missing —
+    a P3-019 latent back-compat gap surfaced by this grounding).
+  - **P6-003 (locks):** idempotency reserve-or-return rewritten to atomic
+    `INSERT … ON CONFLICT DO NOTHING RETURNING` (no advisory lock needed);
+    additive protocol methods `session_lock` (advisory lock CM, no-op on
+    SQLite) + `bump_session_epoch` (increments `lock_epoch`, no-op on SQLite);
+    `SessionStateMachine.transition` nests `session_lock` inside the in-process
+    lock and bumps the epoch on every committed transition.
+  - **P6-004 (fencing + cross-worker control) — SCOPE WIDENED:** the backlog's
+    "fencing tokens for command execution" names only H4; grounding showed H3
+    (cross-worker stop/pause propagation) must close in the same task for
+    "correct concurrency semantics" to hold. ~4 SP (up from 3), recorded per
+    the P0-023 precedent. (a) `update_session`/`add_iteration`/
+    `update_planned_trial_status` accept `lock_epoch` for conditional writes
+    (0-rows ⇒ stale ⇒ discard); the orchestrator's `_record_iteration` adds a
+    stale-iteration guard + `result.discarded.stale_worker` audit. (b)
+    `_should_stop_cross_worker` reads DB-side status so a stop on worker B is
+    observed by the owning worker A's turn poll (the in-process flag stays the
+    fast path). NOTE: `terminate_request_received` is the agent's own
+    TERMINATE_REQUEST completion flag, NOT an operator-stop signal — it must
+    not be treated as a cross-worker stop (a first draft did, misreading normal
+    completions as stops; corrected).
+  - **P6-005 (migration):** `scripts/migrate_sqlite_to_postgres.py` —
+    idempotent, resumable, batched SQLite→Postgres row mover (per-table
+    transactions + a `migration_state` cursor + `ON CONFLICT DO NOTHING`).
+    Validated end-to-end (round-trip equality on all 9 tables + re-run
+    idempotency). `compose/autoresearch.yml`: adds `AUTORESEARCH_DATABASE_URL`
+    env + `postgres_db` dependency.
+  - **P6-006 (guard):** `_validate_runtime_configuration` (`main.py`) is now
+    conditional — SQLite/no-DSN ⇒ still rejects >1 (W14 intact, byte-identical
+    default); Postgres DSN ⇒ allows >1 and logs the effective
+    `max_concurrent_sessions × N` ceiling. `SQLiteStateStore` docstring updated
+    to point at the conditional guard.
+  - **P6-007 (distributed tests — exit gate):** `tests/test_distributed_state_store.py`
+    + a dedicated `distributed` CI job with a `postgres:15-alpine` service.
+    Real multi-process (`multiprocessing.spawn`) + real Postgres: H1 (exactly
+    one idempotency winner across 8 processes), H2 (cross-process transition
+    serialization), H4 (fencing stale-write rejection across processes), +
+    fresh-epoch acceptance. All postgres/distributed tests skip cleanly when
+    `AUTORESEARCH_DATABASE_URL` is unset (default CI run unaffected); the
+    dual-backend parity sweep (`test_postgres_sqlite_parity.py`) proves
+    PostgresStateStore ≡ SQLiteStateStore across the full write+read sequence.
+  - **§0.4 residuals:** `llm-wiki sync` for `PostgresStateStore` /
+    `build_state_store` / `session_lock` remains **deferred** — tool not on
+    PATH (persistent Phase 1–5 residual). No new `domain_coupling_rules.conf`
+    rule for Phase 6 (the orchestrator is already domain-neutral post-Phase-2;
+    Phase 6's exit is operational, not a static-coupling guard — confirmed: no
+    Phase-6 entry in the conf). `.arc-011-phase` bump is bookkeeping only
+    (currently at 4 due to the P5-007 deferral — the carry-over is noted, not
+    force-bumped). The `arc-011/phase-6-done` rollback tag is deferred to the
+    landing commit (P0–P5 precedent).
+  - **Verification:** 1315 autoresearch-agent tests green (incl. the 11
+    postgres write-path, 2 parity, 5 fencing, and 4 distributed tests against a
+    live `postgres:15` container); 21 postgres/distributed tests skip cleanly
+    without a DSN; ruff 0 new errors; mypy 0 new errors on new modules
+    (`postgres_state_store.py`, `migrate_sqlite_to_postgres.py`). Pre-existing
+    orchestrator/state_store/skill_runtime mypy+ruff debt is prior-phase and
+    explicitly out of scope.
+
 - **ARC-011 Phase 5 (in progress) — Auto-initialization, skill lifecycle,
   generator.** Lays the structural foundation for the "universal research agent"
   inflection: full skill-package layout, governed plugin/bootstrap runners,

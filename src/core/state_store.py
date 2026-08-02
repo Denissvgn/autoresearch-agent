@@ -798,6 +798,33 @@ class StateStore(Protocol):
     async def get_schema_version(self) -> int:
         ...
 
+    # --- Cross-process session lock (ARC-011 P6-003) ---
+    @asynccontextmanager
+    async def session_lock(self, session_id: str) -> AsyncIterator[None]:
+        """Hold an exclusive lock on the session for the duration of the block.
+
+        ``SQLiteStateStore``: no-op (its in-process ``SessionLockRegistry``
+        already serializes the transition critical section — single-worker).
+        ``PostgresStateStore``: ``pg_advisory_xact_lock(hashtext($1))`` inside
+        a pooled transaction, so the same-session read→write critical section
+        is mutually exclusive across workers sharing the DB (the H2 fix at
+        multi-worker scale). Re-entrant within one task.
+        """
+        ...
+        yield  # pragma: no cover  (Protocol body; concrete impls override)
+
+    async def bump_session_epoch(self, session_id: str) -> None:
+        """Increment the session's fencing epoch (ARC-011 P6-003 / D-fencing).
+
+        Called by ``SessionStateMachine._apply`` after a committed transition,
+        inside the held ``session_lock``. ``SQLiteStateStore``: no-op (no
+        ``lock_epoch`` column; single-worker ⇒ no stale writers). 
+        ``PostgresStateStore``: ``lock_epoch = lock_epoch + 1`` so any
+        command dispatched before the transition is deauthorized (its captured
+        epoch no longer matches → conditional result writes return 0 rows).
+        """
+        ...
+
 
     # --- Idempotency records ---
     async def begin_idempotency_record(
@@ -1269,7 +1296,10 @@ class SQLiteStateStore:
     cannot back a horizontally-scaled deployment. The runtime *guard* that
     rejects ``WEB_CONCURRENCY > 1`` lives in ``src/main.py``
     (``_validate_runtime_configuration``), not here — it is a service-lifecycle
-    concern. ``PostgresStateStore`` (P6-001/P6-002) will lift this ceiling.
+    concern that is **conditional on the backend** (ARC-011 P6-006): the guard
+    rejects >1 when ``settings.database_url`` is unset/SQLite (today's default,
+    byte-identical), and allows >1 when it points at Postgres.
+    ``PostgresStateStore`` (P6-002) is the ceiling-lifter.
     """
 
     def __init__(self, db_path: str) -> None:
@@ -1344,6 +1374,24 @@ class SQLiteStateStore:
     async def get_schema_version(self) -> int:
         async with self.connection() as db:
             return await _get_schema_version(db)
+
+    @asynccontextmanager
+    async def session_lock(self, session_id: str) -> AsyncIterator[None]:
+        """No-op for SQLite (ARC-011 P6-003).
+
+        SQLiteStateStore is single-worker (W14): the in-process
+        ``SessionLockRegistry`` (``state_machine.py``) already serializes the
+        transition critical section, so there is no cross-process lock to hold.
+        The method exists on the protocol so ``SessionStateMachine.transition``
+        can call it uniformly on both backends; here it yields immediately.
+        ``PostgresStateStore.session_lock`` overrides this with a real
+        ``pg_advisory_xact_lock``.
+        """
+        yield
+
+    async def bump_session_epoch(self, session_id: str) -> None:
+        """No-op for SQLite (ARC-011 P6-003). Single-worker ⇒ no stale writers."""
+        return None
 
     # ------------------------------------------------------------------
     # Idempotency records

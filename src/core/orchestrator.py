@@ -934,11 +934,42 @@ class AgentOrchestrator:
         return None
 
     def _should_stop(self, research_id: str) -> bool:
+        # Fast path: an in-process stop flag set by THIS worker's
+        # SessionManager.stop_session (or request_stop). Always checked first.
         return self._stop_flags.get(research_id, False)
+
+    async def _should_stop_cross_worker(self, research_id: str) -> bool:
+        """Cross-worker stop check (ARC-011 P6-004 / H3).
+
+        The in-process ``_stop_flags`` only reflects stops routed to THIS
+        worker. Under ``WEB_CONCURRENCY > 1`` an operator's stop may land on a
+        different worker, which writes ``stop_requested`` to the shared DB via
+        ``SessionStateMachine.transition``. This worker (owning the running
+        session) must observe that DB-side intent on its turn-loop poll and
+        stop itself. SQLite (single-worker) never has cross-worker stops, but
+        the check is cheap and uniform, so it runs on both backends.
+        """
+        if self._stop_flags.get(research_id, False):
+            return True
+        try:
+            session = await self._store.get_session(research_id)
+        except Exception:  # noqa: BLE001  (a store failure must not mask a stop)
+            logger.warning("stop-check store read failed for %s", research_id,
+                           exc_info=True)
+            return False
+        if not session:
+            return False
+        # The DB-side stop intent is a transitional/terminal status in the
+        # stopping family. (``terminate_request_received`` is a separate flag
+        # for the agent's own TERMINATE_REQUEST completion signal — NOT an
+        # operator-stop signal — so it must not be treated as a cross-worker
+        # stop, or normal completions get misread as stops.)
+        status = str(session.get("status") or "").lower()
+        return status in {"stopping", "stopped", "timed_out", "failed"}
 
     async def _wait_while_paused(self, research_id: str) -> None:
         while self._pause_flags.get(research_id, False):
-            if self._should_stop(research_id):
+            if await self._should_stop_cross_worker(research_id):
                 return
             await asyncio.sleep(2)
 
@@ -2822,15 +2853,17 @@ class AgentOrchestrator:
         try:
             _timed_out = False  # ML-62: track timeout vs normal completion
             for turn in range(max_turns):
-                # Check stop/pause conditions
-                if self._should_stop(research_id):
+                # Check stop/pause conditions. ARC-011 P6-004: the cross-worker
+                # variant reads DB-side stop intent so a stop on another worker
+                # is observed here on the owning worker's turn poll.
+                if await self._should_stop_cross_worker(research_id):
                     logger.info("Research %s: stop requested", research_id)
                     await agent_log.append("system", "Stop requested by user", turn=turn)
                     break
 
                 await self._wait_while_paused(research_id)
 
-                if self._should_stop(research_id):
+                if await self._should_stop_cross_worker(research_id):
                     break
 
                 if _policy_aborted:
@@ -3981,7 +4014,7 @@ class AgentOrchestrator:
             elif _timed_out:
                 _exit_event = SessionEvent.TIMEOUT
                 _reason_status = "timed_out"
-            elif self._should_stop(research_id):
+            elif await self._should_stop_cross_worker(research_id):
                 # An operator stop is in flight. Finalize it via the machine
                 # (STOP_REQUESTED is a no-op backstop if stop_session already
                 # wrote `stopping`; FINALIZE_STOP resolves to `stopped`).
@@ -4607,6 +4640,37 @@ class AgentOrchestrator:
         active_phase = self._active_phase_from_marker_or_session(marker, session)
         if active_phase and not marker.get("search_phase"):
             marker["search_phase"] = active_phase
+
+        # ARC-011 P6-004 / H4 — stale-worker fence. If the session was
+        # deauthorized while this command ran (a stop/timeout/fail transition
+        # landed on another worker, bumping lock_epoch and moving status out of
+        # the active family), discard the iteration rather than recording a
+        # zombie result against a session the operator deliberately stopped.
+        # The iteration's training already happened (sunk cost); this guard
+        # prevents it from advancing best_iteration / effective_iteration_count
+        # / auto-promotion. SQLiteStateStore is single-worker so this never
+        # fires there in practice, but the check is uniform and cheap.
+        _session_status = str((session or {}).get("status") or "").lower()
+        if _session_status and _session_status not in {
+            "running", "paused", "completing",
+        }:
+            logger.warning(
+                "Research %s: discarding stale iteration %s — session status "
+                "is %s (deauthorized while command ran).",
+                research_id, iteration, _session_status,
+            )
+            await self._store.record_audit_event(
+                actor_id="system:orchestrator",
+                action="result.discarded.stale_worker",
+                outcome="info",
+                research_id=research_id,
+                request_metadata={
+                    "iteration": iteration,
+                    "session_status": _session_status,
+                    "primary_metric": primary_metric,
+                },
+            )
+            return
 
         # AR-3: For promotion-family phases the agent does not run a fresh
         # training command and legitimately emits no config_snapshot.  Inherit

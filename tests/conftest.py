@@ -21,9 +21,20 @@ from src.core.results_store import ResultsStore
 
 
 @pytest.fixture(autouse=True)
-async def close_initialized_results_stores(monkeypatch: pytest.MonkeyPatch):
-    """Close long-lived SQLite connections created by tests."""
+async def close_initialized_results_stores(
+    monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest,
+):
+    """Close long-lived SQLite connections created by tests.
 
+    Skipped for ``@pytest.mark.postgres`` tests: those create their own
+    Postgres pools (not ResultsStore instances) and manage their own lifecycle
+    via the ``pg_store`` fixture; the monkeypatch on ResultsStore.initialize
+    interacts badly with asyncpg-pool teardown across the session.
+    """
+
+    if "postgres" in request.keywords or "distributed" in request.keywords:
+        yield
+        return
     stores: list[ResultsStore] = []
     original_initialize = ResultsStore.initialize
 
@@ -35,6 +46,34 @@ async def close_initialized_results_stores(monkeypatch: pytest.MonkeyPatch):
     yield
     for store in reversed(stores):
         await store.close()
+
+
+# --- ARC-011 Phase 6: skip Postgres-dependent tests when no DSN is set -----
+def _phase6_postgres_dsn() -> str | None:
+    raw = os.getenv("AUTORESEARCH_DATABASE_URL") or os.getenv("DATABASE_URL")
+    if not raw:
+        return None
+    low = raw.lower()
+    if not (
+        low.startswith("postgresql://") or low.startswith("postgresql+asyncpg://")
+    ):
+        return None
+    return raw.replace("postgresql+asyncpg://", "postgresql://")
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Skip ``@pytest.mark.postgres`` / ``distributed`` tests when no Postgres DSN.
+
+    The default CI run has no Postgres service (confirmed); a dedicated job
+    (ARC-011 P6-007) wires one and runs ``-m "postgres or distributed"`` with
+    the DSN set.
+    """
+    if _phase6_postgres_dsn() is not None:
+        return
+    skip = pytest.mark.skip(reason="AUTORESEARCH_DATABASE_URL unset; live Postgres required")
+    for item in items:
+        if "postgres" in item.keywords or "distributed" in item.keywords:
+            item.add_marker(skip)
 
 
 # ---------------------------------------------------------------------------

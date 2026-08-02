@@ -27,9 +27,10 @@ from src.core.observability import (
     empty_observability_snapshot,
     format_prometheus,
 )
+from src.core.postgres_state_store import build_state_store
 from src.core.service_preflight import build_not_run_preflight, run_service_preflight
 from src.core.session_manager import SessionManager
-from src.core.state_store import SQLiteStateStore, StateStore
+from src.core.state_store import StateStore
 from src.ws.events import broadcaster
 
 try:
@@ -62,6 +63,13 @@ def _validate_runtime_configuration() -> None:
     env = settings.environment.lower()
     if env in {"prod", "production"} and not secret_value(settings.autoresearch_prometheus_token):
         raise RuntimeError("AUTORESEARCH_PROMETHEUS_TOKEN is required in production")
+    # ARC-011 P6-006: the WEB_CONCURRENCY > 1 guard is conditional on the
+    # backend. SQLiteStateStore is single-writer and cannot back a multi-worker
+    # deployment (W14); PostgresStateStore (settings.database_url → Postgres)
+    # can, so >1 is allowed iff the DSN points at Postgres. The default
+    # (database_url unset) keeps today's strict behavior byte-identical.
+    from src.core.postgres_state_store import is_postgres_dsn
+    multi_worker_supported = is_postgres_dsn(settings.database_url)
     for name in ("WEB_CONCURRENCY", "UVICORN_WORKERS", "AUTORESEARCH_REPLICAS"):
         raw = os.getenv(name)
         if not raw:
@@ -75,10 +83,19 @@ def _validate_runtime_configuration() -> None:
                 name, raw,
             )
             continue
-        if value > 1:
+        if value > 1 and not multi_worker_supported:
             raise RuntimeError(
                 "autoresearch-agent is a single-instance SQLite control-plane "
-                f"service; {name}={value} is not supported"
+                f"service; {name}={value} is not supported without a Postgres "
+                "backend. Set AUTORESEARCH_DATABASE_URL to a postgresql:// DSN "
+                "to enable horizontal scaling (ARC-011 Phase 6)."
+            )
+        if value > 1 and multi_worker_supported:
+            logger.info(
+                "Multi-worker mode enabled (%s=%d) on Postgres backend "
+                "(ARC-011 Phase 6). Effective concurrent-session ceiling is "
+                "max_concurrent_sessions x %d.",
+                name, value, value,
             )
 
 
@@ -100,8 +117,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Max budget: $%.2f", settings.max_budget_usd)
     logger.info("Workspace: %s", settings.workspace_root)
 
-    # Initialize SQLite store
-    _store = SQLiteStateStore(settings.db_path)
+    # Initialize the state store. Backend is config-selected: SQLiteStateStore
+    # (default; W14 single-worker) or PostgresStateStore when
+    # settings.database_url points at Postgres (ARC-011 Phase 6 / R6).
+    _store = build_state_store(settings)
     await _store.initialize()
     app.state.audit_store = _store
 

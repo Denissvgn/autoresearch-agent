@@ -585,6 +585,21 @@ class Settings(BaseSettings):
     def db_path(self) -> str:
         return f"{self.workspace_root}/db/experiments.db"
 
+    database_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_DATABASE_URL",
+            "DATABASE_URL",
+        ),
+        description=(
+            "Optional Postgres DSN enabling the PostgresStateStore backend "
+            "(ARC-011 Phase 6 / R6). When unset (or when the DSN is a sqlite "
+            "URL), the service uses SQLiteStateStore and the WEB_CONCURRENCY>1 "
+            "guard stays active (W14). Set to a postgresql:// (or "
+            "postgresql+asyncpg://) DSN to enable horizontal scaling."
+        ),
+    )
+
     @property
     def skills_dir(self) -> str:
         return f"{self.workspace_root}/.github/skills"

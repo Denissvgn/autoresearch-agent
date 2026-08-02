@@ -44,8 +44,10 @@ def test_state_store_protocol_surface_matches_sqlite_impl():
 
     proto_methods = sorted(StateStore.__protocol_attrs__)
     assert proto_methods, "expected StateStore to declare methods"
-    # The protocol mirrors 48 of the 49 public methods (connection() excluded).
-    assert len(proto_methods) == 48
+    # The protocol mirrors 48 of the 49 public methods (connection() excluded)
+    # + the 2 ARC-011 P6-003 cross-process-lock methods (session_lock,
+    # bump_session_epoch).
+    assert len(proto_methods) == 50, f"expected 50 protocol methods, got {len(proto_methods)}"
     assert "connection" not in proto_methods  # excluded — leaks backend type
 
     for name in proto_methods:
@@ -54,8 +56,20 @@ def test_state_store_protocol_surface_matches_sqlite_impl():
         )
         # Every protocol method is async; the impl must match (a silent
         # sync->async flip would break callers that `await` the result).
+        # ``session_lock`` is an @asynccontextmanager (decorated async
+        # generator) — awaited via ``async with``, not a plain coroutine.
         proto_is_coro = inspect.iscoroutinefunction(getattr(StateStore, name))
         impl_is_coro = inspect.iscoroutinefunction(getattr(SQLiteStateStore, name))
+        if name == "session_lock":
+            # session_lock is an @asynccontextmanager on the impl — a decorated
+            # async generator (not itself an asyncgenfunction after decoration,
+            # but callable + returns an async CM). Just assert presence +
+            # callability; the async-CM contract is exercised by
+            # test_state_machine (transition acquires it).
+            assert callable(getattr(SQLiteStateStore, name)), (
+                f"SQLiteStateStore.{name} must be callable"
+            )
+            continue
         assert proto_is_coro is impl_is_coro is True, (
             f"{name}: protocol coro={proto_is_coro}, impl coro={impl_is_coro}"
         )

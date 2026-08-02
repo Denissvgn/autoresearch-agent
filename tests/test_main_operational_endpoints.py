@@ -127,8 +127,40 @@ def test_runtime_config_requires_metrics_token_in_production(
 def test_runtime_config_rejects_multiple_workers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """SQLite backend (no database_url) ⇒ WEB_CONCURRENCY>1 still rejected (W14)."""
     monkeypatch.setattr(main_module.settings, "environment", "development")
+    monkeypatch.setattr(main_module.settings, "database_url", None)
     monkeypatch.setenv("WEB_CONCURRENCY", "2")
+
+    with pytest.raises(RuntimeError, match="single-instance"):
+        main_module._validate_runtime_configuration()
+
+
+def test_runtime_config_allows_multiple_workers_on_postgres(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ARC-011 P6-006: Postgres backend ⇒ WEB_CONCURRENCY>1 is allowed."""
+    monkeypatch.setattr(main_module.settings, "environment", "development")
+    monkeypatch.setattr(
+        main_module.settings,
+        "database_url",
+        "postgresql://user:pass@postgres_db:5432/traid_platform_db",
+    )
+    monkeypatch.setenv("WEB_CONCURRENCY", "4")
+
+    # Must NOT raise — Postgres backs a multi-worker deployment.
+    main_module._validate_runtime_configuration()
+
+
+def test_runtime_config_rejects_multiple_workers_on_sqlite_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sqlite:// database_url does NOT unlock multi-worker (still W14)."""
+    monkeypatch.setattr(main_module.settings, "environment", "development")
+    monkeypatch.setattr(
+        main_module.settings, "database_url", "sqlite:///./experiments.db"
+    )
+    monkeypatch.setenv("UVICORN_WORKERS", "3")
 
     with pytest.raises(RuntimeError, match="single-instance"):
         main_module._validate_runtime_configuration()

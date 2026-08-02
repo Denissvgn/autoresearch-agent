@@ -16,6 +16,9 @@ anthropic = "^0.52.0"
 openai = "^1.0.0"
 pyyaml = "^6.0"
 aiosqlite = "^0.20.0"
+# ARC-011 P6-002a: raw asyncpg backend for PostgresStateStore (multi-worker).
+# Aligns with requirements-workspace.txt's asyncpg>=0.30.0 (training venv).
+asyncpg = "^0.30.0"
 websockets = "^14.0"
 httpx = "^0.27.0"
 prometheus-client = "^0.19.0"
@@ -78,4 +81,6 @@ python_functions = ["test_*"]
 asyncio_mode = "auto"
 markers = [
     "parity: golden-output parity fixtures (ARC-011 X-002)",
+    "postgres: requires a live Postgres (AUTORESEARCH_DATABASE_URL); skipped otherwise (ARC-011 P6-002a)",
+    "distributed: requires a live Postgres + multi-process harness; skipped otherwise (ARC-011 P6-007)",
 ]

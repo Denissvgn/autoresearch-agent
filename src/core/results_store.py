@@ -16,7 +16,7 @@ consumers to the ``StateStore`` protocol type; migrating the test imports to
 
 The module-level migration helpers (``_SCHEMA_SQL``, ``_MIGRATIONS``,
 ``_LATEST_SCHEMA_VERSION``, ``_add_column_if_missing``, ``_get_schema_version``,
-``_set_schema_version``, ``_migrate_to_v1..v5``, ``_attempt_outcome``) are
+``_set_schema_version``, ``_migrate_to_v1..v6``, ``_attempt_outcome``) are
 re-exported because several tests import them directly.
 """
 
@@ -38,6 +38,7 @@ from src.core.state_store import (  # noqa: F401  (re-exports, ruff-sorted)
     _migrate_to_v3,
     _migrate_to_v4,
     _migrate_to_v5,
+    _migrate_to_v6,
     _normalized_iteration_metrics_json,
     _reason_slug,
     _replay_status,

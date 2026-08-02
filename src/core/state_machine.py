@@ -381,14 +381,21 @@ class SessionStateMachine:
             )
 
         async with self._locks.for_session(session_id):
-            result = await self._transition_locked(
-                session_id,
-                evt,
-                status_fields,
-                broadcast_fields,
-                actor_id,
-                recovery_target,
-            )
+            # ARC-011 P6-003: hold the cross-process advisory lock for the
+            # duration of the read→guard→write→audit→broadcast critical
+            # section. SQLiteStateStore.session_lock is a no-op (single-worker);
+            # PostgresStateStore.session_lock takes pg_advisory_xact_lock so
+            # the same-session transition is mutually exclusive across workers
+            # sharing the DB (the H2 fix at multi-worker scale).
+            async with self._store.session_lock(session_id):
+                result = await self._transition_locked(
+                    session_id,
+                    evt,
+                    status_fields,
+                    broadcast_fields,
+                    actor_id,
+                    recovery_target,
+                )
         if result.changed and result.new_state in _TERMINAL:
             # The session is now terminal-final: its lock is dead. Eviction is
             # safe because every post-terminal transition is a no-op (or the
@@ -508,6 +515,11 @@ class SessionStateMachine:
             session_id, status=spec.terminal.value, **extra
         )
         path.append(spec.terminal)
+        # ARC-011 P6-003: bump the fencing epoch after the terminal status
+        # write so any command dispatched before this transition is
+        # deauthorized (its captured epoch no longer matches). No-op on
+        # SQLiteStateStore (single-worker); increments lock_epoch on Postgres.
+        await self._store.bump_session_epoch(session_id)
 
         await self._store.record_audit_event(
             actor_id=actor_id,
