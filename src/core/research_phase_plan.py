@@ -261,6 +261,7 @@ def build_phase_state(
     hpo_studies: Optional[Iterable[Dict[str, Any]]] = None,
     promotions: Optional[Iterable[Dict[str, Any]]] = None,
     iterations_remaining: Optional[int] = None,
+    phases: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Derive an operator-facing phase plan and next action.
 
@@ -274,7 +275,11 @@ def build_phase_state(
     studies = list(hpo_studies or [])
     promotion_rows = list(promotions or [])
     model_type = session.get("model_type")
-    phases = phases_for_model(model_type)
+    # ARC-011 review C2-1: an explicit ``phases`` override lets the caller
+    # source the plan from the session's skill runtime (manifest-driven)
+    # instead of the hardcoded per-model table. ``None`` keeps the legacy
+    # behavior bit-for-bit.
+    phases = list(phases) if phases is not None else phases_for_model(model_type)
 
     completed = _completed_phase_ids(rows, studies, promotion_rows, model_type)
     blocked = _blocked_reason(rows)

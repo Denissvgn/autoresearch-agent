@@ -34,14 +34,18 @@ def _admin_dsn() -> str | None:
     return base.rsplit("/", 1)[0] + "/postgres"
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture()
 async def pg_dsn(_admin_dsn: str | None) -> str:
-    """One throwaway database shared across the module (or skip).
+    """A per-test throwaway database (or skip).
 
-    Per-test isolation comes from the store's unique session ids + UNIQUE
-    constraints; the write-path tests don't share session ids. Creating+dropping
-    a DB per test deadlocks under pytest-asyncio session teardown, so we use a
-    single module-scoped DB dropped once at the end.
+    Function-scoped **deliberately**: a module-scoped async fixture deadlocks
+    at teardown under pytest-asyncio's function-scoped event loops (the
+    fixture's admin connection is bound to the first test's loop; teardown
+    awaits it after that loop closed — observed as an indefinite client-side
+    hang with both server connections idle). Per-test CREATE/DROP churn is
+    cheap (~0.3s, proven by test_fencing_tokens.py) and teardown runs on the
+    same loop as the test. Matches the fixture scope in every other Phase-6
+    test file.
     """
     import asyncpg
 
@@ -70,11 +74,7 @@ async def pg_dsn(_admin_dsn: str | None) -> str:
 
 @pytest.fixture()
 async def pg_store(pg_dsn: str):
-    """A fresh PostgresStateStore per test against the shared throwaway DB.
-
-    Each test gets a clean store (its own pool + schema initialize); the
-    shared DB means no per-test CREATE/DROP DATABASE churn.
-    """
+    """A fresh PostgresStateStore per test against the throwaway DB."""
     from src.core.postgres_state_store import PostgresStateStore
 
     store = PostgresStateStore(pg_dsn)

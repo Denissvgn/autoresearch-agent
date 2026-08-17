@@ -58,6 +58,14 @@ def _start_metadata(req: "StartResearchRequest") -> dict[str, Any]:
         "instrument": req.instrument,
         "timeframe": req.timeframe,
         "model_type": req.model_type,
+        # ARC-011 implementation review C1 (2026-08-15): record the winning
+        # canonical values, not just shape_conflict records.
+        # record_api_audit_event drops None extras, so legacy requests audit
+        # exactly as before.
+        "skill_id": req.skill_id,
+        "skill_params": req.skill_params,
+        "subject_id": req.subject_id,
+        "variant": req.variant,
         "tag": req.tag,
         "quick_mode": req.quick_mode,
         "max_iterations": req.max_iterations,
@@ -582,6 +590,15 @@ async def start_research(request: Request, req: StartResearchRequest):
             hpo_trials=req.hpo_trials,
             hpo_timesteps=req.hpo_timesteps,
             manifest=req.manifest,
+            # ARC-011 implementation review C1 (2026-08-15): forward the
+            # canonical shape instead of dropping it after validation —
+            # skill_id routes the manifest runtime; skill_params (already
+            # validated against the skill's param_schema above) reach
+            # ResearchConfig; subject_id/variant are authoritative aliases.
+            skill_id=req.skill_id,
+            skill_params=req.skill_params,
+            subject_id=req.subject_id,
+            variant=req.variant,
         )
         await _audit(
             request,

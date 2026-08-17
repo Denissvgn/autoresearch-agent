@@ -64,6 +64,18 @@ if TYPE_CHECKING:
     from src.core.state_store import StateStore
 
 
+class SkillConfigError(ValueError):
+    """A skill manifest declares something the runtime cannot honor.
+
+    ARC-011 review C2 (2026-08-15): raised when the manifest-driven runtime
+    hits a declaration with no wired implementation (e.g.
+    ``promotion_target.kind=registry_api`` on the config-promotion path) —
+    surfacing the deployment error loudly instead of silently downgrading
+    to a default behavior. ``ValueError`` base matches the
+    ``ManifestValidationError`` convention in ``skill_manifest.py``.
+    """
+
+
 # ---------------------------------------------------------------------------
 # Value types — TypedDict aliases over existing dict shapes (D1).
 # ---------------------------------------------------------------------------
@@ -217,6 +229,14 @@ class SkillRuntime(Protocol):
     def phase_plan(self) -> list[Phase]: ...
 
     def phase_advancement_rule(self, phase_id: str) -> AdvancementRule: ...
+
+    def blocker_classification(self) -> dict[str, Any]:
+        """G3: per-skill blocker-classification overrides (ARC-011 review
+        C2-4). Returns ``{"actionable_blockers": [...],
+        "phase_evidence_keys": {phase: [...]}}``; an **empty dict** means
+        "no override — use the orchestrator's module-level defaults"
+        (``_AGENT_ACTIONABLE_BLOCKERS`` / ``_PHASE_SPECIFIC_AGENT_KEYS``)."""
+        ...
 
     # ── Trial identity (dedup) ────────────────────────────────────
     def trial_identity(
@@ -408,6 +428,24 @@ class _BaseTransitionalSkillRuntime:
         from src.core.research_phase_plan import _PHASE_ADVANCEMENT_KEYS
 
         return {"evidence_keys": _PHASE_ADVANCEMENT_KEYS.get(phase_id, ())}
+
+    def blocker_classification(self) -> dict[str, Any]:
+        # Transitional runtimes carry no manifest override — the orchestrator's
+        # module-level defaults apply (ARC-011 review C2-4).
+        return {}
+
+    # ── W11 anti-forgery capabilities (ARC-011 review C3) ────────
+    # Transitional/ML skills do not enforce signed metrics (their eval
+    # scripts don't echo a nonce — the P4-004 backfill is deferred), so the
+    # orchestrator must neither deliver the nonce env nor verify KV blocks
+    # for them (byte-identical legacy behavior).
+    @property
+    def requires_signed_metrics(self) -> bool:
+        return False
+
+    @property
+    def nonce_field(self) -> str:
+        return "server_nonce"
 
     # ── Trial identity (dedup) ────────────────────────────────────
     def trial_identity(
@@ -602,6 +640,27 @@ class ManifestSkillRuntime:
     def skill_version(self) -> str:
         return self._manifest.version
 
+    @property
+    def primer_filename(self) -> str:
+        """The manifest-declared system-prompt primer file
+        (``llm.system_prompt``, default ``SKILL.md``) — consumed by the
+        orchestrator's packaged-primer read (ARC-011 review C2-2) so a skill
+        can ship its primer under a different filename."""
+        return self._manifest.llm.system_prompt or "SKILL.md"
+
+    @property
+    def requires_signed_metrics(self) -> bool:
+        """W11 enforcement flag (``output_parser.require_signed_metrics``).
+        Consumed by the orchestrator (ARC-011 review C3) to gate both the
+        nonce delivery env and the KV-block verification path."""
+        return bool(self._manifest.output_parser.require_signed_metrics)
+
+    @property
+    def nonce_field(self) -> str:
+        """The echoed-nonce field name (``output_parser.nonce_field``,
+        default ``server_nonce``) — the field `_verify_nonce` checks."""
+        return self._manifest.output_parser.nonce_field or "server_nonce"
+
     # ── Prompt construction ───────────────────────────────────────
     def system_prompt(self) -> str:
         """Assemble the system prompt from the manifest's primer file
@@ -613,6 +672,22 @@ class ManifestSkillRuntime:
         claude_md = self._orch._load_claude_md()
         skill_content = primer_path.read_text(encoding="utf-8")
         return f"{claude_md}\n\n---\n\n{skill_content}"
+
+    def blocker_classification(self) -> dict[str, Any]:
+        """G3: the manifest's ``blocker_classification`` section (ARC-011
+        review C2 — consumed by the orchestrator's promotion-readiness
+        advisory). An empty dict means "no override — use the module-level
+        defaults" (``_AGENT_ACTIONABLE_BLOCKERS``)."""
+        bc = getattr(self._manifest, "blocker_classification", None)
+        if bc is None:
+            return {}
+        return {
+            "actionable_blockers": list(bc.actionable_blockers),
+            "phase_evidence_keys": {
+                key: list(values)
+                for key, values in bc.phase_evidence_keys.items()
+            },
+        }
 
     def directive_prompt(self, config: "ResearchConfig") -> str:
         # Delegates to the orchestrator's existing _build_prompt, which branches
@@ -786,8 +861,17 @@ class ManifestSkillRuntime:
     # ── Promotion ─────────────────────────────────────────────────
     def promotion_target(self) -> "PromotionTarget":
         """Build the development-scope ``PromotionTarget`` from the manifest's
-        ``promotion_target.primary`` (kind=file_path today; registry_api /
-        artifact_store / git_branch are forward-compat)."""
+        ``promotion_target.primary``.
+
+        ARC-011 review C2 (2026-08-15): the declared ``kind`` must match an
+        implemented target. ``file_path`` → ``FilePathPromotionTarget``. Every
+        other kind (``registry_api`` / ``artifact_store`` / ``git_branch``)
+        raises ``SkillConfigError`` instead of silently downgrading to a file
+        write — e.g. a ``registry_api`` promotion is a directory move +
+        lifecycle transition (``SkillRegistryPromotionTarget``), a different
+        shape the file-write ``PromotionTarget`` protocol does not cover, so
+        pretending to handle it would promote garbage paths.
+        """
         from src.core.promotion_target import FilePathPromotionTarget
 
         primary = self._manifest.promotion_target.primary
@@ -797,9 +881,12 @@ class ManifestSkillRuntime:
             # manifest's path_template at the runtime boundary (P3 concern);
             # for Phase 2 the default target reproduces the incumbent paths.
             return FilePathPromotionTarget()
-        # Non-file_path kinds stay in ConfigPromoter for Phase 2 (follow-up);
-        # the run loop only needs development-scope file promotion from YAML.
-        return FilePathPromotionTarget()
+        raise SkillConfigError(
+            f"skill {self._manifest.id!r} declares "
+            f"promotion_target.kind={kind!r}, which has no wired "
+            "PromotionTarget implementation (only 'file_path' is); refusing "
+            "to silently downgrade to a file-path promotion"
+        )
 
     # ── Output parsing ────────────────────────────────────────────
     def output_parser(self) -> "OutputParser":
@@ -895,6 +982,12 @@ def materialize_skill_runtime(
     runtimes (P1-024..026) keyed by ``config.model_type``. The fallback keeps
     the switchover per-skill and reversible: a skill not yet lifted into
     ``skills/<id>/SKILL.yaml`` keeps working through its transitional runtime.
+
+    ARC-011 review C2 (2026-08-15): an **explicit** ``skill_id`` that the
+    registry rejects raises ``SkillConfigError`` instead of silently degrading
+    to the transitional runtime — a canonical session must not run different
+    (hardcoded) behavior than the skill it asked for. Legacy sessions
+    (``skill_id=""``) never hit this path.
     """
     # ── P2-007: manifest-driven path ──────────────────────────────────────
     skill_id = config.skill_id
@@ -903,8 +996,13 @@ def materialize_skill_runtime(
             from src.core.skill_registry import default_registry
 
             manifest = default_registry.get(skill_id)
-        except Exception:  # noqa: BLE001 — registry miss → fall through
-            manifest = None
+        except Exception as exc:  # noqa: BLE001 — re-raised below with context
+            raise SkillConfigError(
+                f"skill_id {skill_id!r} was rejected by the skill registry — "
+                "refusing to silently fall back to the transitional runtime "
+                f"(the manifest is missing, invalid, or was removed by a "
+                f"reload): {exc}"
+            ) from exc
         if manifest is not None:
             return ManifestSkillRuntime(manifest, orchestrator)
 
@@ -940,6 +1038,7 @@ __all__ = [
     "Phase",
     "RLSkillRuntime",
     "SessionRecord",
+    "SkillConfigError",
     "SkillRuntime",
     "StructuredHPOPlan",
     "SubjectDescriptor",

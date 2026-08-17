@@ -6,7 +6,7 @@ import os
 import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping
 
 _ALLOWED_PYTHON = (".venv/bin/python", "./.venv/bin/python")
 _ALLOWED_SCRIPTS = {
@@ -75,8 +75,23 @@ def evaluate_command_policy(
     *,
     workspace_root: str,
     session_workspace: str | None = None,
+    policy_extension: Mapping[str, Iterable[str]] | None = None,
 ) -> CommandDecision:
-    """Parse and validate a single agent command before execution."""
+    """Parse and validate a single agent command before execution.
+
+    ARC-011 review C2 (2026-08-15): ``policy_extension`` is the per-skill
+    ``CommandPolicyExtension`` (``skill.command_policy_extension()``). It is
+    strictly **additive** — entries union with the base allow-lists and can
+    never remove or bypass a base restriction. ``allowed_executables`` is
+    accepted but currently a no-op: the base dispatch only knows
+    python/cp/cat (all already allowed); widening executable dispatch is
+    deferred (P2-023).
+    """
+
+    ext: Mapping[str, Iterable[str]] = policy_extension or {}
+    allowed_scripts = _ALLOWED_SCRIPTS | set(ext.get("allowed_scripts") or ())
+    copyable_files = _COPY_FILENAMES | set(ext.get("copyable_files") or ())
+    readable_files = _CAT_FILENAMES | set(ext.get("readable_files") or ())
 
     try:
         argv = shlex.split(command, posix=True)
@@ -102,11 +117,21 @@ def evaluate_command_policy(
         return _reject(f"Executable {executable!r} is not allowed")
 
     if _is_allowed_python(argv[0], workspace_root):
-        return _evaluate_python(argv, workspace_root, session_workspace)
+        return _evaluate_python(
+            argv, workspace_root, session_workspace,
+            allowed_scripts=allowed_scripts,
+            copyable_files=copyable_files,
+        )
     if executable == "cp":
-        return _evaluate_cp(argv, workspace_root, session_workspace)
+        return _evaluate_cp(
+            argv, workspace_root, session_workspace,
+            copyable_files=copyable_files,
+        )
     if executable == "cat":
-        return _evaluate_cat(argv, workspace_root, session_workspace)
+        return _evaluate_cat(
+            argv, workspace_root, session_workspace,
+            readable_files=readable_files,
+        )
 
     return _reject(f"Executable {argv[0]!r} is not allowed")
 
@@ -164,13 +189,20 @@ def _evaluate_python(
     argv: list[str],
     workspace_root: str,
     session_workspace: str | None,
+    *,
+    allowed_scripts: set[str] | None = None,
+    copyable_files: set[str] | None = None,
 ) -> CommandDecision:
+    scripts = _ALLOWED_SCRIPTS if allowed_scripts is None else allowed_scripts
     if len(argv) < 2:
         return _reject("Python commands must invoke an approved autotuner script")
     script = _workspace_relative(argv[1], workspace_root)
-    if script not in _ALLOWED_SCRIPTS:
+    if script not in scripts:
         return _reject(f"Python script {argv[1]!r} is not approved")
-    config_error = _validate_prepare_config(argv, script, workspace_root, session_workspace)
+    config_error = _validate_prepare_config(
+        argv, script, workspace_root, session_workspace,
+        copyable_files=copyable_files,
+    )
     if config_error:
         return _reject(config_error)
     return _allow(argv, operation=f"python:{script}")
@@ -181,7 +213,10 @@ def _validate_prepare_config(
     script: str,
     workspace_root: str,
     session_workspace: str | None,
+    *,
+    copyable_files: set[str] | None = None,
 ) -> str | None:
+    copyable = _COPY_FILENAMES if copyable_files is None else copyable_files
     if script not in _PREPARE_SCRIPTS:
         return None
     if "--config" not in argv:
@@ -196,7 +231,7 @@ def _validate_prepare_config(
     )
     if session_workspace and not _is_within(config_path, session_workspace):
         return "prepare.py --config must point inside the session workspace"
-    if os.path.basename(config_path) not in _COPY_FILENAMES:
+    if os.path.basename(config_path) not in copyable:
         return "prepare.py --config may only target train.yaml or best_train.yaml"
     return None
 
@@ -205,7 +240,10 @@ def _evaluate_cp(
     argv: list[str],
     workspace_root: str,
     session_workspace: str | None,
+    *,
+    copyable_files: set[str] | None = None,
 ) -> CommandDecision:
+    copyable = _COPY_FILENAMES if copyable_files is None else copyable_files
     if not session_workspace:
         return _reject("cp requires a resolved session workspace")
     args = argv[1:]
@@ -224,7 +262,7 @@ def _evaluate_cp(
     for path in resolved:
         if not _is_within(path, session_workspace):
             return _reject("cp may only operate inside the session workspace")
-        if os.path.basename(path) not in _COPY_FILENAMES:
+        if os.path.basename(path) not in copyable:
             return _reject("cp may only copy train.yaml and best_train.yaml")
     return _allow(["cp", *resolved], operation="cp:workspace-config")
 
@@ -233,7 +271,10 @@ def _evaluate_cat(
     argv: list[str],
     workspace_root: str,
     session_workspace: str | None,
+    *,
+    readable_files: set[str] | None = None,
 ) -> CommandDecision:
+    readable = _CAT_FILENAMES if readable_files is None else readable_files
     if not session_workspace:
         return _reject("cat requires a resolved session workspace")
     if len(argv) < 2:
@@ -249,7 +290,7 @@ def _evaluate_cat(
         )
         if not _is_within(path, session_workspace):
             return _reject("cat may only read explicit files in the session workspace")
-        if os.path.basename(path) not in _CAT_FILENAMES:
+        if os.path.basename(path) not in readable:
             return _reject("cat may only read approved workspace result files")
         resolved.append(path)
     return _allow(["cat", *resolved], operation="cat:workspace-result")

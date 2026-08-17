@@ -2,13 +2,140 @@
 
 ## Unreleased
 
+- **ARC-011 implementation review C3 (2026-08-15) — W11 anti-forgery: bypass
+  closed, nonce no longer readable by the adversary it defends against.**
+  Closes review finding C3 (all four sub-findings); design revised in
+  `docs/adr/ARC-011-signed-metrics.md` (Revision 2026-08-15).
+  - **C3.1 — KV-block bypass closed:** the `---` auto-detect path and the
+    marker-file path called `parse_prepare_output` (no nonce argument), so
+    any bash output containing a KV block was recorded as an iteration even
+    for skills with `require_signed_metrics: true`. Both paths now route
+    through the new `AgentOrchestrator._verify_kv_metrics`, which applies
+    the same four-state `_verify_nonce` check the marker path uses
+    (reject → iteration not recorded).
+  - **C3.2 — KV forgeries audited:** rejected KV blocks now emit the
+    `metrics.forged` audit event (`format: delimited_kv`, `source:
+    bash_output|marker_file`) plus agent-log guidance — previously only
+    marker-format forgeries produced an audit.
+  - **C3.3a — nonce out-of-band:** the nonce is no longer embedded in the
+    session manifest. The artifact is written into the agent-readable
+    session workspace (traversable by the `read_file`/`grep` tools), so
+    persisting the W11 secret there handed it to the adversary. The nonce
+    is generated in `SessionManager._build_manifest_payload` and lives only
+    in `config.session_nonce` (process memory, per-run); nothing ever reads
+    it back (continues/resumes generate a fresh nonce). The
+    `session_nonce` field stays in the v2 manifest schema, always `null` in
+    new artifacts (schema shape unchanged; legacy manifests with a value
+    still load). Parity fixtures unaffected (the engine already dropped the
+    non-deterministic nonce key).
+  - **C3.3b — nonce env narrowed:** `AUTORESEARCH_SESSION_NONCE` is no
+    longer injected into every governed subprocess of every session. The
+    env is built only when the skill enforces signed metrics (new
+    `requires_signed_metrics` / `nonce_field` runtime capabilities; the
+    transitional runtimes report `False` — byte-identical ML/legacy
+    behavior), and per command only when the command invokes one of the
+    skill's manifest-declared scripts (`_nonce_env_for_command`). A false
+    negative is loud, not silent: the eval cannot echo the nonce and its
+    markers are rejected with explicit guidance.
+  - **C3.4 — constant-time compare:** `_verify_nonce` uses
+    `hmac.compare_digest` (consistent with the production-approval HMAC).
+  - Tests: new `tests/test_metrics_forgery_c3.py` (9 tests: KV
+    reject/accept/legacy-downgrade/passthrough + audits, workspace-manifest
+    nonce omission via a real `SessionManager.start_session` drive,
+    per-command env narrowing, capability properties);
+    `test_research_manifest.py` nonce tests rewritten for the out-of-band
+    contract. Within-session replay after one legitimate eval run remains
+    inherent (documented in the ADR revision).
+
+- **ARC-011 implementation review C1+C2 (2026-08-15) — canonical start wiring
+  + the manifest-driven runtime as the production path.** Closes the two
+  highest-severity findings of
+  `ARC-011_IMPLEMENTATION_REVIEW_2026-08-15.md`: canonical request fields were
+  validated-then-dropped, and the orchestrator bypassed the materialized
+  `SkillRuntime` for everything except `parse_iteration`.
+  - **C1 (canonical start):** `POST /research/start` now forwards
+    `skill_id` / `skill_params` / `subject_id` / `variant` to
+    `SessionManager.start_session` → `ResearchConfig` (previously dropped
+    after validation — a canonical `enable_hpo: true` silently ran with it
+    off). Recognized flat ML knobs inside `skill_params` win over the legacy
+    kwargs (presence-based, mirroring the API's canonical-wins rule); the
+    `research.start` audit metadata records the winning canonical values.
+    Legacy callers forward `None` and keep byte-identical behavior.
+    Tests: `test_canonical_start_wiring.py` (real SessionManager drive),
+    `test_research_api_compat.py` forwarding/audit assertions.
+  - **C2-1 (phase plan):** `_build_phase_contract_block` and
+    `_refresh_phase_state` source the phase plan from the session's skill
+    runtime (`build_phase_state` gained an explicit `phases=` override; the
+    hardcoded per-model table remains only as the transitional fallback for
+    sessions with no bound skill). Fail-open: a runtime error falls back to
+    the incumbent table rather than blanking the contract.
+  - **C2-2 (system prompt):** manifest-driven sessions read the domain
+    primer from the packaged `skills/<skill_id>/<primer>` (the primer
+    filename honors the manifest's `llm.system_prompt` declaration via the
+    new `ManifestSkillRuntime.primer_filename`); transitional sessions keep
+    the legacy workspace `.github/skills` primer. A missing packaged primer
+    degrades to empty (logged), not a session failure.
+  - **C2-3 (command policy):** `evaluate_command_policy` accepts a
+    per-skill `policy_extension` (`CommandPolicyExtension` from
+    `skill.command_policy_extension()`), plumbed through
+    `GovernedCommandRunner`/`_tool_bash`. **Additive-only** — entries union
+    with the base allow-lists; they can never remove or bypass a base
+    restriction (executable dispatch and path confinement are checked
+    independently). The manifest `command_policy` section is no longer dead
+    config.
+  - **C2-4 (blocker classification):** the `SkillRuntime` protocol gains
+    `blocker_classification()` (22nd member; transitional runtimes return
+    `{}` = use module defaults). The promotion-readiness advisory consumes
+    `actionable_blockers` and `_phase_advancement_is_genuine` consumes
+    `phase_evidence_keys` as skill-declared overrides of
+    `_AGENT_ACTIONABLE_BLOCKERS` / `_PHASE_SPECIFIC_AGENT_KEYS`.
+  - **C2-5 (promotion target):** `_try_auto_promote` routes through the
+    session skill's declared `promotion_target`. `ManifestSkillRuntime.
+    promotion_target()` now raises the new `SkillConfigError` for non-
+    `file_path` kinds instead of silently returning a file target, and
+    auto-promotion **skips loudly** (audited `promotion.auto_skip`,
+    reason `unsupported_promotion_target`) rather than fabricating a file
+    promotion for e.g. a `registry_api` skill; unexpected construction
+    errors still fall back to the default file target. **H6 fixed:** the
+    six `ConfigPromoter` file-surface helpers are now instance methods
+    dispatching through the injected `PromotionTarget` (previously the
+    injection was stored but bypassed — every helper constructed a fresh
+    `FilePathPromotionTarget()` inline); a recording-stub test now pins the
+    dispatch.
+  - **Materialization loudness (H2-adjacent):** `materialize_skill_runtime`
+    raises `SkillConfigError` for an explicit `skill_id` the registry
+    rejects (missing/invalid/removed-by-reload) instead of silently
+    degrading a canonical session to the transitional runtime. Legacy
+    sessions (`skill_id=""`) are unaffected.
+  - **Manifest honesty:** the three ML `SKILL.yaml`s declare
+    `phase_advancement.mode: declarative` / `trial_identity.resolve.mode:
+    declarative` — the previously-declared `phases.py` /
+    `resolve_identity.py` plugin files never shipped and were never
+    imported (dead declarations).
+  - Orchestrator bookkeeping: `_session_skills` registry initialized in
+    `__init__` (registered at runtime materialization, dropped in the
+    `run()` finally); missing-typing-name lint debt (`Any` /
+    `Iterable`) fixed in the new annotations. New
+    `tests/test_manifest_runtime_production_path.py` (26 tests) pins the
+    whole wiring: phase-plan source (contract renders with the hardcoded
+    table made to explode), primer filename, policy additivity + base-
+    restriction preservation, blocker overrides both directions,
+    unsupported-target skip + transitional back-compat, loud
+    materialization. Full suite green (1348 passed); domain-coupling guard
+    green at phase 4; no new ruff/mypy errors (pre-existing baseline
+    unchanged).
+
 - **ARC-011 Phase 6 (in progress) — Distributed storage (R6 / W14).** Adds the
   optional Postgres backend that lifts the single-worker ceiling so
-  `WEB_CONCURRENCY > 1` is supported with correct concurrency semantics
-  (ADR §8.1 line 359 exit criterion). **Gated (R6):** the default deployment is
-  unchanged — `database_url=None` ⇒ `SQLiteStateStore` (byte-identical, the
-  WEB_CONCURRENCY>1 guard stays active); set `AUTORESEARCH_DATABASE_URL` to a
-  postgresql:// DSN to opt into multi-worker. Driven by raw `asyncpg` (mirrors
+  `WEB_CONCURRENCY > 1` is supported, with the four concurrency hazards closed
+  and proven by multi-process tests (H1 atomic idempotency, H2 cross-process
+  transition serialization, H3 cross-worker stop propagation, H4 fencing-token
+  stale-write rejection — ADR §8.1 line 359 exit criterion). **Gated (R6):** the
+  default deployment is unchanged — `database_url=None` ⇒ `SQLiteStateStore`
+  (byte-identical, the WEB_CONCURRENCY>1 guard stays active); set
+  `AUTORESEARCH_DATABASE_URL` to a postgresql:// DSN to opt into multi-worker.
+  Known remaining gap (documented, out of scope): WebSocket fan-out does not
+  span workers. Driven by raw `asyncpg` (mirrors
   SQLiteStateStore's hand-written-SQL shape for parity; `pg_advisory_xact_lock`
   is first-class), NOT SQLAlchemy — deviates from the platform convention but
   matches the existing StateStore style (parity wins).
@@ -38,16 +165,29 @@
     "fencing tokens for command execution" names only H4; grounding showed H3
     (cross-worker stop/pause propagation) must close in the same task for
     "correct concurrency semantics" to hold. ~4 SP (up from 3), recorded per
-    the P0-023 precedent. (a) `update_session`/`add_iteration`/
-    `update_planned_trial_status` accept `lock_epoch` for conditional writes
-    (0-rows ⇒ stale ⇒ discard); the orchestrator's `_record_iteration` adds a
-    stale-iteration guard + `result.discarded.stale_worker` audit. (b)
-    `_should_stop_cross_worker` reads DB-side status so a stop on worker B is
-    observed by the owning worker A's turn poll (the in-process flag stays the
-    fast path). NOTE: `terminate_request_received` is the agent's own
-    TERMINATE_REQUEST completion flag, NOT an operator-stop signal — it must
-    not be treated as a cross-worker stop (a first draft did, misreading normal
-    completions as stops; corrected).
+    the P0-023 precedent. (a) **Fencing chain (H4):** the orchestrator captures
+    the session's `lock_epoch` once at `run()` entry (`_session_epochs`) and
+    threads it into the two state-advancing writes in `_record_iteration`
+    (`add_iteration` + `update_session(effective_iteration_count=…)`, both
+    accepting a `lock_epoch` kwarg on the protocol; SQLite impls accept-and-
+    ignore it — single-worker, no stale writers). A 0-row conditional update
+    ⇒ the session was deauthorized while the command ran ⇒ the result is
+    discarded + a `result.discarded.stale_worker` audit is emitted, so a stale
+    worker cannot advance `best_iteration` / `effective_iteration_count` /
+    auto-promotion. `finish_runtime_command` is intentionally NOT fenced (it
+    writes only the observability-only `runtime_commands` table, keyed by
+    `command_id`, and drives no session state); `update_planned_trial_status`
+    accepts the epoch for completeness but is not on the hot post-command path.
+    The captured epoch is refreshed after a local resume (`_wait_while_paused`).
+    An earlier draft guarded `_record_iteration` with a session-status check —
+    removed in favor of this epoch fence (status cannot distinguish a
+    legitimate `completing → completed` from a cross-worker stop; the epoch
+    can). (b) `_should_stop_cross_worker` reads DB-side status so a stop on
+    worker B is observed by the owning worker A's turn poll (the in-process
+    flag stays the fast path). NOTE: `terminate_request_received` is the
+    agent's own TERMINATE_REQUEST completion flag, NOT an operator-stop
+    signal — it must not be treated as a cross-worker stop (a first draft did,
+    misreading normal completions as stops; corrected).
   - **P6-005 (migration):** `scripts/migrate_sqlite_to_postgres.py` —
     idempotent, resumable, batched SQLite→Postgres row mover (per-table
     transactions + a `migration_state` cursor + `ON CONFLICT DO NOTHING`).
@@ -77,13 +217,41 @@
     (currently at 4 due to the P5-007 deferral — the carry-over is noted, not
     force-bumped). The `arc-011/phase-6-done` rollback tag is deferred to the
     landing commit (P0–P5 precedent).
-  - **Verification:** 1315 autoresearch-agent tests green (incl. the 11
-    postgres write-path, 2 parity, 5 fencing, and 4 distributed tests against a
-    live `postgres:15` container); 21 postgres/distributed tests skip cleanly
+  - **Review-fix round (post-implementation audit):** a self-audit found and
+    fixed six issues. (1) `poetry.lock` regenerated — adding `asyncpg` to
+    `pyproject.toml` had invalidated the lockfile (`poetry check --lock`, a CI
+    gate, was failing). (2) The H4 fencing chain was store-primitive-only and
+    unwired at the orchestrator (no epoch capture, no caller passing
+    `lock_epoch=`); now wired end-to-end as described in P6-004 above, and the
+    misleading status-based `_record_iteration` guard removed. (3)
+    `get_cross_session_iteration_summary` dropped `NULLIF` so Postgres
+    `STRING_AGG` matches SQLite `GROUP_CONCAT`'s keep-empty-string semantics.
+    (4) The parity sweep now also gates `get_cross_session_iteration_summary`
+    (incl. the empty-string edge), `find_duplicate_trial_identity`,
+    `collect_observability_metrics`, `update_planned_trial_status`, and the
+    `session_lock`/`bump_session_epoch` contract. (5) All distributed test
+    workers now use a shared pool-only store helper (no worker re-runs schema
+    DDL; the earlier asymmetry could intermittently race the `pg_type`
+    catalog). (6) `terminate_request_received` aligned to SMALLINT and the
+    keyset indexes to DESC, matching their SQLite counterparts. A seventh
+    issue surfaced during fix verification and was the most severe of all:
+    **`PostgresStateStore.ping()` and `get_schema_version()` leaked a pool
+    connection on every call** (the only two methods missing the
+    `try/finally: _release_short_lived` pattern). Because `/health` calls
+    `ping()` per health check, a Postgres deployment would exhaust the pool
+    (10 connections) and wedge; it was also the true cause of the
+    long-observed "postgres test file hangs when run together" behavior
+    (previously and wrongly attributed to a pytest-asyncio teardown
+    interaction — `pool.close()` was waiting forever on the leaked
+    checkout). Fixed with the release in `finally`; the full postgres +
+    distributed suite now runs together in ~7s where it previously hung.
+  - **Verification:** 1315+ autoresearch-agent tests green (incl. the 11
+    postgres write-path, parity, fencing, and 4 distributed tests against a
+    live `postgres:15` container); postgres/distributed tests skip cleanly
     without a DSN; ruff 0 new errors; mypy 0 new errors on new modules
-    (`postgres_state_store.py`, `migrate_sqlite_to_postgres.py`). Pre-existing
-    orchestrator/state_store/skill_runtime mypy+ruff debt is prior-phase and
-    explicitly out of scope.
+    (`postgres_state_store.py`, `migrate_sqlite_to_postgres.py`); `poetry
+    check --lock` clean. Pre-existing orchestrator/state_store/skill_runtime
+    mypy+ruff debt is prior-phase and explicitly out of scope.
 
 - **ARC-011 Phase 5 (in progress) — Auto-initialization, skill lifecycle,
   generator.** Lays the structural foundation for the "universal research agent"

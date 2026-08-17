@@ -32,7 +32,13 @@ class FakeSessionManager:
     active_count = 0
     _active_pipelines: dict[str, object] = {}
 
+    def __init__(self) -> None:
+        # ARC-011 review C1: capture forwarded kwargs so tests can assert the
+        # canonical shape actually reaches the session manager.
+        self.captured_kwargs: Dict[str, Any] = {}
+
     async def start_session(self, **kwargs: Any) -> Dict[str, Any]:
+        self.captured_kwargs = dict(kwargs)
         return {
             "id": "res_test0001",
             "instrument": kwargs.get("instrument", ""),
@@ -424,3 +430,102 @@ def test_pipeline_row_dual_shape_has_empty_canonical_fields():
     # subject_id/variant still derive from the legacy fields (they are
     # value-neutral labels), only skill_id is empty because "pipeline" has
     # no skill alias.
+
+
+# ====================================================================
+# ARC-011 implementation review C1 (2026-08-15) — canonical fields are
+# forwarded, not validated-then-dropped
+# ====================================================================
+
+
+def _session_manager() -> FakeSessionManager:
+    mgr = research_module._session_manager
+    assert isinstance(mgr, FakeSessionManager)
+    return mgr
+
+
+def test_canonical_fields_forwarded_to_session_manager(client: TestClient):
+    """C1: ``{skill_id, subject_id, variant, skill_params}`` survive the trip
+    to ``start_session`` — previously only the translated legacy fields were
+    passed, so canonical HPO params were silently ignored and ``skill_id``
+    never reached ``ResearchConfig``."""
+    response = client.post(
+        "/api/v1/research/start",
+        headers=auth_headers(),
+        json={
+            "skill_id": "ml-direction",
+            "subject_id": "DOGE_USDT",
+            "variant": "15m",
+            "skill_params": {"enable_hpo": True, "hpo_trials": 100},
+        },
+    )
+    assert response.status_code == 201
+    captured = _session_manager().captured_kwargs
+    assert captured["skill_id"] == "ml-direction"
+    assert captured["skill_params"] == {"enable_hpo": True, "hpo_trials": 100}
+    assert captured["subject_id"] == "DOGE_USDT"
+    assert captured["variant"] == "15m"
+    # The translated legacy shape is still passed alongside (dual shape).
+    assert captured["model_type"] == "direction"
+    assert captured["instrument"] == "DOGE_USDT"
+    assert captured["timeframe"] == "15m"
+
+
+def test_canonical_params_recorded_in_start_audit(client: TestClient):
+    """C1: the research.start audit metadata now records the winning
+    canonical values (previously only shape_conflict records existed, never
+    the values that won)."""
+    response = client.post(
+        "/api/v1/research/start",
+        headers=auth_headers(),
+        json={
+            "skill_id": "ml-direction",
+            "subject_id": "DOGE_USDT",
+            "variant": "15m",
+            "skill_params": {"enable_hpo": True, "hpo_trials": 100},
+        },
+    )
+    assert response.status_code == 201
+    start_events = [
+        e for e in _test_store.audit_events
+        if e.get("action") == "research.start"
+    ]
+    assert len(start_events) == 1
+    metadata = start_events[0]["request_metadata"]
+    assert metadata["skill_id"] == "ml-direction"
+    assert metadata["skill_params"] == {"enable_hpo": True, "hpo_trials": 100}
+    assert metadata["subject_id"] == "DOGE_USDT"
+    assert metadata["variant"] == "15m"
+
+
+def test_legacy_start_forwards_no_canonical_fields(client: TestClient):
+    """C1 back-compat: a legacy request forwards no canonical fields (None),
+    so legacy sessions keep the transitional runtime and flat HPO knobs."""
+    response = client.post(
+        "/api/v1/research/start",
+        headers=auth_headers(),
+        json={
+            "instrument": "DOGE_USDT",
+            "timeframe": "15m",
+            "model_type": "direction",
+            "enable_hpo": True,
+        },
+    )
+    assert response.status_code == 201
+    captured = _session_manager().captured_kwargs
+    assert captured["skill_id"] is None
+    assert captured["skill_params"] is None
+    assert captured["subject_id"] is None
+    assert captured["variant"] is None
+    # Legacy flat HPO knob still passed through.
+    assert captured["enable_hpo"] is True
+    # And the legacy audit metadata carries no canonical keys (None extras
+    # are dropped by record_api_audit_event).
+    start_events = [
+        e for e in _test_store.audit_events
+        if e.get("action") == "research.start"
+    ]
+    metadata = start_events[0]["request_metadata"]
+    assert "skill_id" not in metadata
+    assert "skill_params" not in metadata
+    assert metadata["enable_hpo"] is True

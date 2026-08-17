@@ -929,7 +929,7 @@ class StateStore(Protocol):
         ...
 
     async def update_session(
-        self, session_id: str, **fields: Any,
+        self, session_id: str, *, lock_epoch: Optional[int] = None, **fields: Any,
     ) -> Optional[Dict[str, Any]]:
         ...
 
@@ -1011,6 +1011,7 @@ class StateStore(Protocol):
         consistency_report_json: Optional[str] = None,
         search_phase: Optional[str] = None,
         metric_improvement_epsilon: float = 0.0,
+        lock_epoch: Optional[int] = None,
     ) -> Dict[str, Any]:
         ...
 
@@ -2079,8 +2080,13 @@ class SQLiteStateStore:
             return cursor.rowcount
 
     async def update_session(
-        self, session_id: str, **fields: Any,
+        self, session_id: str, *, lock_epoch: Optional[int] = None, **fields: Any,
     ) -> Optional[Dict[str, Any]]:
+        # ARC-011 P6-004: ``lock_epoch`` is accepted for protocol parity with
+        # PostgresStateStore (which applies a conditional WHERE on it). SQLite
+        # is single-worker → no stale writers → the epoch is ignored (there is
+        # no lock_epoch column to filter on). It is popped from ``fields`` so
+        # it is never written as a column value.
         if not fields:
             return await self.get_session(session_id)
         set_clause = ", ".join(f"{k} = ?" for k in fields)
@@ -2156,7 +2162,11 @@ class SQLiteStateStore:
         consistency_report_json: Optional[str] = None,
         search_phase: Optional[str] = None,
         metric_improvement_epsilon: float = 0.0,
+        lock_epoch: Optional[int] = None,
     ) -> Dict[str, Any]:
+        # ARC-011 P6-004: ``lock_epoch`` is accepted for protocol parity with
+        # PostgresStateStore (which gates the best-metric UPDATE on it). SQLite
+        # is single-worker → no stale writers → the epoch is ignored.
         # F2: persist the phase id the orchestrator believed was active when
         # this iteration ran. The `iterations.search_phase` column has existed
         # since v1 but was never written, which left phase-state derivation

@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, AsyncGenerator, Dict, List, Mapping, Optional
+from typing import Any, AsyncGenerator, Dict, Iterable, List, Mapping, Optional
 
 import yaml
 
@@ -95,7 +95,11 @@ from src.core.research_phase_plan import (
     phases_for_model,
 )
 from src.core.result_artifact import enrich_marker_from_result_artifact
-from src.core.skill_runtime import SkillRuntime, materialize_skill_runtime
+from src.core.skill_runtime import (
+    SkillConfigError,
+    SkillRuntime,
+    materialize_skill_runtime,
+)
 from src.core.state_machine import (
     IllegalTransitionError,
     SessionEvent,
@@ -540,6 +544,7 @@ def _execute_tool(
     proc_registry: CommandProcessRegistry | None = None,
     research_id: str | None = None,
     extra_env: Mapping[str, str] | None = None,
+    policy_extension: Mapping[str, Any] | None = None,
 ) -> ToolExecutionResult:
     """Execute a tool call and return the text result."""
     try:
@@ -550,6 +555,7 @@ def _execute_tool(
                 proc_registry=proc_registry,
                 research_id=research_id,
                 extra_env=extra_env,
+                policy_extension=policy_extension,
             )
         elif name == "read_file":
             return ToolExecutionResult(_tool_read_file(input_data, workspace))
@@ -575,6 +581,7 @@ def _tool_bash(
     proc_registry: CommandProcessRegistry | None = None,
     research_id: str | None = None,
     extra_env: Mapping[str, str] | None = None,
+    policy_extension: Mapping[str, Any] | None = None,
 ) -> ToolExecutionResult:
     command = input_data["command"]
     timeout = input_data.get("timeout_s", 7200)
@@ -592,6 +599,7 @@ def _tool_bash(
     runner = GovernedCommandRunner(
         workspace_root=workspace,
         session_workspace=session_workspace,
+        policy_extension=policy_extension,
     )
     result = runner.run(
         command, timeout_s=timeout, output_callback=output_callback,
@@ -687,6 +695,50 @@ def _tool_grep(input_data: Dict[str, Any], workspace: str) -> str:
         return "Grep timed out after 30s"
 
 
+def _load_packaged_skill_md(skill_id: str, primer: str = "SKILL.md") -> str:
+    """Read the packaged ``skills/<skill_id>/<primer>`` domain primer (C2-2).
+
+    Manifest-driven sessions use the skill package's own primer instead of
+    the legacy workspace ``.github/skills/<model_type>/SKILL.md``.
+    ``primer`` is the manifest-declared filename (``llm.system_prompt``;
+    ``SKILL.md`` by default). A missing packaged primer degrades to an empty
+    string (logged) rather than failing the session — the manifest body
+    already carries the directive content.
+    """
+    from src.core.skill_registry import DEFAULT_SKILLS_ROOT
+
+    path = DEFAULT_SKILLS_ROOT / skill_id / primer
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        logger.warning("Packaged skill primer missing for %s: %s", skill_id, path)
+        return ""
+
+
+def _nonce_env_for_command(
+    nonce_env: Optional[Mapping[str, str]],
+    command: object,
+    policy_extension: Optional[Mapping[str, Any]],
+) -> Optional[Mapping[str, str]]:
+    """Narrow the W11 nonce env delivery to the skill's declared scripts (C3).
+
+    The nonce must reach the sanctioned eval subprocess, but handing it to
+    every governed command re-creates the leak review C3 closes (any
+    sanctioned script that surfaces its environment exposes the secret to
+    the agent relaying its output). Only commands invoking one of the
+    skill's manifest-declared scripts receive the env. A false negative is
+    loud, not silent: without the env the eval cannot echo the nonce and its
+    markers are rejected with explicit guidance.
+    """
+    if nonce_env is None:
+        return None
+    declared = (policy_extension or {}).get("allowed_scripts") or ()
+    cmd = str(command or "")
+    if any(str(script) in cmd for script in declared):
+        return nonce_env
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Orchestrator
 # ---------------------------------------------------------------------------
@@ -734,6 +786,19 @@ class AgentOrchestrator:
         self._marker_parser: OutputParser = JSONMarkerParser()
         self._stop_flags: Dict[str, bool] = {}
         self._pause_flags: Dict[str, bool] = {}
+        # ARC-011 review C2: per-session SkillRuntime binding (registered in
+        # run() at materialization; dropped in the run() finally). Out-of-loop
+        # helpers (phase-plan refresh, blocker classification, promotion
+        # routing) reach the session's skill through this map — mirrors
+        # _session_providers / _session_models.
+        self._session_skills: Dict[str, SkillRuntime] = {}
+        # ARC-011 P6-004: per-session captured lock_epoch. Captured once at
+        # run() entry (the owning worker holds the advisory lock for the run's
+        # lifetime); threaded to the state-advancing writes in _record_iteration
+        # so a stale worker whose session was deauthorized (stop/timeout landed
+        # on another worker, bumping lock_epoch) has its late writes rejected
+        # by the store's conditional WHERE. Refreshed after a local resume.
+        self._session_epochs: Dict[str, int] = {}
         # AR-4: per-session counter tracking how many consecutive kick attempts
         # have been made for each distinct block_reason.  When the counter
         # reaches 3, the kick escalates to a forced TERMINATE_REQUEST instead
@@ -968,10 +1033,29 @@ class AgentOrchestrator:
         return status in {"stopping", "stopped", "timed_out", "failed"}
 
     async def _wait_while_paused(self, research_id: str) -> None:
+        was_paused = self._pause_flags.get(research_id, False)
         while self._pause_flags.get(research_id, False):
             if await self._should_stop_cross_worker(research_id):
                 return
             await asyncio.sleep(2)
+        # ARC-011 P6-004: a pause/resume transition bumped lock_epoch (the
+        # state machine bumps on every committed transition). If we were
+        # paused, refresh the captured epoch so post-resume writes carry the
+        # fresh value and aren't fenced out by our own transition.
+        if was_paused:
+            await self._refresh_session_epoch(research_id)
+
+    async def _refresh_session_epoch(self, research_id: str) -> None:
+        """Re-read and re-cache the session's lock_epoch after a local
+        transition (resume) so subsequent writes carry the fresh value.
+        No-op on SQLite (no lock_epoch column → stays None → unconditional)."""
+        try:
+            session = await self._store.get_session(research_id)
+            self._session_epochs[research_id] = int(
+                (session or {}).get("lock_epoch") or 0
+            )
+        except Exception:  # noqa: BLE001 — refresh must never block the run
+            logger.debug("lock_epoch refresh failed for %s", research_id, exc_info=True)
 
     async def _load_skill_async(self, model_type: str) -> str:
         return await asyncio.to_thread(self._load_skill, model_type)
@@ -987,6 +1071,88 @@ class AgentOrchestrator:
         return await asyncio.to_thread(
             self._read_marker_file, config, min_mtime,
         )
+
+    async def _verify_kv_metrics(
+        self,
+        research_id: str,
+        result: Dict[str, Any],
+        *,
+        turn: int,
+        agent_log: "AgentLogWriter",
+        session_nonce: Optional[bytes],
+        nonce_field: str,
+        requires_signed: bool,
+        source: str,
+        pipeline_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """W11-verify a ``---`` KV metrics block (ARC-011 review C3).
+
+        The KV auto-detect and marker-file paths parse with
+        ``parse_prepare_output``, which has no nonce argument — review C3
+        found this let any bash output containing a ``---`` block be
+        recorded as an iteration even for skills with
+        ``require_signed_metrics=true``. This runs the same four-state
+        ``_verify_nonce`` check the marker path uses. A rejected block is
+        audited as ``metrics.forged`` (previously KV-format forgeries were
+        silently dropped with no audit) and returns ``None`` so the
+        iteration is not recorded. Non-enforcing skills pass through
+        unchanged (byte-identical legacy behavior).
+        """
+        if not requires_signed:
+            return result
+
+        from src.core.output_parser import _verify_nonce
+
+        verified = _verify_nonce(
+            result,
+            session_nonce=session_nonce,
+            nonce_field=nonce_field,
+            require_signed_metrics=True,
+        )
+        if verified is not None:
+            return verified
+
+        logger.warning(
+            "Research %s turn %d: rejected forged %s metrics block "
+            "(nonce missing or mismatch) — not recorded",
+            research_id, turn, source,
+        )
+        try:
+            await agent_log.append(
+                "system",
+                "A `---` metrics block was rejected: the anti-forgery nonce "
+                "was missing or did not match. Metrics may only be emitted by "
+                "the sanctioned eval script, which receives the nonce via the "
+                "AUTORESEARCH_SESSION_NONCE environment variable.",
+                turn=turn,
+            )
+        except Exception:
+            logger.debug(
+                "agent log append failed for %s", research_id, exc_info=True,
+            )
+        try:
+            await self._store.record_audit_event(
+                actor_id="autoresearch-agent",
+                action="metrics.forged",
+                research_id=research_id,
+                pipeline_id=pipeline_id,
+                request_metadata={
+                    "turn": turn,
+                    "format": "delimited_kv",
+                    "source": source,
+                },
+                outcome="failure",
+                error_message=(
+                    "KV metrics block rejected: nonce missing or "
+                    "mismatch (forged)"
+                ),
+            )
+        except Exception as exc:
+            logger.warning(
+                "Research %s: failed to record metrics_forged audit "
+                "event: %s", research_id, exc,
+            )
+        return None
 
     def _load_skill(self, model_type: str) -> str:
         skill_map = {
@@ -1406,6 +1572,28 @@ class AgentOrchestrator:
             f"{phase_contract_block}"
         )
 
+    def _skill_phase_plan(
+        self, config: ResearchConfig,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """ARC-011 review C2-1: the session's skill-runtime phase plan.
+
+        Returns ``None`` for transitional sessions (empty ``skill_id`` — the
+        legacy hardcoded per-model table applies) and on any registry/runtime
+        failure (fail-open to the incumbent plan; a broken manifest must not
+        blank the phase contract).
+        """
+        if not getattr(config, "skill_id", ""):
+            return None
+        try:
+            rt = materialize_skill_runtime(self, config)
+            return rt.phase_plan() or None
+        except Exception:  # pragma: no cover — fail-open guard
+            logger.debug(
+                "skill phase plan unavailable for %s; using legacy table",
+                config.id, exc_info=True,
+            )
+            return None
+
     def _build_phase_contract_block(self, config: ResearchConfig) -> str:
         """F5: render the canonical phase plan for the active model_type as a
         prompt section. The block tells the LLM:
@@ -1419,7 +1607,12 @@ class AgentOrchestrator:
         terminate after a few thousand `tabular_sweeps` iterations declaring
         the task done.
         """
-        phases = phases_for_model(config.domain)
+        # ARC-011 review C2-1: prefer the skill runtime's plan (manifest-
+        # driven sessions) over the hardcoded per-model table; identical for
+        # the ML skills today (X-002 parity), divergent for new skills.
+        phases = self._skill_phase_plan(config)
+        if not phases:
+            phases = phases_for_model(config.domain)
         if not phases:
             return ""
         lines = [
@@ -2586,6 +2779,7 @@ class AgentOrchestrator:
         research_id: str,
         model_type: Optional[str],
         phase_state: Optional[Dict[str, Any]],
+        actionable_blockers: Optional[Iterable[str]] = None,
     ) -> List[Dict[str, Any]]:
         """Evaluate the current best candidate against the development gate
         bundle (pure, no HTTP) and return the agent-actionable model-quality
@@ -2608,10 +2802,18 @@ class AgentOrchestrator:
             evaluation = evaluate_development_gate_bundle(
                 bundle=bundle, model_type=str(model_type), best_iteration=best,
             )
+            # ARC-011 review C2-4: skill-provided actionable set (manifest
+            # ``blocker_classification.actionable_blockers``) overrides the
+            # module-level default when supplied; None keeps the default.
+            allowed_actionable = (
+                set(actionable_blockers)
+                if actionable_blockers is not None
+                else _AGENT_ACTIONABLE_BLOCKERS
+            )
             actionable = [
                 code
                 for code in evaluation.get("blockers", [])
-                if code in _AGENT_ACTIONABLE_BLOCKERS
+                if code in allowed_actionable
             ]
             if not actionable:
                 return []
@@ -2681,10 +2883,27 @@ class AgentOrchestrator:
                         config.id, exc,
                     )
                     prior_session_summary = []
+            # ARC-011 review C2-4: skill-declared actionable blockers
+            # (manifest ``blocker_classification``) override the module-level
+            # defaults so a generative skill's readiness advisory does not
+            # demand ML-only evidence keys.
+            skill_runtime = getattr(self, "_session_skills", {}).get(config.id)
+            actionable_blockers: Optional[Iterable[str]] = None
+            if skill_runtime is not None:
+                try:
+                    bc = skill_runtime.blocker_classification()
+                    if bc.get("actionable_blockers"):
+                        actionable_blockers = bc["actionable_blockers"]
+                except Exception as exc:  # pragma: no cover — fail-open
+                    logger.warning(
+                        "Research %s: blocker_classification() unavailable — "
+                        "using default actionable blockers: %s", config.id, exc,
+                    )
             promotion_readiness = await self._promotion_readiness_advisory(
                 research_id=config.id,
                 model_type=config.domain,
                 phase_state=phase_state,
+                actionable_blockers=actionable_blockers,
             )
             return build_iteration_context_digest(
                 session=session,
@@ -2735,18 +2954,59 @@ class AgentOrchestrator:
         # grep count does not drop yet — AC #2). Phase 2 replaces them with
         # manifest-driven runtimes.
         skill: SkillRuntime = materialize_skill_runtime(self, config)
+        # ARC-011 review C2-3: per-skill governed-command extension. The
+        # manifest's ``command_policy`` section (allowed_scripts /
+        # allowed_executables / copyable_files / readable_files) merges into
+        # the default policy sets inside ``evaluate_command_policy``; the
+        # transitional runtimes return {} (parity with the hardcoded sets).
+        skill_policy_extension = skill.command_policy_extension()
+        # ARC-011 review C2-1/C2-4: keep the runtime reachable by research_id
+        # for the out-of-loop helpers (_refresh_phase_state derives the phase
+        # plan from it; the readiness advisory derives actionable blockers;
+        # _try_auto_promote routes through the declared promotion target).
+        # Mirrors the _session_providers / _session_models pattern above
+        # (initialized in __init__, dropped in the run() finally).
+        self._session_skills[config.id] = skill
 
-        # ARC-011 P4-002: derive the per-session anti-forgery env + nonce bytes.
-        # config.session_nonce is a 64-char hex string (32 bytes) populated by
-        # the session_manager from the built session manifest. extra_env reaches
-        # the sanctioned eval subprocess via GovernedCommandRunner.run (P4-002
-        # delivery); nonce_bytes is passed to skill.parse_iteration for W11
-        # verification (P4-003). Empty for legacy sessions → the parser's
-        # graceful-downgrade path returns metrics_unverified.
+        # ARC-011 P6-004: capture the session's current lock_epoch. This worker
+        # owns the session for the run's lifetime (the advisory lock pins it),
+        # so the captured value is the authoritative "as of dispatch" epoch.
+        # If a stop/timeout lands on another worker during a command, that
+        # transition bumps lock_epoch; the stale captured value no longer
+        # matches and the store's conditional writes (add_iteration /
+        # update_session with lock_epoch=) return 0 rows → the result is
+        # discarded (the H4 stale-writer fix). SQLiteStateStore.get_session
+        # returns no lock_epoch (column absent) → the field stays None and the
+        # writes are unconditional (single-worker, no stale writers possible).
+        try:
+            _run_session = await self._store.get_session(research_id)
+            self._session_epochs[research_id] = int(
+                (_run_session or {}).get("lock_epoch") or 0
+            )
+        except Exception:  # noqa: BLE001 — capture must never block the run
+            logger.debug("lock_epoch capture failed for %s", research_id, exc_info=True)
+
+        # ARC-011 P4-002 / review C3: derive the per-session anti-forgery
+        # nonce material. config.session_nonce is a 64-char hex string (32
+        # bytes) generated out-of-band by the session_manager (never inside
+        # the agent-readable manifest artifact — review C3). nonce_bytes is
+        # passed to skill.parse_iteration (P4-003) and to the KV-block
+        # verification path (review C3). The *env* delivery is built only
+        # when the skill actually enforces signed metrics: injecting
+        # AUTORESEARCH_SESSION_NONCE into every governed subprocess of every
+        # session leaked the secret to any sanctioned command, and nothing
+        # consumes it for non-enforcing skills (all ML skills today).
+        skill_requires_signed = bool(
+            getattr(skill, "requires_signed_metrics", False),
+        )
+        skill_nonce_field = str(
+            getattr(skill, "nonce_field", None) or "server_nonce",
+        )
         nonce_extra_env: Optional[Mapping[str, str]] = None
         nonce_bytes: Optional[bytes] = None
         if config.session_nonce:
-            nonce_extra_env = {"AUTORESEARCH_SESSION_NONCE": config.session_nonce}
+            if skill_requires_signed:
+                nonce_extra_env = {"AUTORESEARCH_SESSION_NONCE": config.session_nonce}
             try:
                 nonce_bytes = bytes.fromhex(config.session_nonce)
             except ValueError:
@@ -2787,7 +3047,19 @@ class AgentOrchestrator:
         # the transitional runtimes retire, system_prompt() reads the package
         # SKILL.md directly. The grep guard (P2-025) only checks
         # config.(model_type|instrument|timeframe), not _load_skill.
-        skill_content = await self._load_skill_async(config.domain)
+        # ARC-011 review C2-2: manifest-driven sessions source the domain
+        # primer from the packaged ``skills/<skill_id>/SKILL.md`` (the very
+        # package the manifest was loaded from); transitional sessions keep
+        # the legacy workspace ``.github/skills`` primer (P2-021 retires it
+        # later). The packaged read is sync file IO → keep it off the event
+        # loop like the legacy helpers.
+        if config.skill_id:
+            primer = getattr(skill, "primer_filename", None) or "SKILL.md"
+            skill_content = await asyncio.to_thread(
+                _load_packaged_skill_md, config.skill_id, primer,
+            )
+        else:
+            skill_content = await self._load_skill_async(config.domain)
         claude_md = await self._load_claude_md_async()
         system_prompt = f"{claude_md}\n\n---\n\n{skill_content}"
 
@@ -3164,6 +3436,14 @@ class AgentOrchestrator:
                                     turn=turn,
                                     runtime_command_id=runtime_command_id,
                                 )
+                            # ARC-011 review C3: the nonce env is narrowed
+                            # per command — only the skill's own declared
+                            # scripts (its eval) receive the secret.
+                            _bash_cmd = (
+                                block.input.get("command")
+                                if isinstance(block.input, dict)
+                                else None
+                            )
                             tool_execution = await asyncio.to_thread(
                                 _execute_tool,
                                 block.name,
@@ -3174,7 +3454,11 @@ class AgentOrchestrator:
                                 command_deadline_mono=_command_deadline_mono,
                                 proc_registry=self._command_procs,
                                 research_id=research_id,
-                                extra_env=nonce_extra_env,
+                                extra_env=_nonce_env_for_command(
+                                    nonce_extra_env, _bash_cmd,
+                                    skill_policy_extension,
+                                ),
+                                policy_extension=skill_policy_extension,
                             )
                         tool_result = tool_execution.content
                         tool_meta = tool_execution.meta
@@ -3360,12 +3644,36 @@ class AgentOrchestrator:
                             and "---" in tool_result
                         ):
                             metrics = parse_prepare_output(tool_result)
-                            if (
-                                metrics.primary_metric is not None
-                                and metrics.status in ("completed", "success")
-                            ):
+                            # ARC-011 review C3: this auto-detect path
+                            # previously bypassed W11 verification entirely
+                            # (parse_prepare_output takes no nonce) — any
+                            # bash output containing a `---` block was
+                            # recorded as an iteration even for enforced
+                            # skills. Route the parsed block through the
+                            # four-state _verify_nonce check first.
+                            _kv_result = (
+                                metrics.to_dict()
+                                if (
+                                    metrics.primary_metric is not None
+                                    and metrics.status in ("completed", "success")
+                                )
+                                else None
+                            )
+                            if _kv_result is not None:
+                                _kv_result = await self._verify_kv_metrics(
+                                    research_id,
+                                    _kv_result,
+                                    turn=turn,
+                                    agent_log=agent_log,
+                                    session_nonce=nonce_bytes,
+                                    nonce_field=skill_nonce_field,
+                                    requires_signed=skill_requires_signed,
+                                    source="bash_output",
+                                    pipeline_id=config.pipeline_id,
+                                )
+                            if _kv_result is not None:
                                 iteration_count += 1
-                                marker_from_tool = metrics.to_dict()
+                                marker_from_tool = _kv_result
                                 self._attach_runtime_command_metadata(
                                     marker_from_tool, tool_meta,
                                 )
@@ -3524,13 +3832,35 @@ class AgentOrchestrator:
                             )
                             if marker_text:
                                 metrics = parse_prepare_output(marker_text)
-                                if (
-                                    _command_succeeded
-                                    and metrics.primary_metric is not None
-                                    and metrics.status in ("completed", "success")
-                                ):
+                                # ARC-011 review C3: same W11 verification
+                                # as the bash auto-detect path — the marker
+                                # file is written by the sanctioned script
+                                # and must carry the echoed nonce for
+                                # enforced skills.
+                                _file_result = (
+                                    metrics.to_dict()
+                                    if (
+                                        _command_succeeded
+                                        and metrics.primary_metric is not None
+                                        and metrics.status in ("completed", "success")
+                                    )
+                                    else None
+                                )
+                                if _file_result is not None:
+                                    _file_result = await self._verify_kv_metrics(
+                                        research_id,
+                                        _file_result,
+                                        turn=turn,
+                                        agent_log=agent_log,
+                                        session_nonce=nonce_bytes,
+                                        nonce_field=skill_nonce_field,
+                                        requires_signed=skill_requires_signed,
+                                        source="marker_file",
+                                        pipeline_id=config.pipeline_id,
+                                    )
+                                if _file_result is not None:
                                     iteration_count += 1
-                                    marker_from_file = metrics.to_dict()
+                                    marker_from_file = _file_result
                                     self._attach_runtime_command_metadata(
                                         marker_from_file, tool_meta,
                                     )
@@ -4216,6 +4546,10 @@ class AgentOrchestrator:
             self._stop_flags.pop(research_id, None)
             self._pause_flags.pop(research_id, None)
             self._blocker_attempt_counters.pop(research_id, None)
+            # ARC-011 review C2: drop the session's skill-runtime binding so a
+            # long-lived orchestrator doesn't accumulate one entry per session
+            # (registration happens in run(); see _session_skills[config.id]).
+            self._session_skills.pop(research_id, None)
 
     # ── ML-53 Fix 2.4 helper ─────────────────────────────────────────────
     async def _try_auto_promote(
@@ -4258,7 +4592,56 @@ class AgentOrchestrator:
             # Import here to avoid circular dependency at module level
             from src.core.config_promoter import ConfigPromoter
 
-            promoter = ConfigPromoter(self._store)
+            # ARC-011 review C2-5: route promotion through the session skill's
+            # declared target (manifest ``promotion_target``) instead of the
+            # implicit FilePathPromotionTarget default. Two failure modes:
+            # * ``SkillConfigError`` — the skill *declares* a target kind the
+            #   development-promotion machinery does not implement (e.g.
+            #   ``registry_api``). Fabricating a file promotion for a skill
+            #   with no config file to promote would be wrong, so the
+            #   promotion is skipped (audited like every other skip). The
+            #   session completes normally.
+            # * any other error — an infrastructure hiccup building the
+            #   target; fall back to the default file target (the incumbent
+            #   behavior) with a warning, keeping ML sessions alive.
+            try:
+                skill_runtime = getattr(self, "_session_skills", {}).get(
+                    research_id,
+                )
+                promotion_target = (
+                    skill_runtime.promotion_target()
+                    if skill_runtime is not None
+                    else None
+                )
+            except SkillConfigError as exc:
+                logger.warning(
+                    "Research %s: auto-promotion skipped — %s",
+                    research_id, exc,
+                )
+                await self._emit_auto_promotion_skipped(
+                    research_id=research_id,
+                    config=config,
+                    agent_log=agent_log,
+                    reason="unsupported_promotion_target",
+                    iteration=best_iter,
+                    terminal_reason=session.get("terminal_reason"),
+                    incomplete_phases=[],
+                    promotion_allowed=False,
+                    blockers=[],
+                    collection_errors={"promotion_target": str(exc)},
+                )
+                return
+            except Exception as exc:
+                logger.warning(
+                    "Research %s: skill promotion_target() failed (%s) — "
+                    "falling back to the default file promotion target",
+                    research_id, exc,
+                )
+                promotion_target = None
+            if promotion_target is not None:
+                promoter = ConfigPromoter(self._store, target=promotion_target)
+            else:
+                promoter = ConfigPromoter(self._store)
             phase_state = await self._auto_promotion_phase_state(
                 research_id=research_id,
                 session=session,
@@ -4641,36 +5024,16 @@ class AgentOrchestrator:
         if active_phase and not marker.get("search_phase"):
             marker["search_phase"] = active_phase
 
-        # ARC-011 P6-004 / H4 — stale-worker fence. If the session was
-        # deauthorized while this command ran (a stop/timeout/fail transition
-        # landed on another worker, bumping lock_epoch and moving status out of
-        # the active family), discard the iteration rather than recording a
-        # zombie result against a session the operator deliberately stopped.
-        # The iteration's training already happened (sunk cost); this guard
-        # prevents it from advancing best_iteration / effective_iteration_count
-        # / auto-promotion. SQLiteStateStore is single-worker so this never
-        # fires there in practice, but the check is uniform and cheap.
-        _session_status = str((session or {}).get("status") or "").lower()
-        if _session_status and _session_status not in {
-            "running", "paused", "completing",
-        }:
-            logger.warning(
-                "Research %s: discarding stale iteration %s — session status "
-                "is %s (deauthorized while command ran).",
-                research_id, iteration, _session_status,
-            )
-            await self._store.record_audit_event(
-                actor_id="system:orchestrator",
-                action="result.discarded.stale_worker",
-                outcome="info",
-                research_id=research_id,
-                request_metadata={
-                    "iteration": iteration,
-                    "session_status": _session_status,
-                    "primary_metric": primary_metric,
-                },
-            )
-            return
+        # ARC-011 P6-004 / H4 — fencing token. The captured lock_epoch (this
+        # worker's "as of dispatch" view) is threaded to the state-advancing
+        # writes below. If a stop/timeout landed on another worker during the
+        # command, that transition bumped lock_epoch; the captured value no
+        # longer matches and the store's conditional WHERE returns 0 rows →
+        # the write is rejected and the iteration is discarded (see the
+        # effective-iteration-count write below). SQLiteStateStore has no
+        # lock_epoch column → get_session returns None for it → the epoch is
+        # None → writes are unconditional (single-worker: no stale writers).
+        _fence_epoch = self._session_epochs.get(research_id)
 
         # AR-3: For promotion-family phases the agent does not run a fresh
         # training command and legitimately emits no config_snapshot.  Inherit
@@ -4876,6 +5239,7 @@ class AgentOrchestrator:
             consistency_report_json=consistency_report_json(consistency_report),
             search_phase=active_phase,
             metric_improvement_epsilon=settings.global_stagnation_epsilon,
+            lock_epoch=_fence_epoch,
         )
 
         try:
@@ -4883,10 +5247,35 @@ class AgentOrchestrator:
             effective_count = sum(
                 1 for row in rows_after_record if not _is_rejected_duplicate(row)
             )
-            await self._store.update_session(
+            # ARC-011 P6-004: the effective-iteration-count write is the
+            # state-advancing write that must be fenced. PostgresStateStore
+            # returns None on a 0-row conditional update (stale epoch); that
+            # means the session was deauthorized while the command ran → the
+            # iteration row is still an immutable record of what ran, but it
+            # must NOT advance the session's counter / trigger auto-promotion.
+            updated = await self._store.update_session(
                 research_id,
                 effective_iteration_count=effective_count,
+                lock_epoch=_fence_epoch,
             )
+            if _fence_epoch is not None and updated is None:
+                logger.warning(
+                    "Research %s: discarding stale iteration %s result — "
+                    "lock_epoch fence rejected the write (captured=%s).",
+                    research_id, iteration, _fence_epoch,
+                )
+                await self._store.record_audit_event(
+                    actor_id="system:orchestrator",
+                    action="result.discarded.stale_worker",
+                    outcome="info",
+                    research_id=research_id,
+                    request_metadata={
+                        "iteration": iteration,
+                        "captured_lock_epoch": _fence_epoch,
+                        "primary_metric": primary_metric,
+                    },
+                )
+                return
         except Exception:  # pragma: no cover - counter refresh must not block recording
             logger.debug(
                 "Effective iteration counter refresh failed for %s",
@@ -5121,15 +5510,37 @@ class AgentOrchestrator:
         research_id: str,
         *,
         iterations_remaining: Optional[int] = None,
+        phases: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         """DM-14: when ``iterations_remaining`` is supplied, ``build_phase_state``
         can gate the active phase's ``next_action`` suffix on budget
         headroom. ``None`` (the default) skips the suffix gate — the
         per-phase ``headroom_hint`` field still appears on every phase
-        entry regardless."""
+        entry regardless.
+
+        ARC-011 review C2-1: ``phases`` lets the caller source the plan from
+        the session's skill runtime (manifest-driven) instead of the
+        hardcoded per-model table inside ``build_phase_state``; ``None``
+        keeps the legacy derivation.
+        """
         session = await self._store.get_session(research_id)
         if not session:
             return
+        # ARC-011 review C2-1: source the phase plan from the session's skill
+        # runtime (manifest-driven) when the caller didn't pass one. The
+        # hardcoded per-model table inside ``build_phase_state`` remains only
+        # as the transitional fallback (legacy sessions with no skill bound).
+        if phases is None:
+            skill_runtime = getattr(self, "_session_skills", {}).get(research_id)
+            if skill_runtime is not None:
+                try:
+                    phases = skill_runtime.phase_plan()
+                except Exception as exc:
+                    logger.warning(
+                        "Research %s: skill phase_plan() failed — falling "
+                        "back to the per-model phase table: %s",
+                        research_id, exc,
+                    )
         iterations = await self._store.get_iterations(research_id)
         hpo_studies = await self._store.get_hpo_studies(research_id)
         promotions = await self._store.list_promotions()
@@ -5142,6 +5553,7 @@ class AgentOrchestrator:
                 if row.get("research_id") == research_id
             ],
             iterations_remaining=iterations_remaining,
+            phases=phases,
         )
         await self._store.update_session(
             research_id,
@@ -5384,6 +5796,26 @@ class AgentOrchestrator:
         """
         if not current_phase:
             return False
+        # ARC-011 review C2-4: a manifest ``blocker_classification`` may
+        # declare per-phase evidence keys; those override the module-level
+        # ``_PHASE_SPECIFIC_AGENT_KEYS`` table when provided (same
+        # skill-value-wins rule as the actionable-blockers override).
+        phase_specific_table: Dict[str, frozenset[str]] = _PHASE_SPECIFIC_AGENT_KEYS
+        skill_runtime = getattr(self, "_session_skills", {}).get(research_id)
+        if skill_runtime is not None:
+            try:
+                bc = skill_runtime.blocker_classification()
+                declared = bc.get("phase_evidence_keys") or {}
+                if declared:
+                    phase_specific_table = {
+                        phase: frozenset(keys)
+                        for phase, keys in declared.items()
+                    }
+            except Exception as exc:  # pragma: no cover — fail-open
+                logger.warning(
+                    "Research %s: blocker_classification() unavailable — "
+                    "using default phase evidence keys: %s", research_id, exc,
+                )
         try:
             iterations = await self._store.get_iterations(research_id)
         except Exception:
@@ -5416,7 +5848,7 @@ class AgentOrchestrator:
             # Even with auto_phase_evidence=True, an agent-explicit phase key
             # (e.g. tsfm_adapter, calibration_full_validation) confirms real
             # work was attempted.
-            phase_specific_keys = _PHASE_SPECIFIC_AGENT_KEYS.get(
+            phase_specific_keys = phase_specific_table.get(
                 current_phase, set(),
             )
             if any(metrics.get(k) for k in phase_specific_keys):

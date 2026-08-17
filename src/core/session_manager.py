@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import secrets
 import shutil
 import uuid
 from dataclasses import dataclass
@@ -243,6 +244,14 @@ class SessionManager:
         hpo_trials: Optional[int] = None,
         hpo_timesteps: Optional[int] = None,
         manifest: Optional[Dict[str, Any]] = None,
+        # ARC-011 implementation review C1 (2026-08-15): canonical start
+        # shape, forwarded by the API after P3-013 validation. Legacy
+        # callers omit these and keep the exact previous behavior
+        # (skill_id="" → transitional runtime, flat-field HPO knobs).
+        skill_id: Optional[str] = None,
+        skill_params: Optional[Dict[str, Any]] = None,
+        subject_id: Optional[str] = None,
+        variant: Optional[str] = None,
     ) -> Dict:
         """Start a new research session. Returns the created session dict."""
         if self.active_count >= settings.max_concurrent_sessions:
@@ -269,6 +278,27 @@ class SessionManager:
             f"{settings.runs_dir}/{instrument}_{timeframe}/{model_type}"
         )
 
+        # ARC-011 implementation review C1 (2026-08-15): canonical
+        # skill_params are no longer validated-then-dropped. Recognized flat
+        # ML knobs inside skill_params win over the legacy keyword arguments
+        # — the same "canonical wins" rule _translate_canonical_request
+        # applies to skill_id/subject_id/variant. Presence-based (not
+        # truthiness-based) so an explicit false / small canonical value
+        # overrides a truthy legacy one.
+        params = dict(skill_params or {})
+        if params.get("enable_hpo") is not None:
+            enable_hpo = bool(params["enable_hpo"])
+        if params.get("hpo_trials") is not None:
+            hpo_trials = int(params["hpo_trials"])
+        if params.get("hpo_timesteps") is not None:
+            hpo_timesteps = int(params["hpo_timesteps"])
+        if params.get("trading_mode") is not None:
+            trading_mode = params["trading_mode"]
+        if params.get("agent_strategy") is not None:
+            agent_strategy = params["agent_strategy"]
+        if params.get("initial_balance") is not None:
+            initial_balance = params["initial_balance"]
+
         config = ResearchConfig(
             id=research_id,
             instrument=instrument,
@@ -287,6 +317,16 @@ class SessionManager:
             enable_hpo=enable_hpo or False,
             hpo_trials=hpo_trials or 20,
             hpo_timesteps=hpo_timesteps or 50000,
+            # ARC-011 review C1: canonical fields are authoritative when
+            # supplied — skill_id routes materialize_skill_runtime to the
+            # manifest-driven runtime; subject_id/variant are pure aliases
+            # that __post_init__ derives from instrument/timeframe when
+            # empty. The full params dict is kept so manifest-driven
+            # runtimes read every knob from one surface.
+            skill_id=skill_id or "",
+            skill_params=params,
+            subject_id=subject_id or "",
+            variant=variant or "",
         )
 
         preflight = await self._run_preflight(config.model_type)
@@ -496,13 +536,21 @@ class SessionManager:
             hpo_timesteps=config.hpo_timesteps,
             overrides=overrides,
         )
-        # ARC-011 P4-002: surface the per-session anti-forgery nonce so the
-        # caller can populate config.session_nonce before the orchestrator runs
-        # (the nonce is generated inside build_research_manifest).
+        # ARC-011 P4-002, revised by review C3 (2026-08-15): the per-session
+        # anti-forgery nonce is generated HERE, out-of-band, and returned to
+        # the caller (who populates config.session_nonce). It is deliberately
+        # never placed inside the manifest: the manifest artifact is written
+        # into the agent-readable session workspace, and the W11 adversary is
+        # the agent itself — embedding the nonce there (or leaking it into
+        # every governed subprocess env) handed the adversary the secret.
+        # The nonce lives only in process memory for the run's lifetime;
+        # nothing ever needs to read it back (continues/resumes generate a
+        # fresh nonce with their own manifest).
+        session_nonce = secrets.token_hex(32)
         return (
             manifest_pretty_json(manifest),
             manifest.manifest_hash or "",
-            manifest.session_nonce or "",
+            session_nonce,
         )
 
     def _build_hpo_plan(self, config: ResearchConfig) -> Dict[str, Any]:

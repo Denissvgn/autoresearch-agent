@@ -140,15 +140,87 @@ def test_target_path_unknown_model_type_raises():
 
 
 def test_config_promoter_target_path_delegates_to_impl():
-    """``ConfigPromoter._get_target_path`` (the back-compat @staticmethod)
-    produces the same string as ``FilePathPromotionTarget().target_path`` — the
-    P1-017 delegation is behavior-identical."""
+    """``ConfigPromoter(store)._get_target_path`` (default target) produces
+    the same string as ``FilePathPromotionTarget().target_path`` — the
+    P1-017 delegation is behavior-identical. ARC-011 review C2-5: the helper
+    is now an instance method dispatching through ``self._target`` (the
+    historical @staticmethod bypassed the injected target)."""
     args = dict(model_type="direction", instrument="DOGE_USDT", timeframe="15m")
-    via_static = ConfigPromoter._get_target_path(  # type: ignore[misc]
+    via_promoter = ConfigPromoter(_FakeStore())._get_target_path(  # type: ignore[arg-type]
         args["model_type"], args["instrument"], args["timeframe"],
     )
     via_impl = FilePathPromotionTarget().target_path(**args)
-    assert via_static == via_impl
+    assert via_promoter == via_impl
+
+
+class _FakeStore:
+    pass
+
+
+class _RecordingTarget:
+    """Records every dispatch; returns fixed values (ARC-011 review C2-5).
+
+    Proves the injected target is actually dispatched through, not just
+    stored — the guarantee the P1-017 CHANGELOG entry claimed but no test
+    previously pinned (finding H6 in the 2026-08-15 review).
+    """
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+        self.writes: list[tuple[str, str]] = []
+
+    def target_path(self, **kwargs: object) -> str:
+        self.calls.append("target_path")
+        return "/recorded/target.yaml"
+
+    def metadata_sidecar_path(self, target_path: str, iteration: int, **kw: object) -> str:
+        self.calls.append("metadata_sidecar_path")
+        return "/recorded/sidecar.json"
+
+    def rollback_snapshot_path(self, **kwargs: object) -> str:
+        self.calls.append("rollback_snapshot_path")
+        return "/recorded/rollback.yaml"
+
+    def rollback_metadata_sidecar_path(self, target_path: str, promotion_id: int) -> str:
+        self.calls.append("rollback_metadata_sidecar_path")
+        return "/recorded/rollback.json"
+
+    def extract_strategy_market(self, yaml_str: str) -> tuple:
+        self.calls.append("extract_strategy_market")
+        return ("BALA", "stock")
+
+    async def write(self, path: str, content: str) -> None:
+        self.calls.append("write")
+        self.writes.append((path, content))
+
+
+def test_config_promoter_dispatches_through_injected_target():
+    """H6/C2-5: every historical helper routes through the injected
+    ``PromotionTarget``. Before the C2 fix these helpers constructed a fresh
+    ``FilePathPromotionTarget()`` inline, so the injection was dead."""
+    import asyncio
+
+    target = _RecordingTarget()
+    promoter = ConfigPromoter(_FakeStore(), target=target)  # type: ignore[arg-type]
+
+    assert promoter._get_target_path("direction", "X", "15m") == "/recorded/target.yaml"
+    assert promoter._metadata_sidecar_path("/any.yaml", 3) == "/recorded/sidecar.json"
+    assert promoter._rollback_snapshot_path(
+        target_path="/any.yaml", research_id="res_x", iteration=3,
+    ) == "/recorded/rollback.yaml"
+    assert promoter._rollback_metadata_sidecar_path("/any.yaml", 9) == "/recorded/rollback.json"
+    assert promoter._extract_strategy_market("agent_strategy: X") == ("BALA", "stock")
+    asyncio.run(promoter._write_text_file("/any.yaml", "content"))
+
+    assert target.calls == [
+        "target_path",
+        "metadata_sidecar_path",
+        "rollback_snapshot_path",
+        "rollback_metadata_sidecar_path",
+        "extract_strategy_market",
+        "write",
+    ]
+    assert target.writes == [("/any.yaml", "content")]
 
 
 def test_config_promoter_accepts_injected_target():

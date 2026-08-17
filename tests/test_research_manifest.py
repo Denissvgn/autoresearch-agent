@@ -63,24 +63,44 @@ def test_build_research_manifest_has_required_runtime_sections():
 
 
 def test_build_research_manifest_emits_per_session_nonce():
-    """ARC-011 P4-002: every built manifest carries a fresh per-session
-    anti-forgery nonce (32 bytes, hex-encoded → 64 chars). It is unique per
-    build (not a constant) so two sessions cannot share a nonce."""
+    """ARC-011 P4-002, revised by review C3 (2026-08-15): the per-session
+    anti-forgery nonce is generated OUT-OF-BAND by the SessionManager and
+    never enters the manifest artifact — the artifact is written into the
+    agent-readable session workspace, and the W11 adversary is the agent
+    itself. The schema keeps the ``session_nonce`` slot (always null in new
+    artifacts) so the v2 shape is unchanged; legacy manifests embedding a
+    value still load."""
     manifest = _build_manifest()
-    assert manifest.session_nonce is not None
-    assert len(manifest.session_nonce) == 64, (
-        "session_nonce must be 32 bytes hex-encoded (64 chars)"
+    assert manifest.session_nonce is None, (
+        "the nonce must NOT be embedded in the manifest artifact (C3) — "
+        "it is generated out-of-band by SessionManager._build_manifest_payload"
     )
-    # Valid hex.
-    bytes.fromhex(manifest.session_nonce)
-    # Uniqueness across builds.
-    other = _build_manifest()
-    assert other.session_nonce != manifest.session_nonce, (
-        "session_nonce must be freshly generated per build (replay defense)"
-    )
-    # Serialized into the artifact.
     payload = json.loads(manifest_pretty_json(manifest))
-    assert payload["session_nonce"] == manifest.session_nonce
+    assert payload["session_nonce"] is None
+
+
+def test_session_manager_nonce_is_out_of_band_and_fresh():
+    """C3: ``SessionManager._build_manifest_payload`` returns a fresh 64-hex
+    nonce alongside the (nonce-free) manifest, so the orchestrator still
+    receives per-session nonce material without it ever touching the
+    agent-readable artifact."""
+    from src.core.orchestrator import ResearchConfig
+    from src.core.session_manager import SessionManager
+
+    mgr = SessionManager.__new__(SessionManager)
+    config = ResearchConfig(
+        id="res_c3", instrument="DOGE_USDT", timeframe="15m",
+        model_type="direction", workspace_path="/tmp/c3",
+    )
+    # _build_manifest_payload is a sync helper: it only reads the config and
+    # calls the manifest builder — no store or orchestrator interaction.
+    _, _, nonce_a = mgr._build_manifest_payload(config)  # noqa: SLF001
+    _, _, nonce_b = mgr._build_manifest_payload(config)  # noqa: SLF001
+
+    for nonce in (nonce_a, nonce_b):
+        assert isinstance(nonce, str) and len(nonce) == 64
+        bytes.fromhex(nonce)  # valid hex — 32 bytes
+    assert nonce_a != nonce_b, "nonce must be freshly generated per session"
 
 
 def test_manifest_identity_overrides_must_match_request():

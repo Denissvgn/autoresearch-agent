@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS research_sessions (
     -- v3: F9 structured terminal reason
     terminal_reason TEXT,
     -- v4: promotion waiver + effective-iteration counter
-    terminate_request_received INTEGER DEFAULT 0,
+    terminate_request_received SMALLINT DEFAULT 0,
     terminate_request_body TEXT,
     effective_iteration_count INTEGER DEFAULT 0,
     -- v6: P3-019 native canonical skill columns (NOT NULL DEFAULT '' matches SQLite)
@@ -291,10 +291,13 @@ CREATE INDEX IF NOT EXISTS idx_planned_trials_expected_command
     ON planned_trials(research_id, expected_command);
 CREATE INDEX IF NOT EXISTS idx_runtime_commands_research_status
     ON runtime_commands(research_id, status);
+-- Keyset indexes mirror the SQLite v5 declarations (DESC) so the
+-- ORDER BY started_at DESC, id DESC list queries are served by a forward
+-- index scan on both backends.
 CREATE INDEX IF NOT EXISTS idx_sessions_started_at_rowid
-    ON research_sessions(started_at, id);
+    ON research_sessions(started_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_pipelines_started_at_rowid
-    ON pipelines(started_at, id);
+    ON pipelines(started_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_iterations_research_iteration
     ON iterations(research_id, iteration);
 CREATE INDEX IF NOT EXISTS idx_iterations_trial_identity_hash
@@ -397,18 +400,24 @@ class PostgresStateStore:
     async def ping(self) -> bool:
         try:
             conn = await self._conn()
-            val = await conn.fetchval("SELECT 1")
-            return val == 1
+            try:
+                val = await conn.fetchval("SELECT 1")
+                return val == 1
+            finally:
+                await self._release_short_lived(conn)
         except asyncpg.PostgresError:
             logger.exception("PostgresStateStore ping failed")
             return False
 
     async def get_schema_version(self) -> int:
         conn = await self._conn()
-        version = await conn.fetchval(
-            "SELECT version FROM pg_schema_version WHERE id = 1"
-        )
-        return int(version) if version is not None else 0
+        try:
+            version = await conn.fetchval(
+                "SELECT version FROM pg_schema_version WHERE id = 1"
+            )
+            return int(version) if version is not None else 0
+        finally:
+            await self._release_short_lived(conn)
 
     # ------------------------------------------------------------------
     # Connection resolution + session_lock (D-connection-sharing)
@@ -476,10 +485,15 @@ class PostgresStateStore:
         Called by ``SessionStateMachine._apply`` after a committed transition,
         inside the held ``session_lock`` (so the bump itself is serialized).
         Any command dispatched before the transition is thereby deauthorized —
-        its captured epoch no longer matches, so the conditional result writes
-        (``add_iteration`` / ``update_session`` / ``finish_runtime_command`` /
-        ``update_planned_trial_status`` with ``lock_epoch=``) return 0 rows and
-        the orchestrator discards the stale result (the H4 fix).
+        its captured epoch no longer matches, so the conditional state-advancing
+        writes (``add_iteration`` / ``update_session`` with ``lock_epoch=``)
+        return 0 rows and the orchestrator discards the stale result (the H4 fix).
+
+        ``finish_runtime_command`` is intentionally NOT fenced: it writes only
+        to the ``runtime_commands`` observability table (keyed by command_id,
+        no lock_epoch column, drives no session state). ``update_planned_trial_status``
+        accepts ``lock_epoch`` for completeness but is not on the orchestrator's
+        hot post-command path today.
         """
         conn = await self._conn()
         try:
@@ -1827,9 +1841,12 @@ class PostgresStateStore:
         exclude_research_id: Optional[str] = None,
         limit: int = 500,
     ) -> List[Dict[str, Any]]:
-        # Postgres translation of the SQLite GROUP_CONCAT/json_extract query:
+        # Postgres translation of the SQLite GROUP_CONCAT/json_extract query.
         # STRING_AGG(DISTINCT ...) replaces GROUP_CONCAT; metrics_json::jsonb->>
-        # replaces json_extract. NULLIF(..., '') keeps the "ignore empty" rule.
+        # replaces json_extract. No NULLIF wrapper: SQLite's GROUP_CONCAT keeps
+        # empty-string values (emitting a leading separator), so Postgres must
+        # too for parity. NULLs are skipped by both aggregates, so NULL handling
+        # stays aligned.
         conn = await self._conn()
         try:
             rows = await conn.fetch(
@@ -1839,15 +1856,15 @@ class PostgresStateStore:
                   MAX(i.primary_metric) AS best_metric,
                   MIN(i.research_id) AS first_research_id,
                   COUNT(*) AS attempts,
-                  STRING_AGG(DISTINCT NULLIF(
-                    i.metrics_json::jsonb->>'adaptive_feature_noop_reason', ''
-                  ), ',') AS noop_reasons,
-                  STRING_AGG(DISTINCT NULLIF(
-                    i.metrics_json::jsonb->>'tsfm_adapter', ''
-                  ), ',') AS tsfm_adapters,
-                  STRING_AGG(DISTINCT NULLIF(
-                    i.metrics_json::jsonb->>'tsfm_fallback_validation', ''
-                  ), ',') AS tsfm_fallback_flags,
+                  STRING_AGG(DISTINCT
+                    i.metrics_json::jsonb->>'adaptive_feature_noop_reason', ','
+                  ) AS noop_reasons,
+                  STRING_AGG(DISTINCT
+                    i.metrics_json::jsonb->>'tsfm_adapter', ','
+                  ) AS tsfm_adapters,
+                  STRING_AGG(DISTINCT
+                    i.metrics_json::jsonb->>'tsfm_fallback_validation', ','
+                  ) AS tsfm_fallback_flags,
                   STRING_AGG(DISTINCT i.decision, ',') AS decisions,
                   COUNT(DISTINCT i.research_id) AS session_count,
                   MIN(i.config_snapshot) AS sample_config_snapshot

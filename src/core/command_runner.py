@@ -11,7 +11,7 @@ import threading
 import time
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Callable, Literal, Mapping
+from typing import Any, Callable, Literal, Mapping
 
 from src.core.command_policy import CommandDecision, evaluate_command_policy
 
@@ -192,9 +192,14 @@ class GovernedCommandRunner:
         *,
         workspace_root: str,
         session_workspace: str | None = None,
+        policy_extension: Mapping[str, Any] | None = None,
     ) -> None:
         self._workspace_root = workspace_root
         self._session_workspace = session_workspace
+        # ARC-011 review C2: per-skill command-policy extension (manifest
+        # ``command_policy:`` section). ``None`` (legacy sessions) keeps the
+        # hardcoded validator sets exactly as before.
+        self._policy_extension = policy_extension
 
     def run(
         self,
@@ -210,6 +215,7 @@ class GovernedCommandRunner:
             command,
             workspace_root=self._workspace_root,
             session_workspace=self._session_workspace,
+            policy_extension=self._policy_extension,
         )
         if not decision.allowed:
             reason = decision.reason or "Command is not allowed"

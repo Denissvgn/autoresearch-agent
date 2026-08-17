@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import secrets
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -57,11 +56,13 @@ class ResearchSessionManifest(BaseModel):
     hpo: Dict[str, Any] = Field(default_factory=dict)
     focus_hint: Optional[str] = None
     manifest_hash: Optional[str] = None
-    # ARC-011 P4-002: per-session anti-forgery nonce (W11). Generated at manifest
-    # write time, persisted in the manifest, and delivered to the sanctioned eval
-    # script via subprocess env (AUTORESEARCH_SESSION_NONCE). The parser
-    # validates the echoed nonce when the skill's ``require_signed_metrics`` is
-    # true (P4-003). Optional so legacy manifests without it still load.
+    # ARC-011 P4-002, revised by review C3 (2026-08-15): per-session
+    # anti-forgery nonce slot (W11). The nonce itself is generated
+    # out-of-band by ``SessionManager._build_manifest_payload`` and NEVER
+    # enters the artifact (the artifact is written into the agent-readable
+    # session workspace — see the C3 finding). New manifests carry ``null``
+    # here; the field is kept so the v2 schema shape is unchanged and legacy
+    # manifests that embedded a value still load.
     session_nonce: Optional[str] = None
     # ARC-011 P3-019 (manifest v2): the canonical dual-shape fields. They mirror
     # the API's dual-shape session responses (§7.7) so the persisted artifact is
@@ -271,11 +272,13 @@ def build_research_manifest(
             "timesteps": hpo_timesteps if enable_hpo else None,
         },
         "focus_hint": focus_hint,
-        # ARC-011 P4-002: per-session anti-forgery nonce (W11). 32 bytes,
-        # hex-encoded. Delivered to the eval script via subprocess env
-        # (AUTORESEARCH_SESSION_NONCE) and validated by the parser when the
-        # skill's require_signed_metrics is true (P4-003).
-        "session_nonce": secrets.token_hex(32),
+        # ARC-011 review C3 (2026-08-15): the per-session anti-forgery nonce
+        # is generated OUT-OF-BAND (SessionManager._build_manifest_payload)
+        # and deliberately NOT placed in the manifest. The manifest artifact
+        # is written into the agent-readable session workspace; embedding the
+        # nonce there handed the W11 adversary (the agent) the very secret the
+        # contract defends against. ``session_nonce`` stays in the schema
+        # (always null in new artifacts) so the v2 shape is unchanged.
     }
     payload = _deep_merge(defaults, overrides or {})
     if payload.get("research_id") != research_id:

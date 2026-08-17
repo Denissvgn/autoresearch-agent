@@ -51,6 +51,7 @@ alias preserves byte-identical behavior with zero construction churn.
 
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import re
@@ -440,7 +441,10 @@ def _verify_nonce(
         )
         return None
 
-    if str(echoed) != expected:
+    if not hmac.compare_digest(str(echoed).encode("utf-8"), expected.encode("utf-8")):
+        # ARC-011 review C3: constant-time compare — consistent with the
+        # fail-closed posture elsewhere (production-approval HMAC) even though
+        # a 256-bit hex nonce makes timing attacks impractical.
         logger.warning(
             "Iteration marker rejected: nonce mismatch (expected %s, got %s) — forged",
             expected[:8] + "...", str(echoed)[:8] + "...",

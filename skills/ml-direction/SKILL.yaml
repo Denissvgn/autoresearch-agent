@@ -173,11 +173,12 @@ phase_plan:
     next_action: "Prepare a development-scoped promotion proposal with ownership and rollback metadata."
     stagnation_exempt: true
 phase_advancement:
-  mode: plugin
-  plugin: phases.py
-  # phases.py exposes phase_completed(phase_id, iterations, evidence) -> bool and
-  # runs under the X-004 plugin trust boundary. The declarative fields above are
-  # the inputs; the plugin owns the hybrid completion rule.
+  # ARC-011 review C2 (2026-08-15): was ``mode: plugin`` / ``plugin: phases.py``
+  # but no phases.py ships in this package — the declaration was dead (the
+  # runtime never imported it). Advancement is resolved from the declarative
+  # evidence-key rules above (``ManifestSkillRuntime.phase_advancement_rule``);
+  # declared honestly now.
+  mode: declarative
 
 # ── 5/8 command_policy ────────────────────────────────────────────────────────
 # Reproduces command_policy.py:11-61 verbatim, narrowed to direction's scripts.
@@ -266,8 +267,9 @@ promotion_target:
 trial_identity:
   hash_fields: [skill_id, subject_id, variant, canonical_config_hash, quick_mode, data_split_id]
   resolve:
-    mode: plugin
-    plugin: resolve_identity.py
+    # ARC-011 review C2 (2026-08-15): plugin file never shipped; identity is
+    # resolved by the ``hash_fields`` hash (declarative), as the runtime does.
+    mode: declarative
 
 # ── Blocker classification (G3) ───────────────────────────────────────────────
 # Reproduces _AGENT_ACTIONABLE_BLOCKERS (orchestrator.py:176-196) and

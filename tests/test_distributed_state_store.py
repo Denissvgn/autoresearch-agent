@@ -34,6 +34,28 @@ pytestmark = pytest.mark.distributed
 _SERVICE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 
+async def _pool_only_store(dsn: str):
+    """Construct a PostgresStateStore with a pool but NO schema DDL.
+
+    The distributed tests spawn worker subprocesses that share a DB whose
+    schema the parent fixture already initialized. Concurrent
+    ``store.initialize()`` calls (which run ``CREATE TABLE IF NOT EXISTS``) can
+    race on the Postgres ``pg_type`` catalog, so workers must NOT re-run the
+    DDL — they create the pool only and rely on the parent's schema. Mirrors
+    the idempotency worker's pattern; all three workers use this helper for
+    consistency.
+    """
+    import asyncpg
+
+    from src.core.postgres_state_store import PostgresStateStore
+
+    store = PostgresStateStore(dsn)
+    store._pool = await asyncpg.create_pool(
+        dsn=dsn, min_size=1, max_size=2, command_timeout=30,
+    )
+    return store
+
+
 def _base_dsn() -> str | None:
     raw = os.getenv("AUTORESEARCH_DATABASE_URL") or os.getenv("DATABASE_URL")
     if not raw:
@@ -59,14 +81,9 @@ def _worker_attempt_idempotency(dsn: str, op: str, parent_id: str,
     # Settings env required for the orchestrator import chain.
     os.environ.setdefault("ANTHROPIC_BASE_URL", "http://anthropic.invalid")
     os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "test-token")
-    from src.core.postgres_state_store import PostgresStateStore
 
     async def run() -> dict[str, Any]:
-        store = PostgresStateStore(dsn)
-        # create_pool only — no schema DDL (parent initialized once).
-        store._pool = await __import__("asyncpg").create_pool(
-            dsn=dsn, min_size=1, max_size=2, command_timeout=30,
-        )
+        store = await _pool_only_store(dsn)
         try:
             result = await store.begin_idempotency_record(
                 operation=op, parent_id=parent_id, key_hash=key_hash,
@@ -85,13 +102,11 @@ def _worker_stop_session(dsn: str, sid: str, actor: str) -> dict[str, Any]:
     sys.path.insert(0, _SERVICE_ROOT)
     os.environ.setdefault("ANTHROPIC_BASE_URL", "http://anthropic.invalid")
     os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "test-token")
-    from src.core.postgres_state_store import PostgresStateStore
     from src.core.state_machine import SessionStateMachine
     from src.ws.events import EventBroadcaster
 
     async def run() -> dict[str, Any]:
-        store = PostgresStateStore(dsn)
-        await store.initialize()
+        store = await _pool_only_store(dsn)
         try:
             sm = SessionStateMachine(store, EventBroadcaster())
             result = await sm.transition(sid, "stop_requested", actor_id=actor)
@@ -107,11 +122,9 @@ def _worker_stale_write(dsn: str, sid: str, captured_epoch: int) -> dict[str, An
     sys.path.insert(0, _SERVICE_ROOT)
     os.environ.setdefault("ANTHROPIC_BASE_URL", "http://anthropic.invalid")
     os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "test-token")
-    from src.core.postgres_state_store import PostgresStateStore
 
     async def run() -> dict[str, Any]:
-        store = PostgresStateStore(dsn)
-        await store.initialize()
+        store = await _pool_only_store(dsn)
         try:
             result = await store.update_session(
                 sid, lock_epoch=captured_epoch, total_api_cost_usd=9.99,

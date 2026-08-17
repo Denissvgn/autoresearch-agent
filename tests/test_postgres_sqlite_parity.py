@@ -200,6 +200,54 @@ async def _run_full_sequence(store: Any, *, sid: str) -> Dict[str, Any]:
     updated = await store.get_session(f"{sid}_del")
     deleted = await store.delete_session(f"{sid}_del")
 
+    # ARC-011 P6 review Fix 4: exercise the highest-risk previously-uncovered
+    # methods so the parity sweep gates them too.
+
+    # update_planned_trial_status (the fencing-gated write).
+    planned_updated = await store.update_planned_trial_status(
+        research_id=sid, trial_id="t1", status="completed",
+        result_path="/tmp/r.json", mlflow_run_id="mlflow_1",
+    )
+    # A second session with a duplicate trial_identity_hash + a canonical_config
+    # hash, to exercise find_duplicate_trial_identity (in- and cross-session)
+    # and get_cross_session_iteration_summary (the STRING_AGG edge case,
+    # incl. empty-string adaptive_feature_noop_reason).
+    dup_sid = f"{sid}_dup"
+    await store.create_session(
+        session_id=dup_sid, instrument="EURUSD", timeframe="H1",
+        model_type="direction", tag="parity", quick_mode=False,
+        max_iterations=10, max_budget_usd=20.0, focus_hint=None,
+        workspace_path="/tmp/ws",
+    )
+    await store.add_iteration(
+        research_id=dup_sid, iteration=1, primary_metric=0.45,
+        metric_name="sharpe", all_gates_passed=True, decision="keep",
+        description="dup", config_snapshot="{}",
+        metrics_json='{"status":"completed","adaptive_feature_noop_reason":""}',
+        training_time_s=4.0, canonical_config_hash="cch_shared",
+        trial_identity_hash="tih_shared",
+    )
+    dup_in_session = await store.find_duplicate_trial_identity(
+        research_id=sid, trial_identity_hash="tih_shared",
+        instrument="EURUSD", timeframe="H1", model_type="direction",
+    )
+    dup_cross_session = await store.find_duplicate_trial_identity(
+        research_id=sid, trial_identity_hash="tih_shared",
+        instrument="EURUSD", timeframe="H1", model_type="direction",
+        include_cross_session=True,
+    )
+    cross_summary = await store.get_cross_session_iteration_summary(
+        instrument="EURUSD", timeframe="H1", model_type="direction",
+        exclude_research_id=sid, limit=10,
+    )
+    # session_lock + bump_session_epoch contract.
+    async with store.session_lock(sid):
+        pass  # no-op on SQLite; advisory lock on Postgres (must not block)
+    await store.bump_session_epoch(sid)
+    session_after_bump = await store.get_session(sid)
+    # collect_observability_metrics — full aggregate snapshot.
+    obs = await store.collect_observability_metrics(active_sessions=1)
+
     return {
         "session": _normalize_row(session),
         "best_iteration_metric": (best or {}).get("primary_metric") if best else None,
@@ -227,6 +275,22 @@ async def _run_full_sequence(store: Any, *, sid: str) -> Dict[str, Any]:
         "updated_status": (updated or {}).get("status") if updated else None,
         "updated_phase": (updated or {}).get("current_phase") if updated else None,
         "deleted": deleted,
+        # P6 review Fix 4 additions:
+        "planned_updated_status": (planned_updated or {}).get("status"),
+        "planned_updated_mlflow": (planned_updated or {}).get("mlflow_run_id"),
+        "dup_in_session_found": dup_in_session is not None,
+        "dup_cross_session_id": (dup_cross_session or {}).get("research_id"),
+        "cross_summary_count": len(cross_summary),
+        "cross_summary_noop": [
+            (r.get("canonical_config_hash"), r.get("noop_reasons"),
+             r.get("tsfm_adapters"), r.get("attempts"))
+            for r in cross_summary
+        ],
+        "epoch_after_bump": (session_after_bump or {}).get("lock_epoch"),
+        "obs_sessions_by_status": obs.get("sessions", {}).get("by_status"),
+        "obs_attempts_by_outcome_len": len(
+            obs.get("attempts", {}).get("by_outcome", [])
+        ),
     }
 
 
@@ -242,11 +306,18 @@ async def test_full_sequence_parity_across_backends(sqlite_store, pg_store_parit
     sid = f"res_parity_{uuid.uuid4().hex[:8]}"
     sqlite_snapshot = await _run_full_sequence(sqlite_store, sid=sid)
     pg_snapshot = await _run_full_sequence(pg_store_parity, sid=sid)
-    # Compare the two snapshots field-by-field for a precise diff on failure.
+    # lock_epoch is Postgres-only (Phase-6 fencing column; SQLite has no such
+    # column → None). The bump contract is asserted separately below; here we
+    # compare everything else field-by-field for a precise diff on failure.
+    sqlite_epoch = sqlite_snapshot.pop("epoch_after_bump")
+    pg_epoch = pg_snapshot.pop("epoch_after_bump")
     assert sqlite_snapshot == pg_snapshot, (
         f"backend divergence:\n"
         f"sqlite={sqlite_snapshot}\npostgres={pg_snapshot}"
     )
+    # Epoch bump: SQLite no-op (None), Postgres incremented by 1.
+    assert sqlite_epoch is None
+    assert pg_epoch == 1
 
 
 async def test_sqlite_full_sequence_unchanged(sqlite_store):

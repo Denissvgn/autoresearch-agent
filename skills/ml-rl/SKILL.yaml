@@ -127,8 +127,9 @@ phase_plan:
     next_action: "Prepare a development-scoped promotion proposal when gates pass."
     stagnation_exempt: true
 phase_advancement:
-  mode: plugin
-  plugin: phases.py
+  # ARC-011 review C2 (2026-08-15): plugin file never shipped — declare the
+  # declarative evidence-key resolution the runtime actually performs.
+  mode: declarative
 
 # ── 5/8 command_policy ────────────────────────────────────────────────────────
 # Reproduces command_policy.py:11-61 verbatim, narrowed to RL's scripts.
@@ -209,8 +210,9 @@ promotion_target:
 trial_identity:
   hash_fields: [skill_id, subject_id, variant, canonical_config_hash, quick_mode, data_split_id]
   resolve:
-    mode: plugin
-    plugin: resolve_identity.py
+    # ARC-011 review C2 (2026-08-15): plugin file never shipped; identity is
+    # resolved by the ``hash_fields`` hash (declarative), as the runtime does.
+    mode: declarative
 
 # ── Blocker classification (G3) ───────────────────────────────────────────────
 blocker_classification:

@@ -2091,35 +2091,37 @@ class ConfigPromoter:
         composite = metrics_payload.get("composite")
         return composite if isinstance(composite, dict) else {}
 
-    @staticmethod
     def _metadata_sidecar_path(
+        self,
         target_path: str,
         iteration: int,
         *,
         scope: str = DEVELOPMENT_PROMOTION_SCOPE,
     ) -> str:
-        # ARC-011 P1-017: delegates to the PromotionTarget impl. Kept as a
-        # @staticmethod for back-compat with internal self.* call sites.
-        return FilePathPromotionTarget().metadata_sidecar_path(
+        # ARC-011 review C2-5 (2026-08-15): instance methods dispatch through
+        # the injected ``self._target`` (previously the injection was stored
+        # but bypassed — every helper constructed a fresh FilePathPromotionTarget,
+        # so a skill-declared target was dead). Static construction of the
+        # default remains available via ``ConfigPromoter(store)._…``.
+        return self._target.metadata_sidecar_path(
             target_path, iteration, scope=scope,
         )
 
-    @staticmethod
     def _rollback_snapshot_path(
+        self,
         *,
         target_path: str,
         research_id: str,
         iteration: int,
     ) -> str:
-        return FilePathPromotionTarget().rollback_snapshot_path(
+        return self._target.rollback_snapshot_path(
             target_path=target_path,
             research_id=research_id,
             iteration=iteration,
         )
 
-    @staticmethod
-    def _rollback_metadata_sidecar_path(target_path: str, promotion_id: int) -> str:
-        return FilePathPromotionTarget().rollback_metadata_sidecar_path(
+    def _rollback_metadata_sidecar_path(self, target_path: str, promotion_id: int) -> str:
+        return self._target.rollback_metadata_sidecar_path(
             target_path, promotion_id,
         )
 
@@ -2127,8 +2129,7 @@ class ConfigPromoter:
     def _sha256_text(value: str) -> str:
         return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
-    @staticmethod
-    async def _write_text_file(path: str, content: str) -> None:
+    async def _write_text_file(self, path: str, content: str) -> None:
         """Atomic write: tmp file → fsync → os.replace.
 
         Phase 3.1: durability hardening. A crash mid-write previously could
@@ -2137,7 +2138,8 @@ class ConfigPromoter:
         complete content or the new complete content. The directory is also
         fsync'd so the rename itself survives a power loss.
         """
-        await FilePathPromotionTarget().write(path, content)
+        # ARC-011 review C2-5: dispatches through the injected target.
+        await self._target.write(path, content)
 
     def _build_rollback_readiness(
         self,
@@ -3117,17 +3119,16 @@ class ConfigPromoter:
                 "HTTP error updating composite for %s: %s", instrument, exc,
             )
 
-    @staticmethod
-    def _extract_strategy_market(yaml_str: str) -> tuple:
+    def _extract_strategy_market(self, yaml_str: str) -> tuple:
         """Extract agent_strategy and trading_mode from a YAML config string.
 
         ARC-011 P1-017: delegates to the PromotionTarget impl. Returns
         (strategy, market_type) with defaults if not found.
         """
-        return FilePathPromotionTarget().extract_strategy_market(yaml_str)
+        return self._target.extract_strategy_market(yaml_str)
 
-    @staticmethod
     def _get_target_path(
+        self,
         model_type: str, instrument: str, timeframe: str,
         strategy: str = "BALA", market_type: str = "stock",
     ) -> str:
@@ -3136,7 +3137,7 @@ class ConfigPromoter:
         ARC-011 P1-017: delegates to the PromotionTarget impl. ML-67: RL
         configs include strategy + market_type in the filename.
         """
-        return FilePathPromotionTarget().target_path(
+        return self._target.target_path(
             model_type=model_type,
             instrument=instrument,
             timeframe=timeframe,

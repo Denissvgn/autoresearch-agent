@@ -96,8 +96,9 @@ def test_transitional_runtime_satisfies_protocol_surface(impl):
     properties; the rest are methods (none async on the transitional runtimes —
     they delegate synchronously)."""
     proto_attrs = sorted(SkillRuntime.__protocol_attrs__)
-    # The full §7.5 surface.
+    # The full §7.5 surface + the C2-4 blocker-classification override.
     expected_methods = {
+        "blocker_classification",
         "command_policy_extension",
         "directive_prompt",
         "generate_research_resume",
@@ -165,6 +166,11 @@ def test_minimal_skill_runtime_satisfies_protocol():
             return []
 
         def phase_advancement_rule(self, phase_id):
+            return {}
+
+        # ARC-011 review C2-4: added to the protocol (22nd member) — the
+        # manifest-driven blocker-classification override surface.
+        def blocker_classification(self):
             return {}
 
         def trial_identity(self, config, *, command, config_snapshot=None, planned_trial=None):

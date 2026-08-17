@@ -189,3 +189,120 @@ async def test_transition_bumps_epoch(pg_store):
     # One committed transition ⇒ epoch bumped by 1.
     assert session["lock_epoch"] == 1
     assert session["status"] == "stopping"
+
+
+# --------------------------------------------------------------------------
+# Integrated fence (ARC-011 P6-004 review Fix 2): the orchestrator-level
+# chain — capture epoch → cross-worker stop bumps it → _record_iteration's
+# state-advancing write is fenced out → discard + audit. These are the tests
+# the original CHANGELOG claimed existed but didn't (they only exercised the
+# store primitive in isolation).
+# --------------------------------------------------------------------------
+
+_MINIMAL_MARKER = {
+    "primary_metric": 0.5,
+    "metric_name": "sharpe",
+    "decision": "keep",
+    "all_gates_passed": True,
+    "description": "integrated fence test",
+    "config_snapshot": "{}",
+}
+
+
+async def test_integrated_fence_stale_worker_discards_result(pg_store):
+    """Full chain: worker A captures epoch 0; worker B stops the session
+    (epoch → 1); worker A's _record_iteration hits the fence — the iteration
+    row is preserved (immutable record) but the counter does not advance, no
+    broadcast side-effects run, and a discard audit is emitted."""
+    from src.core.orchestrator import AgentOrchestrator
+    from src.core.state_machine import SessionStateMachine
+    from src.ws.events import EventBroadcaster
+
+    store = pg_store
+    sid = f"res_ifence_{uuid.uuid4().hex[:6]}"
+    await _seed_session(store, sid)
+
+    # Worker A: the orchestrator owning the run. Simulate run()-entry capture.
+    orch = AgentOrchestrator(store)
+    captured = await store.get_session(sid)
+    assert captured["lock_epoch"] == 0
+    orch._session_epochs[sid] = captured["lock_epoch"]
+
+    # Worker B stops the session via its own state machine (bumps epoch).
+    sm_b = SessionStateMachine(store, EventBroadcaster())
+    await sm_b.transition(sid, "stop_requested", actor_id="operator_B")
+    stopped = await store.get_session(sid)
+    assert stopped["lock_epoch"] == 1
+
+    # Worker A's command finishes late; it records the iteration.
+    await orch._record_iteration(sid, 1, dict(_MINIMAL_MARKER), 0.0)
+
+    # The iteration row IS preserved (immutable record of what ran)…
+    row = await store.get_iteration(sid, 1)
+    assert row is not None
+    assert row["primary_metric"] == 0.5
+    # …but the state-advancing writes were fenced out.
+    session = await store.get_session(sid)
+    assert session["effective_iteration_count"] == 0  # NOT advanced
+    assert session["best_iteration"] is None  # best not moved
+    # …and the discard is audited.
+    audits = await store.list_audit_events(
+        research_id=sid, action="result.discarded.stale_worker",
+    )
+    assert len(audits) == 1
+    assert audits[0]["request_metadata"]["captured_lock_epoch"] == 0
+
+
+async def test_integrated_fence_fresh_epoch_records_normally(pg_store):
+    """The fence only rejects STALE epochs: with no intervening transition,
+    _record_iteration records normally (counter advances, no discard audit).
+    Proves the fence isn't over-rejecting."""
+    from src.core.orchestrator import AgentOrchestrator
+
+    store = pg_store
+    sid = f"res_ifresh_{uuid.uuid4().hex[:6]}"
+    await _seed_session(store, sid)
+
+    orch = AgentOrchestrator(store)
+    captured = await store.get_session(sid)
+    orch._session_epochs[sid] = captured["lock_epoch"]
+
+    await orch._record_iteration(sid, 1, dict(_MINIMAL_MARKER), 0.0)
+
+    session = await store.get_session(sid)
+    assert session["effective_iteration_count"] == 1  # advanced normally
+    assert session["best_iteration"] == 1  # best moved
+    audits = await store.list_audit_events(
+        research_id=sid, action="result.discarded.stale_worker",
+    )
+    assert audits == []
+
+
+async def test_integrated_fence_normal_completion_not_discarded(pg_store):
+    """A session whose status reached `completed` (the normal completing →
+    completed path) still records its in-loop iterations: the epoch is
+    captured BEFORE the terminal transition, so it still matches. This is the
+    case the removed status-based guard mis-fired on."""
+    from src.core.orchestrator import AgentOrchestrator
+
+    store = pg_store
+    sid = f"res_icomp_{uuid.uuid4().hex[:6]}"
+    await _seed_session(store, sid)
+
+    orch = AgentOrchestrator(store)
+    captured = await store.get_session(sid)
+    orch._session_epochs[sid] = captured["lock_epoch"]
+
+    # Simulate the terminal state having been reached while the epoch was
+    # never bumped by another worker (status changed, epoch unchanged). The
+    # epoch fence must key on the epoch, not the status.
+    await store.update_session(sid, status="completed")
+
+    await orch._record_iteration(sid, 1, dict(_MINIMAL_MARKER), 0.0)
+
+    session = await store.get_session(sid)
+    assert session["effective_iteration_count"] == 1  # recorded normally
+    audits = await store.list_audit_events(
+        research_id=sid, action="result.discarded.stale_worker",
+    )
+    assert audits == []
