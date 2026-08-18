@@ -232,6 +232,34 @@ async def promote_preview(
         )
         return _inject_target_kind(result)
     except ValueError as e:
+        # ARC-011 review C4 (P4-016): a non-ML session (model_type="") hits
+        # the file-target path derivation's "Unknown model type" ValueError —
+        # previously surfaced as a misleading 404. Its skill declares a
+        # non-file promotion kind (registry_api / git_branch /
+        # artifact_store) with no wired promotion flow yet (P5-012), so
+        # answer with the structured unsupported-target response (the same
+        # vocabulary as the C2-5 auto-promotion skip).
+        if "Unknown model type" in str(e):
+            await _audit(
+                request,
+                action="promotion.preview",
+                outcome="failure",
+                research_id=research_id,
+                metadata={"scope": payload.scope},
+                error_message="unsupported_promotion_target",
+            )
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "reason": "unsupported_promotion_target",
+                    "message": (
+                        "This session's skill declares a non-file promotion "
+                        "target (e.g. registry_api); no promotion flow is "
+                        "wired for it yet (ARC-011 P5-012). File-config "
+                        "promotion applies to ML skills only."
+                    ),
+                },
+            ) from e
         await _audit(
             request,
             action="promotion.preview",

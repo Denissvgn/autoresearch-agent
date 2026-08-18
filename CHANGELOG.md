@@ -2,6 +2,70 @@
 
 ## Unreleased
 
+- **ARC-011 implementation review C4 (2026-08-15) — the Phase-4 exit
+  criterion is now actually met: a non-ML session runs end-to-end on the
+  OpenAI provider.** The Phase-4 close-out had claimed this while no session
+  had ever run; the fixes below make it true, and
+  `tests/test_skill_prompt_engineering_e2e.py::
+  test_prompt_engineering_session_end_to_end` proves it: a real
+  `AgentOrchestrator.run()` drive on a real `OpenAIProvider` (scripted only
+  at the HTTP client boundary — the wire translation runs for real), the
+  REAL governed `eval/run.py` subprocess executing under the skill's
+  manifest command policy, the W11 nonce verified in the live loop, a
+  forged marker rejected + audited, and a `research_sessions` row
+  indistinguishable from an ML row (best_iteration,
+  effective_iteration_count, terminal_reason) — closing the §7.14 gap the
+  review's finding 5.15 noted (GEN-009 never asserted it for a non-ML
+  skill).
+  - **Skill scripts execute from the packaged tree (C4 command-policy
+    wiring):** skill manifests declare scripts workspace-relative
+    (`eval/run.py`); the extension unions the declared names into the
+    allow-set but the files live in the read-only packaged `skills/<id>/`
+    tree. `ManifestSkillRuntime.command_policy_extension()` now emits a
+    `script_paths` map (declared name → packaged absolute path), and
+    `evaluate_command_policy` rewrites argv to the packaged file whenever
+    the declared script is not present under the runtime workspace root.
+    Deliberately NOT resolved against the session workspace — it is
+    agent-writable (`write_file`), and name-based allowing there would be
+    arbitrary code execution.
+  - **Store accepts non-ML sessions:** `create_session` (SQLite +
+    Postgres parity) KeyEd on `model_type=""` (the API's canonical
+    translation for skills with no legacy alias) via `_MODEL_TO_SKILL[...]`;
+    now `.get(model_type, model_type or "")` — the column is display-only.
+  - **Manifest phases without `next_action` no longer crash the loop**
+    (`research_phase_plan._next_action`: the optional field coalesces
+    instead of `None + str`).
+  - **Skill-declared scripts count as training commands:** the
+    `turn_ran_training_command` guard recognized only the ML script
+    families, so a relayed marker after a non-ML eval was rejected ("no
+    training command was executed this turn"). A session's declared
+    `allowed_scripts` now qualify.
+  - **Server-side decision inference for relayed markers:** non-ML eval
+    markers carry no `decision` (the scorer has no session-best context);
+    the marker-record branch infers it via `_infer_decision` (same as the
+    KV auto-detect path) so `best_iteration` advances on gates-passing
+    improvements. Presence-checked — ML markers with a decision are
+    unaffected.
+  - **bootstrap.py ported to the governed JSON ABI** (P5-005/X-004 §6 —
+    the argparse CLI was incompatible with `PluginRunner`, which fails
+    closed on non-JSON stdout, and was invoked by nothing). The e2e drive
+    renders its workspace through the real `PluginRunner`. The eval script
+    is NOT copied into the workspace (it executes from the packaged tree).
+  - **Eval marker completeness:** `eval/run.py` emits
+    `training_gates_passed` (its own gates) so downstream consumers —
+    decision inference, promotion gates — read the field every iteration
+    recorder expects.
+  - **Promotion preview for non-file targets:** `POST
+    /research/{id}/promote/preview` on a non-ML session hit the
+    file-target path derivation's "Unknown model type" ValueError and
+    surfaced a misleading 404; it now returns a structured 422
+    (`reason: unsupported_promotion_target`, the C2-5 auto-promotion-skip
+    vocabulary). Test added in `test_research_api_integration.py`.
+  - Also: the e2e file's phantom "P4-017" task reference corrected to
+    P4-016; its docstring no longer claims the milestone was validated by
+    mocked-provider tests. Full suite green (1360 passed); domain-coupling
+    guard green; ruff/mypy at the pre-existing baseline (91/15, zero new).
+
 - **ARC-011 implementation review C3 (2026-08-15) — W11 anti-forgery: bypass
   closed, nonce no longer readable by the adversary it defends against.**
   Closes review finding C3 (all four sub-findings); design revised in

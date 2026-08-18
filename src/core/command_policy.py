@@ -92,6 +92,13 @@ def evaluate_command_policy(
     allowed_scripts = _ALLOWED_SCRIPTS | set(ext.get("allowed_scripts") or ())
     copyable_files = _COPY_FILENAMES | set(ext.get("copyable_files") or ())
     readable_files = _CAT_FILENAMES | set(ext.get("readable_files") or ())
+    # ARC-011 review C4: declared-name → packaged-path resolution map
+    # (server-built by the skill runtime; see _evaluate_python).
+    script_paths_raw = ext.get("script_paths") or {}
+    script_paths: Mapping[str, str] | None = (
+        {str(k): str(v) for k, v in dict(script_paths_raw).items()}
+        if script_paths_raw else None
+    )
 
     try:
         argv = shlex.split(command, posix=True)
@@ -121,6 +128,7 @@ def evaluate_command_policy(
             argv, workspace_root, session_workspace,
             allowed_scripts=allowed_scripts,
             copyable_files=copyable_files,
+            script_paths=script_paths,
         )
     if executable == "cp":
         return _evaluate_cp(
@@ -192,20 +200,41 @@ def _evaluate_python(
     *,
     allowed_scripts: set[str] | None = None,
     copyable_files: set[str] | None = None,
+    script_paths: Mapping[str, str] | None = None,
 ) -> CommandDecision:
     scripts = _ALLOWED_SCRIPTS if allowed_scripts is None else allowed_scripts
     if len(argv) < 2:
         return _reject("Python commands must invoke an approved autotuner script")
     script = _workspace_relative(argv[1], workspace_root)
+    exec_argv = argv
+    # ARC-011 review C4 (P4-016): a skill manifest declares its scripts
+    # workspace-relative (e.g. ``eval/run.py``) and the extension unions the
+    # declared names into the allow-set — but the files live in the packaged
+    # ``skills/<id>/`` tree, not under the runtime workspace root. Whenever a
+    # declared entry is not present at its workspace-root-relative location,
+    # resolve it via the server-built ``script_paths`` map to the read-only
+    # packaged path (deliberately NOT the agent-writable session workspace,
+    # which would turn a name-based allow-list into arbitrary code execution)
+    # and rewrite argv so the governed subprocess executes the packaged file.
+    packaged = (script_paths or {}).get(script)
+    script_present = (
+        os.path.isfile(argv[1])
+        if os.path.isabs(argv[1])
+        else os.path.isfile(os.path.join(workspace_root, script))
+    )
     if script not in scripts:
-        return _reject(f"Python script {argv[1]!r} is not approved")
+        if packaged is None or not os.path.isfile(packaged):
+            return _reject(f"Python script {argv[1]!r} is not approved")
+        exec_argv = [argv[0], packaged, *argv[2:]]
+    elif packaged and not script_present:
+        exec_argv = [argv[0], packaged, *argv[2:]]
     config_error = _validate_prepare_config(
         argv, script, workspace_root, session_workspace,
         copyable_files=copyable_files,
     )
     if config_error:
         return _reject(config_error)
-    return _allow(argv, operation=f"python:{script}")
+    return _allow(exec_argv, operation=f"python:{script}")
 
 
 def _validate_prepare_config(

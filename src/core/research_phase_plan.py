@@ -1125,10 +1125,13 @@ def _next_action(
             "and a one-line justification. The server runs promotion "
             "preview/confirm automatically on session end."
         )
+    # ARC-011 review C4 (P4-016): manifest phase entries may omit the
+    # optional ``next_action`` (schema default None) — coalesce rather than
+    # crash on ``None + str``.
     base = next(
         (p["next_action"] for p in phases if p["id"] == current_phase),
         "Inspect session state.",
-    )
+    ) or "Inspect session state."
     # DM-14: append the headroom-hint suffix when the active phase is
     # low-headroom AND budget is tight (< 30% remaining). At budget >=
     # 30% remaining the agent should still try sweeps; only when budget

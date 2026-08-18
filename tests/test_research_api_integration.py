@@ -251,3 +251,33 @@ def test_promotion_preview_carries_target_kind_from_registry(
     )
     assert response.status_code == 200
     assert response.json()["target_kind"] == kind
+
+
+def test_promotion_preview_non_file_target_returns_structured_422(
+    client: TestClient,
+):
+    """ARC-011 review C4 (P4-016): a non-ML session (model_type="") hits the
+    file-target path derivation's "Unknown model type" ValueError inside
+    ConfigPromoter.preview — previously surfaced as a misleading 404. The
+    endpoint must answer with the structured unsupported-target response
+    (same vocabulary as the C2-5 auto-promotion skip)."""
+
+    class _UnknownModelPromoter:
+        async def preview(self, research_id, *, scope="development", approval=None):
+            raise ValueError("Unknown model type: ")
+
+        async def confirm(self, research_id, *, scope="development", approval=None):
+            raise ValueError("Unknown model type: ")
+
+    promotion_module.init(_UnknownModelPromoter(), _store, skill_registry=None)
+    response = client.post(
+        "/api/v1/research/res_int0001/promote/preview",
+        headers=_auth(),
+        json={"scope": "development"},
+    )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert isinstance(detail, dict)
+    assert detail["reason"] == "unsupported_promotion_target"
+    # Restore the default promoter for any test ordering.
+    promotion_module.init(_FakePromoter(), _store, skill_registry=None)

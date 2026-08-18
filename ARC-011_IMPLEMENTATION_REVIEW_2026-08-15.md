@@ -5,11 +5,17 @@
 **Resolution addendum (same day):** findings **C1**, **C2** (all five
 sub-items), **C3** (all four sub-findings — KV bypass closed, KV forgeries
 audited, nonce moved out of the workspace manifest + env delivery narrowed,
-constant-time compare), and **H6** are now fixed in the working tree — see the
-"ARC-011 implementation review C1+C2" and "review C3" entries in
-`CHANGELOG.md`, `tests/test_manifest_runtime_production_path.py`,
-`tests/test_metrics_forgery_c3.py`, and
-`tests/test_canonical_start_wiring.py`, plus the Revision 2026-08-15 note in
+constant-time compare), **C4** (the Phase-4 exit criterion is now actually
+met — a real end-to-end prompt-engineering session runs on the OpenAI
+provider, proven by `test_prompt_engineering_session_end_to_end`; the
+command-policy/`create_session`/`next_action`/training-command/decision
+wiring gaps it exposed are fixed), and **H6** are now fixed in the working
+tree — see the "ARC-011 implementation review C1+C2", "review C3", and
+"review C4" entries in `CHANGELOG.md`, plus
+`tests/test_manifest_runtime_production_path.py`,
+`tests/test_metrics_forgery_c3.py`,
+`tests/test_skill_prompt_engineering_e2e.py`, and
+`tests/test_canonical_start_wiring.py`, and the Revision 2026-08-15 note in
 `docs/adr/ARC-011-signed-metrics.md`. The remaining findings are open.
 **Scope:** All ARC-011 phases (X, 0–6) in `services/autoresearch-agent/`, against
 [`docs/adr/ARC-011-backlog.md`](../../docs/adr/ARC-011-backlog.md) and the per-phase

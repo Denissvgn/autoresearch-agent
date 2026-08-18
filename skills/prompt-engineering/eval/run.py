@@ -51,6 +51,10 @@ def _score_prompt(prompt_text: str, eval_examples: list[dict]) -> dict:
         "mean_cost_usd": round(mean_cost_usd, 4),
         "n_eval_examples": n,
         "composite_eval_score": round(composite, 6),
+        # The skill's own gates ARE its training gates (review C4: downstream
+        # consumers — decision inference, promotion gates — read this field
+        # on every iteration).
+        "training_gates_passed": passes_min_precision and within_cost_budget,
     }
 
 

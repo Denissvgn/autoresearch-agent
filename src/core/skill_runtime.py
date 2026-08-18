@@ -108,12 +108,19 @@ class CommandPolicyExtension(TypedDict, total=False):
     declare its own allowed scripts/executables/copyable-files/readable-files.
     The transitional runtimes (P1-024..026) return the model-type-relevant
     subset of the current global allow-list.
+
+    ``script_paths`` (ARC-011 review C4): declared-name → absolute packaged-
+    path resolution. Skill manifests declare scripts workspace-relative
+    (``eval/run.py``); the runtime resolves each to the read-only packaged
+    ``skills/<id>/`` tree so the governed command can execute it (the
+    session workspace is deliberately NOT used — it is agent-writable).
     """
 
     allowed_scripts: list[str]
     allowed_executables: list[str]
     copyable_files: list[str]
     readable_files: list[str]
+    script_paths: dict[str, str]
 
 
 class Phase(TypedDict, total=False):
@@ -713,11 +720,25 @@ class ManifestSkillRuntime:
     def command_policy_extension(self) -> CommandPolicyExtension:
         """Read the allowed scripts/executables/files from the manifest's
         ``command_policy`` section (the model-specific extension to the
-        orchestrator's domain-neutral base policy)."""
+        orchestrator's domain-neutral base policy).
+
+        ARC-011 review C4 (P4-016): each declared script that exists in the
+        packaged skill dir is also resolved into ``script_paths`` so the
+        governed command can execute it — the agent invokes the declared
+        workspace-relative name (``eval/run.py``); the policy layer rewrites
+        the argv to the read-only packaged path (never the agent-writable
+        session workspace)."""
         cp = self._manifest.command_policy
         ext: CommandPolicyExtension = {}
         if cp.allowed_scripts:
             ext["allowed_scripts"] = sorted(cp.allowed_scripts)
+            script_paths = {
+                script: str(self._skill_dir / script)
+                for script in cp.allowed_scripts
+                if (self._skill_dir / script).is_file()
+            }
+            if script_paths:
+                ext["script_paths"] = script_paths
         if cp.allowed_executables:
             ext["allowed_executables"] = sorted(cp.allowed_executables)
         if cp.copyable_files:

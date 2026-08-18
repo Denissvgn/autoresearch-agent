@@ -3567,12 +3567,26 @@ class AgentOrchestrator:
                         _cmd_str = redact_sensitive_text(
                             str(block.input.get("command", ""))
                         )
-                        if block.name == "bash" and any(
-                            token in _cmd_str
-                            for token in (
-                                "prepare.py",
-                                "run_phase1c_",
-                                "run_phase1b_",
+                        if block.name == "bash" and (
+                            any(
+                                token in _cmd_str
+                                for token in (
+                                    "prepare.py",
+                                    "run_phase1c_",
+                                    "run_phase1b_",
+                                )
+                            )
+                            # ARC-011 review C4 (P4-016): a skill's declared
+                            # scripts (its eval) are that skill's
+                            # iteration-producing commands — a relayed marker
+                            # is backed by a real run for them too, not only
+                            # the ML script families.
+                            or any(
+                                str(script) in _cmd_str
+                                for script in (
+                                    skill_policy_extension.get("allowed_scripts")
+                                    or ()
+                                )
                             )
                         ):
                             turn_ran_training_command = True
@@ -4094,6 +4108,20 @@ class AgentOrchestrator:
                             )
                         else:
                             iteration_count += 1
+                            # ARC-011 review C4 (P4-016): a non-ML eval
+                            # marker carries no ``decision`` (the skill's
+                            # scorer has no session-best context) — infer it
+                            # server-side exactly like the KV auto-detect
+                            # path, so ``best_iteration`` advances on
+                            # gates-passing improvements. ML agents that
+                            # include a decision in their richer marker are
+                            # unaffected (presence-checked).
+                            if not marker.get("decision"):
+                                marker["decision"] = await self._infer_decision(
+                                    research_id,
+                                    marker.get("primary_metric"),
+                                    marker.get("training_gates_passed"),
+                                )
                             await self._record_iteration(
                                 research_id, iteration_count, marker,
                                 total_cost,

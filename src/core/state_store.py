@@ -1588,7 +1588,11 @@ class SQLiteStateStore:
         manifest_path: Optional[str] = None,
         manifest_hash: Optional[str] = None,
     ) -> Dict[str, Any]:
-        skill_name = _MODEL_TO_SKILL[model_type]
+        # ARC-011 review C4 (P4-016): canonical non-ML sessions carry
+        # model_type="" (the API's translation for skills with no legacy
+        # alias) — previously a KeyError; nothing but legacy display reads
+        # this column, so unmapped types pass their own name through.
+        skill_name = _MODEL_TO_SKILL.get(model_type, model_type or "")
         now = datetime.now(timezone.utc).isoformat()
         async with self.connection() as db:
             await db.execute(
