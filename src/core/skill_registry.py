@@ -9,7 +9,7 @@ The discovery root defaults to the service's ``skills/`` directory — **not**
 ``Settings.skills_dir`` (which points at ``{workspace_root}/.github/skills``,
 the workspace-side prompt-primer location). The two are distinct:
 
-* ``services/autoresearch-agent/skills/<id>/SKILL.yaml`` — the authoritative
+* ``skills/<id>/SKILL.yaml`` — the authoritative
   ``research_skill.v1`` manifest this registry loads (P2-005/009/013).
 * ``{workspace}/.github/skills/<name>/SKILL.md`` — the legacy per-``model_type``
   prompt primer ``orchestrator._load_skill`` reads (removed in P2-021).

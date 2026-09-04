@@ -21,7 +21,7 @@ Design (per ARC-011-postgres-state-store.md §2 D-migration):
 
 Usage::
 
-    .venv/bin/python services/autoresearch-agent/scripts/migrate_sqlite_to_postgres.py \\
+    .venv/bin/python scripts/migrate_sqlite_to_postgres.py \\
         --sqlite /app/workspace/db/experiments.db \\
         --dsn "postgresql://admin:pass@postgres_db:5432/traid_platform_db"
 
