@@ -11,7 +11,13 @@ import joblib
 import pytest
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+if not (REPO_ROOT / "scripts" / "autotuner").is_dir():
+    pytest.skip(
+        "platform workspace scripts (scripts/autotuner) not present in this checkout",
+        allow_module_level=True,
+    )
 
 
 def _load_module(name: str, path: Path):

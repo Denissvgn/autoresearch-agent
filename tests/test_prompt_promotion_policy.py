@@ -37,9 +37,9 @@ from src.core.orchestrator import (  # noqa: E402
     ResearchConfig,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 PROMPT_FILES = (
-    REPO_ROOT / "services" / "autoresearch-agent" / "CLAUDE.md",
+    REPO_ROOT / "CLAUDE.md",
     REPO_ROOT / ".github" / "skills" / "direction-autotuner" / "SKILL.md",
     REPO_ROOT / ".github" / "skills" / "volatility-autotuner" / "SKILL.md",
     REPO_ROOT / ".github" / "skills" / "rl-autotuner" / "SKILL.md",

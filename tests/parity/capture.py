@@ -35,7 +35,7 @@ from _engine import (  # type: ignore[import-not-found]  # sibling module
     normalize,
 )
 
-REPO_ROOT = PARITY_DIR.parents[3]  # traio-platform repo root (where .git lives)
+REPO_ROOT = PARITY_DIR.parents[1]  # traio-platform repo root (where .git lives)
 
 
 def _git(args: list[str]) -> str:

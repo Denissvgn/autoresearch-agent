@@ -15,7 +15,7 @@ from src.core.development_gate_bundle import (
     load_gate_bundle,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _bundle():

@@ -158,10 +158,10 @@ explicit confirmation flag to delete.
 
    ```bash
    .venv/bin/python scripts/db/cleanup_model_registry.py --dry-run --all \
-       --db-url postgresql://admin:secure_password_2024@localhost:5433/traid_platform_db
+       --db-url postgresql://admin:$POSTGRES_PASSWORD@localhost:5433/traid_platform_db
    .venv/bin/python scripts/db/cleanup_model_registry.py --all --include-redis --yes-i-am-sure \
-       --db-url postgresql://admin:secure_password_2024@localhost:5433/traid_platform_db \
-       --redis-url redis://:redis_secure_2024@localhost:6380/0
+       --db-url postgresql://admin:$POSTGRES_PASSWORD@localhost:5433/traid_platform_db \
+       --redis-url redis://:$REDIS_PASSWORD@localhost:6380/0
    ```
 
 4. **Verify clean** then launch a fresh session:

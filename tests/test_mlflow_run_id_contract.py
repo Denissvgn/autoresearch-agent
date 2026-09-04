@@ -35,8 +35,11 @@ from src.core.result_artifact import merge_result_payload
 from src.core.results_store import ResultsStore
 
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
 def _load_prepare_module(relative_path: str, module_name: str):
-    path = Path(__file__).resolve().parents[3] / relative_path
+    path = Path(__file__).resolve().parents[1] / relative_path
     spec = importlib.util.spec_from_file_location(module_name, path)
     assert spec is not None
     assert spec.loader is not None
@@ -87,6 +90,10 @@ def test_parse_prepare_output_normalizes_mlflow_sentinels() -> None:
 
 
 def test_prepare_summaries_do_not_emit_literal_none(capsys: pytest.CaptureFixture[str]) -> None:
+    if not (REPO_ROOT / "scripts" / "autotuner").is_dir():
+        pytest.skip(
+            "platform workspace scripts (scripts/autotuner) not present in this checkout"
+        )
     direction_prepare = _load_prepare_module(
         "scripts/autotuner/direction/prepare.py",
         "direction_prepare_for_mlflow_contract_test",

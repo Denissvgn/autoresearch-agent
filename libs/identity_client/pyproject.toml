@@ -1,0 +1,14 @@
+[tool.poetry]
+name = "identity-client"
+version = "0.1.0"
+description = "Shared Identity Service client for Traid Platform"
+authors = ["Traid Platform Team"]
+packages = [{ include = "identity_client" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+httpx = "^0.27.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

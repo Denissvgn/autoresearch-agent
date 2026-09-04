@@ -928,7 +928,7 @@ tenacity = "^8.2.0"
 
 [package.source]
 type = "directory"
-url = "../../libs/data_clients"
+url = "libs/data_clients"
 
 [[package]]
 name = "databricks-sdk"
@@ -1045,7 +1045,7 @@ dev = ["pytest (>=7.0.0)", "pytest-cov (>=4.0.0)"]
 
 [package.source]
 type = "directory"
-url = "../../libs/feature_engineering"
+url = "libs/feature_engineering"
 
 [[package]]
 name = "filelock"
@@ -1645,7 +1645,7 @@ httpx = "^0.27.0"
 
 [package.source]
 type = "directory"
-url = "../../libs/identity_client"
+url = "libs/identity_client"
 
 [[package]]
 name = "idna"
@@ -2366,7 +2366,7 @@ tsfm = ["pyarrow (>=15.0.0)"]
 
 [package.source]
 type = "directory"
-url = "../../libs/ml_artifacts"
+url = "libs/ml_artifacts"
 
 [[package]]
 name = "ml-dtypes"
@@ -3232,7 +3232,7 @@ dev = ["httpx (>=0.25.0,<1.0.0)", "pytest (>=8.0.0,<9.0.0)", "pytest-asyncio (>=
 
 [package.source]
 type = "directory"
-url = "../../libs/observability"
+url = "libs/observability"
 
 [[package]]
 name = "onnx"
@@ -4530,7 +4530,7 @@ develop = true
 
 [package.source]
 type = "directory"
-url = "../../libs/resilience"
+url = "libs/resilience"
 
 [[package]]
 name = "ruff"
@@ -5137,7 +5137,7 @@ python-dotenv = "^1.0.0"
 
 [package.source]
 type = "directory"
-url = "../../libs/config"
+url = "libs/config"
 
 [[package]]
 name = "traid-training-sdk"
@@ -5163,7 +5163,7 @@ torch = "^2.2.0"
 
 [package.source]
 type = "directory"
-url = "../../traid_training_sdk"
+url = "traid_training_sdk"
 
 [[package]]
 name = "triton"
@@ -5385,7 +5385,7 @@ scipy = "^1.11.0"
 
 [package.source]
 type = "directory"
-url = "../../libs/vdmc_core"
+url = "libs/vdmc_core"
 
 [[package]]
 name = "waitress"
@@ -5737,4 +5737,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "dd911f6c78777fd23fcfe37ce347cdf1614a3a5973d626f3a485d4a44e565400"
+content-hash = "47b0d6bea87f4043727433890ffa3f7c6f69530086161827c507f69213922382"

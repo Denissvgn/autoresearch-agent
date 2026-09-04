@@ -1,11 +1,18 @@
 # =================================================================
-# Multi-stage build for autoresearch-agent container
+# Multi-stage build for the standalone autoresearch-agent container
 #
 # Stage 1 (ui-builder): Build the React/Vite frontend
 # Stage 2 (python-builder): Install server + workspace Python deps
 # Stage 3 (runtime): Minimal production image
 #
+# Build context: repository root of this project.
 # Multi-Architecture Support: linux/amd64, linux/arm64
+#
+# NOTE: this image is standalone — it bundles the agent service, the
+# vendored shared libraries, the UI, and the workspace Python venv.
+# Platform training assets (autotuner scripts, ML trainers, production
+# configs) are NOT baked in; mount or copy them into /app/workspace
+# when running against a full ML stack.
 # =================================================================
 
 # -----------------------------------------------------------------
@@ -16,10 +23,10 @@ FROM node:20-alpine AS ui-builder
 WORKDIR /app/ui
 
 # Copy UI source and install deps
-COPY services/autoresearch-agent/ui/package.json services/autoresearch-agent/ui/package-lock.json* ./
+COPY ui/package.json ui/package-lock.json* ./
 RUN npm ci --ignore-scripts
 
-COPY services/autoresearch-agent/ui/ ./
+COPY ui/ ./
 RUN npx vite build
 
 # -----------------------------------------------------------------
@@ -45,18 +52,10 @@ RUN poetry self add poetry-plugin-export
 WORKDIR /app
 
 # --- Server venv (FastAPI + Anthropic SDK) ---
-COPY libs/vdmc_core /libs/vdmc_core
-COPY libs/config /libs/config
-COPY libs/data_clients /libs/data_clients
-COPY libs/feature_engineering /libs/feature_engineering
-COPY libs/identity_client /libs/identity_client
-COPY libs/observability /libs/observability
-COPY libs/ml_artifacts /libs/ml_artifacts
-COPY libs/resilience /libs/resilience
-COPY libs/__init__.py /libs/__init__.py
-COPY traid_training_sdk /traid_training_sdk
-COPY services/autoresearch-agent/pyproject.toml ./
-COPY services/autoresearch-agent/poetry.lock* ./
+# Vendored path dependencies live inside this repository.
+COPY libs /app/libs
+COPY traid_training_sdk /app/traid_training_sdk
+COPY pyproject.toml poetry.lock* ./
 
 ENV POETRY_HTTP_TIMEOUT=300
 ENV PIP_DEFAULT_TIMEOUT=300
@@ -66,56 +65,22 @@ RUN poetry export --without dev --format requirements.txt --output server-requir
     /app/.venv/bin/pip install --no-cache-dir --timeout 300 -r server-requirements.txt
 
 # --- Workspace venv (ML deps for prepare.py) ---
-COPY services/autoresearch-agent/requirements-workspace.txt /tmp/requirements-workspace.txt
+COPY requirements-workspace.txt /tmp/requirements-workspace.txt
 RUN python -m venv /app/workspace/.venv && \
     /app/workspace/.venv/bin/pip install --no-cache-dir --timeout 300 --retries 5 \
     -r /tmp/requirements-workspace.txt
 
-# --- Copy workspace content (baked into image) ---
-# Autotuner scripts (prepare.py, setup.py, promote.py, train.yaml templates)
-COPY scripts/autotuner/ /app/workspace/scripts/autotuner/
-
-# Training scripts invoked by prepare.py
-COPY scripts/training/ /app/workspace/scripts/training/
-
-# Ensemble-trainer source (required by training scripts for DirectionModelConfig, etc.)
-COPY services/ml/ensemble-trainer/src/ /app/workspace/services/ml/ensemble-trainer/src/
-
-# RL-trainer source (required by RL training scripts for RLTrainingConfig, etc.)
-COPY services/ml/rl-trainer/src/ /app/workspace/services/ml/rl-trainer/src/
-
+# --- Workspace skeleton ---
 # SKILL.md files the agent follows
 COPY .github/skills/direction-autotuner/ /app/workspace/.github/skills/direction-autotuner/
 COPY .github/skills/volatility-autotuner/ /app/workspace/.github/skills/volatility-autotuner/
 COPY .github/skills/rl-autotuner/ /app/workspace/.github/skills/rl-autotuner/
 
-# Production configs (baseline for promotion)
-COPY configs/ /app/workspace/configs/
-
 # Promotion gate bundles consumed by ConfigPromoter.
 COPY reports/direction-tuning/promotion/ /app/workspace/reports/direction-tuning/promotion/
 
-# Shared Python libraries used by training scripts
-COPY libs/ /app/workspace/libs/
-
-# Training SDK
-COPY traid_training_sdk/ /app/workspace/traid_training_sdk/
-
-# Install libs and SDK into the workspace venv (editable)
-RUN cd /app/workspace && \
-    .venv/bin/pip install --no-cache-dir \
-    -e ./libs/vdmc_core \
-    -e ./libs/config \
-    -e ./libs/data_clients \
-    -e ./libs/feature_engineering \
-    -e ./libs/identity_client \
-    -e ./libs/observability \
-    -e ./libs/ml_artifacts \
-    -e ./libs/resilience \
-    -e ./traid_training_sdk
-
 # CLAUDE.md — agent workspace context
-COPY services/autoresearch-agent/CLAUDE.md /app/workspace/CLAUDE.md
+COPY CLAUDE.md /app/workspace/CLAUDE.md
 
 # -----------------------------------------------------------------
 # Stage 3: Production runtime
@@ -132,11 +97,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Non-root user. PR-9: UID/GID 1000 to match the host user that owns the
-# bind-mounted ``configs/`` (mounted at /host/configs), so promotion can write
-# the updated instrument config (ConfigPromoter atomic write). UID 1001 left the
-# agent unable to create the temp/rollback files in the host-owned configs dir
-# → PermissionError on promote/confirm. Overridable via build args if a deploy
+# Non-root user. UID/GID 1000 matches a typical host user that owns
+# bind-mounted workspace content, so promotion can write atomic
+# temp/rollback files there. Overridable via build args if a deploy
 # needs a different host UID.
 ARG APP_UID=1000
 ARG APP_GID=1000
@@ -145,9 +108,9 @@ RUN groupadd -g ${APP_GID} appuser && useradd -u ${APP_UID} -g appuser -m appuse
 # Copy server venv from builder
 COPY --from=python-builder /app/.venv /app/.venv
 
-# Copy editable path dependencies used by the server venv.
-COPY --from=python-builder --chown=appuser:appuser /libs /libs
-COPY --from=python-builder --chown=appuser:appuser /traid_training_sdk /traid_training_sdk
+# Copy vendored path dependencies used by the server venv (editable installs).
+COPY --from=python-builder --chown=appuser:appuser /app/libs /app/libs
+COPY --from=python-builder --chown=appuser:appuser /app/traid_training_sdk /app/traid_training_sdk
 
 # Copy workspace (including .venv) from builder
 COPY --from=python-builder --chown=appuser:appuser /app/workspace /app/workspace
@@ -155,24 +118,22 @@ COPY --from=python-builder --chown=appuser:appuser /app/workspace /app/workspace
 # Copy built UI from ui-builder
 COPY --from=ui-builder /app/ui/dist /app/ui/dist
 
-# Copy shared service helpers and server source code
-COPY --chown=appuser:appuser services/__init__.py /app/services/__init__.py
-COPY --chown=appuser:appuser services/shared /app/services/shared
-COPY --chown=appuser:appuser services/autoresearch-agent/src/ /app/src/
+# Copy server source code
+COPY --chown=appuser:appuser src/ /app/src/
 
 # Create runtime directories
 RUN mkdir -p /app/workspace/runs /app/workspace/db && \
     chown -R appuser:appuser /app/workspace/runs /app/workspace/db
 
 # Entrypoint script (fixes volume ownership, then drops to appuser)
-COPY services/autoresearch-agent/entrypoint.sh /app/entrypoint.sh
+COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 WORKDIR /app
 
 # Environment
 ENV PATH="/app/.venv/bin:$PATH" \
-    PYTHONPATH="/app:/" \
+    PYTHONPATH="/app" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 

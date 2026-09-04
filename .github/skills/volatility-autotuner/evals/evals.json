@@ -1,0 +1,35 @@
+{
+  "skill_name": "volatility-autotuner",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Start autonomous volatility model tuning for DOGE_USDT 15m. The current positive rate is only 3% which means the ATR multiplier is way too high. Sweep lower ATR values to find better class balance while maximizing AUC. Run overnight.",
+      "expected_output": "Agent creates branch, initializes volatility workspace, recognizes the class imbalance problem, and focuses the loop on lowering ATR multiplier values (1.5-3.0 range) to increase positive_rate into the 10-40% sweet spot",
+      "files": [],
+      "expectations": [
+        "Creates autoresearch branch",
+        "Initializes volatility workspace via setup.py",
+        "Recognizes positive_rate 3% as class imbalance problem",
+        "Disables ATR auto-sweep and forces specific lower values",
+        "Experiments with ATR mult in 1.5-3.0 range",
+        "Checks both AUC AND positive_rate when evaluating results",
+        "Logs to results.tsv with each experiment",
+        "Continues autonomously without asking"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "The volatility AUC for BTC_USDT is 0.62 which is great, but the calibration is terrible (ECE > 0.08). Start an autotuning loop focused on improving calibration without losing AUC.",
+      "expected_output": "Agent recognizes this as a Phase 2 (threshold/calibration) problem rather than ATR sweep, creates branch, and focuses experiments on calibration_method switching and threshold optimization",
+      "files": [],
+      "expectations": [
+        "Creates autoresearch branch for BTC_USDT",
+        "Initializes workspace",
+        "Focuses on calibration_method (isotonic vs sigmoid) first",
+        "Also experiments with threshold_strategy and threshold_beta",
+        "Does NOT waste time on ATR sweep since AUC is already good",
+        "Monitors ece_calibrated as a secondary metric"
+      ]
+    }
+  ]
+}

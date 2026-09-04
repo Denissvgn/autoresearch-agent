@@ -1,0 +1,46 @@
+[tool.poetry]
+name = "vdmc_core"
+version = "0.1.0"
+description = "VDMC (Volatility-Driven Momentum Cycle) Indicator Core Library"
+authors = ["Traid Platform Team"]
+readme = "README.md"
+packages = [{include = "vdmc_core"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+numpy = ">=1.26.0"
+scipy = "^1.11.0"
+pydantic = "^2.6.3"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.2"
+pytest-cov = "^4.1.0"
+pytest-benchmark = "^4.0.0"
+black = "^24.2.0"
+isort = "^5.13.2"
+mypy = "^1.8.0"
+ruff = "^0.2.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=vdmc_core --cov-report=term-missing --cov-fail-under=90"
+
+[tool.black]
+line-length = 100
+target-version = ['py312']
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 100
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true 

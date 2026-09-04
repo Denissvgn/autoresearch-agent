@@ -2,6 +2,14 @@
 
 Autonomous ML model tuning service. An LLM agent iteratively runs training experiments, adjusts hyperparameters, and promotes winning configurations — without human intervention.
 
+> **Standalone repository.** This project was extracted from the TRAID platform
+> monorepo (`services/autoresearch-agent`) with its full git history. The shared
+> libraries it depends on (`libs/`) and the training SDK (`traid_training_sdk/`)
+> are vendored into this repository, so it builds and tests on its own.
+> Platform training assets (autotuner scripts, ML trainers, production configs)
+> are **not** bundled — see [Workspace](#workspace) for running against a full
+> ML stack.
+
 ## How It Works
 
 ```
@@ -38,7 +46,6 @@ HPO plans, cross-service consistency reports, and reconstructable
 Copy the tracked sanitized template, then edit the local `.env` file:
 
 ```bash
-cd services/autoresearch-agent
 cp .env.example .env
 ```
 
@@ -80,19 +87,28 @@ moved to a distributed store.
 
 ### 2. Build and run
 
+With Docker (build context = this repository's root):
+
 ```bash
-# From project root:
-docker compose -f compose/base.yml -f compose/infra.yml -f compose/ml.yml -f compose/autoresearch.yml build autoresearch-agent
-docker compose -f compose/base.yml -f compose/infra.yml -f compose/ml.yml -f compose/autoresearch.yml up -d autoresearch-agent
+docker build -t autoresearch-agent .
+docker run --rm -p 8030:8000 --env-file .env autoresearch-agent
+```
+
+Or locally with Poetry:
+
+```bash
+poetry install --no-interaction --no-root
+poetry run uvicorn src.main:app --host 0.0.0.0 --port 8030
 ```
 
 The Docker build consumes the tracked UI source, `package.json`, and
-`package-lock.json`. The root `.dockerignore` excludes `.env`,
-`services/**/.env`, nested `ui/node_modules/`, `ui/dist/`, and coverage outputs
-while keeping `.env.example`, package manifests, and source files available to
-Docker builds.
+`package-lock.json`. The `.dockerignore` excludes `.env`, `ui/node_modules/`,
+`ui/dist/`, and coverage outputs while keeping `.env.example`, package
+manifests, and source files available to Docker builds.
 
-The service starts on **port 8030**. The ML platform services must already be running on the same Docker network (`traid-network`).
+The service starts on **port 8030**. When running as part of the TRAID ML
+platform, the platform services must already be running on the same Docker
+network (`traid-network`); see [Required Platform Services](#required-platform-services).
 
 ### 3. Open the UI
 
@@ -176,7 +192,7 @@ The **History** page shows:
 ## Architecture
 
 ```
-services/autoresearch-agent/
+autoresearch-agent/
 ├── src/                        # FastAPI backend
 │   ├── main.py                 # App entry, lifespan, CORS, static files
 │   ├── config.py               # Settings (env vars → pydantic)
@@ -202,6 +218,9 @@ services/autoresearch-agent/
 │       ├── components/         # MetricsChart, IterationsTable, AgentLog, etc.
 │       ├── hooks/              # React Query hooks with auto-refetch
 │       └── api/client.ts       # API client + TypeScript types
+├── libs/                       # Vendored shared libraries (observability, config, …)
+├── traid_training_sdk/         # Vendored training SDK
+├── skills/                     # Agent skill definitions (ml-direction, ml-rl)
 ├── Dockerfile                  # 3-stage build (UI → Python deps → runtime)
 ├── CLAUDE.md                   # Agent system prompt ("Act, Don't Explore")
 ├── pyproject.toml              # Server Python dependencies
@@ -244,27 +263,51 @@ available for backward compatibility but is not the UI default.
 | `GET` | `/metrics` | Prometheus metrics (disabled unless bearer-token scrape auth is configured) |
 | `WS` | `/ws/events` | WebSocket for real-time events |
 
-### Docker Compose
+### Docker Compose (example)
 
 ```yaml
-# compose/autoresearch.yml
+# Example standalone deployment; when running inside the TRAID platform,
+# use the platform's compose files instead.
 services:
   autoresearch-agent:
-    container_name: traid_autoresearch_agent
+    container_name: autoresearch_agent
     ports: ["127.0.0.1:8030:8000"]
-    networks: [traid-network]
+    env_file: .env
     volumes:
       - autoresearch_runs:/app/workspace/runs    # Experiment artifacts
       - autoresearch_db:/app/workspace/db         # SQLite database
-      - ../configs:/host/configs                  # Config promotion target (UID 1001)
+      - ./workspace:/app/workspace                # Optional: training workspace (see below)
     deploy:
       resources:
         limits: { memory: 2G, cpus: "2.0" }
 ```
 
+## Workspace
+
+Training sessions execute inside a workspace directory (default
+`/app/workspace`, override with `AUTORESEARCH_WORKSPACE_ROOT`). This repository
+bundles the workspace *skeleton*: the agent skills
+(`direction-autotuner`, `volatility-autotuner`, `rl-autotuner`), the promotion
+gate bundles, a Python venv with the ML dependencies
+(`requirements-workspace.txt`), and the vendored shared libraries.
+
+It does **not** bundle the platform training assets — the autotuner scripts
+(`scripts/autotuner/`), the ML trainers (`ensemble-trainer`, `rl-trainer`), and
+production configs. To run full ML tuning sessions, mount a workspace that
+contains those assets (as the TRAID platform image does), e.g.:
+
+```bash
+docker run -v /path/to/platform/workspace:/app/workspace …
+```
+
+Without them, the service still runs: the API, UI, session management, SQLite
+persistence, replay tooling, and promotion preview/confirm for
+development-scope promotions all work standalone.
+
 ### Required Platform Services
 
-The agent calls these services over Docker DNS during training:
+The agent calls these services over Docker DNS during training (only present in
+a full TRAID platform deployment):
 
 | Service | URL (inside Docker) | Purpose |
 |---------|---------------------|---------|
@@ -305,20 +348,20 @@ reproducibility. VDMC readiness is required for `rl`, `pipeline`, and
 health-wide `all` preflight checks; it is observed but non-blocking for
 `direction` and `volatility` sessions.
 
-The container runs as UID/GID `1001`, matching the main ML service images.
-Ensure any host-owned `configs/` path used for promotions is writable by that
-identity.
+The container runs as UID/GID `1000` by default (`APP_UID`/`APP_GID` build
+args). Ensure any host-owned workspace or configs path used for promotions is
+writable by that identity.
 
 ### Direction Upgrade Runbooks
 
-- `services/autoresearch-agent/RUNBOOK.md` covers service auth, metrics,
-  health/readiness, Docker build, UID `1001`, and workspace dependency parity.
-- `docs/ml/autoresearch_direction_runbook.md` covers operator workflow,
-  phase-state inspection, HPO rules, promotion readiness, rollback triggers,
-  and verification commands.
-- `docs/ml/development_promotion_rollback_guide.md` covers development
-  promotion preview/confirm requirements and rollback procedure.
-- `docs/ml/direction_prediction_model_card.md` defines the model-card fields
+- `RUNBOOK.md` covers service auth, metrics, health/readiness, Docker build,
+  UID handling, and workspace dependency parity.
+- In the TRAID platform monorepo, `docs/ml/autoresearch_direction_runbook.md`
+  covers operator workflow, phase-state inspection, HPO rules, promotion
+  readiness, rollback triggers, and verification commands;
+  `docs/ml/development_promotion_rollback_guide.md` covers development
+  promotion preview/confirm requirements and rollback procedure; and
+  `docs/ml/direction_prediction_model_card.md` defines the model-card fields
   expected for direction candidates and promoted development configs.
 
 ### Supported LLM Backends

@@ -3,8 +3,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SERVICE_DIR = REPO_ROOT / "services" / "autoresearch-agent"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SERVICE_DIR = REPO_ROOT
 
 
 def _git(*args: str) -> subprocess.CompletedProcess[str]:
@@ -81,25 +81,18 @@ def test_env_example_exists_and_contains_only_sanitized_values():
 
 def test_autoresearch_ui_build_inputs_are_tracked_and_outputs_ignored():
     tracked_inputs = (
-        "services/autoresearch-agent/ui/package.json",
-        "services/autoresearch-agent/ui/package-lock.json",
-        "services/autoresearch-agent/ui/src/App.tsx",
+        "ui/package.json",
+        "ui/package-lock.json",
+        "ui/src/App.tsx",
     )
     for path in tracked_inputs:
         result = _git("ls-files", "--error-unmatch", path)
         assert result.returncode == 0, result.stderr
 
-    assert _git("check-ignore", "-q", "services/autoresearch-agent/.env").returncode == 0
-    assert (
-        _git("check-ignore", "-q", "services/autoresearch-agent/.env.example").returncode
-        == 1
-    )
-    assert (
-        _git("check-ignore", "-q", "services/autoresearch-agent/ui/node_modules")
-        .returncode
-        == 0
-    )
-    assert _git("check-ignore", "-q", "services/autoresearch-agent/ui/dist").returncode == 0
+    assert _git("check-ignore", "-q", ".env").returncode == 0
+    assert _git("check-ignore", "-q", ".env.example").returncode == 1
+    assert _git("check-ignore", "-q", "ui/node_modules").returncode == 0
+    assert _git("check-ignore", "-q", "ui/dist").returncode == 0
 
 
 def test_autoresearch_backend_uses_src_layout_and_committed_lockfile():
@@ -107,50 +100,67 @@ def test_autoresearch_backend_uses_src_layout_and_committed_lockfile():
     assert not (SERVICE_DIR / "server").exists()
     assert (SERVICE_DIR / "poetry.lock").exists()
 
-    result = _git("check-ignore", "-q", "services/autoresearch-agent/poetry.lock")
+    result = _git("check-ignore", "-q", "poetry.lock")
     assert result.returncode == 1
 
 
-def test_autoresearch_dockerfile_matches_ml_service_runtime_contract():
+def test_vendored_path_dependencies_are_tracked():
+    vendored = (
+        "libs/__init__.py",
+        "libs/observability",
+        "libs/config",
+        "libs/vdmc_core",
+        "libs/data_clients",
+        "libs/feature_engineering",
+        "libs/identity_client",
+        "libs/ml_artifacts",
+        "libs/resilience",
+        "traid_training_sdk",
+    )
+    for path in vendored:
+        result = _git("ls-files", "--error-unmatch", path)
+        assert result.returncode == 0, f"missing vendored dependency: {path}"
+
+
+def test_autoresearch_dockerfile_matches_standalone_runtime_contract():
     dockerfile = (SERVICE_DIR / "Dockerfile").read_text(encoding="utf-8")
 
     assert "poetry lock" not in dockerfile
     assert "|| true" not in dockerfile
     assert "2>/dev/null" not in dockerfile
-    assert "services/autoresearch-agent/src/ /app/src/" in dockerfile
+    assert "src/ /app/src/" in dockerfile
     assert 'CMD ["uvicorn", "src.main:app"' in dockerfile
-    # Non-root user creation. PR-9: UID/GID were hard-coded 1001 originally;
-    # the Dockerfile now parameterizes them via APP_UID/APP_GID build args
-    # (defaulting to 1000 to match the host user that owns the bind-mounted
-    # configs/ dir, so promotion can write atomic temp/rollback files there).
+    # Non-root user creation. UID/GID are parameterized via APP_UID/APP_GID
+    # build args (defaulting to 1000 to match the host user that owns
+    # bind-mounted workspace content, so promotion can write atomic temp
+    # and rollback files there).
     assert "ARG APP_UID=" in dockerfile
     assert "ARG APP_GID=" in dockerfile
     assert "groupadd -g ${APP_GID} appuser" in dockerfile
     assert "useradd -u ${APP_UID} -g appuser -m appuser" in dockerfile
-    assert "services/shared /app/services/shared" in dockerfile
-    assert "-e ./libs/ml_artifacts" in dockerfile
+    # Vendored path dependencies must be present in the runtime image for
+    # the editable installs made by the server venv.
+    assert "COPY --from=python-builder --chown=appuser:appuser /app/libs /app/libs" in dockerfile
+    assert (
+        "COPY --from=python-builder --chown=appuser:appuser "
+        "/app/traid_training_sdk /app/traid_training_sdk"
+    ) in dockerfile
     assert '"--workers", "1"' in dockerfile
+    # Promotion gate bundles are bundled from this repository.
     assert (
         "reports/direction-tuning/promotion/ "
         "/app/workspace/reports/direction-tuning/promotion/"
     ) in dockerfile
     assert (
-        REPO_ROOT
-        / "reports"
-        / "direction-tuning"
-        / "promotion"
+        REPO_ROOT / "reports" / "direction-tuning" / "promotion"
         / "development_gate_bundle_v1.yaml"
     ).exists()
 
 
 def test_autoresearch_deployment_documents_single_instance_constraint():
     readme = (SERVICE_DIR / "README.md").read_text(encoding="utf-8")
-    compose = (REPO_ROOT / "compose" / "autoresearch.yml").read_text(encoding="utf-8")
-    swarm = (REPO_ROOT / "compose" / "swarm-overrides.yml").read_text(encoding="utf-8")
 
     assert "single-instance SQLite" in readme
-    assert "replicas:" not in compose
-    assert "autoresearch-agent:" not in swarm
 
 
 def test_readme_uses_tracked_env_template_without_token_samples():

@@ -1,0 +1,57 @@
+# --- Secrets / environment ---
+# Local env files must never be committed; only the sanitized .env.example
+# template is tracked.
+.env
+.env.*
+!.env.example
+
+# Vault / token material
+*-token.txt
+*secret-id*.txt
+root-token.txt
+unseal-keys.txt
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# --- UI ---
+ui/node_modules
+ui/dist
+ui/.vite
+
+# --- Node (tooling) ---
+node_modules/
+
+# --- Runtime artifacts ---
+# Local workspace (runs, SQLite DBs, generated skills) when running standalone.
+workspace/
+runs/
+db/
+logs/
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Editors / OS ---
+.idea/
+.vscode/
+*.swp
+.DS_Store
