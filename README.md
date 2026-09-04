@@ -383,3 +383,9 @@ Any API compatible with the Anthropic Messages format:
 | Experiment timeout | 2 hours | `AUTORESEARCH_TIMEOUT_S` |
 | Max concurrent sessions | 2 | `AUTORESEARCH_MAX_CONCURRENT` |
 | Quick mode default | off | `AUTORESEARCH_DEFAULT_QUICK_MODE` |
+
+---
+
+## License
+
+Released under the [MIT License](LICENSE).

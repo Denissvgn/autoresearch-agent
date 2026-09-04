@@ -3,6 +3,7 @@ name = "autoresearch-agent"
 version = "0.1.0"
 description = "Autonomous ML model tuning agent powered by Claude"
 authors = ["Traid Platform Team"]
+license = "MIT"
 packages = []
 package-mode = false
 
