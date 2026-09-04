@@ -34,7 +34,6 @@ from src.core.research_state import build_research_state
 from src.core.result_artifact import merge_result_payload
 from src.core.results_store import ResultsStore
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 

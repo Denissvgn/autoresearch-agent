@@ -10,7 +10,6 @@ from pathlib import Path
 import joblib
 import pytest
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 if not (REPO_ROOT / "scripts" / "autotuner").is_dir():
