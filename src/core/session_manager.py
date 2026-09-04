@@ -1047,20 +1047,45 @@ class SessionManager:
         own a stop-vs-complete distinction the way the per-session
         orchestrator does. If you change PipelineController to surface
         stop/complete distinctly, drop the eager update here too.
+
+        ARC-011 review C5 (P6-004 / H3): the DB stop intent is written
+        BEFORE the local-registry check, mirroring ``stop_session`` — a stop
+        routed to a non-owning worker records ``status='stopping'`` (which
+        the owning controller's phase-loop poll observes) and forwards the
+        stop to every recorded phase session (``stop_session`` records DB
+        intent even for non-locally-owned sessions, so the owner's current
+        phase session stops mid-run too). Previously the early return made a
+        cross-worker pipeline stop a silent no-op.
         """
         task = self._active_pipelines.get(pipeline_id)
-        if not task or task.done():
+
+        # DB-side stop intent — observed by the owning controller's poll.
+        pipe = await self._store.get_pipeline(pipeline_id)
+        if pipe is None:
             return False
+        if str(pipe.get("status") or "") not in {"running", "stopping"}:
+            # Terminal/failed pipeline — nothing to stop (and we must not
+            # overwrite a terminal status with 'stopping').
+            return False
+        await self._store.update_pipeline(pipeline_id, status="stopping")
+
+        # Also stop the currently running phase session(s) — locally owned
+        # ones drain here; non-owned ones get their DB stop intent recorded
+        # (stop_session handles both since review C5).
+        for phase in PHASES:
+            sid = pipe.get(f"{phase}_session_id")
+            if sid:
+                await self.stop_session(sid)
+
+        if task is None or task.done():
+            logger.info(
+                "Stop intent recorded for pipeline %s on a non-owning "
+                "worker; the owning controller will observe the DB status",
+                pipeline_id,
+            )
+            return True
 
         self._pipeline_ctrl.request_stop(pipeline_id)
-
-        # Also stop the currently running phase session
-        pipe = await self._store.get_pipeline(pipeline_id)
-        if pipe:
-            for phase in PHASES:
-                sid = pipe.get(f"{phase}_session_id")
-                if sid and self.is_running(sid):
-                    await self.stop_session(sid)
 
         await self._drain_or_cancel_task(
             task,
@@ -1166,10 +1191,20 @@ class SessionManager:
         (timing_out/failing) the intent is refused and we return False;
         against an already-terminal session the transition is an idempotent
         no-op.
+
+        ARC-011 review C5 (P6-004 / H3): the DB intent is written BEFORE the
+        local-registry check. Under ``WEB_CONCURRENCY > 1`` with a non-sticky
+        load balancer the stop may be routed to a worker that does not own
+        the session (its ``_active`` registry is empty) — the previous early
+        return meant no intent was ever written, so the owning worker's
+        ``_should_stop_cross_worker`` DB poll never fired (the ADR §6.2
+        assumption "worker B writes the transition" was unreachable). Now
+        any worker records ``stopping``; the owner observes it on its turn
+        poll and finalizes. When this worker DOES own the session it
+        additionally sets the in-process flag and drains the task (the fast
+        path — no poll latency).
         """
         active = self._active.get(research_id)
-        if not active:
-            return False
         # Record stop intent so a racing `complete` is refused under the lock.
         # Against a terminal session the transition is an idempotent no-op
         # (``new_state`` stays terminal, ``changed`` is False) — detect that and
@@ -1182,15 +1217,25 @@ class SessionManager:
             )
         except IllegalTransitionError:
             return False
+        except LookupError:
+            # Unknown session id — nothing to stop on any worker.
+            return False
         if result.new_state is not SessionState.STOPPING:
             return False
-        self._orchestrator.request_stop(research_id)
-        await self._drain_or_cancel_task(
-            active.task,
-            label=f"research {research_id}",
-            active_dict=self._active,
-            active_key=research_id,
-        )
+        if active is not None:
+            self._orchestrator.request_stop(research_id)
+            await self._drain_or_cancel_task(
+                active.task,
+                label=f"research {research_id}",
+                active_dict=self._active,
+                active_key=research_id,
+            )
+        else:
+            logger.info(
+                "Stop intent recorded for research %s on a non-owning worker; "
+                "the owning worker will observe the DB status and finalize",
+                research_id,
+            )
         logger.info("Stop requested for research %s", research_id)
         return True
 
@@ -1239,32 +1284,58 @@ class SessionManager:
             logger.exception("Failed to clean workspace after start failure: %s", path)
 
     async def pause_session(self, research_id: str) -> bool:
+        # ARC-011 review C5 (P6-004 / H3): the DB transition is written before
+        # the local-registry check, mirroring stop_session — a pause routed to
+        # a non-owning worker records ``paused`` so the owning worker's
+        # ``_wait_while_paused`` DB poll observes it (previously the early
+        # return made cross-worker pause a silent no-op).
         active = self._active.get(research_id)
-        if not active:
-            return False
         # ARC-011 P0-003: route through the state machine. (running, pause) →
         # paused; illegal against a winding-down session (stopping/completing/
         # timing_out/failing) or terminal — return False so the API 404s
         # rather than clobber an in-flight terminal (pause sibling-of-W8).
         try:
-            await self._sm.transition(research_id, SessionEvent.PAUSE)
+            result = await self._sm.transition(research_id, SessionEvent.PAUSE)
         except IllegalTransitionError:
             return False
-        self._orchestrator.request_pause(research_id)
+        except LookupError:
+            return False
+        if result.new_state is not SessionState.PAUSED:
+            return False
+        if active is not None:
+            self._orchestrator.request_pause(research_id)
+        else:
+            logger.info(
+                "Pause recorded for research %s on a non-owning worker; the "
+                "owning worker will observe the DB status",
+                research_id,
+            )
         logger.info("Paused research %s", research_id)
         return True
 
     async def resume_session(self, research_id: str) -> bool:
+        # ARC-011 review C5: same restructure — a cross-worker resume writes
+        # ``running``; the owning worker's pause poll honors the authoritative
+        # DB status (and refreshes its captured lock_epoch after the wait).
         active = self._active.get(research_id)
-        if not active:
-            return False
         # ARC-011 P0-003: (paused, resume) → running; illegal from any other
         # state (a winding-down or terminal session cannot resume).
         try:
-            await self._sm.transition(research_id, SessionEvent.RESUME)
+            result = await self._sm.transition(research_id, SessionEvent.RESUME)
         except IllegalTransitionError:
             return False
-        self._orchestrator.request_resume(research_id)
+        except LookupError:
+            return False
+        if result.new_state is not SessionState.RUNNING:
+            return False
+        if active is not None:
+            self._orchestrator.request_resume(research_id)
+        else:
+            logger.info(
+                "Resume recorded for research %s on a non-owning worker; the "
+                "owning worker will observe the DB status",
+                research_id,
+            )
         logger.info("Resumed research %s", research_id)
         return True
 

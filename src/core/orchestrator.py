@@ -1033,17 +1033,62 @@ class AgentOrchestrator:
         return status in {"stopping", "stopped", "timed_out", "failed"}
 
     async def _wait_while_paused(self, research_id: str) -> None:
-        was_paused = self._pause_flags.get(research_id, False)
-        while self._pause_flags.get(research_id, False):
+        """Block while the session is paused — locally OR DB-side.
+
+        ARC-011 review C5 (P6-004 / H3): the previous loop only spun on the
+        in-process ``_pause_flags``, so a pause recorded by a non-owning
+        worker (DB status ``paused``) was never observed by the owner, and a
+        cross-worker resume could never unstick a locally-paused owner. The
+        DB status is authoritative: wait while it says ``paused``; when it
+        says ``running`` again (resumed from any worker), proceed — even if a
+        stale local flag is still set.
+        """
+        was_paused = False
+        while True:
             if await self._should_stop_cross_worker(research_id):
                 return
+            db_paused = await self._is_paused_cross_worker(research_id)
+            if not db_paused:
+                if self._pause_flags.get(research_id, False):
+                    # DB says running while the local flag is set — a resume
+                    # was recorded elsewhere (or the local transition was
+                    # outrun); honor the authoritative DB and proceed.
+                    logger.info(
+                        "Research %s: DB shows resumed while the local pause "
+                        "flag is set — honoring the DB resume",
+                        research_id,
+                    )
+                break
+            was_paused = True
             await asyncio.sleep(2)
         # ARC-011 P6-004: a pause/resume transition bumped lock_epoch (the
         # state machine bumps on every committed transition). If we were
-        # paused, refresh the captured epoch so post-resume writes carry the
-        # fresh value and aren't fenced out by our own transition.
+        # paused (locally or DB-side), refresh the captured epoch so
+        # post-resume writes carry the fresh value and aren't fenced out by
+        # our own transition.
         if was_paused:
             await self._refresh_session_epoch(research_id)
+
+    async def _is_paused_cross_worker(self, research_id: str) -> bool:
+        """True when the shared DB says the session is ``paused``.
+
+        The DB-side pause may have been recorded by any worker (review C5);
+        SQLite is single-worker so only the local path applies there, but
+        the check is cheap and uniform on both backends.
+        """
+        try:
+            session = await self._store.get_session(research_id)
+        except Exception:  # noqa: BLE001  (a read failure must not un-pause)
+            logger.warning(
+                "pause-check store read failed for %s", research_id,
+                exc_info=True,
+            )
+            # Fail closed against the local flag: a locally-paused session
+            # must not un-pause merely because the DB read failed.
+            return bool(self._pause_flags.get(research_id, False))
+        if not session:
+            return False
+        return str(session.get("status") or "").lower() == "paused"
 
     async def _refresh_session_epoch(self, research_id: str) -> None:
         """Re-read and re-cache the session's lock_epoch after a local

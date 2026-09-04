@@ -2,6 +2,50 @@
 
 ## Unreleased
 
+- **ARC-011 implementation review C5 (2026-08-15) — cross-worker
+  stop/pause/resume works at the SessionManager entry point (P6-004 / H3;
+  ADR §6.2's design is finally reachable).** All four control methods
+  (`stop_session` / `pause_session` / `resume_session` / `stop_pipeline`)
+  began with an `_active`-registry early return BEFORE writing any DB
+  intent — under `WEB_CONCURRENCY > 1` with a non-sticky load balancer, a
+  request routed to a worker that did not own the session returned False and
+  wrote nothing, so the owning worker's DB-side polls never fired (the
+  fencing tests bypassed `SessionManager`, leaving the gap untested).
+  - **Sessions:** each control method now writes the DB transition FIRST
+    (state machine under the advisory lock); local ownership only adds the
+    fast path (in-process flag + task drain, no poll latency). A non-owning
+    worker records `stopping`/`paused`/`running` and the owner observes it
+    (`_should_stop_cross_worker` for stop; see the pause fix below). A
+    stop against an unknown id returns False (`LookupError`); terminal
+    rows remain idempotent no-ops (status never clobbered).
+  - **Pause observation (the other half):** `_wait_while_paused` previously
+    spun only on the in-process `_pause_flags` — a DB-side `paused` (recorded
+    by any worker) was invisible, and a locally-paused owner could never be
+    unstuck by a cross-worker resume. The DB status is now authoritative:
+    wait while it says `paused`; proceed when it says `running` again (even
+    with a stale local flag); a store-read failure fails closed to the local
+    flag (a blip must not un-pause). The captured `lock_epoch` is refreshed
+    after any observed pause/resume (P6-004).
+  - **Pipelines (ADR §6.2 lists them for the same fix):** `stop_pipeline`
+    records `status='stopping'` before the local-registry check (terminal
+    rows refused, not clobbered) and forwards the stop to every recorded
+    phase session — `stop_session` records DB intent even for non-owned
+    sessions, so the owner's current phase session stops mid-run too. The
+    owning `PipelineController`'s phase-loop poll consults the DB row
+    (`_stop_recorded_db`; read failures fail closed to the local flag).
+  - **Tests:** new `tests/test_cross_worker_control.py` (9 tests): non-owner
+    stop/pause/resume record DB intent (and the owner's poll observes it —
+    the H3 loop closed at unit level), unknown/terminal no-ops, the local
+    fast path unchanged, DB-side pause observation + cross-worker-resume
+    unstick + epoch refresh, pipeline DB intent + terminal-row refusal +
+    controller poll. The distributed harness gains
+    `test_distributed_session_manager_stop_records_intent` — a real
+    multi-process worker stopping through the REAL `SessionManager` entry
+    point (previously the harness bypassed it, which is why the C5 bug was
+    invisible); runs in the dedicated Postgres CI job. Full suite green
+    (1369 passed); ruff/mypy at the pre-existing baseline (91/15, zero
+    new); domain-coupling guard green.
+
 - **ARC-011 implementation review C4 (2026-08-15) — the Phase-4 exit
   criterion is now actually met: a non-ML session runs end-to-end on the
   OpenAI provider.** The Phase-4 close-out had claimed this while no session

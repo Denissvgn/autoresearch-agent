@@ -269,3 +269,48 @@ async def test_distributed_fresh_epoch_write_accepted(pg_store, pg_dsn):
     assert results[0]["accepted"] is True
     session = await pg_store.get_session(sid)
     assert float(session["total_api_cost_usd"]) == 9.99
+
+
+def _worker_session_manager_stop(dsn: str, sid: str) -> dict[str, Any]:
+    """Child: stop a session through the REAL SessionManager entry point.
+
+    ARC-011 review C5: the earlier harness drove ``sm.transition`` directly,
+    bypassing SessionManager — which was exactly where the H3 bug lived (the
+    ``_active`` early return meant a non-owning worker recorded nothing). This
+    worker owns nothing (fresh manager, empty registry), like a stop routed to
+    the wrong worker by a non-sticky load balancer.
+    """
+    sys.path.insert(0, _SERVICE_ROOT)
+    os.environ.setdefault("ANTHROPIC_BASE_URL", "http://anthropic.invalid")
+    os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "test-token")
+    os.environ.setdefault("USE_VAULT", "false")
+
+    async def run() -> dict[str, Any]:
+        store = await _pool_only_store(dsn)
+        try:
+            from src.core.session_manager import SessionManager
+
+            manager = SessionManager(store)
+            accepted = await manager.stop_session(sid)
+            return {"accepted": accepted}
+        finally:
+            await store.close()
+
+    return asyncio.run(run())
+
+
+async def test_distributed_session_manager_stop_records_intent(
+    pg_store, pg_dsn,
+):
+    """H3 through the real entry point, across processes: a worker that does
+    NOT own the session calls ``SessionManager.stop_session`` and the shared
+    DB must carry the ``stopping`` intent afterward — the owning worker's
+    ``_should_stop_cross_worker`` poll would observe exactly this row."""
+    sid = f"res_dist_smstop_{uuid.uuid4().hex[:6]}"
+    await _seed(pg_store, sid)
+    results = _spawn(_worker_session_manager_stop, pg_dsn, sid, n=2)
+    # Both non-owning workers report the stop as recorded (the second is an
+    # idempotent no-op on 'stopping' that still returns True).
+    assert all(r["accepted"] for r in results)
+    session = await pg_store.get_session(sid)
+    assert session["status"] in {"stopping", "stopped"}

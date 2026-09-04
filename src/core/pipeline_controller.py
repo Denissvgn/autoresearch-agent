@@ -185,6 +185,27 @@ class PipelineController:
     def _should_stop(self, pipeline_id: str) -> bool:
         return self._stop_flags.get(pipeline_id, False)
 
+    async def _stop_recorded_db(self, pipeline_id: str) -> bool:
+        """True when the shared DB carries a pipeline stop intent (review C5).
+
+        ``SessionManager.stop_pipeline`` records ``status='stopping'`` before
+        its local-registry check, so a stop routed to a non-owning worker
+        (WEB_CONCURRENCY>1, non-sticky LB) is observable here at the owning
+        controller's phase-loop poll. Read failures fail closed to the local
+        flag (a store blip must not un-stop a locally-stopped pipeline).
+        """
+        try:
+            pipe = await self._store.get_pipeline(pipeline_id)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "pipeline stop-check store read failed for %s", pipeline_id,
+                exc_info=True,
+            )
+            return self._should_stop(pipeline_id)
+        if not pipe:
+            return False
+        return str(pipe.get("status") or "").lower() in {"stopping", "stopped"}
+
     def _compute_phase_budgets(self, config: PipelineConfig) -> Dict[str, int]:
         if config.phase_budgets:
             return config.phase_budgets
@@ -218,7 +239,9 @@ class PipelineController:
                     )
                     continue
 
-                if self._should_stop(pipeline_id):
+                if self._should_stop(pipeline_id) or await self._stop_recorded_db(
+                    pipeline_id,
+                ):
                     await self._store.update_pipeline(
                         pipeline_id,
                         status="stopped",
