@@ -32,18 +32,25 @@ _SKILL_ID_TO_MODEL_TYPE: dict[str, str] = {v: k for k, v in _MODEL_TYPE_TO_SKILL
 def model_type_to_skill_id(model_type: str) -> str:
     """Translate a legacy ``model_type`` to its canonical ``skill_id``.
 
-    Returns ``""`` for an unknown ``model_type`` (e.g. ``"pipeline"`` which is
-    deliberately out of Phase 2 scope, or empty string).
+    Known legacy values map to their canonical skill ids; any other non-empty
+    value is already a canonical ``skill_id`` and is returned unchanged
+    (``skill_id`` is the universal vocabulary — non-legacy skills are their own
+    ``model_type`` alias). Empty string stays empty.
     """
-    return _MODEL_TYPE_TO_SKILL_ID.get(model_type, "")
+    if not model_type:
+        return ""
+    return _MODEL_TYPE_TO_SKILL_ID.get(model_type, model_type)
 
 
 def skill_id_to_model_type(skill_id: str) -> str:
     """Translate a canonical ``skill_id`` back to its legacy ``model_type``.
 
-    Returns ``""`` for an unknown ``skill_id``.
+    Known canonical ids map to their legacy short names; any other non-empty
+    id is its own ``model_type`` alias (empty string stays empty).
     """
-    return _SKILL_ID_TO_MODEL_TYPE.get(skill_id, "")
+    if not skill_id:
+        return ""
+    return _SKILL_ID_TO_MODEL_TYPE.get(skill_id, skill_id)
 
 
 def is_known_model_type(model_type: str) -> bool:

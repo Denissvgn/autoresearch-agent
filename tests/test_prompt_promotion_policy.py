@@ -40,9 +40,7 @@ from src.core.orchestrator import (  # noqa: E402
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PROMPT_FILES = (
     REPO_ROOT / "CLAUDE.md",
-    REPO_ROOT / ".github" / "skills" / "direction-autotuner" / "SKILL.md",
-    REPO_ROOT / ".github" / "skills" / "volatility-autotuner" / "SKILL.md",
-    REPO_ROOT / ".github" / "skills" / "rl-autotuner" / "SKILL.md",
+    REPO_ROOT / "skills" / "prompt-engineering" / "SKILL.md",
 )
 
 
@@ -65,8 +63,12 @@ def test_prompt_sources_do_not_instruct_direct_promote_py():
         text = path.read_text(encoding="utf-8")
 
         assert "promote.py" not in text, path
-        assert "Do not promote directly" in text, path
-        assert "let the server preview/confirm" in text, path
+
+    # The workspace-level agent context carries the server-owned promotion
+    # handoff contract explicitly.
+    claude_md = (REPO_ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "Do not promote directly" in claude_md
+    assert "let the server preview/confirm" in claude_md
 
 
 def test_fresh_orchestrator_prompts_use_server_owned_setup_mode(monkeypatch):

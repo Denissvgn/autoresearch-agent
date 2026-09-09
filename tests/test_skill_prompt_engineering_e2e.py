@@ -180,7 +180,8 @@ class TestCanonicalRequestTranslation:
             skill_id="prompt-engineering", subject_id="default", variant="production",
         )
         conflicts = _translate_canonical_request(req)
-        assert req.model_type == ""
+        # Identity alias fallback: a non-legacy skill is its own model_type.
+        assert req.model_type == "prompt-engineering"
         assert req.instrument == "default"
         assert req.timeframe == "production"
         assert conflicts == []

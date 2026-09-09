@@ -26,7 +26,8 @@ from src.api.subjects import router as subjects_router
 from src.config import settings
 
 API_TOKEN = "test-autoresearch-token"
-_EXPECTED_SKILL_IDS = {"ml-direction", "ml-volatility", "ml-rl"}
+_EXPECTED_SKILL_IDS = {"prompt-engineering"}
+_REFERENCE_SKILL = "prompt-engineering"
 
 
 def create_test_app() -> FastAPI:
@@ -63,7 +64,7 @@ def auth_headers() -> dict[str, str]:
 
 # --- GET /skills (GEN-003) ---
 
-def test_list_skills_returns_all_ml_skills(client: TestClient):
+def test_list_skills_returns_installed_skills(client: TestClient):
     response = client.get("/api/v1/skills", headers=auth_headers())
     assert response.status_code == 200
     ids = {s["id"] for s in response.json()}
@@ -73,9 +74,8 @@ def test_list_skills_returns_all_ml_skills(client: TestClient):
 def test_list_skills_carries_legacy_model_type_alias(client: TestClient):
     response = client.get("/api/v1/skills", headers=auth_headers())
     by_id = {s["id"]: s for s in response.json()}
-    assert by_id["ml-direction"]["model_type"] == "direction"
-    assert by_id["ml-volatility"]["model_type"] == "volatility"
-    assert by_id["ml-rl"]["model_type"] == "rl"
+    # Non-legacy skills are their own model_type alias (identity fallback).
+    assert by_id["prompt-engineering"]["model_type"] == "prompt-engineering"
 
 
 def test_list_skills_category_filter(client: TestClient):
@@ -88,14 +88,14 @@ def test_list_skills_category_filter(client: TestClient):
 # --- GET /skills/{id} ---
 
 def test_get_skill_returns_descriptor_with_links(client: TestClient):
-    response = client.get("/api/v1/skills/ml-direction", headers=auth_headers())
+    response = client.get(f"/api/v1/skills/{_REFERENCE_SKILL}", headers=auth_headers())
     assert response.status_code == 200
     body = response.json()
-    assert body["id"] == "ml-direction"
+    assert body["id"] == _REFERENCE_SKILL
     assert body["display_name"]
-    assert body["links"]["self"] == "/skills/ml-direction"
-    assert body["links"]["form_fields"] == "/skills/ml-direction/form-fields"
-    assert body["model_type"] == "direction"
+    assert body["links"]["self"] == f"/skills/{_REFERENCE_SKILL}"
+    assert body["links"]["form_fields"] == f"/skills/{_REFERENCE_SKILL}/form-fields"
+    assert body["model_type"] == _REFERENCE_SKILL
 
 
 def test_get_skill_unknown_returns_404_with_hint(client: TestClient):
@@ -111,7 +111,9 @@ def test_get_skill_unknown_returns_404_with_hint(client: TestClient):
 # --- Sub-resource endpoints ---
 
 def test_get_param_schema(client: TestClient):
-    response = client.get("/api/v1/skills/ml-direction/param-schema", headers=auth_headers())
+    response = client.get(
+        f"/api/v1/skills/{_REFERENCE_SKILL}/param-schema", headers=auth_headers()
+    )
     assert response.status_code == 200
     schema = response.json()
     assert schema["type"] == "object"
@@ -119,17 +121,21 @@ def test_get_param_schema(client: TestClient):
 
 
 def test_get_form_fields(client: TestClient):
-    response = client.get("/api/v1/skills/ml-direction/form-fields", headers=auth_headers())
+    response = client.get(
+        f"/api/v1/skills/{_REFERENCE_SKILL}/form-fields", headers=auth_headers()
+    )
     assert response.status_code == 200
     body = response.json()
-    assert body["skill_id"] == "ml-direction"
+    assert body["skill_id"] == _REFERENCE_SKILL
     assert isinstance(body["form_fields"], list)
     field_names = {f["name"] for f in body["form_fields"]}
-    assert "enable_hpo" in field_names
+    assert "eval_set" in field_names
 
 
 def test_get_metric_schema(client: TestClient):
-    response = client.get("/api/v1/skills/ml-direction/metric-schema", headers=auth_headers())
+    response = client.get(
+        f"/api/v1/skills/{_REFERENCE_SKILL}/metric-schema", headers=auth_headers()
+    )
     assert response.status_code == 200
     schema = response.json()
     assert "primary" in schema
@@ -139,19 +145,23 @@ def test_get_metric_schema(client: TestClient):
 
 
 def test_get_versions(client: TestClient):
-    response = client.get("/api/v1/skills/ml-direction/versions", headers=auth_headers())
+    response = client.get(
+        f"/api/v1/skills/{_REFERENCE_SKILL}/versions", headers=auth_headers()
+    )
     assert response.status_code == 200
     body = response.json()
-    assert body["skill_id"] == "ml-direction"
+    assert body["skill_id"] == _REFERENCE_SKILL
     assert len(body["versions"]) >= 1
     assert body["versions"][0]["current"] is True
 
 
 def test_get_changelog(client: TestClient):
-    response = client.get("/api/v1/skills/ml-direction/changelog", headers=auth_headers())
+    response = client.get(
+        f"/api/v1/skills/{_REFERENCE_SKILL}/changelog", headers=auth_headers()
+    )
     assert response.status_code == 200
     body = response.json()
-    assert body["skill_id"] == "ml-direction"
+    assert body["skill_id"] == _REFERENCE_SKILL
     assert "changelog" in body
 
 
@@ -164,7 +174,7 @@ def test_get_changelog_too_large_returns_413(
     structured detail (``error``/``skill_id``/``size_bytes``/``max_bytes``/
     ``hint``) instead of slurping the whole file into the response."""
     # Write an oversized CHANGELOG.md into a fake skill package directory.
-    skill_id = "ml-direction"  # any registered skill id; we override the dir
+    skill_id = _REFERENCE_SKILL  # any registered skill id; we override the dir
     skill_dir = tmp_path / skill_id
     skill_dir.mkdir()
     oversized = "x" * (skills_module._MAX_CHANGELOG_BYTES + 1)
@@ -217,7 +227,9 @@ def test_reload_allowed_in_staging(client: TestClient, monkeypatch: pytest.Monke
 # --- Subjects (P3-009, P3-010) ---
 
 def test_list_subjects(client: TestClient):
-    response = client.get("/api/v1/subjects?skill_id=ml-direction", headers=auth_headers())
+    response = client.get(
+        f"/api/v1/subjects?skill_id={_REFERENCE_SKILL}", headers=auth_headers()
+    )
     assert response.status_code == 200
     subjects = response.json()
     assert isinstance(subjects, list)
@@ -228,13 +240,13 @@ def test_list_subjects(client: TestClient):
 
 def test_list_subject_variants(client: TestClient):
     response = client.get(
-        "/api/v1/subjects/DOGE_USDT/variants?skill_id=ml-direction",
+        f"/api/v1/subjects/default/variants?skill_id={_REFERENCE_SKILL}",
         headers=auth_headers(),
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["skill_id"] == "ml-direction"
-    assert body["subject_id"] == "DOGE_USDT"
+    assert body["skill_id"] == _REFERENCE_SKILL
+    assert body["subject_id"] == "default"
     assert isinstance(body["variants"], list)
 
 
@@ -255,7 +267,7 @@ def test_subjects_unknown_skill_returns_404(client: TestClient):
 
 def test_skills_require_auth(client: TestClient):
     assert client.get("/api/v1/skills").status_code == 401
-    assert client.get("/api/v1/skills/ml-direction").status_code == 401
+    assert client.get(f"/api/v1/skills/{_REFERENCE_SKILL}").status_code == 401
 
 
 # --- OpenAPI contract (extends test_openapi_contract.py) ---

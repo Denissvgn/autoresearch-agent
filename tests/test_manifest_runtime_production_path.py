@@ -73,6 +73,37 @@ def _manifest(skill_id: str):
     return load_skill_manifest(SKILLS_ROOT / skill_id / "SKILL.yaml")
 
 
+def _file_path_manifest():
+    """A synthetic ``file_path``-promotion manifest (no installed skill uses
+    that kind anymore; the runtime must still resolve it)."""
+    import yaml
+
+    data = {
+        "schema_version": "research_skill.v1",
+        "id": "synthetic-file-skill",
+        "version": "1.0.0",
+        "category": "optimization",
+        "display_name": "Synthetic",
+        "description": "synthetic file_path skill",
+        "llm": {"provider": "anthropic", "primary_model": "m"},
+        "workspace": {"session_path_template": "runs/{skill_id}"},
+        "variants": {"static": ["v1"]},
+        "param_schema": {"type": "object"},
+        "metric_schema": {
+            "primary": {"field": "m", "label": "M", "direction": "higher_is_better"}
+        },
+        "decision_vocabulary": {"base": ["keep"]},
+        "phase_plan": [{"id": "p1", "min_iterations": 1, "max_iterations": 2}],
+        "command_policy": {},
+        "output_parser": {"format": "delimited_kv"},
+        "preflight": [],
+        "promotion_target": {
+            "primary": {"kind": "file_path", "path_template": "/tmp/x"}
+        },
+    }
+    return load_skill_manifest(yaml.safe_dump(data))
+
+
 def _config(**overrides: Any) -> ResearchConfig:
     defaults = dict(
         id="res_c2",
@@ -105,10 +136,11 @@ def test_phase_contract_block_sources_from_manifest_not_constants(monkeypatch):
     monkeypatch.setattr(orchestrator_module, "phases_for_model", _no_constants)
     orch = AgentOrchestrator(MagicMock())  # type: ignore[arg-type]
 
-    block = orch._build_phase_contract_block(_config(skill_id="ml-direction"))
-    # Rendered from the manifest's own phase ids (ml-direction declares the
-    # incumbent direction plan — the X-002 equivalence guarantee).
-    for phase in _manifest("ml-direction").phase_plan:
+    block = orch._build_phase_contract_block(
+        _config(skill_id="prompt-engineering", model_type="prompt-engineering")
+    )
+    # Rendered from the manifest's own phase ids.
+    for phase in _manifest("prompt-engineering").phase_plan:
         assert phase.id in block, f"manifest phase {phase.id!r} missing from contract"
 
     # The transitional fallback is gone for legacy sessions only: with no
@@ -125,10 +157,12 @@ def test_skill_phase_plan_none_for_legacy_sessions():
     orch = AgentOrchestrator(MagicMock())  # type: ignore[arg-type]
     assert orch._skill_phase_plan(_config()) is None
     # Manifest sessions get the runtime's plan.
-    plan = orch._skill_phase_plan(_config(skill_id="ml-direction"))
+    plan = orch._skill_phase_plan(
+        _config(skill_id="prompt-engineering", model_type="prompt-engineering")
+    )
     assert plan is not None
     assert [p["id"] for p in plan] == [
-        p.id for p in _manifest("ml-direction").phase_plan
+        p.id for p in _manifest("prompt-engineering").phase_plan
     ]
 
 
@@ -203,9 +237,9 @@ async def test_refresh_phase_state_uses_session_skill_plan():
 
 
 def test_load_packaged_skill_md_reads_package_primer():
-    content = _load_packaged_skill_md("ml-direction")
-    assert content.strip(), "packaged ml-direction primer must be non-empty"
-    primer = (SKILLS_ROOT / "ml-direction" / "SKILL.md").read_text(encoding="utf-8")
+    content = _load_packaged_skill_md("prompt-engineering")
+    assert content.strip(), "packaged prompt-engineering primer must be non-empty"
+    primer = (SKILLS_ROOT / "prompt-engineering" / "SKILL.md").read_text(encoding="utf-8")
     assert content == primer
 
 
@@ -226,7 +260,7 @@ def test_load_packaged_skill_md_honors_declared_primer_filename(monkeypatch, tmp
 
 
 def test_manifest_runtime_exposes_declared_primer_filename():
-    rt = ManifestSkillRuntime(_manifest("ml-direction"), orchestrator=MagicMock())
+    rt = ManifestSkillRuntime(_manifest("prompt-engineering"), orchestrator=MagicMock())
     assert rt.primer_filename == "SKILL.md"  # declared in llm.system_prompt
 
 
@@ -284,9 +318,9 @@ def test_transitional_runtime_policy_extension_never_widens():
 
 
 def test_manifest_runtime_policy_extension_carries_manifest_scripts():
-    rt = ManifestSkillRuntime(_manifest("ml-direction"), orchestrator=MagicMock())
+    rt = ManifestSkillRuntime(_manifest("prompt-engineering"), orchestrator=MagicMock())
     ext = rt.command_policy_extension()
-    assert "scripts/autotuner/direction/prepare.py" in ext["allowed_scripts"]
+    assert "eval/run.py" in ext["allowed_scripts"]
 
 
 # ============================================================================
@@ -295,9 +329,9 @@ def test_manifest_runtime_policy_extension_carries_manifest_scripts():
 
 
 def test_manifest_runtime_blocker_classification_non_empty():
-    rt = ManifestSkillRuntime(_manifest("ml-direction"), orchestrator=MagicMock())
+    rt = ManifestSkillRuntime(_manifest("prompt-engineering"), orchestrator=MagicMock())
     bc = rt.blocker_classification()
-    assert bc["actionable_blockers"], "ml-direction declares actionable blockers"
+    assert bc["actionable_blockers"], "prompt-engineering declares actionable blockers"
     assert "phase_evidence_keys" in bc
 
 
@@ -349,7 +383,7 @@ async def test_phase_advancement_not_genuine_without_the_key():
 
 
 def test_manifest_runtime_file_path_kind_returns_file_target():
-    rt = ManifestSkillRuntime(_manifest("ml-rl"), orchestrator=MagicMock())
+    rt = ManifestSkillRuntime(_file_path_manifest(), orchestrator=MagicMock())
     assert isinstance(rt.promotion_target(), FilePathPromotionTarget)
 
 
@@ -513,9 +547,11 @@ def test_materialize_unknown_explicit_skill_id_raises():
 
 
 def test_materialize_canonical_skill_id_returns_manifest_runtime():
-    rt = materialize_skill_runtime(MagicMock(), _config(skill_id="ml-direction"))
+    rt = materialize_skill_runtime(
+        MagicMock(), _config(skill_id="prompt-engineering", model_type="prompt-engineering")
+    )
     assert isinstance(rt, ManifestSkillRuntime)
-    assert rt.skill_id == "ml-direction"
+    assert rt.skill_id == "prompt-engineering"
 
 
 def test_materialize_legacy_empty_skill_id_keeps_transitional():
@@ -528,10 +564,10 @@ def test_materialize_legacy_empty_skill_id_keeps_transitional():
 # ============================================================================
 
 
-@pytest.mark.parametrize("skill_id", ["ml-direction", "ml-volatility", "ml-rl"])
+@pytest.mark.parametrize("skill_id", ["prompt-engineering"])
 def test_default_registry_resolves_packaged_skills(skill_id):
     """The production registry (the one ``materialize_skill_runtime`` uses)
-    resolves all three packaged ML skills — the manifest path is reachable
+    resolves the packaged skills — the manifest path is reachable
     without any test-only setup."""
     manifest = default_registry.get(skill_id)
     assert manifest.id == skill_id

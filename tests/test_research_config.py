@@ -56,13 +56,16 @@ def test_alias_round_trip_is_identity():
         assert skill_id_to_model_type(model_type_to_skill_id(mt)) == mt
 
 
-def test_unknown_model_type_returns_empty():
-    assert model_type_to_skill_id("pipeline") == ""
-    assert model_type_to_skill_id("nope") == ""
+def test_unknown_model_type_is_its_own_skill_id():
+    """Non-legacy values are already canonical skill ids — identity fallback."""
+    assert model_type_to_skill_id("prompt-engineering") == "prompt-engineering"
+    assert model_type_to_skill_id("") == ""
 
 
-def test_unknown_skill_id_returns_empty():
-    assert skill_id_to_model_type("nope") == ""
+def test_unknown_skill_id_is_its_own_model_type():
+    """Non-legacy skill ids alias to themselves — dual-shape for every skill."""
+    assert skill_id_to_model_type("prompt-engineering") == "prompt-engineering"
+    assert skill_id_to_model_type("") == ""
 
 
 def test_is_known_model_type():

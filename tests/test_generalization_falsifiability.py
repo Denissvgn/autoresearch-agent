@@ -38,7 +38,7 @@ from src.config import settings
 from src.core.skill_registry import DEFAULT_SKILLS_ROOT, SkillRegistry
 
 API_TOKEN = "test-autoresearch-token"
-_EXPECTED_SKILL_IDS = {"ml-direction", "ml-volatility", "ml-rl"}
+_EXPECTED_SKILL_IDS = {"prompt-engineering"}
 
 # Phase-3 grep deny-list (§1.7): these patterns must return 0 hits in
 # orchestrator.py after Phase 2+3. The orchestrator should be domain-agnostic.
@@ -77,12 +77,12 @@ def auth_headers() -> dict[str, str]:
 
 
 # ------------------------------------------------------------------
-# GEN-003: GET /skills lists the three ML skills
+# GEN-003: GET /skills lists the installed skills
 # ------------------------------------------------------------------
 
 
-def test_gen003_skills_lists_all_ml_skills(client: TestClient):
-    """GEN-003: GET /skills lists ml-direction, ml-volatility, ml-rl."""
+def test_gen003_skills_lists_installed_skills(client: TestClient):
+    """GEN-003: GET /skills lists every installed skill package."""
     response = client.get("/api/v1/skills", headers=auth_headers())
     assert response.status_code == 200
     ids = {s["id"] for s in response.json()}

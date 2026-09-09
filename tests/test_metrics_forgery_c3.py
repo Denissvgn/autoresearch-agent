@@ -47,10 +47,7 @@ os.environ.setdefault("USE_VAULT", "false")
 
 from src.core.orchestrator import AgentOrchestrator, _nonce_env_for_command
 from src.core.skill_loader import load_skill_manifest
-from src.core.skill_runtime import (
-    DirectionSkillRuntime,
-    ManifestSkillRuntime,
-)
+from src.core.skill_runtime import ManifestSkillRuntime
 
 SKILLS_ROOT = Path(__file__).resolve().parents[1] / "skills"
 _NONCE_HEX = "ab" * 32
@@ -276,16 +273,6 @@ def test_requires_signed_metrics_capability_properties():
     )
     assert pe.requires_signed_metrics is True
     assert pe.nonce_field == "server_nonce"
-
-    ml = ManifestSkillRuntime(
-        load_skill_manifest(SKILLS_ROOT / "ml-direction" / "SKILL.yaml"),
-        orchestrator=MagicMock(),
-    )
-    assert ml.requires_signed_metrics is False
-
-    transitional = DirectionSkillRuntime(MagicMock())
-    assert transitional.requires_signed_metrics is False
-    assert transitional.nonce_field == "server_nonce"
 
 
 # ============================================================================

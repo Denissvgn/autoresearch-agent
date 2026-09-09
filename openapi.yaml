@@ -1999,20 +1999,22 @@ components:
           - type: 'null'
           title: Instrument
           examples:
-          - DOGE_USDT
+          - subject-a
         timeframe:
           anyOf:
           - type: string
           - type: 'null'
           title: Timeframe
           examples:
-          - 15m
+          - v1
         model_type:
           anyOf:
           - type: string
-            pattern: ^(direction|volatility|rl|pipeline)$
           - type: 'null'
           title: Model Type
+          description: Legacy alias for skill_id. Known legacy short names (direction/volatility/rl) map
+            to their canonical skill ids; any other value is used as the skill_id directly. Unknown skills
+            are rejected with 404 skill_not_found.
         skill_id:
           anyOf:
           - type: string

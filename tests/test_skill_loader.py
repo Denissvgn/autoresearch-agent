@@ -53,17 +53,10 @@ SPIKE_DIR = REPO_ROOT / "docs" / "adr" / "arc-011-manifest-spike"
 
 
 class _StubSettings:
-    """Minimal settings object exposing every attr the spike manifests
+    """Minimal settings object exposing every attr the reference manifests
     reference via ``{settings.*}``."""
 
     mlflow_tracking_uri = "http://mlflow:5000"
-    mlflow_service_url = "http://mlflow-svc:8000"
-    data_ingest_url = "http://ingest:9000"
-    ensemble_trainer_url = "http://ens:9001"
-    rl_trainer_url = "http://rl:9002"
-    feature_service_url = "http://feat:9003"
-    inference_service_url = "http://inf:9004"
-    admin_service_url = "http://admin:9005"
     host_configs_path = "/mnt/host_configs"
 
 
@@ -105,7 +98,6 @@ def _minimal_manifest_dict() -> dict[str, Any]:
 @pytest.mark.parametrize(
     "draft_name",
     [
-        "ml-direction",
         "prompt-engineering",
         "code-refactor",
         "db-config-tuning",
@@ -113,8 +105,8 @@ def _minimal_manifest_dict() -> dict[str, Any]:
     ],
 )
 def test_schema_validates_every_spike_draft(draft_name: str):
-    """The X-003 GO-verdict stress test: all five spike drafts validate against
-    the P2-001 schema (covers all four promotion kinds + all three categories)."""
+    """The X-003 GO-verdict stress test: all spike drafts validate against
+    the P2-001 schema (covers four promotion kinds + all five categories)."""
     path = SPIKE_DIR / f"{draft_name}.yaml"
     data = yaml.safe_load(path.read_text())
     manifest = ResearchSkillManifest.model_validate(data)
@@ -257,43 +249,64 @@ def test_schema_metric_goal_accepts_satisfice():
 # ===========================================================================
 
 
-def test_loader_loads_spike_ml_direction_with_interpolation():
+def _reference_manifest_dict() -> dict[str, Any]:
+    """A domain-neutral manifest exercising ``{settings.*}`` interpolation."""
+    data = _minimal_manifest_dict()
+    data["id"] = "reference-skill"
+    data["preflight"] = [
+        {
+            "name": "mlflow_tracking",
+            "kind": "http_health",
+            "url": "{settings.mlflow_tracking_uri}",
+        },
+    ]
+    data["promotion_target"]["primary"]["path_template"] = (
+        "{settings.host_configs_path}/reference.yaml"
+    )
+    return data
+
+
+@pytest.fixture()
+def reference_manifest_path(tmp_path: Path) -> Path:
+    path = tmp_path / "reference-skill.yaml"
+    path.write_text(yaml.safe_dump(_reference_manifest_dict()))
+    return path
+
+
+def test_loader_resolves_settings_placeholders(reference_manifest_path: Path):
     """Loading the reference manifest resolves ``{settings.*}`` placeholders
     (G6 semantics owned by the loader)."""
     manifest = load_skill_manifest(
-        SPIKE_DIR / "ml-direction.yaml", settings_obj=STUB_SETTINGS
+        reference_manifest_path, settings_obj=STUB_SETTINGS
     )
-    assert manifest.id == "ml-direction"
+    assert manifest.id == "reference-skill"
     # G6: the preflight URL is now the resolved setting, not the placeholder.
     mlflow_target = next(t for t in manifest.preflight if t.name == "mlflow_tracking")
     assert mlflow_target.url == "http://mlflow:5000"
 
 
-def test_loader_missing_setting_raises_field_specific_error():
+def test_loader_missing_setting_raises_field_specific_error(
+    reference_manifest_path: Path,
+):
     class Empty:
         pass
 
     with pytest.raises(ManifestValidationError) as exc:
-        load_skill_manifest(SPIKE_DIR / "ml-direction.yaml", settings_obj=Empty())
+        load_skill_manifest(reference_manifest_path, settings_obj=Empty())
     msg = str(exc.value)
     assert "settings.mlflow_tracking_uri" in msg
     assert "preflight" in msg  # field-specific path
 
 
-def test_loader_missing_setting_value_none_raises():
+def test_loader_missing_setting_value_none_raises(reference_manifest_path: Path):
     """A setting that resolves to ``None`` (present but unset) is an error."""
 
     class NoneSettings:
         mlflow_tracking_uri = None
-        mlflow_service_url = "u"
-        data_ingest_url = "u"
-        ensemble_trainer_url = "u"
-        rl_trainer_url = "u"
-        feature_service_url = "u"
         host_configs_path = "/x"
 
     with pytest.raises(ManifestValidationError):
-        load_skill_manifest(SPIKE_DIR / "ml-direction.yaml", settings_obj=NoneSettings())
+        load_skill_manifest(reference_manifest_path, settings_obj=NoneSettings())
 
 
 def test_loader_rejects_wrong_version_with_version_error():
@@ -348,37 +361,37 @@ def test_loader_skill_params_resolvable_when_supplied():
 
 @pytest.fixture()
 def temp_skills_root(tmp_path: Path) -> Path:
-    """A temp ``skills/`` dir with one valid ``ml-direction`` skill package."""
-    skill_dir = tmp_path / "ml-direction"
+    """A temp ``skills/`` dir with one valid ``reference-skill`` package."""
+    skill_dir = tmp_path / "reference-skill"
     skill_dir.mkdir()
     (skill_dir / SKILL_MANIFEST_FILENAME).write_text(
-        (SPIKE_DIR / "ml-direction.yaml").read_text()
+        yaml.safe_dump(_reference_manifest_dict())
     )
     return tmp_path
 
 
 def test_registry_discovers_skill_packages(temp_skills_root: Path):
     reg = SkillRegistry(root=temp_skills_root, settings_obj=STUB_SETTINGS)
-    assert reg.discover() == ["ml-direction"]
+    assert reg.discover() == ["reference-skill"]
     # available() reflects discovered ids even before lazy load
-    assert reg.available() == ["ml-direction"]
+    assert reg.available() == ["reference-skill"]
 
 
 def test_registry_loads_lazily_and_caches(temp_skills_root: Path):
     reg = SkillRegistry(root=temp_skills_root, settings_obj=STUB_SETTINGS)
-    m1 = reg.get("ml-direction")
-    m2 = reg.get("ml-direction")
+    m1 = reg.get("reference-skill")
+    m2 = reg.get("reference-skill")
     assert m1 is m2  # cached, no reload
 
 
 def test_registry_hot_reloads_on_mtime_change(temp_skills_root: Path):
     reg = SkillRegistry(root=temp_skills_root, settings_obj=STUB_SETTINGS)
-    m1 = reg.get("ml-direction")
-    manifest_path = temp_skills_root / "ml-direction" / SKILL_MANIFEST_FILENAME
+    m1 = reg.get("reference-skill")
+    manifest_path = temp_skills_root / "reference-skill" / SKILL_MANIFEST_FILENAME
     # bump mtime into the future
     future = time.time() + 10
     os.utime(manifest_path, (future, future))
-    m2 = reg.get("ml-direction")
+    m2 = reg.get("reference-skill")
     assert m1 is not m2  # reloaded
 
 
@@ -391,10 +404,10 @@ def test_registry_unknown_id_raises(temp_skills_root: Path):
 
 def test_registry_register_path(temp_skills_root: Path):
     reg = SkillRegistry(settings_obj=STUB_SETTINGS)
-    path = temp_skills_root / "ml-direction" / SKILL_MANIFEST_FILENAME
-    reg.register_path("ml-direction", path)
-    assert "ml-direction" in reg.available()
-    assert reg.get("ml-direction").id == "ml-direction"
+    path = temp_skills_root / "reference-skill" / SKILL_MANIFEST_FILENAME
+    reg.register_path("reference-skill", path)
+    assert "reference-skill" in reg.available()
+    assert reg.get("reference-skill").id == "reference-skill"
 
 
 def test_registry_default_root_points_at_service_skills_dir():

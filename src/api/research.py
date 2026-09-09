@@ -430,10 +430,16 @@ async def _run_idempotent(
 
 class StartResearchRequest(BaseModel):
     # Legacy shape (§10 #1: still accepted identically).
-    instrument: Optional[str] = Field(default=None, examples=["DOGE_USDT"])
-    timeframe: Optional[str] = Field(default=None, examples=["15m"])
+    instrument: Optional[str] = Field(default=None, examples=["subject-a"])
+    timeframe: Optional[str] = Field(default=None, examples=["v1"])
     model_type: Optional[str] = Field(
-        default=None, pattern="^(direction|volatility|rl|pipeline)$"
+        default=None,
+        description=(
+            "Legacy alias for skill_id. Known legacy short names "
+            "(direction/volatility/rl) map to their canonical skill ids; any "
+            "other value is used as the skill_id directly. Unknown skills are "
+            "rejected with 404 skill_not_found."
+        ),
     )
     # Canonical shape (ARC-011 §7.7 / P3-013).
     skill_id: Optional[str] = Field(default=None, examples=["ml-direction"])

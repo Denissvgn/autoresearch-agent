@@ -186,21 +186,21 @@ def test_canonical_start_returns_201_with_dual_shape(client: TestClient):
         "/api/v1/research/start",
         headers=auth_headers(),
         json={
-            "skill_id": "ml-direction",
-            "subject_id": "DOGE_USDT",
-            "variant": "15m",
+            "skill_id": "prompt-engineering",
+            "subject_id": "default",
+            "variant": "production",
         },
     )
     assert response.status_code == 201
     body = response.json()
     # Canonical fields.
-    assert body["skill_id"] == "ml-direction"
-    assert body["subject_id"] == "DOGE_USDT"
-    assert body["variant"] == "15m"
+    assert body["skill_id"] == "prompt-engineering"
+    assert body["subject_id"] == "default"
+    assert body["variant"] == "production"
     # Legacy fields derived from canonical (dual-shape).
-    assert body["model_type"] == "direction"
-    assert body["instrument"] == "DOGE_USDT"
-    assert body["timeframe"] == "15m"
+    assert body["model_type"] == "prompt-engineering"
+    assert body["instrument"] == "default"
+    assert body["timeframe"] == "production"
 
 
 # --- Unknown skill_id → 404 with installable-skills hint ---
@@ -242,10 +242,10 @@ def test_both_shapes_canonical_wins(client: TestClient):
         "/api/v1/research/start",
         headers=auth_headers(),
         json={
-            "skill_id": "ml-direction",
-            "subject_id": "DOGE_USDT",
-            "variant": "15m",
-            "model_type": "direction",  # also legacy — canonical wins
+            "skill_id": "prompt-engineering",
+            "subject_id": "default",
+            "variant": "production",
+            "model_type": "prompt-engineering",  # also legacy — canonical wins
         },
     )
     assert response.status_code == 201
@@ -276,9 +276,9 @@ def test_conflicting_shapes_canonical_overrides_legacy(client: TestClient):
         "/api/v1/research/start",
         headers=auth_headers(),
         json={
-            "skill_id": "ml-direction",       # → model_type "direction"
-            "subject_id": "DOGE_USDT",
-            "variant": "15m",
+            "skill_id": "prompt-engineering",   # → model_type "prompt-engineering"
+            "subject_id": "default",
+            "variant": "production",
             "model_type": "volatility",        # CONFLICTS — canonical must win
             "instrument": "BTC_USDT",          # CONFLICTS — canonical must win
             "timeframe": "1h",                 # CONFLICTS — canonical must win
@@ -287,11 +287,11 @@ def test_conflicting_shapes_canonical_overrides_legacy(client: TestClient):
     assert response.status_code == 201
     body = response.json()
     # Canonical values must win over the conflicting legacy ones.
-    assert body["model_type"] == "direction", (
+    assert body["model_type"] == "prompt-engineering", (
         f"canonical lost to conflicting legacy: model_type={body['model_type']}"
     )
-    assert body["instrument"] == "DOGE_USDT"
-    assert body["timeframe"] == "15m"
+    assert body["instrument"] == "default"
+    assert body["timeframe"] == "production"
 
 
 def test_conflicting_shapes_recorded_in_audit(client: TestClient):
@@ -300,9 +300,9 @@ def test_conflicting_shapes_recorded_in_audit(client: TestClient):
         "/api/v1/research/start",
         headers=auth_headers(),
         json={
-            "skill_id": "ml-direction",
-            "subject_id": "DOGE_USDT",
-            "variant": "15m",
+            "skill_id": "prompt-engineering",
+            "subject_id": "default",
+            "variant": "production",
             "model_type": "volatility",
         },
     )
@@ -329,10 +329,10 @@ def test_skill_params_valid_passes(client: TestClient):
         "/api/v1/research/start",
         headers=auth_headers(),
         json={
-            "skill_id": "ml-direction",
-            "subject_id": "DOGE_USDT",
-            "variant": "15m",
-            "skill_params": {"enable_hpo": True},
+            "skill_id": "prompt-engineering",
+            "subject_id": "default",
+            "variant": "production",
+            "skill_params": {"eval_set": "eval/eval_set.jsonl"},
         },
     )
     assert response.status_code == 201
@@ -345,9 +345,9 @@ def test_skill_params_unknown_key_returns_422(client: TestClient):
         "/api/v1/research/start",
         headers=auth_headers(),
         json={
-            "skill_id": "ml-direction",
-            "subject_id": "DOGE_USDT",
-            "variant": "15m",
+            "skill_id": "prompt-engineering",
+            "subject_id": "default",
+            "variant": "production",
             "skill_params": {"bogus_field": 42},
         },
     )
@@ -363,16 +363,16 @@ def test_skill_params_wrong_type_returns_422(client: TestClient):
         "/api/v1/research/start",
         headers=auth_headers(),
         json={
-            "skill_id": "ml-direction",
-            "subject_id": "DOGE_USDT",
-            "variant": "15m",
-            "skill_params": {"enable_hpo": "not-a-boolean"},
+            "skill_id": "prompt-engineering",
+            "subject_id": "default",
+            "variant": "production",
+            "skill_params": {"eval_set": 123},
         },
     )
     assert response.status_code == 422
     detail = response.json()["detail"]
     assert detail["error"] == "skill_params_invalid"
-    assert any("enable_hpo" in v["field"] for v in detail["violations"])
+    assert any("eval_set" in v["field"] for v in detail["violations"])
 
 
 # --- A3: GET /research items have dual-shape fields ---
@@ -402,13 +402,11 @@ def test_list_research_items_have_dual_shape(client: TestClient):
 
 # --- A4: Pipeline rows are the documented empty-canonical case ---
 
-def test_pipeline_row_dual_shape_has_empty_canonical_fields():
-    """A pipeline row (``model_type="pipeline"``) is a multi-skill container,
-    not itself a skill, so it has no ``model_type ↔ skill_id`` alias entry.
-    The dual-shape helper documents this as the one row kind where canonical
-    fields (``skill_id``/``subject_id``/``variant``) come back empty by design;
-    legacy fields stay populated. This pins the contract so the empty string
-    is not mistaken for a bug or a missing-derivation regression."""
+def test_pipeline_row_dual_shape_fields():
+    """A pipeline row (``model_type="pipeline"``) is a multi-skill container.
+    With the identity alias fallback every ``model_type`` maps to a
+    ``skill_id`` value, and ``subject_id``/``variant`` derive from the legacy
+    fields (value-neutral labels)."""
     from src.api.research import _dual_shape_session
 
     pipeline_row = {
@@ -423,13 +421,11 @@ def test_pipeline_row_dual_shape_has_empty_canonical_fields():
     assert shaped["model_type"] == "pipeline"
     assert shaped["instrument"] == "DOGE_USDT"
     assert shaped["timeframe"] == "15m"
-    # Canonical fields empty by design (pipeline is not a skill).
-    assert shaped["skill_id"] == ""
+    # Canonical fields follow the identity fallback (pipeline is not an
+    # installed skill, but the alias never yields a missing value).
+    assert shaped["skill_id"] == "pipeline"
     assert shaped["subject_id"] == "DOGE_USDT"  # ← instrument passthrough
     assert shaped["variant"] == "15m"            # ← timeframe passthrough
-    # subject_id/variant still derive from the legacy fields (they are
-    # value-neutral labels), only skill_id is empty because "pipeline" has
-    # no skill alias.
 
 
 # ====================================================================
@@ -453,22 +449,24 @@ def test_canonical_fields_forwarded_to_session_manager(client: TestClient):
         "/api/v1/research/start",
         headers=auth_headers(),
         json={
-            "skill_id": "ml-direction",
-            "subject_id": "DOGE_USDT",
-            "variant": "15m",
-            "skill_params": {"enable_hpo": True, "hpo_trials": 100},
+            "skill_id": "prompt-engineering",
+            "subject_id": "default",
+            "variant": "production",
+            "skill_params": {"eval_set": "eval/eval_set.jsonl", "target_metric": "f1"},
         },
     )
     assert response.status_code == 201
     captured = _session_manager().captured_kwargs
-    assert captured["skill_id"] == "ml-direction"
-    assert captured["skill_params"] == {"enable_hpo": True, "hpo_trials": 100}
-    assert captured["subject_id"] == "DOGE_USDT"
-    assert captured["variant"] == "15m"
+    assert captured["skill_id"] == "prompt-engineering"
+    assert captured["skill_params"] == {
+        "eval_set": "eval/eval_set.jsonl", "target_metric": "f1",
+    }
+    assert captured["subject_id"] == "default"
+    assert captured["variant"] == "production"
     # The translated legacy shape is still passed alongside (dual shape).
-    assert captured["model_type"] == "direction"
-    assert captured["instrument"] == "DOGE_USDT"
-    assert captured["timeframe"] == "15m"
+    assert captured["model_type"] == "prompt-engineering"
+    assert captured["instrument"] == "default"
+    assert captured["timeframe"] == "production"
 
 
 def test_canonical_params_recorded_in_start_audit(client: TestClient):
@@ -479,10 +477,10 @@ def test_canonical_params_recorded_in_start_audit(client: TestClient):
         "/api/v1/research/start",
         headers=auth_headers(),
         json={
-            "skill_id": "ml-direction",
-            "subject_id": "DOGE_USDT",
-            "variant": "15m",
-            "skill_params": {"enable_hpo": True, "hpo_trials": 100},
+            "skill_id": "prompt-engineering",
+            "subject_id": "default",
+            "variant": "production",
+            "skill_params": {"eval_set": "eval/eval_set.jsonl", "target_metric": "f1"},
         },
     )
     assert response.status_code == 201
@@ -492,10 +490,12 @@ def test_canonical_params_recorded_in_start_audit(client: TestClient):
     ]
     assert len(start_events) == 1
     metadata = start_events[0]["request_metadata"]
-    assert metadata["skill_id"] == "ml-direction"
-    assert metadata["skill_params"] == {"enable_hpo": True, "hpo_trials": 100}
-    assert metadata["subject_id"] == "DOGE_USDT"
-    assert metadata["variant"] == "15m"
+    assert metadata["skill_id"] == "prompt-engineering"
+    assert metadata["skill_params"] == {
+        "eval_set": "eval/eval_set.jsonl", "target_metric": "f1",
+    }
+    assert metadata["subject_id"] == "default"
+    assert metadata["variant"] == "production"
 
 
 def test_legacy_start_forwards_no_canonical_fields(client: TestClient):

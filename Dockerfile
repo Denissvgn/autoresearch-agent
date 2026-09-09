@@ -68,13 +68,6 @@ RUN python -m venv /app/workspace/.venv && \
     -r /tmp/requirements-workspace.txt
 
 # --- Workspace skeleton ---
-# SKILL.md files the agent follows
-COPY .github/skills/direction-autotuner/ /app/workspace/.github/skills/direction-autotuner/
-COPY .github/skills/volatility-autotuner/ /app/workspace/.github/skills/volatility-autotuner/
-COPY .github/skills/rl-autotuner/ /app/workspace/.github/skills/rl-autotuner/
-
-# Promotion gate bundles consumed by ConfigPromoter.
-COPY reports/direction-tuning/promotion/ /app/workspace/reports/direction-tuning/promotion/
 
 # CLAUDE.md — agent workspace context
 COPY CLAUDE.md /app/workspace/CLAUDE.md
