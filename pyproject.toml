@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "autoresearch-agent"
 version = "0.1.0"
-description = "Autonomous ML model tuning agent powered by Claude"
-authors = ["Traid Platform Team"]
+description = "Universal autonomous research agent powered by skill manifests and LLM sessions"
+authors = ["Autoresearch Agent maintainers"]
 license = "MIT"
 packages = []
 package-mode = false
@@ -18,21 +18,14 @@ openai = "^1.0.0"
 pyyaml = "^6.0"
 aiosqlite = "^0.20.0"
 # ARC-011 P6-002a: raw asyncpg backend for PostgresStateStore (multi-worker).
-# Aligns with requirements-workspace.txt's asyncpg>=0.30.0 (training venv).
+# Aligns with requirements-workspace.txt's asyncpg>=0.30.0 (workspace venv).
 asyncpg = "^0.30.0"
 websockets = "^14.0"
 httpx = "^0.27.0"
 prometheus-client = "^0.19.0"
 psutil = "^5.9.0"
-vdmc-core = {path = "libs/vdmc_core", develop = true}
-traid-config = {path = "libs/config", develop = true}
-data-clients = {path = "libs/data_clients", develop = true}
-identity-client = {path = "libs/identity_client", develop = true}
-observability = {path = "libs/observability", develop = true}
-ml-artifacts = {path = "libs/ml_artifacts", develop = true}
-feature-engineering = {path = "libs/feature_engineering", develop = true}
-resilience = {path = "libs/resilience", develop = true}
-traid-training-sdk = {path = "traid_training_sdk", develop = true}
+# TF-IDF backend for the goal->skill domain classifier (src/core/domain_classifier.py).
+numpy = "^2.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

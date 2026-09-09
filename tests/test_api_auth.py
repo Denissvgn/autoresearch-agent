@@ -17,11 +17,10 @@ except ImportError:  # Starlette <0.37 closes denied sockets instead.
 os.environ.setdefault("ANTHROPIC_BASE_URL", "http://anthropic.invalid")
 os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "test-token")
 
-from src import config as config_module
 from src.api import auth as auth_module
 from src.api import promotion, research, results
 from src.api.auth import require_websocket_auth
-from src.config import Settings, secret_value, settings
+from src.config import Settings, settings
 
 API_TOKEN = "test-autoresearch-token"
 
@@ -526,8 +525,12 @@ def test_identity_jwt_admin_token_is_accepted(
     configure_api_auth: FakeStore,
     monkeypatch,
 ):
-    async def fake_introspect_token(base_url: str, token: str, timeout: float):
-        assert base_url == settings.identity_service_url
+    monkeypatch.setattr(
+        settings, "identity_introspection_url", "http://idp.invalid/introspect"
+    )
+
+    async def fake_introspect_token(endpoint_url: str, token: str, timeout: float):
+        assert endpoint_url == settings.identity_introspection_url
         assert token == "jwt-admin-token"
         assert timeout == settings.identity_introspection_timeout_s
         return {
@@ -557,7 +560,11 @@ def test_identity_jwt_without_admin_role_is_rejected(
     configure_api_auth: FakeStore,
     monkeypatch,
 ):
-    async def fake_introspect_token(base_url: str, token: str, timeout: float):
+    monkeypatch.setattr(
+        settings, "identity_introspection_url", "http://idp.invalid/introspect"
+    )
+
+    async def fake_introspect_token(endpoint_url: str, token: str, timeout: float):
         return {
             "active": True,
             "sub": "user-456",
@@ -601,7 +608,11 @@ def test_websocket_accepts_authorization_header(client: TestClient):
 
 
 def test_websocket_accepts_identity_jwt_header(client: TestClient, monkeypatch):
-    async def fake_introspect_token(base_url: str, token: str, timeout: float):
+    monkeypatch.setattr(
+        settings, "identity_introspection_url", "http://idp.invalid/introspect"
+    )
+
+    async def fake_introspect_token(endpoint_url: str, token: str, timeout: float):
         return {
             "active": True,
             "sub": "user-ws",
@@ -669,7 +680,7 @@ def test_settings_accept_canonical_autoresearch_aliases(monkeypatch):
     assert cfg.default_quick_mode is False
     assert cfg.max_concurrent_sessions == 4
     assert cfg.log_level == "DEBUG"
-    assert cfg.identity_service_url == "http://identity:8000"
+    assert cfg.identity_introspection_url == "http://identity:8000"
     assert cfg.vdmc_indicator_url == "http://vdmc-custom:8000"
 
 
@@ -699,36 +710,20 @@ def test_settings_keep_bare_env_fallbacks(monkeypatch):
     assert cfg.workspace_root == "/legacy/workspace"
 
 
-def test_settings_use_vault_defaults_below_env(monkeypatch):
+def test_identity_introspection_defaults_to_disabled(monkeypatch):
     for key in (
-        "ANTHROPIC_BASE_URL",
-        "ANTHROPIC_AUTH_TOKEN",
-        "AUTORESEARCH_API_TOKEN",
-        "AUTORESEARCH_PROMETHEUS_TOKEN",
+        "AUTORESEARCH_IDENTITY_INTROSPECTION_URL",
+        "AUTORESEARCH_IDENTITY_SERVICE_URL",
+        "IDENTITY_SERVICE_URL",
     ):
         monkeypatch.delenv(key, raising=False)
 
-    def fake_vault_source():
-        return {
-            "anthropic_base_url": "http://vault-anthropic.invalid",
-            "anthropic_auth_token": "vault-anthropic-token",
-            "autoresearch_api_token": "vault-api-token",
-            "autoresearch_prometheus_token": "vault-scrape-token",
-        }
+    cfg = Settings(
+        anthropic_base_url="http://anthropic.invalid",
+        anthropic_auth_token="test-token",
+    )
 
-    monkeypatch.setattr(config_module, "_vault_settings_source", fake_vault_source)
-
-    cfg = Settings(_env_file=None)  # type: ignore[call-arg]
-    assert cfg.anthropic_base_url == "http://vault-anthropic.invalid"
-    assert secret_value(cfg.anthropic_auth_token) == "vault-anthropic-token"
-    assert secret_value(cfg.autoresearch_api_token) == "vault-api-token"
-    assert secret_value(cfg.autoresearch_prometheus_token) == "vault-scrape-token"
-
-    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "env-anthropic-token")
-    monkeypatch.setenv("AUTORESEARCH_API_TOKEN", "env-api-token")
-    env_cfg = Settings(_env_file=None)  # type: ignore[call-arg]
-    assert secret_value(env_cfg.anthropic_auth_token) == "env-anthropic-token"
-    assert secret_value(env_cfg.autoresearch_api_token) == "env-api-token"
+    assert cfg.identity_introspection_url == ""
 
 
 def test_sensitive_settings_do_not_leak_in_repr():

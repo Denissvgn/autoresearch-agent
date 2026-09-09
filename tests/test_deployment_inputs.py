@@ -104,24 +104,6 @@ def test_autoresearch_backend_uses_src_layout_and_committed_lockfile():
     assert result.returncode == 1
 
 
-def test_vendored_path_dependencies_are_tracked():
-    vendored = (
-        "libs/__init__.py",
-        "libs/observability",
-        "libs/config",
-        "libs/vdmc_core",
-        "libs/data_clients",
-        "libs/feature_engineering",
-        "libs/identity_client",
-        "libs/ml_artifacts",
-        "libs/resilience",
-        "traid_training_sdk",
-    )
-    for path in vendored:
-        result = _git("ls-files", "--error-unmatch", path)
-        assert result.returncode == 0, f"missing vendored dependency: {path}"
-
-
 def test_autoresearch_dockerfile_matches_standalone_runtime_contract():
     dockerfile = (SERVICE_DIR / "Dockerfile").read_text(encoding="utf-8")
 
@@ -138,23 +120,10 @@ def test_autoresearch_dockerfile_matches_standalone_runtime_contract():
     assert "ARG APP_GID=" in dockerfile
     assert "groupadd -g ${APP_GID} appuser" in dockerfile
     assert "useradd -u ${APP_UID} -g appuser -m appuser" in dockerfile
-    # Vendored path dependencies must be present in the runtime image for
-    # the editable installs made by the server venv.
-    assert "COPY --from=python-builder --chown=appuser:appuser /app/libs /app/libs" in dockerfile
-    assert (
-        "COPY --from=python-builder --chown=appuser:appuser "
-        "/app/traid_training_sdk /app/traid_training_sdk"
-    ) in dockerfile
+    # No vendored platform path dependencies should be copied anymore.
+    assert "/app/libs" not in dockerfile
+    assert "traid_training_sdk" not in dockerfile
     assert '"--workers", "1"' in dockerfile
-    # Promotion gate bundles are bundled from this repository.
-    assert (
-        "reports/direction-tuning/promotion/ "
-        "/app/workspace/reports/direction-tuning/promotion/"
-    ) in dockerfile
-    assert (
-        REPO_ROOT / "reports" / "direction-tuning" / "promotion"
-        / "development_gate_bundle_v1.yaml"
-    ).exists()
 
 
 def test_autoresearch_deployment_documents_single_instance_constraint():

@@ -4,9 +4,9 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from libs.observability import bind_platform_headers
 
 from src import main as main_module
+from src.core.http_headers import bind_request_headers
 from src.core.observability import empty_observability_snapshot
 
 
@@ -106,10 +106,10 @@ def test_unknown_api_v1_path_returns_404(client: TestClient) -> None:
     assert response.json()["detail"] == "API endpoint not found"
 
 
-def test_app_has_platform_header_dependency() -> None:
+def test_app_has_request_header_dependency() -> None:
     dependencies = main_module.app.router.dependencies
     assert any(
-        getattr(dependency, "dependency", None) is bind_platform_headers
+        getattr(dependency, "dependency", None) is bind_request_headers
         for dependency in dependencies
     )
 

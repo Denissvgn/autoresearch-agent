@@ -14,16 +14,32 @@ from typing import Any
 from fastapi import Depends, HTTPException, Request, WebSocket, status
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from httpx import AsyncClient
 
 from src.config import secret_value, settings
 
-try:
-    from identity_client import introspect_token as _introspect_token
-except ImportError:  # pragma: no cover - dependency is declared, fallback is defensive.
-    _introspect_token = None
+
+async def introspect_token(
+    endpoint_url: str,
+    token: str,
+    timeout_s: float,
+) -> dict[str, Any]:
+    """Introspect a bearer token via OAuth2 Token Introspection (RFC 7666).
+
+    ``endpoint_url`` is the authorization server's full introspection endpoint
+    (e.g. ``https://idp.example.local/oauth2/introspect``). Returns the decoded
+    introspection payload (``{"active": false}`` for inactive or unknown
+    tokens).
+    """
+
+    async with AsyncClient(timeout=timeout_s) as client:
+        response = await client.post(endpoint_url, data={"token": token})
+        response.raise_for_status()
+        payload: dict[str, Any] = response.json()
+        return payload
+
 
 IdentityIntrospector = Callable[[str, str, float], Awaitable[dict[str, Any]]]
-introspect_token: IdentityIntrospector | None = _introspect_token
 
 logger = logging.getLogger(__name__)
 
@@ -114,12 +130,9 @@ async def _authenticate_identity_token(
     mechanism: str,
     websocket_subprotocol: str | None = None,
 ) -> AuthenticatedActor:
-    if introspect_token is None:
-        logger.warning("identity-client is unavailable for autoresearch JWT introspection")
-        raise _auth_required()
     try:
         payload = await introspect_token(
-            settings.identity_service_url,
+            settings.identity_introspection_url,
             token,
             settings.identity_introspection_timeout_s,
         )
@@ -161,7 +174,7 @@ async def _authenticate_token(
             roles=("admin", "ml_admin"),
         )
 
-    if settings.identity_service_url:
+    if settings.identity_introspection_url:
         return await _authenticate_identity_token(
             token,
             mechanism=mechanism,

@@ -13,15 +13,11 @@ from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSock
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
-from libs.observability import (
-    ensure_app_platform_headers,
-    initialize_telemetry_from_env,
-    shutdown_telemetry,
-)
 
 from src.api.auth import require_api_auth, require_websocket_auth
-from src.config import get_vault_status, secret_value, settings
+from src.config import secret_value, settings
 from src.core.config_promoter import ConfigPromoter
+from src.core.http_headers import ensure_app_request_headers
 from src.core.observability import (
     PROMETHEUS_CONTENT_TYPE,
     empty_observability_snapshot,
@@ -33,23 +29,11 @@ from src.core.session_manager import SessionManager
 from src.core.state_store import StateStore
 from src.ws.events import broadcaster
 
-try:
-    from libs.config.ml_service_logging import setup_ml_service_logging
-
-    _ml_logger = setup_ml_service_logging(
-        service_name=settings.service_name,
-        level=settings.log_level,
-        json_logs=settings.environment == "production",
-        mask_secrets=True,
-    )
-    logger = _ml_logger.logger
-except Exception:
-    logging.basicConfig(
-        level=getattr(logging, settings.log_level.upper(), logging.INFO),
-        format="%(asctime)s %(levelname)-8s %(name)s - %(message)s",
-    )
-    logger = logging.getLogger(settings.service_name)
-    _ml_logger = None
+logging.basicConfig(
+    level=getattr(logging, settings.log_level.upper(), logging.INFO),
+    format="%(asctime)s %(levelname)-8s %(name)s - %(message)s",
+)
+logger = logging.getLogger(settings.service_name)
 
 # Global instances (initialized in lifespan)
 _store: StateStore | None = None
@@ -106,11 +90,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     logger.info("Starting autoresearch-agent service")
     _validate_runtime_configuration()
-    initialize_telemetry_from_env(settings.service_name)
-    if _ml_logger:
-        vault_status = get_vault_status()
-        _ml_logger.log_service_startup(settings, vault_status)
-        _ml_logger.log_config_loaded(settings, vault_status.get("vault_config_keys", 0))
     logger.info("Model: %s", settings.anthropic_model)
     logger.info("Default quick mode: %s", settings.default_quick_mode)
     logger.info("Max iterations: %d", settings.max_iterations)
@@ -156,17 +135,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await _session_manager.shutdown()
     if _store:
         await _store.close()
-    shutdown_telemetry()
     logger.info("Shutdown complete")
 
 
 app = FastAPI(
     title="Autoresearch Agent",
-    description="Autonomous ML model tuning via Claude agent sessions",
+    description="Autonomous research agent driven by skill manifests and Claude/OpenAI sessions",
     version="0.1.0",
     lifespan=lifespan,
 )
-ensure_app_platform_headers(app)
+ensure_app_request_headers(app)
 
 # CORS — Phase 1.4 hardening: when origins is the wildcard, force
 # allow_credentials=False because Starlette will silently produce a
@@ -277,11 +255,6 @@ async def readiness() -> dict[str, Any]:
 
     ready = all(internal_checks.values()) and dependencies_ready
     status_text = "ready" if ready else "not_ready"
-    if _ml_logger:
-        _ml_logger.log_health_check(
-            status_text,
-            {**internal_checks, "active_sessions": active_sessions},
-        )
 
     return {
         "ready": ready,

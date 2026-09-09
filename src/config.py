@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from functools import lru_cache
 from typing import Any, List, Optional
 
@@ -12,58 +11,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
-try:
-    from libs.config.config.vault_loader import get_vault_status as _get_vault_client_status
-    from libs.config.config.vault_loader import load_vault_only as _load_vault_only
-
-    _VAULT_AVAILABLE = True
-except ImportError:
-    try:
-        from config.vault_loader import get_vault_status as _get_vault_client_status
-        from config.vault_loader import load_vault_only as _load_vault_only
-
-        _VAULT_AVAILABLE = True
-    except ImportError:
-        _VAULT_AVAILABLE = False
-        _get_vault_client_status = None
-        _load_vault_only = None
-
 DEFAULT_CORS_ORIGINS = (
     "http://localhost:8030,"
     "http://127.0.0.1:8030,"
     "http://localhost:5173,"
     "http://127.0.0.1:5173"
 )
-
-_SERVICE_NAME = "autoresearch-agent"
-
-
-def _settings_env() -> str:
-    return (
-        os.getenv("APP_ENV")
-        or os.getenv("AUTORESEARCH_ENVIRONMENT")
-        or os.getenv("ENVIRONMENT")
-        or "development"
-    )
-
-
-@lru_cache(maxsize=1)
-def _vault_settings_source() -> dict[str, Any]:
-    """Load service defaults from Vault only, leaving env/.env precedence intact."""
-
-    if not _VAULT_AVAILABLE or _load_vault_only is None:
-        return {}
-    env = _settings_env()
-    try:
-        return _load_vault_only(_SERVICE_NAME, env)
-    except Exception as exc:
-        logger.warning(
-            "Failed to load Vault config for %s (%s): %s",
-            _SERVICE_NAME,
-            env,
-            type(exc).__name__,
-        )
-        return {}
 
 
 def secret_value(value: SecretStr | str | None) -> str | None:
@@ -84,25 +37,6 @@ class Settings(BaseSettings):
         extra="ignore",
         populate_by_name=True,
     )
-
-    @classmethod
-    def settings_customise_sources(
-        cls,
-        settings_cls: type[BaseSettings],
-        init_settings: Any,
-        env_settings: Any,
-        dotenv_settings: Any,
-        file_secret_settings: Any,
-    ) -> tuple[Any, ...]:
-        """Use Vault as defaults below explicit init args, env vars, and .env."""
-
-        return (
-            init_settings,
-            env_settings,
-            dotenv_settings,
-            _vault_settings_source,
-            file_secret_settings,
-        )
 
     # --- Service ---
     service_name: str = Field(
@@ -161,13 +95,20 @@ class Settings(BaseSettings):
             "scrape is rejected with HTTP 401. Phase 5.2 hardening."
         ),
     )
-    identity_service_url: str = Field(
-        default="http://identity-service:8000",
+    identity_introspection_url: str = Field(
+        default="",
         validation_alias=AliasChoices(
+            "AUTORESEARCH_IDENTITY_INTROSPECTION_URL",
+            # Legacy aliases from the platform identity-service integration;
+            # the value must now be the full introspection endpoint URL.
             "AUTORESEARCH_IDENTITY_SERVICE_URL",
             "IDENTITY_SERVICE_URL",
         ),
-        description="Identity-service base URL used for JWT bearer-token introspection.",
+        description=(
+            "Optional OAuth2 token-introspection endpoint URL (RFC 7666) used "
+            "to authenticate admin JWT bearer tokens. Empty (default) disables "
+            "JWT introspection; only the static API token is accepted then."
+        ),
     )
     identity_introspection_timeout_s: float = Field(
         default=5.0,
@@ -176,7 +117,7 @@ class Settings(BaseSettings):
             "AUTORESEARCH_IDENTITY_INTROSPECTION_TIMEOUT_S",
             "IDENTITY_INTROSPECTION_TIMEOUT_S",
         ),
-        description="Timeout in seconds for identity-service token introspection.",
+        description="Timeout in seconds for token introspection.",
     )
 
     # --- Anthropic ---
@@ -632,25 +573,6 @@ def get_settings() -> Settings:
     settings = Settings()  # type: ignore[call-arg]
     logger.info("Settings loaded for %s", settings.service_name)
     return settings
-
-
-def get_vault_status() -> dict[str, Any]:
-    """Return Vault configuration status for health/debug endpoints."""
-
-    vault_config = _vault_settings_source()
-    status: dict[str, Any] = {
-        "vault_library_available": _VAULT_AVAILABLE,
-        "vault_config_loaded": bool(vault_config),
-        "vault_config_keys": len(vault_config),
-        "service_name": _SERVICE_NAME,
-        "app_env": _settings_env(),
-    }
-    if _VAULT_AVAILABLE and _get_vault_client_status is not None:
-        try:
-            status.update(_get_vault_client_status())
-        except Exception as exc:
-            status["vault_client_error"] = type(exc).__name__
-    return status
 
 
 settings = get_settings()

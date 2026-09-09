@@ -9,10 +9,10 @@
 # Multi-Architecture Support: linux/amd64, linux/arm64
 #
 # NOTE: this image is standalone — it bundles the agent service, the
-# vendored shared libraries, the UI, and the workspace Python venv.
-# Platform training assets (autotuner scripts, ML trainers, production
-# configs) are NOT baked in; mount or copy them into /app/workspace
-# when running against a full ML stack.
+# UI, and a generic workspace Python venv. Domain skill assets
+# (experiment scripts, training harnesses, production configs) are NOT
+# baked in; install them as skills/ packages or mount them into
+# /app/workspace when running against an external stack.
 # =================================================================
 
 # -----------------------------------------------------------------
@@ -52,9 +52,6 @@ RUN poetry self add poetry-plugin-export
 WORKDIR /app
 
 # --- Server venv (FastAPI + Anthropic SDK) ---
-# Vendored path dependencies live inside this repository.
-COPY libs /app/libs
-COPY traid_training_sdk /app/traid_training_sdk
 COPY pyproject.toml poetry.lock* ./
 
 ENV POETRY_HTTP_TIMEOUT=300
@@ -107,10 +104,6 @@ RUN groupadd -g ${APP_GID} appuser && useradd -u ${APP_UID} -g appuser -m appuse
 
 # Copy server venv from builder
 COPY --from=python-builder /app/.venv /app/.venv
-
-# Copy vendored path dependencies used by the server venv (editable installs).
-COPY --from=python-builder --chown=appuser:appuser /app/libs /app/libs
-COPY --from=python-builder --chown=appuser:appuser /app/traid_training_sdk /app/traid_training_sdk
 
 # Copy workspace (including .venv) from builder
 COPY --from=python-builder --chown=appuser:appuser /app/workspace /app/workspace
