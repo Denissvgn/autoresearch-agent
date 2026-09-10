@@ -238,7 +238,7 @@ async def readiness() -> dict[str, Any]:
     dependencies_ready = True
     if settings.preflight_enabled:
         try:
-            preflight = await run_service_preflight(model_type="all")
+            preflight = await run_service_preflight(targets=[])
         except Exception as exc:
             preflight = {
                 "schema_version": "autoresearch_service_preflight.v1",
@@ -271,7 +271,7 @@ async def monitoring_health() -> dict[str, Any]:
     active_sessions = _session_manager.active_count if _session_manager else 0
     if settings.preflight_enabled:
         try:
-            preflight = await run_service_preflight(model_type="all")
+            preflight = await run_service_preflight(targets=[])
         except Exception as exc:
             preflight = {
                 "schema_version": "autoresearch_service_preflight.v1",

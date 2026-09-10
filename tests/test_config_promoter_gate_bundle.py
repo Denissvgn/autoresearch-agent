@@ -1132,57 +1132,24 @@ async def test_preview_skips_quality_baseline_formula_version_mismatch(
 
 
 @pytest.mark.asyncio
-async def test_preview_collects_smoke_evidence_when_missing(
-    tmp_path,
-    monkeypatch,
-):
-    """A timed-out / manually-promoted session has no smoke_validation in its
-    metrics. preview() must collect it (mirroring the orchestrator) so the
-    promotion isn't falsely blocked on failed_smoke_validation when the
-    paper-replay would pass."""
+async def test_preview_without_smoke_evidence_uses_recorded_metrics(tmp_path, monkeypatch):
+    """With the platform evidence collector removed, preview evaluates the
+    metrics exactly as the session recorded them — no server-side
+    backfilling of smoke/replay evidence."""
     _write_gate_bundle(tmp_path)
     monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
     monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
-    monkeypatch.setattr(
-        config_promoter.settings, "auto_collect_promotion_evidence", True, raising=False
-    )
     metrics = _passing_metrics()
     metrics.pop("smoke_validation", None)  # timed-out session: never collected
     best = _best_iteration(metrics, primary_metric=0.71, metric_name="auc")
+    store = FakePromotionStore(best)
+    promoter = ConfigPromoter(store)
 
-    collected = {"called": False}
+    preview = await promoter.preview("res_test")
 
-    class _FakeCollector:
-        def __init__(self, store):
-            self._store = store
-
-        async def collect_and_patch(self, research_id, iteration):
-            collected["called"] = True
-            # Simulate a passing paper-replay patched into the iteration.
-            patched = dict(metrics)
-            patched["smoke_validation"] = {"passed": True}
-            self._store.iterations = [
-                {**self._store.best, "metrics_json": json.dumps(patched)}
-            ]
-            self._store.best = self._store.iterations[0]
-            return {"smoke_validation": {"passed": True}}
-
-    import src.core.promotion_evidence_collector as pec
-    monkeypatch.setattr(pec, "PromotionEvidenceCollector", _FakeCollector)
-
-    store = FakePromotionStore(best, promotions=[])
-    preview = await ConfigPromoter(store).preview("research_1")
-
-    # The core contract: preview collected the missing evidence (it would not
-    # have if smoke_validation were already present — see the passing-metrics
-    # tests which never trigger the collector).
-    assert collected["called"] is True
-    # And the collected passing smoke evidence is reflected (not stuck on the
-    # missing-evidence blocker).
-    assert "failed_smoke_validation" not in [
-        b.get("code") for b in (preview.get("blocker_details") or [])
-    ]
-
+    # The preview reflects the recorded metrics (no fabricated smoke evidence).
+    assert preview["promotion_allowed"] in (True, False)
+    assert preview["iteration"] == best["iteration"]
 
 @pytest.mark.asyncio
 async def test_preview_passes_when_baseline_predates_version_stamp(
@@ -1374,12 +1341,6 @@ async def test_confirm_records_promotion_when_bundle_passes(tmp_path, monkeypatc
     monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
     monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
 
-    async def _skip_composite_update(*args, **kwargs):
-        return None
-
-    monkeypatch.setattr(
-        ConfigPromoter, "_update_composite_versions", _skip_composite_update
-    )
     store = FakePromotionStore(_best_iteration(_passing_metrics()))
 
     result = await ConfigPromoter(store).confirm("research_1")
@@ -1470,12 +1431,6 @@ async def test_confirm_persists_development_metadata_with_results_store(
     monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
     monkeypatch.setattr(config_promoter.settings, "host_configs_path", str(tmp_path / "configs"))
 
-    async def _skip_composite_update(*args, **kwargs):
-        return None
-
-    monkeypatch.setattr(
-        ConfigPromoter, "_update_composite_versions", _skip_composite_update
-    )
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -1585,8 +1540,6 @@ async def test_production_scope_records_full_decision_chain(
     monkeypatch.setattr(
         config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
     )
-    monkeypatch.setattr(config_promoter.settings, "mlflow_service_auth_token", "service-token")
-    monkeypatch.setattr(config_promoter.settings, "mlflow_service_url", "http://mlflow-service")
     metrics = _production_scope_metrics()
     metrics["rollup_score"] = 0.77
     mlflow_client = _install_fake_mlflow_client(
@@ -1638,138 +1591,10 @@ async def test_production_scope_records_full_decision_chain(
         "production",
     ]
     assert metadata["rollback_targets"]["production"] == "direction_model:12"
-    assert metadata["mlflow_service"] == {
-        "outcome": "promoted",
-        "composite_id": "composite-prod",
-        "prior_status": "staging",
-        "final_status": "production",
-        "promoted_at": "2026-05-08T12:00:00+00:00",
-        "url": "http://mlflow-service/api/v1/composites/composite-prod",
-    }
+    # No platform composite delegation anymore: the promotion is recorded
+    # locally with no mlflow-service metadata.
+    assert "mlflow_service" not in metadata
     assert store.promotions[-1]["promotion_metadata"]["scope"] == "production"
-    assert store.promotions[-1]["promotion_metadata"]["mlflow_service"]["outcome"] == "promoted"
-    assert mlflow_client.calls[0]["method"] == "GET"
-    assert mlflow_client.calls[0]["headers"]["Authorization"] == "Bearer service-token"
-    assert mlflow_client.calls[0]["headers"]["X-Service-Name"] == "autoresearch-agent"
-    assert mlflow_client.calls[0]["params"] == {
-        "instrument": "DOGE_USDT",
-        "page_size": 100,
-    }
-    assert mlflow_client.calls[1]["method"] == "POST"
-    assert mlflow_client.calls[1]["json"] == {
-        "target_stage": "production",
-        "reason": "stage gate approved",
-        "rollup_score": 0.77,
-    }
-
-
-@pytest.mark.asyncio
-async def test_production_scope_requires_mlflow_service_token(
-    tmp_path,
-    monkeypatch,
-):
-    _write_gate_bundle_with_m7_remaining(tmp_path)
-    _write_production_gate_bundle(tmp_path)
-    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
-    monkeypatch.setattr(
-        config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
-    )
-    monkeypatch.setattr(config_promoter.settings, "mlflow_service_auth_token", None)
-    store = FakePromotionStore(
-        _best_iteration(_production_scope_metrics()),
-        promotions=[
-            _promotion_row("development", 1),
-            _promotion_row("paper", 2),
-            _promotion_row("canary", 3),
-        ],
-    )
-
-    with pytest.raises(ValueError, match="requires .*MLFLOW_SERVICE_AUTH_TOKEN"):
-        await ConfigPromoter(store).confirm(
-            "research_1",
-            scope="production",
-            approval=_approval(),
-        )
-
-    assert len(store.promotions) == 3
-
-
-@pytest.mark.asyncio
-async def test_production_scope_fails_without_matching_composite_before_record(
-    tmp_path,
-    monkeypatch,
-):
-    _write_gate_bundle_with_m7_remaining(tmp_path)
-    _write_production_gate_bundle(tmp_path)
-    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
-    monkeypatch.setattr(
-        config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
-    )
-    monkeypatch.setattr(config_promoter.settings, "mlflow_service_auth_token", "service-token")
-    _install_fake_mlflow_client(monkeypatch, composites=[])
-    store = FakePromotionStore(
-        _best_iteration(_production_scope_metrics()),
-        promotions=[
-            _promotion_row("development", 1),
-            _promotion_row("paper", 2),
-            _promotion_row("canary", 3),
-        ],
-    )
-
-    with pytest.raises(ValueError, match="No non-retired mlflow-service composite"):
-        await ConfigPromoter(store).confirm(
-            "research_1",
-            scope="production",
-            approval=_approval(),
-        )
-
-    assert len(store.promotions) == 3
-
-
-@pytest.mark.asyncio
-async def test_production_scope_fails_on_ambiguous_composite_before_record(
-    tmp_path,
-    monkeypatch,
-):
-    _write_gate_bundle_with_m7_remaining(tmp_path)
-    _write_production_gate_bundle(tmp_path)
-    monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
-    monkeypatch.setattr(
-        config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
-    )
-    monkeypatch.setattr(config_promoter.settings, "mlflow_service_auth_token", "service-token")
-    _install_fake_mlflow_client(
-        monkeypatch,
-        composites=[
-            {
-                "id": "composite-a",
-                "status": "staging",
-                "direction_model_version": "direction-model:12",
-            },
-            {
-                "id": "composite-b",
-                "status": "production",
-                "direction_model_version": "direction-model:12",
-            },
-        ],
-    )
-    store = FakePromotionStore(
-        _best_iteration(_production_scope_metrics()),
-        promotions=[
-            _promotion_row("development", 1),
-            _promotion_row("paper", 2),
-            _promotion_row("canary", 3),
-        ],
-    )
-
-    with pytest.raises(ValueError, match="Multiple non-retired mlflow-service composites"):
-        await ConfigPromoter(store).confirm(
-            "research_1",
-            scope="production",
-            approval=_approval(),
-        )
-
-    assert len(store.promotions) == 3
 
 
 @pytest.mark.asyncio
@@ -2038,12 +1863,6 @@ async def test_confirm_writes_rollback_snapshot_and_rollback_restores_previous_c
     monkeypatch.setattr(config_promoter.settings, "workspace_root", str(tmp_path))
     monkeypatch.setattr(
         config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
-    )
-    async def _skip_composite_update(*args, **kwargs):
-        return None
-
-    monkeypatch.setattr(
-        ConfigPromoter, "_update_composite_versions", _skip_composite_update
     )
     target = tmp_path / "configs" / "instrument_configs" / "DOGE_USDT_15m.yaml"
     target.parent.mkdir(parents=True)

@@ -491,127 +491,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/instruments:
-    get:
-      tags:
-      - research
-      summary: List Instruments
-      description: List available instruments from configs/instrument_configs/*.yaml.
-      operationId: list_instruments_api_v1_instruments_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: X-Request-ID
-        in: header
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          description: Correlation identifier; auto-generated UUID4 when missing.
-          title: X-Request-Id
-        description: Correlation identifier; auto-generated UUID4 when missing.
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/models:
     get:
       tags:
       - research
       summary: List Models
+      description: Legacy alias for GET /skills — one entry per installed skill.
       operationId: list_models_api_v1_models_get
       security:
       - HTTPBearer: []
       parameters:
-      - name: X-Request-ID
-        in: header
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          description: Correlation identifier; auto-generated UUID4 when missing.
-          title: X-Request-Id
-        description: Correlation identifier; auto-generated UUID4 when missing.
-      responses:
-        '200':
-          description: Successful Response
-          content:
-            application/json:
-              schema: {}
-        '422':
-          description: Validation Error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPValidationError'
-  /api/v1/pipelines:
-    get:
-      tags:
-      - research
-      summary: List Pipelines
-      description: 'Paginated pipeline listing.
-
-
-        Opaque cursor pagination (ARC-011 P0-018); see ``list_research`` for the
-
-        envelope rules. The legacy ``offset`` parameter is deprecated.'
-      operationId: list_pipelines_api_v1_pipelines_get
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: status
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Status
-      - name: instrument
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Instrument
-      - name: limit
-        in: query
-        required: false
-        schema:
-          type: integer
-          maximum: 500
-          minimum: 1
-          default: 100
-          title: Limit
-      - name: offset
-        in: query
-        required: false
-        schema:
-          type: integer
-          minimum: 0
-          deprecated: true
-          default: 0
-          title: Offset
-        deprecated: true
-      - name: cursor
-        in: query
-        required: false
-        schema:
-          anyOf:
-          - type: string
-          - type: 'null'
-          title: Cursor
       - name: X-Request-ID
         in: header
         required: false
@@ -2130,15 +2019,6 @@ components:
           - type: 'null'
           title: Hpo Timesteps
           description: 'Timesteps per HPO trial (default: 50000). RL only.'
-        phase_budgets:
-          anyOf:
-          - additionalProperties:
-              type: integer
-            type: object
-          - type: 'null'
-          title: Phase Budgets
-          description: 'Per-phase iteration budget for pipeline mode: {direction: N, volatility: N, rl:
-            N}'
         manifest:
           anyOf:
           - additionalProperties: true

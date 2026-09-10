@@ -396,22 +396,6 @@ class TestApiEnvelopeSelection:
         # Final single-row page -> exhausted.
         assert page2["next_cursor"] is None
 
-    async def test_list_pipelines_cursor_and_offset_envelopes(self, store, monkeypatch):
-        for i in range(3):
-            await store.create_pipeline(pipeline_id=f"pipe_{i}", **_PIPELINE_COMMON)
-        monkeypatch.setattr(research_api, "_store", store)
-
-        offset_page = await research_api.list_pipelines(limit=10, offset=0, cursor=None)
-        assert "total" in offset_page and offset_page["total"] == 3
-        assert "next_cursor" in offset_page  # exhausted (3 < 10) -> None
-        assert offset_page["next_cursor"] is None
-
-        # Page-1 with limit 2 -> offers a cursor; page-2 via cursor -> no total.
-        first = await research_api.list_pipelines(limit=2, offset=0, cursor=None)
-        token = first["next_cursor"]
-        page2 = await research_api.list_pipelines(limit=2, offset=0, cursor=token)
-        assert set(page2) == {"items", "limit", "next_cursor"}
-
     async def test_iterations_endpoint_opt_in_pagination(self, store, monkeypatch):
         await store.create_session(session_id="res_x", **_SESSION_COMMON)
         for i in range(3):

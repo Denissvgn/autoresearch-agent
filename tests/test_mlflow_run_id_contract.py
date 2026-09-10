@@ -301,9 +301,7 @@ async def test_config_promoter_does_not_pass_sentinel_mlflow_run_id(
             host_configs_path=str(tmp_path / "configs"),
             workspace_root=str(tmp_path),
             venv_python=sys.executable,
-            mlflow_service_auth_token=None,
             service_name="autoresearch-agent",
-            mlflow_service_url="http://mlflow-service",
         ),
     )
 
@@ -314,12 +312,6 @@ async def test_config_promoter_does_not_pass_sentinel_mlflow_run_id(
         return types.SimpleNamespace(returncode=0, stdout="ok", stderr="")
 
     monkeypatch.setattr(config_promoter.subprocess, "run", fake_run)
-    monkeypatch.setattr(
-        ConfigPromoter,
-        "_update_composite_versions",
-        lambda *args, **kwargs: None,
-    )
-
     class FakeStore:
         async def get_session(self, research_id: str):
             return {

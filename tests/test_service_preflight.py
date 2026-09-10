@@ -42,19 +42,27 @@ def _configure_preflight(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Non
     monkeypatch.setattr(settings, "preflight_enabled", True)
     monkeypatch.setattr(settings, "allow_unready_services", False)
     monkeypatch.setattr(settings, "preflight_timeout_s", 0.5)
-    monkeypatch.setattr(settings, "artifact_logging_required", True)
     monkeypatch.setattr(settings, "mlflow_tracking_uri", "http://mlflow:5000")
-    monkeypatch.setattr(settings, "mlflow_service_url", "http://mlflow-service:8000")
-    monkeypatch.setattr(settings, "data_ingest_url", "http://data-ingest:8000")
-    monkeypatch.setattr(settings, "ensemble_trainer_url", "http://ensemble-trainer:8000")
-    monkeypatch.setattr(settings, "rl_trainer_url", "http://rl-trainer:8000")
-    monkeypatch.setattr(settings, "feature_service_url", "http://feature-service:8000")
-    monkeypatch.setattr(settings, "inference_service_url", "http://inference-service:8000")
-    monkeypatch.setattr(settings, "vdmc_indicator_url", "http://vdmc-indicator:8000")
-    monkeypatch.setattr(settings, "admin_service_url", "http://admin-service:8000")
-    monkeypatch.setattr(settings, "nats_url", None)
-    monkeypatch.setattr(settings, "s3_endpoint_url", "http://minio:9000")
-    monkeypatch.setattr(settings, "mlflow_s3_endpoint_url", None)
+
+
+def _sample_targets():
+    from src.core.service_preflight import ServicePreflightTarget
+
+    return [
+        ServicePreflightTarget(
+            "data_ingest", "http://data-ingest:8000",
+            health_paths=("/readiness", "/health"),
+        ),
+        ServicePreflightTarget(
+            "ensemble_trainer", "http://ensemble-trainer:8000",
+            health_paths=("/health/ready", "/health"),
+        ),
+        ServicePreflightTarget("mlflow_service", "http://mlflow-service:8000"),
+        ServicePreflightTarget(
+            "artifact_store", "http://minio:9000",
+            health_paths=("/minio/health/ready", "/health"),
+        ),
+    ]
 
 
 def _healthy_transport() -> httpx.MockTransport:
@@ -84,7 +92,9 @@ def _healthy_transport() -> httpx.MockTransport:
 async def test_service_preflight_records_healthy_services(monkeypatch, tmp_path):
     _configure_preflight(monkeypatch, tmp_path)
     async with httpx.AsyncClient(transport=_healthy_transport()) as client:
-        result = await run_service_preflight(model_type="direction", client=client)
+        result = await run_service_preflight(
+            targets=_sample_targets(), client=client,
+        )
 
     assert result["schema_version"] == "autoresearch_service_preflight.v1"
     assert result["status"] == "ready"
@@ -96,12 +106,6 @@ async def test_service_preflight_records_healthy_services(monkeypatch, tmp_path)
     ]
     assert result["services"]["ensemble_trainer"]["checked_url"].endswith("/health/ready")
     assert result["services"]["artifact_store"]["url"] == "http://minio:9000"
-    assert result["services"]["inference_service"]["required"] is False
-    assert result["services"]["admin_service"]["required"] is False
-    assert result["services"]["vdmc_indicator"]["required"] is False
-    assert result["services"]["vdmc_indicator"]["checked_url"].endswith(
-        "/api/v1/health/ready"
-    )
     assert all(check["status"] == "ready" for check in result["services"].values())
 
 
@@ -118,95 +122,14 @@ async def test_service_preflight_blocks_unhealthy_required_service(
         return httpx.Response(200, json={"status": "ready"})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        result = await run_service_preflight(model_type="rl", client=client)
+        result = await run_service_preflight(
+            targets=_sample_targets(), client=client,
+        )
 
     assert result["status"] == "failed"
     assert result["required_failures"] == ["mlflow_service"]
     with pytest.raises(ServicePreflightError, match="mlflow_service"):
         require_preflight_ready(result)
-
-
-@pytest.mark.asyncio
-async def test_vdmc_preflight_required_for_rl_pipeline_and_all_only(monkeypatch, tmp_path):
-    _configure_preflight(monkeypatch, tmp_path)
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.host == "vdmc-indicator":
-            return httpx.Response(503, json={"status": "not_ready"})
-        return httpx.Response(200, json={"status": "ready"})
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        direction = await run_service_preflight(model_type="direction", client=client)
-        volatility = await run_service_preflight(model_type="volatility", client=client)
-        rl = await run_service_preflight(model_type="rl", client=client)
-        pipeline = await run_service_preflight(model_type="pipeline", client=client)
-        all_services = await run_service_preflight(model_type="all", client=client)
-
-    for result in (direction, volatility):
-        assert result["status"] == "ready"
-        assert result["required_failures"] == []
-        assert result["services"]["vdmc_indicator"]["required"] is False
-        assert result["services"]["vdmc_indicator"]["status"] == "failed"
-
-    for result in (rl, pipeline, all_services):
-        assert result["status"] == "failed"
-        assert result["required_failures"] == ["vdmc_indicator"]
-        assert result["services"]["vdmc_indicator"]["required"] is True
-
-
-@pytest.mark.asyncio
-async def test_full_stack_preflight_requires_inference_admin_and_nats(
-    monkeypatch,
-    tmp_path,
-):
-    _configure_preflight(monkeypatch, tmp_path)
-    monkeypatch.setattr(settings, "nats_url", "nats://nats:4222")
-
-    import src.core.service_preflight as preflight_module
-
-    async def fake_tcp_check(target, timeout_s):
-        return {
-            "name": target.name,
-            "url": target.url,
-            "required": target.required,
-            "status": "ready",
-            "health_paths": [],
-            "transport": "tcp",
-            "checked_url": target.url,
-            "status_code": None,
-            "latency_ms": 1.0,
-            "error": None,
-        }
-
-    monkeypatch.setattr(preflight_module, "_check_tcp_target", fake_tcp_check)
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.host == "inference-service":
-            return httpx.Response(503, json={"status": "not_ready"})
-        if request.url.host == "admin-service":
-            return httpx.Response(503, json={"status": "not_ready"})
-        return httpx.Response(200, json={"status": "ready"})
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        direction = await run_service_preflight(model_type="direction", client=client)
-        pipeline = await run_service_preflight(model_type="pipeline", client=client)
-        all_services = await run_service_preflight(model_type="all", client=client)
-
-    assert direction["status"] == "ready"
-    assert "nats" not in direction["services"]
-    assert direction["services"]["inference_service"]["required"] is False
-    assert direction["services"]["admin_service"]["required"] is False
-
-    for result in (pipeline, all_services):
-        assert result["status"] == "failed"
-        assert result["services"]["inference_service"]["required"] is True
-        assert result["services"]["admin_service"]["required"] is True
-        assert result["services"]["nats"]["required"] is True
-        assert result["services"]["nats"]["status"] == "ready"
-        assert result["required_failures"] == [
-            "inference_service",
-            "admin_service",
-        ]
 
 
 @pytest.mark.asyncio
@@ -233,11 +156,10 @@ async def test_session_start_persists_preflight_in_manifest(monkeypatch, tmp_pat
 
     fake_orchestrator = FakeOrchestrator(None)
 
-    async def healthy_preflight(*, model_type: str):
+    async def healthy_preflight(*, targets=None):
         return {
             "schema_version": "autoresearch_service_preflight.v1",
             "status": "ready",
-            "model_type": model_type,
             "required_ready": True,
             "override_allowed_unready": False,
             "services": {
@@ -319,7 +241,7 @@ async def test_session_start_preflight_failure_skips_llm_call(monkeypatch, tmp_p
     }
     fake_orchestrator = FakeOrchestrator(None)
 
-    async def unhealthy_preflight(*, model_type: str):
+    async def unhealthy_preflight(*, targets=None):
         return failed_preflight
 
     monkeypatch.setattr(

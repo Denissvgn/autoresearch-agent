@@ -3620,37 +3620,6 @@ class AgentOrchestrator:
                 )
                 return
 
-            # Fix 3: server-side promotion-evidence collection. Resolves
-            # infrastructure-side blockers (inference_adapter_load_failure,
-            # inference_reload_failed, failed_smoke_validation, missing
-            # signal-health metrics) that the agent itself cannot produce.
-            if settings.auto_collect_promotion_evidence:
-                try:
-                    from src.core.promotion_evidence_collector import (
-                        PromotionEvidenceCollector,
-                    )
-
-                    collector = PromotionEvidenceCollector(self._store)
-                    patch = await collector.collect_and_patch(
-                        research_id, best_iter,
-                    )
-                    if patch:
-                        logger.info(
-                            "ML-53: promotion evidence collected for %s "
-                            "iter %d (keys=%s)",
-                            research_id, best_iter, sorted(patch.keys()),
-                        )
-                        await agent_log.append(
-                            "system",
-                            f"Promotion evidence auto-collected: "
-                            f"{', '.join(sorted(patch.keys()))}",
-                        )
-                except Exception as exc:  # pragma: no cover — fail-open
-                    logger.warning(
-                        "ML-53: promotion evidence collection failed for %s: %s",
-                        research_id, exc, exc_info=True,
-                    )
-
             try:
                 preview = await promoter.preview(research_id)
             except ValueError as exc:
@@ -3670,35 +3639,6 @@ class AgentOrchestrator:
             promotion_allowed = bool(preview.get("promotion_allowed"))
             if not promotion_allowed:
                 blockers = self._auto_promotion_preview_blockers(preview)
-                # Gap 3: pull through the underlying collection errors from the
-                # iteration's metrics_json so the audit event / log line
-                # distinguishes infrastructure failures (inference-service
-                # unreachable, 502 from /admin/composite/reload) from genuine
-                # model-validation failures. The errors are persisted by
-                # PromotionEvidenceCollector at
-                # promotion_evidence_collector.py:140 under the
-                # ``promotion_evidence_collection_errors`` key.
-                collection_errors: Optional[Dict[str, str]] = None
-                try:
-                    best_row = await self._store.get_iteration(
-                        research_id, best_iter,
-                    )
-                    best_metrics = (
-                        self._parse_metrics_json(best_row.get("metrics_json"))
-                        if best_row else {}
-                    )
-                    raw_errors = best_metrics.get(
-                        "promotion_evidence_collection_errors"
-                    )
-                    if isinstance(raw_errors, dict) and raw_errors:
-                        collection_errors = {
-                            str(k): str(v) for k, v in raw_errors.items()
-                        }
-                except Exception:
-                    logger.debug(
-                        "Failed to load promotion_evidence_collection_errors for %s iter %s",
-                        research_id, best_iter, exc_info=True,
-                    )
                 await self._emit_auto_promotion_skipped(
                     research_id=research_id,
                     config=config,
@@ -3709,7 +3649,6 @@ class AgentOrchestrator:
                     incomplete_phases=[],
                     promotion_allowed=False,
                     blockers=blockers,
-                    collection_errors=collection_errors,
                 )
                 return
 

@@ -344,13 +344,6 @@ def test_authenticated_api_calls_preserve_existing_behavior(client: TestClient):
     assert rollback.json()["rolled_back"] is True
 
 
-def test_authenticated_status_includes_vdmc_service_url(client: TestClient):
-    response = client.get("/api/v1/status", headers=auth_headers())
-
-    assert response.status_code == 200
-    assert response.json()["service_urls"]["vdmc_indicator"] == settings.vdmc_indicator_url
-
-
 def test_api_v1_and_legacy_api_prefixes_are_both_protected(client: TestClient):
     for prefix in ("/api/v1", "/api"):
         missing_auth = client.get(f"{prefix}/research")
@@ -359,21 +352,6 @@ def test_api_v1_and_legacy_api_prefixes_are_both_protected(client: TestClient):
         response = client.get(f"{prefix}/research", headers=auth_headers())
         assert response.status_code == 200
         assert response.json()["items"] == []
-
-
-def test_pipeline_phase_budgets_are_validated(client: TestClient):
-    response = client.post(
-        "/api/research/start",
-        json={
-            "instrument": "DOGE_USDT",
-            "timeframe": "15m",
-            "model_type": "pipeline",
-            "phase_budgets": {"direction": 1, "surprise": 2},
-        },
-        headers=auth_headers(),
-    )
-
-    assert response.status_code == 422
 
 
 def test_continue_requires_and_replays_idempotency_key(client: TestClient):
@@ -662,7 +640,6 @@ def test_settings_accept_canonical_autoresearch_aliases(monkeypatch):
         "AUTORESEARCH_MAX_CONCURRENT": "4",
         "AUTORESEARCH_LOG_LEVEL": "DEBUG",
         "AUTORESEARCH_IDENTITY_SERVICE_URL": "http://identity:8000",
-        "AUTORESEARCH_VDMC_INDICATOR_URL": "http://vdmc-custom:8000",
     }
     for key, value in env_values.items():
         monkeypatch.setenv(key, value)
@@ -681,18 +658,6 @@ def test_settings_accept_canonical_autoresearch_aliases(monkeypatch):
     assert cfg.max_concurrent_sessions == 4
     assert cfg.log_level == "DEBUG"
     assert cfg.identity_introspection_url == "http://identity:8000"
-    assert cfg.vdmc_indicator_url == "http://vdmc-custom:8000"
-
-
-def test_settings_accept_vdmc_service_url_alias(monkeypatch):
-    monkeypatch.setenv("VDMC_SERVICE_URL", "http://vdmc-alias:8000")
-
-    cfg = Settings(
-        anthropic_base_url="http://anthropic.invalid",
-        anthropic_auth_token="test-token",
-    )
-
-    assert cfg.vdmc_indicator_url == "http://vdmc-alias:8000"
 
 
 def test_settings_keep_bare_env_fallbacks(monkeypatch):

@@ -73,20 +73,13 @@ class FakeOrchestrator:
         pass
 
 
-async def _healthy_preflight(*, model_type: str) -> Dict[str, Any]:
+async def _healthy_preflight(*, targets=None) -> Dict[str, Any]:
     return {
         "schema_version": "autoresearch_service_preflight.v1",
         "status": "ready",
-        "model_type": model_type,
         "required_ready": True,
         "override_allowed_unready": False,
-        "services": {
-            "mlflow_service": {
-                "url": "http://mlflow-service:8000",
-                "required": True,
-                "status": "ready",
-            }
-        },
+        "services": {},
         "required_failures": [],
     }
 
@@ -96,9 +89,6 @@ def _configure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     # preflight call itself is monkeypatched, so only the workspace roots and
     # manifest-referenced attributes matter here.
     monkeypatch.setattr(settings, "workspace_root", str(tmp_path / "workspace"))
-    monkeypatch.setattr(settings, "mlflow_tracking_uri", "http://mlflow:5000")
-    monkeypatch.setattr(settings, "mlflow_service_url", "http://mlflow-service:8000")
-    monkeypatch.setattr(settings, "data_ingest_url", "http://data-ingest:8000")
     monkeypatch.setattr(settings, "host_configs_path", str(tmp_path / "host_configs"))
 
 

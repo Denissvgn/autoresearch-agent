@@ -43,21 +43,13 @@ _CHILD_ENV_ALLOWLIST: frozenset[str] = frozenset(
         # Host config / workspace roots (setup.py, direction/prepare.py, enrich_rl_dataset.py)
         "HOST_CONFIGS_PATH", "AUTORESEARCH_HOST_CONFIGS_PATH",
         "AUTORESEARCH_WORKSPACE_ROOT", "WORKSPACE_ROOT",
-        # rl-trainer delegation (rl/prepare.py:132-138)
-        "RL_TRAINER_URL", "RL_POLL_INTERVAL", "RL_ENRICHED_BUCKET",
-        "RL_TRAINER_SERVICE_TOKEN", "AUTORESEARCH_RL_TRAINER_SERVICE_TOKEN",
-        "ML_ADMIN_TOKEN",
-        # minio / S3 (rl/prepare.py:1273-1274, boto3)
+        # Optional S3-compatible artifact store credentials (boto3-based
+        # skill scripts). Skills bring their own service credentials.
         "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
         "AWS_DEFAULT_REGION", "AWS_REGION", "AWS_SESSION_TOKEN",
         "S3_ENDPOINT_URL", "MINIO_ENDPOINT_URL", "MLFLOW_S3_ENDPOINT_URL",
-        # mlflow tracking URI only (NOT the promotion token); consumed by the
-        # rl-trainer SDK via MLFLOW_TRACKING_URI -> config -> set_tracking_uri.
+        # mlflow tracking URI only (never any promotion/service token).
         "MLFLOW_TRACKING_URI",
-        # data-ingest (enrich_rl_dataset.py:597)
-        "DATA_INGEST_URL",
-        # training-child niceties rl/prepare.py:1948-1949 re-sets on its own copy
-        "NUMBA_CACHE_DIR", "MPLCONFIGDIR",
     }
 )
 # Kept by prefix so the Python family (PYTHONUNBUFFERED, PYTHONPATH, ...) and

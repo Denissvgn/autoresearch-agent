@@ -302,8 +302,8 @@ def test_governed_runner_strips_control_plane_secrets_from_child_env(
     }
     for name, value in canaries.items():
         monkeypatch.setenv(name, value)
-    # An experiment-legitimate secret (rl-trainer delegation) that must be kept.
-    monkeypatch.setenv("ML_ADMIN_TOKEN", "kept-rl-admin")
+    # A legacy platform admin token — must now be stripped like the others.
+    monkeypatch.setenv("ML_ADMIN_TOKEN", "legacy-admin")
     # A core runtime var that must also be kept.
     monkeypatch.setenv("PATH", "/usr/bin:/bin")
 
@@ -337,8 +337,9 @@ def test_governed_runner_strips_control_plane_secrets_from_child_env(
         assert value not in child_env.values(), (
             f"{name}'s value leaked via another env var"
         )
-    # Kept: experiment-legitimate creds and core runtime vars propagate.
-    assert child_env.get("ML_ADMIN_TOKEN") == "kept-rl-admin"
+    # Stripped: legacy platform admin tokens do not propagate either.
+    assert "ML_ADMIN_TOKEN" not in child_env
+    # Kept: core runtime vars propagate.
     assert child_env.get("PATH") == "/usr/bin:/bin"
 
 
@@ -350,20 +351,12 @@ def test_build_child_env_allowlist_covers_approved_script_inventory():
     experiment-legitimate var. Consumers (file:line) per ARC-011 P0-023 inventory.
     """
     required = {
-        # setup.py:31, direction/prepare.py:167, enrich_rl_dataset.py:131
+        # Skill bootstrap/setup scripts read the workspace roots.
         "HOST_CONFIGS_PATH",
-        # rl/prepare.py:132-135
-        "RL_TRAINER_URL", "RL_POLL_INTERVAL", "RL_ENRICHED_BUCKET",
-        # rl/prepare.py:137-138 (rl-trainer delegation)
-        "RL_TRAINER_SERVICE_TOKEN", "ML_ADMIN_TOKEN",
-        # rl/prepare.py:1273-1274 (boto3 client)
+        # Artifact-store clients (boto3-based skill scripts).
         "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
-        # rl/prepare.py:134
         "S3_ENDPOINT_URL", "MLFLOW_S3_ENDPOINT_URL",
-        # enrich_rl_dataset.py:597
-        "DATA_INGEST_URL",
-        # consumed downstream by rl-trainer SDK; inherited via os.environ.copy()
-        # into the training children (direction/volatility/rl prepare.py).
+        # MLflow tracking (generic, no service tokens).
         "MLFLOW_TRACKING_URI",
     }
     missing = required - _CHILD_ENV_ALLOWLIST

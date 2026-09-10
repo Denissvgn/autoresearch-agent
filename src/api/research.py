@@ -34,7 +34,6 @@ from src.core.skill_registry import SkillNotRegisteredError, default_registry
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["research"], dependencies=[Depends(require_api_auth)])
-VALID_PIPELINE_PHASES = {"direction", "volatility", "rl"}
 
 
 def _started_at_id_cursor(row: Mapping[str, Any]) -> tuple[Any, Any]:
@@ -77,7 +76,6 @@ def _start_metadata(req: "StartResearchRequest") -> dict[str, Any]:
         "enable_hpo": req.enable_hpo,
         "hpo_trials": req.hpo_trials,
         "hpo_timesteps": req.hpo_timesteps,
-        "phase_budgets": req.phase_budgets,
         "manifest_supplied": req.manifest is not None,
     }
 
@@ -124,22 +122,6 @@ async def _audit(
     )
 
 
-def _validate_phase_budgets(value: Optional[Dict[str, int]]) -> Optional[Dict[str, int]]:
-    if value is None:
-        return None
-    unknown = sorted(set(value) - VALID_PIPELINE_PHASES)
-    if unknown:
-        raise ValueError(f"Unknown phase budget keys: {', '.join(unknown)}")
-    invalid = {
-        phase: budget
-        for phase, budget in value.items()
-        if not isinstance(budget, (int, float)) or int(budget) < 1
-    }
-    if invalid:
-        raise ValueError("phase_budgets values must be integers >= 1")
-    return {phase: int(budget) for phase, budget in value.items()}
-
-
 def _dual_shape_session(session: Dict[str, Any]) -> Dict[str, Any]:
     """Augment a session dict with canonical (skill_id/subject_id/variant)
     and legacy (model_type/instrument/timeframe) fields (§10 guarantee #4:
@@ -150,13 +132,9 @@ def _dual_shape_session(session: Dict[str, Any]) -> Dict[str, Any]:
     ``skill_id``/``subject_id``/``variant`` columns (P3-019), those become the
     source and legacy fields are derived — the response shape stays the same.
 
-    Canonical fields are always populated **for skill-backed sessions**. A
-    pipeline row is a multi-skill container, not itself a skill, so its
-    ``model_type="pipeline"`` has no alias entry and ``skill_id``/``subject_id``/
-    ``variant`` come back empty by design (a pipeline does not belong to one
-    skill). Legacy fields remain populated for every row. GEN-009 (the
-    falsifiability suite) iterates the 3 ML model types and asserts uniformity
-    there; pipelines are documented as the documented empty-canonical case.
+    Canonical fields are populated for every row via the identity alias
+    fallback (a skill_id without a legacy short name is its own model_type).
+    Legacy rows written before the skill migration keep rendering correctly.
     """
     augmented = dict(session)
     model_type = session.get("model_type", "") or ""
@@ -493,14 +471,6 @@ class StartResearchRequest(BaseModel):
         default=None, ge=10000, le=500000,
         description="Timesteps per HPO trial (default: 50000). RL only.",
     )
-    # ML-63: Pipeline settings
-    phase_budgets: Optional[Dict[str, int]] = Field(
-        default=None,
-        description=(
-            "Per-phase iteration budget for pipeline mode: "
-            "{direction: N, volatility: N, rl: N}"
-        ),
-    )
     manifest: Optional[Dict[str, Any]] = Field(
         default=None,
         description=(
@@ -508,11 +478,6 @@ class StartResearchRequest(BaseModel):
             "fields must still match the server-generated session."
         ),
     )
-
-    @field_validator("phase_budgets")
-    @classmethod
-    def validate_phase_budgets(cls, value: Optional[Dict[str, int]]) -> Optional[Dict[str, int]]:
-        return _validate_phase_budgets(value)
 
     @model_validator(mode="after")
     def _validate_shape_presence(self) -> "StartResearchRequest":
@@ -552,33 +517,6 @@ async def start_research(request: Request, req: StartResearchRequest):
 
     metadata = _start_metadata(req)
     try:
-        # ML-63: Route pipeline requests to the pipeline controller
-        if req.model_type == "pipeline":
-            pipeline = await _session_manager.start_pipeline(
-                instrument=req.instrument,
-                timeframe=req.timeframe,
-                tag=req.tag,
-                quick_mode=req.quick_mode,
-                max_iterations=req.max_iterations,
-                max_budget_usd=req.max_budget_usd,
-                timeout_minutes=req.timeout_minutes,
-                focus_hint=req.focus_hint,
-                phase_budgets=req.phase_budgets,
-                trading_mode=req.trading_mode,
-                agent_strategy=req.agent_strategy,
-                initial_balance=req.initial_balance,
-                enable_hpo=req.enable_hpo,
-                hpo_trials=req.hpo_trials,
-                hpo_timesteps=req.hpo_timesteps,
-            )
-            await _audit(
-                request,
-                action="pipeline.start",
-                outcome="success",
-                pipeline_id=pipeline.get("id"),
-                metadata=metadata,
-            )
-            return _dual_shape_session(pipeline)
         session = await _session_manager.start_session(
             instrument=req.instrument,
             timeframe=req.timeframe,
@@ -617,7 +555,7 @@ async def start_research(request: Request, req: StartResearchRequest):
     except RuntimeError as e:
         await _audit(
             request,
-            action="pipeline.start" if req.model_type == "pipeline" else "research.start",
+            action="research.start",
             outcome="failure",
             metadata=metadata,
             error_message=str(e),
@@ -742,27 +680,6 @@ async def get_research(research_id: str):
 
 @router.post("/research/{research_id}/stop")
 async def stop_research(request: Request, research_id: str):
-    # ML-63: Handle pipeline stop
-    if research_id.startswith("pipe_"):
-        ok = await _session_manager.stop_pipeline(research_id)
-        if ok:
-            await _audit(
-                request,
-                action="pipeline.stop",
-                outcome="success",
-                pipeline_id=research_id,
-            )
-            return {"status": "stop_requested", "pipeline_id": research_id}
-        await _audit(
-            request,
-            action="pipeline.stop",
-            outcome="failure",
-            pipeline_id=research_id,
-            error_message="Session not found or not running",
-        )
-        raise HTTPException(
-            status_code=404, detail="Session not found or not running",
-        )
     ok = await _session_manager.stop_session(research_id)
     if not ok:
         await _audit(
@@ -876,29 +793,6 @@ async def continue_research(
         req = ContinueResearchRequest()
     metadata = _continue_metadata(req)
     try:
-        # ML-63: Handle pipeline continue
-        if research_id.startswith("pipe_"):
-            pipeline = await _run_idempotent(
-                operation="pipeline.continue",
-                parent_id=research_id,
-                key=idempotency_key,
-                request_payload=req.model_dump(),
-                call=lambda: _session_manager.continue_pipeline(
-                    research_id,
-                    max_iterations=req.max_iterations,
-                    max_budget_usd=req.max_budget_usd,
-                    timeout_minutes=req.timeout_minutes,
-                    focus_hint=req.focus_hint,
-                ),
-            )
-            await _audit(
-                request,
-                action="pipeline.continue",
-                outcome="success",
-                pipeline_id=research_id,
-                metadata={**metadata, "continued_pipeline_id": pipeline.get("id")},
-            )
-            return pipeline
         session = await _run_idempotent(
             operation="research.continue",
             parent_id=research_id,
@@ -923,14 +817,9 @@ async def continue_research(
     except RuntimeError as e:
         await _audit(
             request,
-            action=(
-                "pipeline.continue"
-                if research_id.startswith("pipe_")
-                else "research.continue"
-            ),
+            action="research.continue",
             outcome="failure",
-            research_id=None if research_id.startswith("pipe_") else research_id,
-            pipeline_id=research_id if research_id.startswith("pipe_") else None,
+            research_id=research_id,
             metadata=metadata,
             error_message=str(e),
         )
@@ -1027,151 +916,27 @@ async def delete_research(request: Request, research_id: str):
     return {"status": "deleted", "research_id": research_id}
 
 
-@router.get("/instruments")
-async def list_instruments():
-    """List available instruments from configs/instrument_configs/*.yaml."""
-    instrument_dir = os.path.join(settings.configs_dir, "instrument_configs")
-    instruments = []
-    if os.path.isdir(instrument_dir):
-        for path in sorted(glob.glob(os.path.join(instrument_dir, "*.yaml"))):
-            filename = os.path.basename(path)
-            name = filename.rsplit(".", 1)[0]  # e.g. DOGE_USDT_15m
-            # Try to split into instrument + timeframe
-            parts = name.rsplit("_", 1)
-            if len(parts) == 2 and parts[1] in (
-                "1m", "5m", "15m", "30m", "1h", "4h", "1d",
-            ):
-                instruments.append({
-                    "name": name,
-                    "instrument": "_".join(parts[0].split("_")[:2]),
-                    "timeframe": parts[1],
-                })
-            else:
-                instruments.append({"name": name, "instrument": name, "timeframe": "unknown"})
-
-    # Also check RL configs (ML-67: handle new naming with strategy+market)
-    rl_dir = os.path.join(settings.configs_dir, "rl")
-    _valid_strats = {"AGGR", "CONS", "BALA", "SCAL"}
-    _valid_mkts = {"stock", "margin"}
-    if os.path.isdir(rl_dir):
-        for path in sorted(glob.glob(os.path.join(rl_dir, "*_production.yaml"))):
-            filename = os.path.basename(path)
-            stem = filename.replace("_production.yaml", "")
-            parts = stem.split("_")
-
-            # Try new format: {BASE}_{QUOTE}_{TF}_{STRAT}_{MKT}
-            instrument = None
-            timeframe = None
-            strategy = None
-            if (len(parts) >= 5
-                    and parts[-2].upper() in _valid_strats
-                    and parts[-1].lower() in _valid_mkts):
-                instrument = "_".join(parts[:-3])
-                timeframe = parts[-3]
-                strategy = parts[-2].upper()
-            elif len(parts) >= 3:
-                # Legacy: {BASE}_{QUOTE}_{TF}
-                timeframe = parts[-1]
-                instrument = "_".join(parts[:-1])
-
-            display_name = stem
-            # Avoid duplicates
-            if instrument and not any(i["name"] == display_name for i in instruments):
-                entry = {
-                    "name": display_name,
-                    "instrument": instrument,
-                    "timeframe": timeframe or "unknown",
-                }
-                if strategy:
-                    entry["strategy"] = strategy
-                instruments.append(entry)
-
-    return instruments
-
-
 @router.get("/models")
 async def list_models():
+    """Legacy alias for GET /skills — one entry per installed skill."""
     return [
-        {"id": "direction", "name": "Direction", "skill": "direction-autotuner"},
-        {"id": "volatility", "name": "Volatility", "skill": "volatility-autotuner"},
-        {"id": "rl", "name": "RL (PPO)", "skill": "rl-autotuner"},
-        {"id": "pipeline", "name": "Pipeline (dir→vol→rl)", "skill": "pipeline"},
+        {"id": sid, "name": sid, "skill": sid}
+        for sid in default_registry.available()
     ]
-
-
-# ------------------------------------------------------------------
-# ML-63: Pipeline-specific endpoints
-# ------------------------------------------------------------------
-
-
-@router.get("/pipelines")
-async def list_pipelines(
-    status: Optional[str] = None,
-    instrument: Optional[str] = None,
-    limit: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
-    offset: int = Query(default=0, ge=0, deprecated=True),
-    cursor: Optional[str] = None,
-):
-    """Paginated pipeline listing.
-
-    Opaque cursor pagination (ARC-011 P0-018); see ``list_research`` for the
-    envelope rules. The legacy ``offset`` parameter is deprecated.
-    """
-
-    # Under direct (non-FastAPI) calls used by the test suite, `limit`/`offset`
-    # receive the Query() sentinel rather than their defaults; coerce them.
-    if not isinstance(limit, int):
-        limit = DEFAULT_PAGE_SIZE
-    if not isinstance(offset, int):
-        offset = 0
-    decoded = decode_cursor(cursor)
-    if decoded is None and cursor:
-        logger.warning("malformed /pipelines cursor token; serving page 1")
-    if decoded is not None:
-        items = await _store.list_pipelines(
-            status=status, instrument=instrument, limit=limit, cursor=decoded,
-        )
-        return build_cursor_page(items, limit, _started_at_id_cursor)
-    if offset > 0:
-        logger.warning(
-            "offset pagination is deprecated for /pipelines; use cursor "
-            "(ARC-011 P0-018)"
-        )
-    items = await _store.list_pipelines(
-        status=status, instrument=instrument, limit=limit, offset=offset,
-    )
-    total = await _store.count_pipelines(status=status, instrument=instrument)
-    # Legacy offset envelope, with an additive ``next_cursor``.
-    return {
-        "items": items,
-        "total": total,
-        "limit": limit,
-        "offset": offset,
-        "next_cursor": compute_next_cursor(items, limit, _started_at_id_cursor),
-    }
 
 
 @router.get("/status")
 async def system_status():
     return {
         "active_sessions": _session_manager.active_count,
-        "active_pipelines": len(_session_manager._active_pipelines),
         "max_concurrent": settings.max_concurrent_sessions,
         "anthropic_model": settings.anthropic_model,
         "default_quick_mode": settings.default_quick_mode,
         "max_iterations": settings.max_iterations,
         "max_budget_usd": settings.max_budget_usd,
-        "service_urls": {
-            "data_ingest": settings.data_ingest_url,
-            "ensemble_trainer": settings.ensemble_trainer_url,
-            "feature_service": settings.feature_service_url,
-            "vdmc_indicator": settings.vdmc_indicator_url,
-            "rl_trainer": settings.rl_trainer_url,
+        "llm": {
             "mlflow_tracking": settings.mlflow_tracking_uri,
-            "mlflow_service": settings.mlflow_service_url,
             "mlflow_external": settings.mlflow_external_url,
-            "admin_service": settings.admin_service_url,
-            "promotion_api": settings.promotion_service_url,
         },
         "persistence": {
             "db_path": settings.db_path,

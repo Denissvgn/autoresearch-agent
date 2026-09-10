@@ -26,7 +26,6 @@ from src.core.blocker_classifier import classify_blockers
 from src.config import secret_value, settings
 from src.core.consistency_validator import build_consistency_report
 from src.core.development_gate_bundle import (
-    apply_instrument_gate_overrides,
     evaluate_development_gate_bundle,
     load_gate_bundle,
     load_production_gate_bundle,
@@ -140,14 +139,6 @@ class ConfigPromoter:
             raise ValueError(f"No winning iteration found for {research_id}")
 
         # Self-sufficient evidence collection: the orchestrator collects
-        # promotion evidence (smoke validation, signal health, reload) in its
-        # session-end auto-promotion flow, but a session that TIMED OUT or is
-        # promoted manually never reached that phase — leaving smoke_validation
-        # absent and the gate stuck on failed_smoke_validation even though the
-        # paper-replay would pass. Collect it here too (fail-open) so preview
-        # reflects the real, collectable evidence.
-        best = await self._ensure_promotion_evidence(research_id, best)
-
         workspace_path = session["workspace_path"]
         model_type = session["model_type"]
         instrument = session["instrument"]
@@ -662,15 +653,6 @@ class ConfigPromoter:
             promotion_metadata=metadata,
         )
 
-        # ML-52: Update composite model versions in mlflow-service
-        if model_registry_name and model_version:
-            version_tag = f"{model_registry_name}:{model_version}"
-            await self._update_composite_versions(
-                instrument=instrument,
-                model_type=model_type,
-                version_tag=version_tag,
-            )
-
         return promotion
 
     async def _confirm_scoped_promotion(
@@ -724,15 +706,6 @@ class ConfigPromoter:
                 f"({blockers})"
             )
 
-        best = await self._store.get_best_iteration(research_id)
-        metrics_payload = self._best_iteration_payload(best or {})
-        if scope == PRODUCTION_PROMOTION_SCOPE:
-            metadata["mlflow_service"] = await self._promote_production_composite(
-                preview=preview,
-                metrics_payload=metrics_payload,
-                approval=approval,
-            )
-
         metadata_path = self._metadata_sidecar_path(
             preview["target_path"],
             preview["iteration"],
@@ -761,30 +734,6 @@ class ConfigPromoter:
             metadata_path=metadata_path,
             promotion_metadata=metadata,
         )
-
-    def _mlflow_service_auth_headers(self, *, require_token: bool) -> dict[str, str] | None:
-        token = secret_value(settings.mlflow_service_auth_token)
-        if not token:
-            if require_token:
-                raise ValueError(
-                    "Production-scope promotion requires "
-                    "AUTORESEARCH_MLFLOW_SERVICE_AUTH_TOKEN, "
-                    "MLFLOW_SERVICE_AUTH_TOKEN, SERVICE_AUTH_TOKEN, or "
-                    "ML_ADMIN_TOKEN"
-                )
-            return None
-        return {
-            "Authorization": f"Bearer {token}",
-            "X-Service-Name": settings.service_name,
-        }
-
-    @staticmethod
-    def _composite_version_key(model_type: str) -> str | None:
-        return {
-            "direction": "direction_model_version",
-            "volatility": "volatility_model_version",
-            "rl": "rl_model_version",
-        }.get(model_type)
 
     @staticmethod
     def _model_version_components(
@@ -822,127 +771,6 @@ class ConfigPromoter:
                 "serving, ensemble, or base model registry name and version"
             )
         return f"{registry_name}:{model_version}"
-
-    async def _promote_production_composite(
-        self,
-        *,
-        preview: Dict[str, Any],
-        metrics_payload: Dict[str, Any],
-        approval: Optional[Dict[str, Any]],
-    ) -> Dict[str, Any]:
-        """Promote the authoritative mlflow-service composite to production."""
-        headers = self._mlflow_service_auth_headers(require_token=True)
-        model_type = str(preview["model_type"])
-        version_key = self._composite_version_key(model_type)
-        if not version_key:
-            raise ValueError(f"Unknown model_type {model_type!r}")
-        version_tag = self._model_version_tag(metrics_payload)
-
-        base_url = settings.mlflow_service_url.rstrip("/")
-        list_url = f"{base_url}{MLFLOW_COMPOSITES_API_PREFIX}"
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                list_resp = await client.get(
-                    list_url,
-                    headers=headers,
-                    params={
-                        "instrument": preview["instrument"],
-                        "page_size": 100,
-                    },
-                )
-        except httpx.HTTPError as exc:
-            raise RuntimeError(
-                "Failed to list mlflow-service composites for production "
-                f"promotion: {exc}"
-            ) from exc
-
-        if list_resp.status_code != 200:
-            raise RuntimeError(
-                "Failed to list mlflow-service composites for production "
-                f"promotion: HTTP {list_resp.status_code} {list_resp.text[:300]}"
-            )
-
-        composites_payload = list_resp.json()
-        if isinstance(composites_payload, list):
-            composites = composites_payload
-        elif isinstance(composites_payload, dict):
-            composites = composites_payload.get("items") or composites_payload.get("composites") or []
-        else:
-            composites = []
-
-        matches = [
-            composite
-            for composite in composites
-            if isinstance(composite, dict)
-            and str(composite.get("status") or "").lower() != "retired"
-            and str(composite.get(version_key) or "") == version_tag
-        ]
-        if not matches:
-            raise ValueError(
-                "No non-retired mlflow-service composite matches "
-                f"{version_key}={version_tag} for {preview['instrument']}"
-            )
-        if len(matches) > 1:
-            ids = ", ".join(str(match.get("id")) for match in matches)
-            raise ValueError(
-                "Multiple non-retired mlflow-service composites match "
-                f"{version_key}={version_tag}: {ids}"
-            )
-
-        selected = matches[0]
-        composite_id = str(selected.get("id") or "")
-        if not composite_id:
-            raise RuntimeError("Matched mlflow-service composite has no id")
-        prior_status = str(selected.get("status") or "")
-        composite_url = f"{list_url}/{composite_id}"
-        if prior_status.lower() == PRODUCTION_PROMOTION_SCOPE:
-            return {
-                "outcome": "already_production",
-                "composite_id": composite_id,
-                "prior_status": prior_status,
-                "final_status": prior_status,
-                "promoted_at": selected.get("promoted_at"),
-                "url": composite_url,
-            }
-
-        reason = (approval or {}).get("reason") or "autoresearch production promotion"
-        promote_payload: dict[str, Any] = {
-            "target_stage": PRODUCTION_PROMOTION_SCOPE,
-            "reason": reason,
-        }
-        if "rollup_score" in metrics_payload and metrics_payload.get("rollup_score") is not None:
-            rollup_score = self._numeric_value(metrics_payload.get("rollup_score"))
-            if rollup_score is None:
-                raise ValueError("metrics.rollup_score must be numeric when present")
-            promote_payload["rollup_score"] = rollup_score
-
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                promote_resp = await client.post(
-                    f"{composite_url}/promote",
-                    headers=headers,
-                    json=promote_payload,
-                )
-        except httpx.HTTPError as exc:
-            raise RuntimeError(
-                "Failed to promote mlflow-service composite to production: "
-                f"{exc}"
-            ) from exc
-
-        if promote_resp.status_code not in {200, 201}:
-            raise RuntimeError(
-                "Failed to promote mlflow-service composite to production: "
-                f"HTTP {promote_resp.status_code} {promote_resp.text[:300]}"
-            )
-        promoted = promote_resp.json()
-        return {
-            "outcome": "promoted",
-            "composite_id": composite_id,
-            "prior_status": prior_status,
-            "final_status": promoted.get("status") or PRODUCTION_PROMOTION_SCOPE,
-            "promoted_at": promoted.get("promoted_at"),
-            "url": composite_url,
-        }
 
     async def _build_scoped_promotion_metadata(
         self,
@@ -2196,44 +2024,6 @@ class ConfigPromoter:
         )
         return readiness
 
-    async def _ensure_promotion_evidence(
-        self, research_id: str, best: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        """Collect promotion evidence (smoke/signal-health/reload) into the
-        best iteration when it is missing, then return the re-fetched row.
-
-        Mirrors the orchestrator's session-end collection so promotions of
-        timed-out or manually-promoted sessions are not falsely blocked on
-        infrastructure evidence the agent cannot itself produce. Fail-open:
-        any collection error leaves ``best`` unchanged.
-        """
-        if not getattr(settings, "auto_collect_promotion_evidence", True):
-            return best
-        payload = self._best_iteration_payload(best)
-        if _has_smoke_validation_evidence(payload):
-            return best
-        try:
-            from src.core.promotion_evidence_collector import (
-                PromotionEvidenceCollector,
-            )
-
-            collector = PromotionEvidenceCollector(self._store)
-            patch = await collector.collect_and_patch(
-                research_id, best["iteration"],
-            )
-            if patch:
-                refreshed = await self._store.get_iteration(
-                    research_id, best["iteration"],
-                )
-                if refreshed:
-                    return refreshed
-        except Exception as exc:  # pragma: no cover — fail-open
-            logger.warning(
-                "promotion evidence collection in preview failed for %s: %s",
-                research_id, exc,
-            )
-        return best
-
     def _build_smoke_validation(
         self,
         *,
@@ -2857,12 +2647,6 @@ class ConfigPromoter:
         """
         try:
             bundle = load_gate_bundle(settings.workspace_root)
-            bundle = apply_instrument_gate_overrides(
-                bundle,
-                instrument=instrument,
-                timeframe=timeframe,
-                workspace_root=settings.workspace_root,
-            )
         except Exception as exc:
             if model_type == "direction":
                 return {
@@ -3062,62 +2846,6 @@ class ConfigPromoter:
         if os.path.isdir(model_abs):
             return model_abs
         return None
-
-    async def _update_composite_versions(
-        self,
-        instrument: str,
-        model_type: str,
-        version_tag: str,
-    ) -> None:
-        """PATCH the composite in mlflow-service with the new model version.
-
-        Uses the service-token protected PATCH /by-instrument/{instrument}/versions
-        endpoint. If no composite exists (404), logs a warning and moves on.
-        """
-        version_key = self._composite_version_key(model_type)
-        if not version_key:
-            logger.warning(
-                "Unknown model_type %r — skipping composite update", model_type,
-            )
-            return
-        headers = self._mlflow_service_auth_headers(require_token=False)
-        if not headers:
-            logger.warning(
-                "Skipping composite update for %s: no mlflow-service auth token configured",
-                instrument,
-            )
-            return
-
-        url = (
-            f"{settings.mlflow_service_url.rstrip('/')}{MLFLOW_COMPOSITES_API_PREFIX}"
-            f"/by-instrument/{instrument}/versions"
-        )
-        body = {version_key: version_tag}
-
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.patch(url, headers=headers, json=body)
-            if resp.status_code == 200:
-                data = resp.json()
-                logger.info(
-                    "Composite versions updated for %s: %s (updated %d composite(s))",
-                    instrument, version_tag, data.get("updated", 0),
-                )
-            elif resp.status_code == 404:
-                logger.warning(
-                    "No composite found for %s — skipping composite update. "
-                    "Create one via POST /api/v1/composites first.",
-                    instrument,
-                )
-            else:
-                logger.error(
-                    "Failed to update composite for %s: %d %s",
-                    instrument, resp.status_code, resp.text[:300],
-                )
-        except httpx.HTTPError as exc:
-            logger.error(
-                "HTTP error updating composite for %s: %s", instrument, exc,
-            )
 
     def _extract_strategy_market(self, yaml_str: str) -> tuple:
         """Extract agent_strategy and trading_mode from a YAML config string.

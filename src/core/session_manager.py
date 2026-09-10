@@ -15,9 +15,9 @@ from typing import Any, Dict, Optional
 
 from src.config import settings
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig
-from src.core.pipeline_controller import PHASES, PipelineConfig, PipelineController
 from src.core.research_manifest import build_research_manifest, manifest_pretty_json
 from src.core.service_preflight import (
+    ServicePreflightTarget,
     require_preflight_ready,
     run_service_preflight,
 )
@@ -28,7 +28,6 @@ from src.core.state_machine import (
     SessionStateMachine,
 )
 from src.core.state_store import StateStore
-from src.core.structured_hpo import build_structured_hpo_plan, hpo_plan_json
 from src.ws.events import broadcaster
 
 logger = logging.getLogger(__name__)
@@ -62,7 +61,6 @@ class SessionManager:
         # one per-session lock registry; tests may omit it.
         self._sm = state_machine or SessionStateMachine(store, broadcaster)
         self._orchestrator = AgentOrchestrator(store, state_machine=self._sm)
-        self._pipeline_ctrl = PipelineController(store, self)
         self._active: Dict[str, ActiveSession] = {}
         self._active_pipelines: Dict[str, asyncio.Task] = {}
         self._session_spawn_lock = asyncio.Lock()
@@ -329,9 +327,8 @@ class SessionManager:
             variant=variant or "",
         )
 
-        preflight = await self._run_preflight(config.model_type)
-        hpo_plan = self._build_hpo_plan(config)
-        manifest_overrides = self._merge_manifest_overrides(manifest, hpo_plan)
+        preflight = await self._run_preflight(config)
+        manifest_overrides = dict(manifest or {})
         manifest_overrides["preflight"] = preflight
         manifest_json, manifest_hash, session_nonce = self._build_manifest_payload(
             config, overrides=manifest_overrides,
@@ -361,8 +358,6 @@ class SessionManager:
             manifest_path=manifest_path,
             manifest_hash=manifest_hash,
         )
-        await self._record_hpo_plan(config, hpo_plan)
-
         # Spawn background task
         task = asyncio.create_task(
             self._run_and_cleanup(research_id, config),
@@ -440,9 +435,14 @@ class SessionManager:
         finally:
             self._active.pop(research_id, None)
 
-    async def _run_preflight(self, model_type: str) -> Dict[str, Any]:
-        """Run dependency checks and raise before any LLM task is spawned."""
-        preflight = await run_service_preflight(model_type=model_type)
+    async def _run_preflight(self, config: ResearchConfig) -> Dict[str, Any]:
+        """Run the skill's declared dependency checks and raise before any
+        LLM task is spawned. Skills with no ``preflight`` section (or unknown
+        skill ids, which fail later at runtime materialization) run with an
+        empty target list — trivially ready.
+        """
+        targets = self._skill_preflight_targets(getattr(config, "skill_id", ""))
+        preflight = await run_service_preflight(targets=targets)
         require_preflight_ready(preflight)
         if preflight.get("status") == "degraded":
             logger.warning(
@@ -450,8 +450,42 @@ class SessionManager:
                 preflight.get("required_failures"),
             )
         else:
-            logger.info("Service preflight %s for %s", preflight.get("status"), model_type)
+            logger.info(
+                "Service preflight %s for %s",
+                preflight.get("status"), config.skill_id or config.model_type,
+            )
         return preflight
+
+    @staticmethod
+    def _skill_preflight_targets(skill_id: str) -> list[ServicePreflightTarget]:
+        """Map the skill manifest's ``preflight`` section to check targets."""
+        if not skill_id:
+            return []
+        try:
+            from src.core.skill_registry import default_registry
+
+            manifest = default_registry.get(skill_id)
+        except Exception:
+            return []
+        if manifest is None:
+            return []
+        targets: list[ServicePreflightTarget] = []
+        for entry in manifest.preflight:
+            if entry.kind == "local_file":
+                continue
+            health_paths = (
+                tuple(entry.health_paths) if entry.health_paths else ("/health",)
+            )
+            targets.append(
+                ServicePreflightTarget(
+                    name=entry.name,
+                    url=entry.url or "",
+                    health_paths=health_paths,
+                    required=entry.required,
+                    transport="tcp" if entry.kind == "tcp" else "http",
+                )
+            )
+        return targets
 
     async def _archive_stale_workspace(self, workspace_path: str) -> None:
         """Move an existing model workspace to a timestamped archive directory.
@@ -551,55 +585,6 @@ class SessionManager:
             manifest_pretty_json(manifest),
             manifest.manifest_hash or "",
             session_nonce,
-        )
-
-    def _build_hpo_plan(self, config: ResearchConfig) -> Dict[str, Any]:
-        return build_structured_hpo_plan(
-            research_id=config.id,
-            instrument=config.instrument,
-            timeframe=config.timeframe,
-            model_type=config.model_type,
-            quick_mode=config.quick_mode,
-            max_iterations=config.max_iterations,
-            max_budget_usd=config.max_budget_usd,
-            timeout_s=config.timeout_s,
-            enable_hpo=config.enable_hpo,
-            hpo_trials=config.hpo_trials,
-            hpo_timesteps=config.hpo_timesteps,
-            trading_mode=config.trading_mode,
-        )
-
-    @staticmethod
-    def _merge_manifest_overrides(
-        overrides: Optional[Dict[str, Any]],
-        hpo_plan: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        merged = dict(overrides or {})
-        hpo = dict(merged.get("hpo") or {})
-        hpo.update(hpo_plan)
-        merged["hpo"] = hpo
-        return merged
-
-    async def _record_hpo_plan(
-        self,
-        config: ResearchConfig,
-        hpo_plan: Dict[str, Any],
-    ) -> None:
-        if not hpo_plan.get("enabled"):
-            return
-        await self._store.record_hpo_study_plan(
-            research_id=config.id,
-            study_id=hpo_plan["study_id"],
-            max_trials=int(hpo_plan.get("max_trials") or 0),
-            search_space_json=hpo_plan_json(hpo_plan.get("search_space") or {}),
-            budget_json=hpo_plan_json(hpo_plan.get("budget") or {}),
-            timeout_s=int(hpo_plan.get("timeout_s") or 0),
-            quick_mode=bool(hpo_plan.get("quick_mode")),
-        )
-        await self._store.record_planned_trials(
-            research_id=config.id,
-            study_id=hpo_plan["study_id"],
-            trials=list(hpo_plan.get("trials") or []),
         )
 
     async def _write_manifest(
@@ -704,17 +689,14 @@ class SessionManager:
             resumed_from=parent_id,
         )
 
-        preflight = await self._run_preflight(config.model_type)
-        hpo_plan = self._build_hpo_plan(config)
+        preflight = await self._run_preflight(config)
         manifest_overrides = {
             "runtime": {"resumed_from": parent_id},
             "preflight": preflight,
         }
         manifest_json, manifest_hash, session_nonce = self._build_manifest_payload(
             config,
-            overrides=self._merge_manifest_overrides(
-                manifest_overrides, hpo_plan,
-            ),
+            overrides=manifest_overrides,
         )
         # ARC-011 P4-002: carry the nonce into the orchestrator (continue path).
         config.session_nonce = session_nonce
@@ -738,7 +720,6 @@ class SessionManager:
         )
         # Set resumed_from (not in create_session signature)
         await self._store.update_session(research_id, resumed_from=parent_id)
-        await self._record_hpo_plan(config, hpo_plan)
 
         # ML-62: Do NOT archive the workspace — it IS the continuation state.
         # The workspace contains train.yaml, best_train.yaml, results from
@@ -808,375 +789,6 @@ class SessionManager:
     # ------------------------------------------------------------------
     # Pipeline sessions (ML-63)
     # ------------------------------------------------------------------
-
-    async def start_pipeline(self, **kwargs: Any) -> Dict:
-        async with self._pipeline_spawn_lock:
-            return await self._start_pipeline_unlocked(**kwargs)
-
-    async def _start_pipeline_unlocked(
-        self,
-        *,
-        instrument: str,
-        timeframe: str,
-        tag: Optional[str] = None,
-        quick_mode: Optional[bool] = None,
-        max_iterations: Optional[int] = None,
-        max_budget_usd: Optional[float] = None,
-        timeout_minutes: Optional[int] = None,
-        focus_hint: Optional[str] = None,
-        phase_budgets: Optional[Dict] = None,
-        trading_mode: Optional[str] = None,
-        agent_strategy: Optional[str] = None,
-        initial_balance: Optional[float] = None,
-        enable_hpo: Optional[bool] = None,
-        hpo_trials: Optional[int] = None,
-        hpo_timesteps: Optional[int] = None,
-    ) -> Dict:
-        """Start a pipeline that trains direction → volatility → rl in sequence."""
-        # Block duplicate pipeline for same instrument
-        for pid, task in list(self._active_pipelines.items()):
-            if not task.done():
-                pipe = await self._store.get_pipeline(pid)
-                if (
-                    pipe
-                    and pipe["instrument"] == instrument
-                    and pipe["timeframe"] == timeframe
-                    and pipe["status"] == "running"
-                ):
-                    raise RuntimeError(
-                        f"A pipeline for {instrument} {timeframe} is already "
-                        f"running (id={pid})"
-                    )
-
-        pipeline_id = f"pipe_{uuid.uuid4().hex[:12]}"
-        effective_tag = tag or f"pipeline-{pipeline_id[-8:]}"
-
-        config = PipelineConfig(
-            id=pipeline_id,
-            instrument=instrument,
-            timeframe=timeframe,
-            tag=effective_tag,
-            quick_mode=quick_mode if quick_mode is not None else settings.default_quick_mode,
-            max_iterations=max_iterations or settings.max_iterations,
-            max_budget_usd=max_budget_usd or (settings.max_budget_usd * 3),
-            timeout_s=timeout_minutes * 60 if timeout_minutes else 0,
-            focus_hint=focus_hint,
-            phase_budgets=phase_budgets,
-            trading_mode=trading_mode,
-            agent_strategy=agent_strategy,
-            initial_balance=initial_balance,
-            enable_hpo=enable_hpo or False,
-            hpo_trials=hpo_trials or 20,
-            hpo_timesteps=hpo_timesteps or 50000,
-        )
-
-        await self._run_preflight("pipeline")
-
-        # Persist pipeline to DB
-        pipeline_dict = await self._store.create_pipeline(
-            pipeline_id=pipeline_id,
-            instrument=instrument,
-            timeframe=timeframe,
-            tag=effective_tag,
-            max_iterations=config.max_iterations,
-            max_budget_usd=config.max_budget_usd,
-            quick_mode=config.quick_mode,
-            timeout_s=config.timeout_s,
-            focus_hint=focus_hint,
-            phase_budgets=json.dumps(phase_budgets) if phase_budgets else None,
-            trading_mode=trading_mode,
-            agent_strategy=agent_strategy,
-            initial_balance=initial_balance,
-            enable_hpo=config.enable_hpo,
-            hpo_trials=config.hpo_trials if config.enable_hpo else None,
-            hpo_timesteps=config.hpo_timesteps if config.enable_hpo else None,
-        )
-
-        # Spawn pipeline task
-        task = asyncio.create_task(
-            self._run_pipeline_and_cleanup(pipeline_id, config),
-            name=f"pipeline-{pipeline_id}",
-        )
-        self._attach_done_callback(task, pipeline_id=pipeline_id)
-        self._active_pipelines[pipeline_id] = task
-
-        logger.info(
-            "Started pipeline %s: %s %s (max_iter=%d, quick=%s)",
-            pipeline_id, instrument, timeframe,
-            config.max_iterations, config.quick_mode,
-        )
-        return pipeline_dict
-
-    async def _run_pipeline_and_cleanup(
-        self, pipeline_id: str, config: PipelineConfig,
-    ) -> None:
-        try:
-            await self._pipeline_ctrl.run(config)
-        finally:
-            self._active_pipelines.pop(pipeline_id, None)
-
-    async def start_phase_session(self, **kwargs: Any) -> Dict:
-        workspace_path = self._workspace_path_from_kwargs(kwargs)
-        async with self._session_spawn_lock:
-            try:
-                return await self._start_phase_session_unlocked(**kwargs)
-            except Exception as exc:
-                if workspace_path and not isinstance(exc, RuntimeError):
-                    await self._cleanup_failed_start_workspace(workspace_path)
-                raise
-
-    async def _start_phase_session_unlocked(
-        self,
-        *,
-        instrument: str,
-        timeframe: str,
-        model_type: str,
-        tag: str,
-        quick_mode: bool,
-        max_iterations: int,
-        max_budget_usd: float,
-        timeout_minutes: int,
-        focus_hint: Optional[str] = None,
-        pipeline_id: Optional[str] = None,
-        trading_mode: Optional[str] = None,
-        agent_strategy: Optional[str] = None,
-        initial_balance: Optional[float] = None,
-        enable_hpo: bool = False,
-        hpo_trials: Optional[int] = None,
-        hpo_timesteps: Optional[int] = None,
-    ) -> Dict:
-        """Start a sub-session for a pipeline phase.
-
-        Unlike start_session(), this:
-        - Does NOT check max_concurrent (pipeline manages concurrency)
-        - Does NOT block on duplicate model+instrument (pipeline manages this)
-        - Archives the workspace (fresh start per phase)
-        - Sets pipeline_id on the session record for linkage
-        """
-        research_id = f"res_{uuid.uuid4().hex[:12]}"
-        workspace_path = (
-            f"{settings.runs_dir}/{instrument}_{timeframe}/{model_type}"
-        )
-
-        config = ResearchConfig(
-            id=research_id,
-            instrument=instrument,
-            timeframe=timeframe,
-            model_type=model_type,
-            tag=tag,
-            quick_mode=quick_mode,
-            max_iterations=max_iterations,
-            max_budget_usd=max_budget_usd,
-            timeout_s=timeout_minutes * 60 if timeout_minutes else 0,
-            focus_hint=focus_hint,
-            workspace_path=workspace_path,
-            trading_mode=trading_mode,
-            agent_strategy=agent_strategy,
-            initial_balance=initial_balance,
-            enable_hpo=enable_hpo,
-            hpo_trials=hpo_trials or 20,
-            hpo_timesteps=hpo_timesteps or 50000,
-            pipeline_id=pipeline_id,
-        )
-
-        preflight = await self._run_preflight(config.model_type)
-        hpo_plan = self._build_hpo_plan(config)
-        manifest_overrides = {
-            "runtime": {"pipeline_id": pipeline_id},
-            "preflight": preflight,
-        }
-        manifest_json, manifest_hash, session_nonce = self._build_manifest_payload(
-            config,
-            overrides=self._merge_manifest_overrides(
-                manifest_overrides, hpo_plan,
-            ),
-        )
-        # ARC-011 P4-002: carry the nonce into the orchestrator (pipeline path).
-        config.session_nonce = session_nonce
-
-        await self._archive_stale_workspace(workspace_path)
-        manifest_path = await self._write_manifest(config, manifest_json)
-
-        session_dict = await self._store.create_session(
-            session_id=research_id,
-            instrument=instrument,
-            timeframe=timeframe,
-            model_type=model_type,
-            tag=tag,
-            quick_mode=quick_mode,
-            max_iterations=max_iterations,
-            max_budget_usd=max_budget_usd,
-            focus_hint=focus_hint,
-            workspace_path=workspace_path,
-            manifest_json=manifest_json,
-            manifest_path=manifest_path,
-            manifest_hash=manifest_hash,
-        )
-        # Link to pipeline
-        if pipeline_id:
-            await self._store.update_session(
-                research_id, pipeline_id=pipeline_id,
-            )
-        await self._record_hpo_plan(config, hpo_plan)
-
-        # Spawn and track — the pipeline controller will wait for completion
-        task = asyncio.create_task(
-            self._run_and_cleanup(research_id, config),
-            name=f"research-{research_id}",
-        )
-        self._attach_done_callback(task, research_id=research_id)
-        self._active[research_id] = ActiveSession(
-            research_id=research_id,
-            task=task,
-            config=config,
-            started_at=datetime.now(timezone.utc),
-        )
-
-        logger.info(
-            "Started phase session %s: %s %s %s (pipeline=%s, max_iter=%d)",
-            research_id, model_type, instrument, timeframe,
-            pipeline_id, max_iterations,
-        )
-        return await self._store.get_session(research_id)
-
-    async def stop_pipeline(self, pipeline_id: str) -> bool:
-        """Stop a running pipeline and its current phase session.
-
-        The pipeline's terminal status is set by the controller's finally
-        path; we only mark `stopped` here because the controller does not
-        own a stop-vs-complete distinction the way the per-session
-        orchestrator does. If you change PipelineController to surface
-        stop/complete distinctly, drop the eager update here too.
-
-        ARC-011 review C5 (P6-004 / H3): the DB stop intent is written
-        BEFORE the local-registry check, mirroring ``stop_session`` — a stop
-        routed to a non-owning worker records ``status='stopping'`` (which
-        the owning controller's phase-loop poll observes) and forwards the
-        stop to every recorded phase session (``stop_session`` records DB
-        intent even for non-locally-owned sessions, so the owner's current
-        phase session stops mid-run too). Previously the early return made a
-        cross-worker pipeline stop a silent no-op.
-        """
-        task = self._active_pipelines.get(pipeline_id)
-
-        # DB-side stop intent — observed by the owning controller's poll.
-        pipe = await self._store.get_pipeline(pipeline_id)
-        if pipe is None:
-            return False
-        if str(pipe.get("status") or "") not in {"running", "stopping"}:
-            # Terminal/failed pipeline — nothing to stop (and we must not
-            # overwrite a terminal status with 'stopping').
-            return False
-        await self._store.update_pipeline(pipeline_id, status="stopping")
-
-        # Also stop the currently running phase session(s) — locally owned
-        # ones drain here; non-owned ones get their DB stop intent recorded
-        # (stop_session handles both since review C5).
-        for phase in PHASES:
-            sid = pipe.get(f"{phase}_session_id")
-            if sid:
-                await self.stop_session(sid)
-
-        if task is None or task.done():
-            logger.info(
-                "Stop intent recorded for pipeline %s on a non-owning "
-                "worker; the owning controller will observe the DB status",
-                pipeline_id,
-            )
-            return True
-
-        self._pipeline_ctrl.request_stop(pipeline_id)
-
-        await self._drain_or_cancel_task(
-            task,
-            label=f"pipeline {pipeline_id}",
-            active_dict=self._active_pipelines,
-            active_key=pipeline_id,
-        )
-        # Write stopped only after the task has drained so the task's own
-        # CancelledError handler does not race and overwrite a later status.
-        await self._store.update_pipeline(pipeline_id, status="stopped")
-        logger.info("Stop requested for pipeline %s", pipeline_id)
-        return True
-
-    async def continue_pipeline(self, pipeline_id: str, **kwargs: Any) -> Dict:
-        async with self._pipeline_spawn_lock:
-            return await self._continue_pipeline_unlocked(pipeline_id, **kwargs)
-
-    async def _continue_pipeline_unlocked(
-        self,
-        pipeline_id: str,
-        *,
-        max_iterations: Optional[int] = None,
-        max_budget_usd: Optional[float] = None,
-        timeout_minutes: Optional[int] = None,
-        focus_hint: Optional[str] = None,
-    ) -> Dict:
-        """Resume a terminal pipeline from its last incomplete phase."""
-        pipe = await self._store.get_pipeline(pipeline_id)
-        if not pipe:
-            raise RuntimeError(f"Pipeline {pipeline_id} not found")
-        if pipe["status"] not in (
-            "timed_out",
-            "phase_failed",
-            "promotion_blocked",
-            "completed",
-            "failed",
-        ):
-            raise RuntimeError(
-                f"Can only continue pipelines with terminal status, got: {pipe['status']}"
-            )
-
-        completed_phases = json.loads(pipe.get("completed_phases") or "[]")
-        phase_budgets = (
-            json.loads(pipe["phase_budgets"])
-            if pipe.get("phase_budgets")
-            else None
-        )
-
-        config = PipelineConfig(
-            id=pipeline_id,
-            instrument=pipe["instrument"],
-            timeframe=pipe["timeframe"],
-            tag=pipe["tag"],
-            quick_mode=bool(pipe.get("quick_mode")),
-            max_iterations=max_iterations or pipe.get("max_iterations", 30),
-            max_budget_usd=max_budget_usd or pipe.get("max_budget_usd", 30.0),
-            timeout_s=timeout_minutes * 60 if timeout_minutes else pipe.get("timeout_s", 0),
-            focus_hint=focus_hint or pipe.get("focus_hint"),
-            phase_budgets=phase_budgets,
-            completed_phases=completed_phases,
-            trading_mode=pipe.get("trading_mode"),
-            agent_strategy=pipe.get("agent_strategy"),
-            initial_balance=pipe.get("initial_balance"),
-            enable_hpo=bool(pipe.get("enable_hpo")),
-            hpo_trials=pipe.get("hpo_trials") or 20,
-            hpo_timesteps=pipe.get("hpo_timesteps") or 50000,
-        )
-
-        await self._run_preflight("pipeline")
-
-        await self._store.update_pipeline(
-            pipeline_id,
-            status="running",
-            error_message=None,
-            promotion_blocked_phase=None,
-            promotion_blockers_json=None,
-            promotion_preview_json=None,
-        )
-
-        task = asyncio.create_task(
-            self._run_pipeline_and_cleanup(pipeline_id, config),
-            name=f"pipeline-{pipeline_id}",
-        )
-        self._attach_done_callback(task, pipeline_id=pipeline_id)
-        self._active_pipelines[pipeline_id] = task
-
-        logger.info(
-            "Continuing pipeline %s from phases %s",
-            pipeline_id, completed_phases,
-        )
-        return await self._store.get_pipeline(pipeline_id)
 
     async def stop_session(self, research_id: str) -> bool:
         """Request a graceful stop for a running session.

@@ -33,16 +33,7 @@ class ServicePreflightError(RuntimeError):
         super().__init__(format_preflight_error(result))
 
 
-def _normalise_model_type(model_type: str | None) -> str:
-    return (model_type or "all").strip().lower() or "all"
 
-
-def _vdmc_required_for(model_type: str | None) -> bool:
-    return _normalise_model_type(model_type) in {"rl", "pipeline", "all"}
-
-
-def _full_stack_required_for(model_type: str | None) -> bool:
-    return _normalise_model_type(model_type) in {"pipeline", "all"}
 
 
 def sanitize_service_url(raw: str | None) -> str:
@@ -59,88 +50,19 @@ def sanitize_service_url(raw: str | None) -> str:
     return urlunsplit((parsed.scheme, netloc, parsed.path.rstrip("/"), "", ""))
 
 
-def build_service_preflight_targets(
-    settings_obj=settings,
-    *,
-    model_type: str = "all",
-) -> list[ServicePreflightTarget]:
-    """Build the service dependency list from current server settings."""
-    full_stack_required = _full_stack_required_for(model_type)
-    targets = [
-        ServicePreflightTarget(
-            "mlflow_tracking",
-            settings_obj.mlflow_tracking_uri,
-            health_paths=("/health", "/"),
-        ),
-        ServicePreflightTarget("mlflow_service", settings_obj.mlflow_service_url),
-        ServicePreflightTarget(
-            "data_ingest",
-            settings_obj.data_ingest_url,
-            health_paths=("/readiness", "/health"),
-        ),
-        ServicePreflightTarget(
-            "ensemble_trainer",
-            settings_obj.ensemble_trainer_url,
-            health_paths=("/health/ready", "/health"),
-        ),
-        ServicePreflightTarget(
-            "rl_trainer",
-            settings_obj.rl_trainer_url,
-            health_paths=("/health/ready", "/health"),
-        ),
-        ServicePreflightTarget("feature_service", settings_obj.feature_service_url),
-        ServicePreflightTarget(
-            "inference_service",
-            settings_obj.inference_service_url,
-            health_paths=("/api/v1/health", "/health"),
-            required=full_stack_required,
-        ),
-        ServicePreflightTarget(
-            "admin_service",
-            settings_obj.admin_service_url,
-            health_paths=("/api/v1/health", "/health"),
-            required=full_stack_required,
-        ),
-        ServicePreflightTarget(
-            "vdmc_indicator",
-            settings_obj.vdmc_indicator_url,
-            health_paths=("/api/v1/health/ready", "/health/ready"),
-            required=_vdmc_required_for(model_type),
-        ),
-    ]
-    if full_stack_required and settings_obj.nats_url:
-        targets.append(
-            ServicePreflightTarget(
-                "nats",
-                settings_obj.nats_url,
-                health_paths=(),
-                required=True,
-                transport="tcp",
-            )
-        )
-    if settings_obj.artifact_logging_required:
-        targets.append(
-            ServicePreflightTarget(
-                "artifact_store",
-                settings_obj.artifact_store_endpoint_url,
-                health_paths=("/minio/health/ready", "/health"),
-            )
-        )
-    return targets
-
 
 def build_not_run_preflight(
     settings_obj=settings,
     *,
-    model_type: str = "all",
+    targets: "list[ServicePreflightTarget] | tuple[()]" = (),
+    model_type: str = "",
 ) -> dict[str, Any]:
     """Build a manifest-safe dependency snapshot when checks have not run."""
-    targets = build_service_preflight_targets(settings_obj, model_type=model_type)
     return {
         "schema_version": SCHEMA_VERSION,
         "status": "not_run",
         "checked_at": None,
-        "model_type": _normalise_model_type(model_type),
+        "model_type": model_type,
         "required_ready": False,
         "override_allowed_unready": False,
         "timeout_s": settings_obj.preflight_timeout_s,
@@ -160,21 +82,32 @@ def build_not_run_preflight(
 
 async def run_service_preflight(
     *,
-    model_type: str,
+    targets: "list[ServicePreflightTarget]",
     settings_obj=settings,
     client: httpx.AsyncClient | None = None,
 ) -> dict[str, Any]:
-    """Check required ML dependencies before launching a research session."""
-    normalised_model_type = _normalise_model_type(model_type)
-    targets = build_service_preflight_targets(settings_obj, model_type=normalised_model_type)
-    base = {
+    """Check the declared service dependencies before launching a session.
+
+    Targets are supplied by the caller (the session manager derives them from
+    the skill manifest's ``preflight`` section); the engine is generic. With
+    no targets the result is trivially ``ready``.
+    """
+    base: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "checked_at": datetime.now(timezone.utc).isoformat(),
-        "model_type": normalised_model_type,
         "required_ready": True,
         "override_allowed_unready": bool(settings_obj.allow_unready_services),
         "timeout_s": settings_obj.preflight_timeout_s,
-        "services": {},
+        "services": {
+            target.name: {
+                "url": sanitize_service_url(target.url),
+                "required": target.required,
+                "status": "not_run",
+                "health_paths": list(target.health_paths),
+                "transport": target.transport,
+            }
+            for target in targets
+        },
         "required_failures": [],
     }
 
@@ -203,12 +136,8 @@ async def run_service_preflight(
     )
     owns_client = client is None
     active_client = client or httpx.AsyncClient(timeout=timeout, follow_redirects=True)
-    # ARC-011 P1-021: dispatch via the PreflightCheck protocol instead of the
-    # inline ``if target.transport == "tcp"`` fork. Each descriptor is converted
-    # to an HTTPHealthCheck / TCPConnectCheck; the check's ``check(client)``
-    # method delegates to the unchanged _check_target / _check_tcp_target. The
-    # import is local to avoid a module-load cycle (preflight.py imports from
-    # this module for the check bodies).
+    # ARC-011 P1-021: dispatch via the PreflightCheck protocol instead of an
+    # inline ``if target.transport == "tcp"`` fork.
     from src.core.preflight import preflight_check_from_target
 
     preflight_checks = [

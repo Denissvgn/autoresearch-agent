@@ -72,13 +72,6 @@ class ControlFakeOrchestrator:
         await asyncio.sleep(0)
 
 
-class FakePipelineController:
-    def __init__(self) -> None:
-        self.stop_requests: List[str] = []
-
-    def request_stop(self, pipeline_id: str) -> None:
-        self.stop_requests.append(pipeline_id)
-
 
 async def _seed_running_session(store: ResultsStore, research_id: str) -> None:
     await store.create_session(
@@ -97,20 +90,15 @@ async def _seed_running_session(store: ResultsStore, research_id: str) -> None:
 
 def _manager_with_fake_orchestrator(
     monkeypatch: pytest.MonkeyPatch, store: ResultsStore,
-) -> tuple[SessionManager, ControlFakeOrchestrator, FakePipelineController]:
+) -> tuple[SessionManager, ControlFakeOrchestrator]:
     fake_orch = ControlFakeOrchestrator()
-    fake_pipe = FakePipelineController()
     monkeypatch.setattr(
         session_manager_module, "AgentOrchestrator",
         lambda store, state_machine=None: fake_orch,
     )
-    monkeypatch.setattr(
-        session_manager_module, "PipelineController",
-        lambda store, sm: fake_pipe,
-    )
     manager = SessionManager(store)
     # The session-manager flow under test never awaits the run task here.
-    return manager, fake_orch, fake_pipe
+    return manager, fake_orch
 
 
 # ============================================================================
@@ -127,7 +115,7 @@ async def test_stop_on_non_owning_worker_records_db_intent(monkeypatch, tmp_path
     store = ResultsStore(str(tmp_path / "c5.sqlite"))
     await store.initialize()
     await _seed_running_session(store, "res_c5_stop01")
-    manager, fake_orch, _ = _manager_with_fake_orchestrator(monkeypatch, store)
+    manager, fake_orch = _manager_with_fake_orchestrator(monkeypatch, store)
 
     assert manager.is_running("res_c5_stop01") is False  # non-owning worker
     assert await manager.stop_session("res_c5_stop01") is True
@@ -146,7 +134,7 @@ async def test_stop_on_non_owning_worker_records_db_intent(monkeypatch, tmp_path
 async def test_stop_unknown_session_returns_false(monkeypatch, tmp_path):
     store = ResultsStore(str(tmp_path / "c5.sqlite"))
     await store.initialize()
-    manager, _, _ = _manager_with_fake_orchestrator(monkeypatch, store)
+    manager, _ = _manager_with_fake_orchestrator(monkeypatch, store)
     assert await manager.stop_session("res_no_such") is False
 
 
@@ -155,7 +143,7 @@ async def test_stop_terminal_session_is_idempotent_no_op(monkeypatch, tmp_path):
     store = ResultsStore(str(tmp_path / "c5.sqlite"))
     await store.initialize()
     await _seed_running_session(store, "res_c5_term01")
-    manager, _, _ = _manager_with_fake_orchestrator(monkeypatch, store)
+    manager, _ = _manager_with_fake_orchestrator(monkeypatch, store)
     # Drive to terminal via the state machine.
     await manager._sm.transition("res_c5_term01", SessionEvent.COMPLETE)  # noqa: SLF001
 
@@ -169,7 +157,7 @@ async def test_pause_and_resume_on_non_owning_worker(monkeypatch, tmp_path):
     store = ResultsStore(str(tmp_path / "c5.sqlite"))
     await store.initialize()
     await _seed_running_session(store, "res_c5_pause1")
-    manager, fake_orch, _ = _manager_with_fake_orchestrator(monkeypatch, store)
+    manager, fake_orch = _manager_with_fake_orchestrator(monkeypatch, store)
 
     assert await manager.pause_session("res_c5_pause1") is True
     session = await store.get_session("res_c5_pause1")
@@ -193,7 +181,7 @@ async def test_local_owner_fast_path_unchanged(monkeypatch, tmp_path):
     store = ResultsStore(str(tmp_path / "c5.sqlite"))
     await store.initialize()
     await _seed_running_session(store, "res_c5_own001")
-    manager, fake_orch, _ = _manager_with_fake_orchestrator(monkeypatch, store)
+    manager, fake_orch = _manager_with_fake_orchestrator(monkeypatch, store)
 
     task = asyncio.get_running_loop().create_task(asyncio.sleep(0.05))
     manager._active["res_c5_own001"] = ActiveSession(  # noqa: SLF001
@@ -283,35 +271,3 @@ async def _seed_running_pipeline(store: ResultsStore, pipeline_id: str) -> None:
     )
 
 
-@pytest.mark.asyncio
-async def test_stop_pipeline_non_owning_records_db_intent(monkeypatch, tmp_path):
-    store = ResultsStore(str(tmp_path / "c5.sqlite"))
-    await store.initialize()
-    await _seed_running_pipeline(store, "pipe_c5_00001")
-    manager, _, fake_pipe = _manager_with_fake_orchestrator(monkeypatch, store)
-
-    assert await manager.stop_pipeline("pipe_c5_00001") is True
-    pipe = await store.get_pipeline("pipe_c5_00001")
-    assert pipe["status"] == "stopping"
-    assert fake_pipe.stop_requests == []  # non-owner: no local flag
-
-    # The owning controller's phase-loop poll observes the intent.
-    from src.core.pipeline_controller import PipelineController
-
-    controller = PipelineController.__new__(PipelineController)
-    controller._store = store  # type: ignore[attr-defined]
-    controller._stop_flags = {}  # type: ignore[attr-defined]
-    assert await controller._stop_recorded_db("pipe_c5_00001") is True  # noqa: SLF001
-
-
-@pytest.mark.asyncio
-async def test_stop_pipeline_terminal_row_is_refused(monkeypatch, tmp_path):
-    store = ResultsStore(str(tmp_path / "c5.sqlite"))
-    await store.initialize()
-    await _seed_running_pipeline(store, "pipe_c5_00002")
-    await store.update_pipeline("pipe_c5_00002", status="completed")
-    manager, _, _ = _manager_with_fake_orchestrator(monkeypatch, store)
-
-    assert await manager.stop_pipeline("pipe_c5_00002") is False
-    pipe = await store.get_pipeline("pipe_c5_00002")
-    assert pipe["status"] == "completed"  # terminal status not clobbered

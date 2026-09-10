@@ -330,119 +330,16 @@ class Settings(BaseSettings):
         description="Maximum concurrently connected WebSocket event clients.",
     )
 
-    # --- ML Service URLs (Docker DNS) ---
-    mlflow_tracking_uri: str = Field(default="http://mlflow:5000")
-    mlflow_service_url: str = Field(default="http://mlflow-service:8000")
+    # --- Optional MLflow tracking (generic; empty = disabled) ---
+    mlflow_tracking_uri: str = Field(
+        default="",
+        description="MLflow tracking server URI (e.g. http://mlflow:5000). Empty disables MLflow integration.",
+    )
     mlflow_external_url: str = Field(
-        default="http://localhost:5000",
+        default="",
         description="Browser-accessible MLflow URL for deep-linking from UI",
     )
-    data_ingest_url: str = Field(default="http://data-ingest:8000")
-    ensemble_trainer_url: str = Field(default="http://ensemble-trainer:8000")
-    rl_trainer_url: str = Field(default="http://rl-trainer:8000")
-    feature_service_url: str = Field(default="http://feature-service:8000")
-    inference_service_url: str = Field(default="http://inference-service:8000")
-    # Fix 3: server-side resolution of infrastructure-side promotion blockers
-    # (inference_adapter_load_failure, inference_reload_failed,
-    # failed_smoke_validation, missing_signal_health_metrics). When True the
-    # orchestrator runs PromotionEvidenceCollector before ConfigPromoter.preview
-    # so the agent's best iteration is enriched with server-owned evidence the
-    # agent itself cannot produce.
-    auto_collect_promotion_evidence: bool = Field(
-        default=True,
-        validation_alias=AliasChoices(
-            "AUTORESEARCH_AUTO_COLLECT_PROMOTION_EVIDENCE",
-            "AUTO_COLLECT_PROMOTION_EVIDENCE",
-        ),
-        description=(
-            "Run PromotionEvidenceCollector before ConfigPromoter.preview to "
-            "resolve infrastructure-side blockers."
-        ),
-    )
-    promotion_evidence_timeout_s: float = Field(
-        default=120.0,
-        ge=5.0,
-        le=900.0,
-        validation_alias=AliasChoices(
-            "AUTORESEARCH_PROMOTION_EVIDENCE_TIMEOUT_S",
-            "PROMOTION_EVIDENCE_TIMEOUT_S",
-        ),
-        description="Per-collector timeout when contacting inference-service.",
-    )
-    nats_url: Optional[str] = Field(
-        default="nats://nats:4222",
-        validation_alias=AliasChoices("NATS_URL", "AUTORESEARCH_NATS_URL"),
-    )
-    inference_replay_sample_path: Optional[str] = Field(
-        default=None,
-        validation_alias=AliasChoices(
-            "INFERENCE_REPLAY_SAMPLE_PATH",
-            "AUTORESEARCH_INFERENCE_REPLAY_SAMPLE_PATH",
-        ),
-        description=(
-            "Optional replay sample path supplied to inference-service replay "
-            "validation. Defaults are resolved by the training helper."
-        ),
-    )
-    rl_trainer_service_token: SecretStr | None = Field(
-        default=None,
-        repr=False,
-        validation_alias=AliasChoices(
-            "RL_TRAINER_SERVICE_TOKEN",
-            "AUTORESEARCH_RL_TRAINER_SERVICE_TOKEN",
-            "ML_ADMIN_TOKEN",
-        ),
-        description=(
-            "Bearer token used by workspace scripts when delegating to "
-            "rl-trainer. Defaults to ML_ADMIN_TOKEN in compose."
-        ),
-    )
-    vdmc_indicator_url: str = Field(
-        default="http://vdmc-indicator:8000",
-        validation_alias=AliasChoices(
-            "AUTORESEARCH_VDMC_INDICATOR_URL",
-            "VDMC_SERVICE_URL",
-        ),
-        description="VDMC indicator service URL used by RL/pipeline preflight checks.",
-    )
-    admin_service_url: str = Field(default="http://admin-service:8000")
-    promotion_service_url: str = Field(
-        default="http://mlflow-service:8000",
-        description=(
-            "Service owning promotion/composite APIs. Defaults to mlflow-service "
-            "because autoresearch development promotion updates composites there."
-        ),
-    )
-    mlflow_service_auth_token: SecretStr | None = Field(
-        default=None,
-        repr=False,
-        validation_alias=AliasChoices(
-            "AUTORESEARCH_MLFLOW_SERVICE_AUTH_TOKEN",
-            "MLFLOW_SERVICE_AUTH_TOKEN",
-            "SERVICE_AUTH_TOKEN",
-            "ML_ADMIN_TOKEN",
-        ),
-        description=(
-            "Bearer token used when autoresearch writes mlflow-service composite "
-            "versions or promotes production composites."
-        ),
-    )
-    inference_service_auth_token: SecretStr | None = Field(
-        default=None,
-        repr=False,
-        validation_alias=AliasChoices(
-            "AUTORESEARCH_INFERENCE_SERVICE_AUTH_TOKEN",
-            "INFERENCE_SERVICE_AUTH_TOKEN",
-        ),
-        description=(
-            "Bearer token for service-to-service admin calls into inference-service "
-            "(/admin/adapter/preflight, /admin/composite/reload). When unset, "
-            "PromotionEvidenceCollector falls back to mlflow_service_auth_token so "
-            "operators with a single SERVICE_AUTH_TOKEN / ML_ADMIN_TOKEN do not need "
-            "to configure two tokens. Set this only when the inference-service "
-            "trusts a different identity than mlflow-service."
-        ),
-    )
+
     production_approval_verifier: SecretStr | None = Field(
         default=None,
         repr=False,
@@ -458,17 +355,6 @@ class Settings(BaseSettings):
             "this secret."
         ),
     )
-    s3_endpoint_url: Optional[str] = Field(
-        default=None,
-        validation_alias=AliasChoices("S3_ENDPOINT_URL", "MINIO_ENDPOINT_URL"),
-        description="S3-compatible artifact endpoint used by MLflow artifacts.",
-    )
-    mlflow_s3_endpoint_url: Optional[str] = Field(
-        default=None,
-        validation_alias=AliasChoices("MLFLOW_S3_ENDPOINT_URL"),
-        description="MLflow S3 artifact endpoint override.",
-    )
-
     # --- Dependency Preflight ---
     preflight_enabled: bool = Field(
         default=True,
@@ -495,15 +381,6 @@ class Settings(BaseSettings):
         ),
         description="Per-service preflight timeout in seconds.",
     )
-    artifact_logging_required: bool = Field(
-        default=False,
-        validation_alias=AliasChoices(
-            "AUTORESEARCH_ARTIFACT_LOGGING_REQUIRED",
-            "ARTIFACT_LOGGING_REQUIRED",
-        ),
-        description="Require the S3/MinIO endpoint during session preflight.",
-    )
-
     # --- CORS ---
     cors_origins_raw: str = Field(
         default=DEFAULT_CORS_ORIGINS,
@@ -559,9 +436,6 @@ class Settings(BaseSettings):
     def venv_python(self) -> str:
         return f"{self.workspace_root}/.venv/bin/python"
 
-    @property
-    def artifact_store_endpoint_url(self) -> Optional[str]:
-        return self.mlflow_s3_endpoint_url or self.s3_endpoint_url
 
 
 @lru_cache(maxsize=1)
