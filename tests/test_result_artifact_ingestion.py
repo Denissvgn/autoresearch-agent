@@ -349,67 +349,6 @@ async def test_record_iteration_copies_results_and_merges_nested_evidence(
 
 
 @pytest.mark.asyncio
-async def test_fallback_results_json_is_claimed_preserved_and_consumed(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    root = tmp_path / "workspace-root"
-    workspace = root / "runs" / "autotuner" / "DOGE_USDT_15m" / "direction"
-    workspace.mkdir(parents=True)
-    monkeypatch.setattr(orchestrator_module.settings, "workspace_root", str(root))
-
-    store = ResultsStore(str(tmp_path / "autoresearch.sqlite"))
-    await store.initialize()
-    await _create_session(store, session_id="res_fallback", workspace=workspace)
-
-    results_path = workspace / "results.json"
-    results_path.write_text(
-        json.dumps(_rich_results_payload()) + "\n",
-        encoding="utf-8",
-    )
-
-    orchestrator = AgentOrchestrator(store)
-    marker_text = orchestrator._read_marker_file(
-        ResearchConfig(
-            id="res_fallback",
-            instrument="DOGE_USDT",
-            timeframe="15m",
-            model_type="direction",
-        )
-    )
-
-    assert marker_text is not None
-    assert not results_path.exists()
-    marker = parse_prepare_output(marker_text).to_dict()
-    claimed_path = Path(marker["results_json_path"])
-    assert claimed_path.exists()
-    marker["decision"] = "keep"
-    marker["description"] = "fallback rich artifact"
-    marker["config_snapshot"] = "instrument: DOGE_USDT\n"
-
-    await orchestrator._record_iteration(
-        "res_fallback",
-        1,
-        marker,
-        0.0,
-        workspace=str(workspace),
-        turn=1,
-        command=".venv/bin/python scripts/training/run_phase1c_direction.py",
-    )
-
-    row = await store.get_iteration("res_fallback", 1)
-    metrics = json.loads(row["metrics_json"])
-    assert not claimed_path.exists()
-    assert Path(metrics["result_artifact_path"]).exists()
-    assert metrics["config"]["calibration_full_validation"]["signal_rate_distribution"][
-        "max"
-    ] == 0.18
-    assert metrics["candidate_family"] == "tabular"
-    assert metrics["is_tsfm_candidate"] is False
-    assert metrics["feature_schema_flags"]["adaptive_levels"]["enabled"] is True
-
-
-@pytest.mark.asyncio
 async def test_invalid_result_artifact_path_is_ignored(tmp_path: Path) -> None:
     store = ResultsStore(str(tmp_path / "autoresearch.sqlite"))
     await store.initialize()

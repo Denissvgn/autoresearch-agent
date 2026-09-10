@@ -267,10 +267,8 @@ class Settings(BaseSettings):
     )
     stagnation_exempt_phases: List[str] = Field(
         default=[
-            "tsfm_sweeps",
-            "calibration_replay_gates",
-            "multi_seed_robustness",
-            "inference_parity_replay",
+            "baseline_capture",
+            "robustness",
             "promotion_proposal",
         ],
         validation_alias=AliasChoices(

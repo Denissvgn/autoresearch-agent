@@ -60,7 +60,6 @@ from src.core.research_phase_plan import build_phase_state, phases_for_model
 from src.core.skill_loader import load_skill_manifest
 from src.core.skill_registry import SkillRegistry, default_registry
 from src.core.skill_runtime import (
-    DirectionSkillRuntime,
     ManifestSkillRuntime,
     SkillConfigError,
     materialize_skill_runtime,
@@ -307,16 +306,6 @@ def test_policy_extension_cannot_reallow_rejected_config_target():
     assert not decision.allowed
 
 
-def test_transitional_runtime_policy_extension_never_widens():
-    """Legacy sessions: the transitional runtime's extension is a subset of
-    the global allow-list — parity with the pre-C2 hardcoded sets."""
-    orch = MagicMock()
-    ext = DirectionSkillRuntime(orch).command_policy_extension()
-    from src.core.command_policy import _ALLOWED_SCRIPTS
-
-    assert set(ext["allowed_scripts"]) <= _ALLOWED_SCRIPTS
-
-
 def test_manifest_runtime_policy_extension_carries_manifest_scripts():
     rt = ManifestSkillRuntime(_manifest("prompt-engineering"), orchestrator=MagicMock())
     ext = rt.command_policy_extension()
@@ -554,9 +543,11 @@ def test_materialize_canonical_skill_id_returns_manifest_runtime():
     assert rt.skill_id == "prompt-engineering"
 
 
-def test_materialize_legacy_empty_skill_id_keeps_transitional():
-    rt = materialize_skill_runtime(MagicMock(), _config())
-    assert isinstance(rt, DirectionSkillRuntime)
+def test_materialize_legacy_empty_skill_id_raises():
+    """Sessions without a skill_id can no longer materialize a runtime —
+    every session must name an installed skill."""
+    with pytest.raises(SkillConfigError, match="no skill_id"):
+        materialize_skill_runtime(MagicMock(), _config())
 
 
 # ============================================================================

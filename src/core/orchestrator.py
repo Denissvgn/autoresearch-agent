@@ -35,8 +35,6 @@ from src.core.consistency_validator import (
     consistency_report_json,
 )
 from src.core.experiment_parser import (
-    is_hpo_study_output,
-    parse_hpo_study_output,
     parse_iteration_marker,
     parse_prepare_output,
 )
@@ -107,50 +105,10 @@ from src.core.state_machine import (
     SessionStateMachine,
 )
 from src.core.state_store import StateStore
-from src.core.structured_hpo import materialize_planned_trials
 from src.ws.events import broadcaster
 
 logger = logging.getLogger(__name__)
 
-
-def _resolve_rl_source_model_ids(
-    instrument: str, timeframe: str
-) -> Dict[str, Any]:
-    """Resolve the promoted direction/volatility source run-ids the RL enriched
-    dataset is derived from, for the dedup trial identity.
-
-    Reads the same promoted instrument config the enricher uses
-    (``enrich_rl_dataset._get_mlflow_run_id_from_config``): keys
-    ``source_mlflow_run_id`` (direction) and ``volatility_source_mlflow_run_id``
-    (volatility).  Folding these into ``data_split_id`` makes a legitimately-new RL
-    run against retrained upstream models distinct from the stale run, so a model
-    swap no longer reads as a duplicate (no manual ``training.seed`` bump needed).
-    Returns only the keys that resolve; missing/unreadable config → empty dict
-    (identity falls back to the prior split-only behavior).
-    """
-    host_configs = Path(os.environ.get("HOST_CONFIGS_PATH", "/host/configs"))
-    local_configs = Path("configs")
-    key_map = {
-        "direction_source_run_id": "source_mlflow_run_id",
-        "volatility_source_run_id": "volatility_source_mlflow_run_id",
-    }
-    resolved: Dict[str, Any] = {}
-    for base in (host_configs, local_configs):
-        config_path = base / "instrument_configs" / f"{instrument}_{timeframe}.yaml"
-        if not config_path.exists():
-            continue
-        try:
-            cfg = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-        except (OSError, yaml.YAMLError):
-            continue
-        if not isinstance(cfg, dict):
-            continue
-        for identity_key, config_key in key_map.items():
-            if identity_key not in resolved and cfg.get(config_key):
-                resolved[identity_key] = cfg[config_key]
-        if len(resolved) == len(key_map):
-            break
-    return resolved
 
 
 # Pricing constants (_CLAUDE_INPUT_USD_PER_TOKEN / _CLAUDE_OUTPUT_USD_PER_TOKEN /
@@ -168,12 +126,7 @@ _MAX_CONSECUTIVE_POLICY_REJECTIONS = 5
 # trained artefact.  _record_iteration inherits the most recent non-null
 # config_snapshot from the DB for these phases so that consistency reports
 # don't flag ``missing_config_snapshot`` as a blocker.
-_PROMOTION_FAMILY: frozenset[str] = frozenset({
-    "multi_seed_robustness",
-    "inference_parity_replay",
-    "calibration_replay_gates",
-    "promotion_proposal",
-})
+_PROMOTION_FAMILY: frozenset[str] = frozenset({"promotion_proposal"})
 
 # Promotion gate blockers the AGENT can act on during the run (model-quality /
 # data-handling). Surfaced in the iteration-context digest so the agent tunes
@@ -181,19 +134,7 @@ _PROMOTION_FAMILY: frozenset[str] = frozenset({
 # signal_health, rollback, inference_parity) are resolved server-side by the
 # PromotionEvidenceCollector at promotion time and are intentionally excluded —
 # they are not the agent's job and would only cause it to flail.
-_AGENT_ACTIONABLE_BLOCKERS: frozenset[str] = frozenset({
-    "signal_saturation",
-    "weak_calibration",
-    "unstable_fold_thresholds",
-    "direction_auc_below_gate_or_missing",
-    "best_metric_below_development_baseline",
-    "missing_brier_score",
-    "missing_reliability_diagram",
-    "missing_threshold_stability_by_fold",
-    "missing_signal_rate_distribution",
-    "missing_per_regime_calibration_status",
-    "tsfm_adapter_load_failure_without_tabular_fallback",
-})
+_AGENT_ACTIONABLE_BLOCKERS: frozenset[str] = frozenset()
 
 # Stagnation-genuineness check: phase-specific evidence keys that, when
 # present in an iteration's ``metrics_json``, indicate the agent (or a
@@ -201,42 +142,8 @@ _AGENT_ACTIONABLE_BLOCKERS: frozenset[str] = frozenset({
 # permissive ``auto_phase_evidence`` fallback. Used by
 # ``_phase_advancement_is_genuine`` to decide whether to honor a phase's
 # stagnation exemption.
-_PHASE_SPECIFIC_AGENT_KEYS: Dict[str, frozenset[str]] = {
-    "tsfm_sweeps": frozenset({"tsfm", "tsfm_adapter"}),
-    "calibration_replay_gates": frozenset(
-        {"calibration_full_validation", "economic_replay"},
-    ),
-    "multi_seed_robustness": frozenset(
-        {"seed_trials", "n_seed_trials", "seeds_passed_gates"},
-    ),
-    "inference_parity_replay": frozenset(
-        {"inference_parity", "inference_reload_validation"},
-    ),
-    "promotion_proposal": frozenset(
-        {
-            "development_promotion_metadata",
-            "promotion_allowed",
-            "smoke_validation",
-            "signal_health",
-        },
-    ),
-}
+_PHASE_SPECIFIC_AGENT_KEYS: Dict[str, frozenset[str]] = {}
 
-# G-C: calibration_replay_gates / multi_seed_robustness / inference_parity_
-# replay are already recognized as genuine by the _PHASE_SPECIFIC_AGENT_KEYS
-# path above, because prepare.py emits exactly those keys. The one tail phase
-# the existing logic misses is tsfm_sweeps: for a legitimately tabular-only
-# instrument prepare.py emits ONLY ``tsfm_fallback_validation`` (a permissive
-# key, deliberately NOT in _PHASE_SPECIFIC_AGENT_KEYS) plus
-# ``auto_phase_evidence:True``. That is the correct, server-confirmed terminal
-# state for the phase, yet stagnation suppression is denied there and the
-# session is terminated mid-tail. ``tsfm_fallback_validation`` is only ever
-# emitted (and only ever present) when prepare.py determined
-# is_tsfm_candidate=False, so its presence is a trustworthy server signal.
-# Recognizing it here is low-risk: it only marks this single evidence
-# phase as genuine for stagnation handling; phase completion still requires
-# adapter evidence or fallback evidence plus dwell in research_phase_plan.
-_TSFM_FALLBACK_GENUINE_PHASE = "tsfm_sweeps"
 
 # ---------------------------------------------------------------------------
 # Research config dataclass
@@ -495,10 +402,6 @@ def _normalize_command_for_plan(command: str) -> str:
         return " ".join(shlex.split(command))
     except ValueError:
         return command.strip()
-
-
-def _is_setup_command(command: str) -> bool:
-    return "scripts/autotuner/setup.py" in command
 
 
 def _config_snapshot_path_from_command(
@@ -1102,9 +1005,6 @@ class AgentOrchestrator:
         except Exception:  # noqa: BLE001 — refresh must never block the run
             logger.debug("lock_epoch refresh failed for %s", research_id, exc_info=True)
 
-    async def _load_skill_async(self, model_type: str) -> str:
-        return await asyncio.to_thread(self._load_skill, model_type)
-
     async def _load_claude_md_async(self) -> str:
         return await asyncio.to_thread(self._load_claude_md)
 
@@ -1199,18 +1099,6 @@ class AgentOrchestrator:
             )
         return None
 
-    def _load_skill(self, model_type: str) -> str:
-        skill_map = {
-            "direction": "direction-autotuner",
-            "volatility": "volatility-autotuner",
-            "rl": "rl-autotuner",
-        }
-        skill_name = skill_map[model_type]
-        skill_path = os.path.join(
-            settings.skills_dir, skill_name, "SKILL.md",
-        )
-        return Path(skill_path).read_text(encoding="utf-8")
-
     def _load_claude_md(self) -> str:
         claude_md_path = os.path.join(settings.workspace_root, "CLAUDE.md")
         if os.path.exists(claude_md_path):
@@ -1222,50 +1110,46 @@ class AgentOrchestrator:
         config: ResearchConfig,
         min_mtime: Optional[float] = None,
     ) -> Optional[str]:
-        """Read and consume last_metrics.txt marker file if it exists.
+        """Read and consume a marker file declared by the skill's
+        ``output_parser.fallback`` section.
 
-        prepare.py writes this file on completion so the orchestrator
-        can detect iterations even when the bash tool times out.
-        Falls back to parsing results.json directly if the marker file
-        is missing (e.g. agent bypassed prepare.py).
-
-        When ``min_mtime`` is provided, a marker file older than that
-        timestamp is treated as stale (left over from a prior session
-        on the same instrument/timeframe/model_type) and ignored.
+        The experiment command writes the marker on completion so the
+        orchestrator can detect iterations even when the bash tool times
+        out. When ``min_mtime`` is provided, a marker older than that
+        timestamp is treated as stale (left over from a prior session)
+        and ignored.
         """
-        instrument_underscore = config.subject_id.replace("-", "_")
-        base_dir = os.path.join(
-            settings.workspace_root,
-            "runs", "autotuner",
-            f"{instrument_underscore}_{config.variant}",
-            config.domain,
-        )
-        marker_path = os.path.join(base_dir, "last_metrics.txt")
-        if os.path.exists(marker_path):
+        skill = getattr(self, "_session_skills", {}).get(config.id)
+        if skill is None:
+            return None
+        try:
+            paths = list(skill.marker_file_paths(config))
+        except Exception:
+            return None
+        for marker_path in paths:
+            if not marker_path.exists():
+                continue
             if min_mtime is not None:
                 try:
-                    marker_mtime = os.path.getmtime(marker_path)
+                    marker_mtime = marker_path.stat().st_mtime
                 except OSError:
                     marker_mtime = None
                 if marker_mtime is not None and marker_mtime < min_mtime:
                     logger.info(
                         "Ignoring stale marker file %s (mtime=%.3f < "
-                        "min_mtime=%.3f, age=%.1fs)",
+                        "min_mtime=%.3f)",
                         marker_path, marker_mtime, min_mtime,
-                        min_mtime - marker_mtime,
                     )
-                    return None
-            # Phase 3.3: rename-then-read so a concurrent prepare.py write
-            # cannot have its fresh marker silently deleted by our cleanup.
-            # The rename is atomic on POSIX; if it fails because the file
-            # vanished underneath us we simply return None.
+                    continue
+            # Rename-then-read so a concurrent writer cannot have its
+            # fresh marker silently deleted by our cleanup.
             claim_path = (
                 f"{marker_path}.consumed.{os.getpid()}.{int(time.time() * 1000)}"
             )
             try:
                 os.replace(marker_path, claim_path)
             except FileNotFoundError:
-                return None
+                continue
             try:
                 content = Path(claim_path).read_text(encoding="utf-8")
             except OSError as exc:
@@ -1278,111 +1162,8 @@ class AgentOrchestrator:
                     "Failed to unlink consumed marker %s", claim_path,
                     exc_info=True,
                 )
-            return content
-
-        # Fallback: synthesize a marker from results.json when the agent
-        # ran the training script directly (bypassing prepare.py).
-        results_path = os.path.join(base_dir, "results.json")
-        if os.path.exists(results_path):
-            if min_mtime is not None:
-                try:
-                    results_mtime = os.path.getmtime(results_path)
-                except OSError:
-                    results_mtime = None
-                if results_mtime is not None and results_mtime < min_mtime:
-                    logger.info(
-                        "Ignoring stale results.json %s (mtime=%.3f < "
-                        "min_mtime=%.3f, age=%.1fs)",
-                        results_path, results_mtime, min_mtime,
-                        min_mtime - results_mtime,
-                    )
-                    return None
-            claim_path = (
-                f"{results_path}.consumed.{os.getpid()}.{int(time.time() * 1000)}"
-            )
-            try:
-                os.replace(results_path, claim_path)
-                results_data = json.loads(
-                    Path(claim_path).read_text(encoding="utf-8")
-                )
-
-                # Extra per-fold metric lines surfaced for RL so the session
-                # view reflects the walk-forward detail the trainer produced
-                # (sharpe / return / drawdown / folds_passed) instead of just
-                # the composite scalar — and so the RL ``validation`` phase can
-                # see genuine OOS evidence keys on this synthesis path too.
-                extra_lines: list[str] = []
-                if config.domain == "rl":
-                    # RL results use aggregate metrics. Compute composite_rl_score
-                    # ML-61: matching prepare.py: 1.0×sharpe + 0.5×return - 2.0×drawdown - 0.1×cv
-                    agg = results_data.get("aggregate", {})
-                    mean_sharpe = agg.get("mean_oos_sharpe") or 0.0
-                    mean_return = agg.get("mean_oos_return") or 0.0
-                    mean_dd = agg.get("mean_oos_drawdown") or 0.0
-                    sharpe_cv = agg.get("sharpe_cv") or 0.0
-                    primary = (
-                        1.0 * mean_sharpe + 0.5 * mean_return
-                        - 2.0 * mean_dd - 0.1 * sharpe_cv
-                    )
-                    n_folds = agg.get("n_folds", 1)
-                    folds_passed = agg.get("folds_passed", 0)
-                    passed = (
-                        agg.get("all_folds_passed", False)
-                        and folds_passed / max(n_folds, 1) >= 0.5
-                    )
-                    metric_name = "composite_rl_score"
-                    extra_lines = [
-                        f"mean_oos_sharpe:    {float(mean_sharpe):.6f}",
-                        f"mean_oos_return:    {float(mean_return):.6f}",
-                        f"mean_oos_drawdown:  {float(mean_dd):.6f}",
-                        f"sharpe_cv:          {float(sharpe_cv):.6f}",
-                        f"std_oos_sharpe:     {float(agg.get('std_oos_sharpe') or 0.0):.6f}",
-                        f"trading_score:      {float(agg.get('mean_oos_trading_score') or 0.0):.6f}",
-                        f"rl_profit_score:    {float(agg.get('rl_profit_score') or 0.0):.6f}",
-                        f"folds_passed:       {folds_passed}/{n_folds}",
-                    ]
-                else:
-                    # Direction / volatility results
-                    wf = results_data.get("walkforward", {})
-                    metrics_d = results_data.get("metrics", {})
-                    gates = results_data.get("gate_results", {})
-                    primary = (
-                        wf.get("walkforward_mean_auc")
-                        or metrics_d.get("auc")
-                        or 0.0
-                    )
-                    passed = gates.get("all_supported_gates_passed", False)
-                    metric_name = "walkforward_mean_auc"
-
-                # Build a synthetic --- block that parse_prepare_output
-                # can parse.
-                lines = [
-                    "---",
-                    f"status:             completed",
-                    f"primary_metric:     {primary:.6f}",
-                    f"metric_name:        {metric_name}",
-                    f"direction:          higher_is_better",
-                    f"training_gates_passed: {str(passed).lower()}",
-                    f"all_gates_passed:   {str(passed).lower()}",
-                    *extra_lines,
-                    f"results_json_path:  {claim_path}",
-                    f"result_artifact_consume_source: true",
-                    "---",
-                ]
-                return "\n".join(lines)
-            except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
-                logger.debug("Failed to synthesize metrics from results.json: %s", exc)
-                try:
-                    if os.path.exists(claim_path) and not os.path.exists(results_path):
-                        os.replace(claim_path, results_path)
-                except OSError:
-                    logger.debug(
-                        "Failed to restore claimed results artifact %s",
-                        claim_path,
-                        exc_info=True,
-                    )
-                return None
-
+            if content:
+                return content
         return None
 
     def _load_research_resume(self, config: ResearchConfig) -> str:
@@ -1428,194 +1209,6 @@ class AgentOrchestrator:
         except Exception as exc:
             logger.warning("Failed to load research resume: %s", exc)
             return ""
-
-    @staticmethod
-    def _generate_research_resume_file(
-        *,
-        config: ResearchConfig,
-        resume_path: str,
-    ) -> None:
-        try:
-            resume_script = os.path.join(
-                settings.workspace_root,
-                "scripts",
-                "autotuner",
-                "resume.py",
-            )
-            if not os.path.exists(resume_script):
-                logger.warning("Resume script not found: %s", resume_script)
-                return
-            instrument_underscore = config.subject_id.replace("-", "_")
-            cmd = [
-                settings.venv_python,
-                resume_script,
-                "--instrument",
-                instrument_underscore,
-                "--timeframe",
-                config.variant,
-                "--db",
-                settings.db_path,
-                "--runs-dir",
-                settings.runs_dir,
-                "--output",
-                resume_path,
-            ]
-            result = subprocess.run(
-                cmd,
-                cwd=settings.workspace_root,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            if result.returncode != 0:
-                logger.warning(
-                    "Resume fallback generation failed (rc=%d): %s",
-                    result.returncode,
-                    result.stderr[:500],
-                )
-        except Exception as exc:
-            logger.warning("Failed to generate research resume fallback: %s", exc)
-
-    def _build_prompt(self, config: ResearchConfig) -> str:
-        quick_flag = " --quick" if config.quick_mode else ""
-        focus = f"\nFocus hint: {config.focus_hint}" if config.focus_hint else ""
-        instrument_underscore = config.subject_id.replace("-", "_")
-        workspace = (
-            f"runs/autotuner/{instrument_underscore}_{config.variant}"
-            f"/{config.domain}"
-        )
-
-        # Load research resume for cross-session context
-        resume_block = self._load_research_resume(config)
-
-        # RL fixed settings — build setup.py args + constraint notice for Claude
-        setup_extra_args = ""
-        fixed_settings_notice = ""
-        if config.domain == "rl":
-            rl_args = []
-            fixed_fields = []
-            if config.trading_mode:
-                rl_args.append(f"--trading-mode {config.trading_mode}")
-                fixed_fields.append(f"trading_mode: {config.trading_mode}")
-            if config.agent_strategy:
-                rl_args.append(f"--agent-strategy {config.agent_strategy}")
-                fixed_fields.append(f"agent_strategy: {config.agent_strategy}")
-            if config.initial_balance is not None:
-                rl_args.append(f"--initial-balance {config.initial_balance}")
-                fixed_fields.append(f"initial_balance: {config.initial_balance}")
-            if rl_args:
-                setup_extra_args = " " + " ".join(rl_args)
-            if fixed_fields:
-                fields_str = ", ".join(fixed_fields)
-                fixed_settings_notice = (
-                    f"\n\n**FIXED SETTINGS (do NOT modify in train.yaml):** "
-                    f"{fields_str}. These are user-configured and must remain "
-                    f"unchanged throughout the research session."
-                )
-
-        # ML-59: 3-phase HPO workflow for RL when enable_hpo is set
-        if config.domain == "rl" and config.enable_hpo:
-            return self._build_prompt_rl_hpo(
-                config, workspace, setup_extra_args, fixed_settings_notice,
-                quick_flag, focus, instrument_underscore,
-            )
-
-        hpo_block = ""
-        if config.enable_hpo and config.domain in ("direction", "volatility"):
-            hpo_block = (
-                "\n\nStructured HPO is enabled for this session. The server owns "
-                f"the trial list and has bounded it to at most "
-                f"{min(config.hpo_trials, config.max_iterations)} training "
-                "attempts. After setup, use `server_hpo_plan.json` and run only "
-                "the listed expected commands exactly. Do not edit `train.yaml` "
-                "or planned trial YAML files for HPO. If you want a follow-up "
-                "trial outside the plan, describe it as MANUAL_REVIEW_REQUEST "
-                "in text and do not run it. Mark HPO-screening attempts with "
-                "search_phase=hpo_screening in any explicit ITERATION_RESULT "
-                "payload."
-            )
-
-        # RL needs an enrichment step before the first training run
-        if config.domain == "rl":
-            enrich_step = (
-                f"2. Enrich RL dataset (REQUIRED before any training):\n"
-                f"```bash\n"
-                f".venv/bin/python "
-                f"scripts/autotuner/enrich_rl_dataset.py "
-                f"--instrument {instrument_underscore} "
-                f"--timeframe {config.variant}\n"
-                f"```\n"
-                f"Verify direction_proba mean is NOT ~0.5 (should show real signal).\n\n"
-                f"3. Read guidance (use read_file tool):\n"
-                f"   - `scripts/autotuner/{config.domain}/README.md`\n"
-                f"   - `{workspace}/train.yaml`\n\n"
-                f"4. Baseline run:\n"
-                f"```bash\n"
-                f".venv/bin/python "
-                f"scripts/autotuner/{config.domain}/prepare.py "
-                f"--config {workspace}/train.yaml{quick_flag}\n"
-                f"```\n\n"
-                f"5. After baseline, iterate: edit train.yaml → run prepare.py → "
-                f"check metrics → keep or revert."
-            )
-        elif config.enable_hpo and config.domain in ("direction", "volatility"):
-            enrich_step = (
-                f"2. Read guidance (use read_file tool):\n"
-                f"   - `scripts/autotuner/{config.domain}/README.md`\n"
-                f"   - `{workspace}/server_hpo_plan.json` after setup completes\n\n"
-                f"3. Run the server-owned structured trials:\n"
-                f"   - The server materializes "
-                f"`{workspace}/planned_trials/<trial_id>/train.yaml` files "
-                f"from the approved plan immediately after setup.\n"
-                f"   - Execute expected commands from "
-                f"`{workspace}/server_hpo_plan.json` exactly.\n\n"
-                f"4. After planned trials finish, interpret results and propose "
-                f"follow-up plans in text only. Off-plan commands require "
-                f"manual review."
-            )
-        else:
-            enrich_step = (
-                f"2. Read guidance (use read_file tool):\n"
-                f"   - `scripts/autotuner/{config.domain}/README.md`\n"
-                f"   - `{workspace}/train.yaml`\n\n"
-                f"3. Baseline run:\n"
-                f"```bash\n"
-                f".venv/bin/python "
-                f"scripts/autotuner/{config.domain}/prepare.py "
-                f"--config {workspace}/train.yaml{quick_flag}\n"
-                f"```\n\n"
-                f"4. After baseline, iterate: edit train.yaml → run prepare.py → "
-                f"check metrics → keep or revert."
-            )
-
-        # F5: phase contract — the agent previously had no awareness of the
-        # 9-phase plan and self-terminated mid-phase. We now describe the
-        # active phase list and the evidence keys it must emit on
-        # ITERATION_RESULT markers to advance.
-        phase_contract_block = self._build_phase_contract_block(config)
-
-        return (
-            f"Tune {config.domain} model for {config.subject_id} "
-            f"{config.variant} (tag: {config.tag}). "
-            f"Max {config.max_iterations} iterations.\n\n"
-            f"Execute these commands IN ORDER — do not explore first:\n\n"
-            f"1. Setup: {SERVER_OWNED_SETUP_INSTRUCTION}\n"
-            f"```bash\n"
-            f".venv/bin/python scripts/autotuner/setup.py "
-            f"--instrument {instrument_underscore} "
-            f"--timeframe {config.variant} "
-            f"--models {config.domain}{setup_extra_args}\n"
-            f"```\n\n"
-            f"{enrich_step}\n\n"
-            f"{PROMOTION_HANDOFF_INSTRUCTION}\n\n"
-            f"Run autonomously. Start with the setup and training steps above "
-            f"without exploring the filesystem first."
-            f"{fixed_settings_notice}"
-            f"{focus}"
-            f"{resume_block}"
-            f"{hpo_block}"
-            f"{phase_contract_block}"
-        )
 
     def _skill_phase_plan(
         self, config: ResearchConfig,
@@ -1701,228 +1294,6 @@ class AgentOrchestrator:
             "the evidence key or move on.",
         ])
         return "\n".join(lines)
-
-    async def _build_resume_prompt(self, config: ResearchConfig) -> str:
-        """ML-62: Build a prompt for resuming a timed-out session.
-
-        Instead of setup → enrich → baseline, this tells Claude to continue
-        from where the parent session left off, using the preserved workspace
-        (train.yaml, best_train.yaml, results).
-        """
-        parent_id = config.resumed_from
-        quick_flag = " --quick" if config.quick_mode else ""
-        focus = f"\nFocus hint: {config.focus_hint}" if config.focus_hint else ""
-        instrument_underscore = config.subject_id.replace("-", "_")
-        workspace = (
-            f"runs/autotuner/{instrument_underscore}_{config.variant}"
-            f"/{config.domain}"
-        )
-
-        # Load iteration history from parent session
-        parent_session = await self._store.get_session(parent_id) if parent_id else None
-        parent_iterations = await self._store.get_iterations(parent_id) if parent_id else []
-        parent_insights = (parent_session or {}).get("insights", "") or ""
-        parent_best_iter = (parent_session or {}).get("best_iteration")
-        parent_best_metric = (parent_session or {}).get("best_metric")
-        parent_iter_count = len(parent_iterations)
-
-        # Build compact iteration history
-        iter_summary_lines = []
-        for it in parent_iterations:
-            num = it.get("iteration", "?")
-            pm = it.get("primary_metric")
-            metric_s = f"{pm:.4f}" if pm is not None else "—"
-            gates = "✅" if training_gates_passed_from_iteration(it) else "❌"
-            decision = it.get("decision", "?")
-            desc = (it.get("description") or "")[:150]
-            iter_summary_lines.append(
-                f"  {num}. metric={metric_s} training_gates={gates} "
-                f"decision={decision} — {desc}"
-            )
-        iter_summary = (
-            "\n".join(iter_summary_lines)
-            if iter_summary_lines
-            else "  (no iterations recorded)"
-        )
-
-        # RL fixed settings notice
-        fixed_settings_notice = ""
-        if config.domain == "rl":
-            fixed_fields = []
-            if config.trading_mode:
-                fixed_fields.append(f"trading_mode: {config.trading_mode}")
-            if config.agent_strategy:
-                fixed_fields.append(f"agent_strategy: {config.agent_strategy}")
-            if config.initial_balance is not None:
-                fixed_fields.append(f"initial_balance: {config.initial_balance}")
-            if fixed_fields:
-                fields_str = ", ".join(fixed_fields)
-                fixed_settings_notice = (
-                    f"\n\n**FIXED SETTINGS (do NOT modify in train.yaml):** "
-                    f"{fields_str}. These are user-configured and must remain "
-                    f"unchanged throughout the research session."
-                )
-
-        # Load research resume for broader cross-session context
-        resume_block = self._load_research_resume(config)
-
-        best_info = ""
-        if parent_best_metric is not None:
-            best_info = (
-                f"Best result so far: iteration {parent_best_iter}, "
-                f"metric={parent_best_metric:.4f}\n"
-            )
-
-        insights_block = ""
-        if parent_insights.strip():
-            insights_block = (
-                f"\n**Insights from parent session:**\n{parent_insights.strip()}\n"
-            )
-
-        return (
-            f"**CONTINUATION SESSION** — Resuming timed-out research for "
-            f"{config.domain} model on {config.subject_id} "
-            f"{config.variant} (tag: {config.tag}).\n\n"
-            f"The previous session (id: {parent_id[:12] if parent_id else '?'}) "
-            f"completed {parent_iter_count} iterations before timing out.\n"
-            f"{best_info}"
-            f"You have {config.max_iterations} iterations remaining.\n\n"
-            f"## Parent session iteration history\n"
-            f"{iter_summary}\n"
-            f"{insights_block}\n"
-            f"## Instructions\n\n"
-            f"The workspace is ALREADY SET UP from the previous session. "
-            f"Do NOT run setup.py, enrich, or baseline again.\n\n"
-            f"1. Read the current state:\n"
-            f"   - `{workspace}/train.yaml` (current config)\n"
-            f"   - `{workspace}/best_train.yaml` (best validated config, if exists)\n"
-            f"   - `{workspace}/results.json` (last run results, if exists)\n\n"
-            f"2. Continue iterating from where the parent left off:\n"
-            f"```bash\n"
-            f".venv/bin/python "
-            f"scripts/autotuner/{config.domain}/prepare.py "
-            f"--config {workspace}/train.yaml{quick_flag}\n"
-            f"```\n\n"
-            f"3. After each run, analyze results and iterate: "
-            f"edit train.yaml → run prepare.py → check metrics → keep or revert.\n\n"
-            f"{PROMOTION_HANDOFF_INSTRUCTION}\n\n"
-            f"Build on the parent session's findings. Do NOT repeat experiments "
-            f"that already failed. Run autonomously."
-            f"{fixed_settings_notice}"
-            f"{focus}"
-            f"{resume_block}"
-        )
-
-    def _build_prompt_rl_hpo(
-        self,
-        config: ResearchConfig,
-        workspace: str,
-        setup_extra_args: str,
-        fixed_settings_notice: str,
-        quick_flag: str,
-        focus: str,
-        instrument_underscore: str,
-    ) -> str:
-        """Build prompt for the server-owned RL HPO workflow.
-
-        The HPO search is now materialized by the server as a bounded set of
-        planned trials (one ``prepare.py`` run each over the PPO hyperparameter
-        grid) — exactly like direction/volatility structured HPO — instead of
-        the agent invoking ``prepare.py --hpo``. Off-plan training commands are
-        rejected by the structured-HPO guard, so the agent runs the listed
-        expected commands exactly. This removes the LLM-adherence drift that
-        caused the Optuna study to never run (RL-TRAINING-ISSUES-ANALYSIS).
-        """
-        trial_count = min(config.hpo_trials, config.max_iterations)
-
-        # Load research resume for cross-session context
-        resume_block = self._load_research_resume(config)
-
-        return (
-            f"Tune RL model for {config.subject_id} {config.variant} "
-            f"(tag: {config.tag}) using the **server-owned HPO workflow**. "
-            f"The server has materialized up to {trial_count} bounded PPO "
-            f"hyperparameter trials; you execute them exactly.\n\n"
-            f"Execute these steps IN ORDER:\n\n"
-            f"1. Setup workspace: {SERVER_OWNED_SETUP_INSTRUCTION}\n"
-            f"```bash\n"
-            f".venv/bin/python scripts/autotuner/setup.py "
-            f"--instrument {instrument_underscore} "
-            f"--timeframe {config.variant} "
-            f"--models rl{setup_extra_args}\n"
-            f"```\n\n"
-            f"2. Enrich RL dataset (REQUIRED before any training):\n"
-            f"```bash\n"
-            f".venv/bin/python "
-            f"scripts/autotuner/enrich_rl_dataset.py "
-            f"--instrument {instrument_underscore} "
-            f"--timeframe {config.variant}\n"
-            f"```\n"
-            f"Verify direction_proba mean is NOT ~0.5.\n\n"
-            f"3. Run the server-owned HPO trials:\n"
-            f"   - After setup the server materializes "
-            f"`{workspace}/planned_trials/<trial_id>/train.yaml` files and "
-            f"`{workspace}/server_hpo_plan.json`.\n"
-            f"   - Read `{workspace}/server_hpo_plan.json` and run each trial's "
-            f"`expected_command` EXACTLY, one bash call per trial. Each command "
-            f"is `prepare.py --config {workspace}/planned_trials/<trial_id>/"
-            f"train.yaml{quick_flag}`.\n"
-            f"   - Do NOT edit `train.yaml` or any planned-trial YAML, and do "
-            f"NOT invent configs — off-plan training commands are rejected. "
-            f"Each trial's PPO hyperparameters are already baked into its "
-            f"materialized train.yaml.\n"
-            f"   - The `---` block from each run reports `primary_metric` "
-            f"(composite_rl_score) and fold metrics; the server records each as "
-            f"an `hpo_screening` iteration.\n\n"
-            f"4. After all trials finish, interpret the results: identify the "
-            f"trial with the best `composite_rl_score`. Propose any follow-up "
-            f"experiment as a `MANUAL_REVIEW_REQUEST:` line in TEXT only — do "
-            f"not run off-plan commands.\n\n"
-            f"{PROMOTION_HANDOFF_INSTRUCTION}\n\n"
-            f"Run autonomously."
-            f"{fixed_settings_notice}"
-            f"{focus}"
-            f"{resume_block}"
-        )
-
-    async def _update_research_resume(
-        self, instrument: str, timeframe: str,
-    ) -> None:
-        """Rebuild the research resume for an instrument after session ends."""
-        try:
-            instrument_underscore = instrument.replace("-", "_")
-            resume_script = os.path.join(
-                settings.workspace_root, "scripts", "autotuner", "resume.py"
-            )
-            if not os.path.exists(resume_script):
-                logger.warning("Resume script not found: %s", resume_script)
-                return
-            cmd = [
-                os.path.join(settings.workspace_root, ".venv", "bin", "python"),
-                resume_script,
-                "--instrument", instrument_underscore,
-                "--timeframe", timeframe,
-                "--db", settings.db_path,
-                "--runs-dir", settings.runs_dir,
-            ]
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await proc.communicate()
-            if proc.returncode == 0:
-                logger.info(
-                    "Research resume updated for %s_%s",
-                    instrument_underscore, timeframe,
-                )
-            else:
-                logger.warning(
-                    "Resume update failed (rc=%d): %s",
-                    proc.returncode, stderr.decode()[:500],
-                )
-        except Exception as exc:
-            logger.warning("Failed to update research resume: %s", exc)
 
     async def _extract_session_insights(self, research_id: str) -> None:
         """ML-60: Use Claude to extract compact insights from a completed session.
@@ -2032,278 +1403,6 @@ class AgentOrchestrator:
                 exc_info=True,
             )
 
-    @staticmethod
-    def _structured_hpo_enforced(config: ResearchConfig) -> bool:
-        # RL HPO is now server-owned via materialized planned trials (same as
-        # direction/volatility) instead of the agent invoking ``prepare.py
-        # --hpo`` — which the agent reliably skipped because the per-turn phase
-        # guidance never reissued the command (see RL-TRAINING-ISSUES-ANALYSIS).
-        return bool(
-            config.enable_hpo
-            and config.domain in {"direction", "volatility", "rl"}
-        )
-
-    async def _active_hpo_study_id(self, research_id: str) -> Optional[str]:
-        studies = await self._store.get_hpo_studies(research_id)
-        for study in studies:
-            if study.get("study_id"):
-                return str(study["study_id"])
-        return None
-
-    async def _ensure_structured_plan_materialized(
-        self,
-        *,
-        config: ResearchConfig,
-        workspace: str,
-        agent_log: AgentLogWriter,
-        turn: int,
-    ) -> None:
-        if not self._structured_hpo_enforced(config):
-            return
-        planned_trials = [
-            trial
-            for trial in await self._store.get_planned_trials(config.id)
-            if trial.get("status") != "manual_review"
-        ]
-        if not planned_trials:
-            return
-        plan = {
-            "schema_version": "autoresearch_structured_hpo_plan.v1",
-            "research_id": config.id,
-            "model_type": config.domain,
-            "trials": planned_trials,
-        }
-        written = await asyncio.to_thread(
-            materialize_planned_trials,
-            plan,
-            workspace,
-        )
-        if not written:
-            await agent_log.append(
-                "warning",
-                "Structured HPO plan was not materialized because train.yaml "
-                "is not available yet.",
-                turn=turn,
-            )
-            return
-        # Resolve upstream source run-ids once for the whole plan (RL only).
-        source_model_ids = (
-            _resolve_rl_source_model_ids(config.subject_id, config.variant)
-            if config.domain == "rl"
-            else None
-        )
-        for trial in written:
-            trial_config_snapshot = None
-            materialized_path = trial.get("materialized_config_path")
-            if materialized_path:
-                try:
-                    trial_config_snapshot = Path(materialized_path).read_text(
-                        encoding="utf-8",
-                    )
-                except OSError:
-                    trial_config_snapshot = None
-            identity = build_trial_identity(
-                instrument=config.subject_id,
-                timeframe=config.variant,
-                model_type=config.domain,
-                command=trial.get("expected_command"),
-                config_snapshot=trial_config_snapshot,
-                quick_mode=config.quick_mode,
-                source_model_ids=source_model_ids,
-            )
-            await self._store.update_planned_trial_status(
-                research_id=config.id,
-                trial_id=trial["trial_id"],
-                status="materialized",
-                train_config_path=trial.get("train_config_path")
-                or trial.get("materialized_config_path"),
-                canonical_config_hash=identity.get("canonical_config_hash"),
-                trial_identity_hash=trial_identity_hash(identity),
-                trial_identity=identity,
-            )
-        await agent_log.append(
-            "system",
-            f"Materialized {len(written)} server-owned structured HPO trials "
-            f"under {workspace}/planned_trials.",
-            turn=turn,
-        )
-
-    async def _guard_structured_hpo_tool(
-        self,
-        *,
-        config: ResearchConfig,
-        turn: int,
-        tool_name: str,
-        input_data: Dict[str, Any],
-    ) -> tuple[Optional[Dict[str, Any]], Optional[ToolExecutionResult]]:
-        if not self._structured_hpo_enforced(config):
-            return None, None
-
-        if tool_name == "bash":
-            command = str(input_data.get("command", ""))
-            if _is_setup_command(command):
-                return None, None
-            is_training_command = (
-                "prepare.py" in command
-                or "run_phase1c_" in command
-                or "run_phase1b_" in command
-            )
-            if not is_training_command:
-                return None, None
-            normalized = _normalize_command_for_plan(command)
-            planned_trial = await self._store.get_planned_trial_for_command(
-                config.id,
-                normalized,
-            )
-            if planned_trial:
-                return planned_trial, None
-            reason = (
-                "Structured HPO command is outside the server-owned plan. "
-                "Run expected commands from server_hpo_plan.json exactly or "
-                "request manual review."
-            )
-            await self._record_structured_hpo_manual_review(
-                config=config,
-                turn=turn,
-                proposed_action=normalized,
-                reason=reason,
-                config_patch={"proposed_command": normalized},
-            )
-            return None, ToolExecutionResult(
-                (
-                    "Structured HPO manual review required: this training "
-                    "command is outside the server-owned plan. Read "
-                    "server_hpo_plan.json and run an expected_command exactly, "
-                    "or describe the desired follow-up as MANUAL_REVIEW_REQUEST."
-                ),
-                meta={
-                    "policy_allowed": False,
-                    "policy_reason": reason,
-                    "policy_operation": "structured_hpo.manual_review",
-                    "normalized_command": normalized,
-                    "returncode": None,
-                    "timed_out": False,
-                },
-            )
-
-        if tool_name == "write_file":
-            raw_path = str(input_data.get("path", ""))
-            if not self._is_structured_hpo_config_write(raw_path):
-                return None, None
-            reason = (
-                "Structured HPO config files are server-owned. Proposed YAML "
-                "edits must be routed to manual review instead of written."
-            )
-            await self._record_structured_hpo_manual_review(
-                config=config,
-                turn=turn,
-                proposed_action=f"write_file:{raw_path}",
-                reason=reason,
-                config_patch={
-                    "proposed_write_path": raw_path,
-                    "content_length": len(str(input_data.get("content", ""))),
-                },
-            )
-            return None, ToolExecutionResult(
-                (
-                    "Structured HPO manual review required: train.yaml and "
-                    "planned trial YAML files are server-owned in this mode. "
-                    "Describe the desired follow-up as MANUAL_REVIEW_REQUEST."
-                ),
-                meta={
-                    "policy_allowed": False,
-                    "policy_reason": reason,
-                    "policy_operation": "structured_hpo.manual_review",
-                    "returncode": None,
-                    "timed_out": False,
-                },
-            )
-
-        return None, None
-
-    @staticmethod
-    def _is_structured_hpo_config_write(raw_path: str) -> bool:
-        normalized = raw_path.replace("\\", "/")
-        basename = normalized.rsplit("/", 1)[-1]
-        if basename in {"train.yaml", "best_train.yaml"}:
-            return True
-        return "/planned_trials/" in normalized and normalized.endswith((".yaml", ".yml"))
-
-    async def _record_structured_hpo_manual_review(
-        self,
-        *,
-        config: ResearchConfig,
-        turn: int,
-        proposed_action: str,
-        reason: str,
-        config_patch: Dict[str, Any],
-    ) -> None:
-        try:
-            study_id = await self._active_hpo_study_id(config.id)
-            await self._store.record_planned_trial_manual_review(
-                research_id=config.id,
-                study_id=study_id,
-                expected_command=proposed_action,
-                reason=reason,
-                config_patch=config_patch,
-            )
-            await self._store.record_audit_event(
-                actor_id="autoresearch-agent",
-                action="structured_hpo.manual_review",
-                research_id=config.id,
-                pipeline_id=config.pipeline_id,
-                request_metadata={
-                    "turn": turn,
-                    "model_type": config.domain,
-                    "proposed_action": redact_sensitive_text(proposed_action),
-                },
-                outcome="manual_review",
-                error_message=reason,
-            )
-        except Exception as exc:
-            logger.warning(
-                "Research %s turn %d: failed to record structured HPO "
-                "manual-review state: %s",
-                config.id,
-                turn,
-                exc,
-                exc_info=True,
-            )
-
-    @staticmethod
-    def _attach_planned_trial_metadata(
-        marker: Dict[str, Any],
-        planned_trial: Optional[Dict[str, Any]],
-    ) -> None:
-        if not planned_trial:
-            return
-        marker.setdefault(
-            "search_phase",
-            planned_trial.get("search_phase") or "hpo_screening",
-        )
-        marker["planned_trial_id"] = planned_trial.get("trial_id")
-        marker["config_hash"] = planned_trial.get("config_hash")
-        marker["expected_command"] = planned_trial.get("expected_command")
-        marker["planned_result_path"] = planned_trial.get("result_path")
-
-    async def _finish_planned_trial(
-        self,
-        *,
-        config: ResearchConfig,
-        planned_trial: Optional[Dict[str, Any]],
-        marker: Dict[str, Any],
-        status: str,
-    ) -> None:
-        if not planned_trial:
-            return
-        await self._store.update_planned_trial_status(
-            research_id=config.id,
-            trial_id=planned_trial["trial_id"],
-            status=status,
-            result_path=planned_trial.get("result_path"),
-            mlflow_run_id=marker.get("mlflow_run_id"),
-        )
-
     async def _guard_duplicate_training_attempt(
         self,
         *,
@@ -2311,7 +1410,7 @@ class AgentOrchestrator:
         turn: int,
         command: str,
         config_snapshot: Optional[str],
-        planned_trial: Optional[Dict[str, Any]],
+        planned_trial: Optional[Dict[str, Any]] = None,
         current_phase: Optional[str] = None,
     ) -> tuple[Optional[ToolExecutionResult], Optional[Dict[str, Any]]]:
         """Reject an already-attempted config/seed/mode/split identity.
@@ -2332,11 +1431,6 @@ class AgentOrchestrator:
             config_snapshot=config_snapshot,
             quick_mode=config.quick_mode,
             marker=planned_trial or {},
-            source_model_ids=(
-                _resolve_rl_source_model_ids(config.subject_id, config.variant)
-                if config.domain == "rl"
-                else None
-            ),
         )
         identity_hash = trial_identity_hash(identity)
         if not identity_hash:
@@ -3082,42 +2176,35 @@ class AgentOrchestrator:
                 )
                 self._session_models[config.id] = llm_cfg.primary_model
 
-        # Load system prompt. The assembly (claude.md + SKILL.md) mirrors
+        # Load system prompt. The assembly (claude.md + primer) mirrors
         # ``skill.system_prompt()`` exactly; the file reads are kept off the
-        # event loop via the existing _load_skill_async / _load_claude_md_async
-        # helpers (skill.system_prompt() is the sync equivalent — used by the
-        # transitional runtime and the parity tests). The ``skill`` object is
+        # event loop via asyncio.to_thread. The ``skill`` object is
         # materialized above so every later domain branch can reach through it.
-        # ARC-011 P2-021: the _load_skill map is a transitional helper; once
-        # the transitional runtimes retire, system_prompt() reads the package
-        # SKILL.md directly. The grep guard (P2-025) only checks
-        # config.(model_type|instrument|timeframe), not _load_skill.
-        # ARC-011 review C2-2: manifest-driven sessions source the domain
-        # primer from the packaged ``skills/<skill_id>/SKILL.md`` (the very
-        # package the manifest was loaded from); transitional sessions keep
-        # the legacy workspace ``.github/skills`` primer (P2-021 retires it
-        # later). The packaged read is sync file IO → keep it off the event
-        # loop like the legacy helpers.
-        if config.skill_id:
-            primer = getattr(skill, "primer_filename", None) or "SKILL.md"
-            skill_content = await asyncio.to_thread(
-                _load_packaged_skill_md, config.skill_id, primer,
-            )
-        else:
-            skill_content = await self._load_skill_async(config.domain)
+        # ARC-011 review C2-2: sessions source the domain primer from the
+        # packaged ``skills/<skill_id>/`` package the manifest was loaded from.
+        primer = getattr(skill, "primer_filename", None) or "SKILL.md"
+        skill_content = await asyncio.to_thread(
+            _load_packaged_skill_md, config.skill_id, primer,
+        )
         claude_md = await self._load_claude_md_async()
         system_prompt = f"{claude_md}\n\n---\n\n{skill_content}"
 
-        # Build initial user message
-        # ML-62: Use resume prompt for continuation sessions
+        # Build initial user message. Continuation sessions get the skill
+        # runtime's resume prompt; fresh sessions its directive prompt.
         if config.resumed_from:
-            user_prompt = await self._build_resume_prompt(config)
+            parent_session = await self._store.get_session(config.resumed_from)
+            parent_iterations = await self._store.get_iterations(
+                config.resumed_from,
+            )
+            user_prompt = skill.resume_prompt(
+                config, parent_session or {}, parent_iterations,
+            )
         else:
-            user_prompt = self._build_prompt(config)
+            user_prompt = skill.directive_prompt(config)
 
-            messages: list[Message] = [
-                Message(role="user", content=user_prompt),
-            ]
+        messages: list[Message] = [
+            Message(role="user", content=user_prompt),
+        ]
 
         iteration_count = 0
         # duplicate_rejected_count: audit records for duplicate training
@@ -3276,7 +2363,6 @@ class AgentOrchestrator:
                 agent_text = ""
                 turn_recorded_iteration = False
                 turn_ran_training_command = False
-                last_planned_trial_for_turn: Optional[Dict[str, Any]] = None
 
                 for block in assistant_content:
                     if isinstance(block, TextBlock):
@@ -3306,74 +2392,44 @@ class AgentOrchestrator:
                             meta={"tool_id": block.id, "input": logged_input},
                         )
 
-                        planned_trial_for_tool: Optional[Dict[str, Any]] = None
-                        structured_rejection: Optional[ToolExecutionResult] = None
-                        if isinstance(block.input, dict):
-                            (
-                                planned_trial_for_tool,
-                                structured_rejection,
-                            ) = await self._guard_structured_hpo_tool(
-                                config=config,
-                                turn=turn,
-                                tool_name=block.name,
-                                input_data=block.input,
-                            )
-                        if planned_trial_for_tool:
-                            last_planned_trial_for_turn = planned_trial_for_tool
                         raw_command_for_tool = (
                             str(block.input.get("command", ""))
                             if isinstance(block.input, dict)
                             else ""
                         )
 
-                        # Pre-snapshot: capture train.yaml BEFORE running
-                        # prepare.py so we have an immutable config record
-                        # for this attempt — preserved even on crash/timeout.
+                        # Pre-snapshot: capture the config file a command
+                        # references BEFORE running it, so the attempt has an
+                        # immutable config record preserved even on crash or
+                        # timeout.
                         _pending_snapshot: Optional[str] = None
                         if (
-                            structured_rejection is None
-                            and isinstance(block.input, dict)
+                            isinstance(block.input, dict)
                             and block.name == "bash"
-                            and any(
-                                token in raw_command_for_tool
-                                for token in (
-                                    "prepare.py",
-                                    "run_phase1c_",
-                                    "run_phase1b_",
-                                )
-                            )
                         ):
                             snapshot_path = _config_snapshot_path_from_command(
                                 raw_command_for_tool,
                                 settings.workspace_root,
                                 workspace,
-                            ) or os.path.join(workspace, "train.yaml")
-                            try:
-                                _pending_snapshot = Path(snapshot_path).read_text(
-                                    encoding="utf-8",
-                                )
-                            except OSError:
-                                logger.warning(
-                                    "Research %s: could not pre-snapshot "
-                                    "%s before prepare.py run",
-                                    research_id,
-                                    snapshot_path,
-                                )
+                            )
+                            if snapshot_path:
+                                try:
+                                    _pending_snapshot = Path(snapshot_path).read_text(
+                                        encoding="utf-8",
+                                    )
+                                except OSError:
+                                    logger.warning(
+                                        "Research %s: could not pre-snapshot "
+                                        "%s before the run",
+                                        research_id,
+                                        snapshot_path,
+                                    )
 
                         duplicate_rejection: Optional[ToolExecutionResult] = None
                         duplicate_marker: Optional[Dict[str, Any]] = None
                         if (
-                            structured_rejection is None
-                            and isinstance(block.input, dict)
+                            isinstance(block.input, dict)
                             and block.name == "bash"
-                            and any(
-                                token in raw_command_for_tool
-                                for token in (
-                                    "prepare.py",
-                                    "run_phase1c_",
-                                    "run_phase1b_",
-                                )
-                            )
                         ):
                             _phase_for_dedup = self._active_phase_from_marker_or_session(
                                 {}, await self._store.get_session(config.id),
@@ -3386,15 +2442,13 @@ class AgentOrchestrator:
                                 turn=turn,
                                 command=raw_command_for_tool,
                                 config_snapshot=_pending_snapshot,
-                                planned_trial=planned_trial_for_tool,
                                 current_phase=_phase_for_dedup,
                             )
 
                         runtime_command_id: Optional[int] = None
                         command_started_at: Optional[float] = None
                         if (
-                            structured_rejection is None
-                            and duplicate_rejection is None
+                            duplicate_rejection is None
                             and isinstance(block.input, dict)
                             and block.name == "bash"
                         ):
@@ -3411,9 +2465,7 @@ class AgentOrchestrator:
                             )
                             runtime_command_id = runtime_command["id"]
 
-                        if structured_rejection is not None:
-                            tool_execution = structured_rejection
-                        elif duplicate_rejection is not None:
+                        if duplicate_rejection is not None:
                             duplicate_marker = duplicate_marker or {}
                             _is_baseline_link = (
                                 duplicate_rejection.meta.get(
@@ -3423,10 +2475,6 @@ class AgentOrchestrator:
                             iteration_count += 1
                             if not _is_baseline_link:
                                 duplicate_rejected_count += 1
-                            self._attach_planned_trial_metadata(
-                                duplicate_marker,
-                                planned_trial_for_tool,
-                            )
                             await self._record_iteration(
                                 research_id, iteration_count,
                                 duplicate_marker, total_cost,
@@ -3434,22 +2482,6 @@ class AgentOrchestrator:
                                 turn=turn,
                                 command=redact_sensitive_text(raw_command_for_tool),
                             )
-                            if planned_trial_for_tool:
-                                await self._store.update_planned_trial_status(
-                                    research_id=config.id,
-                                    trial_id=planned_trial_for_tool["trial_id"],
-                                    status=(
-                                        "completed"
-                                        if _is_baseline_link
-                                        else "duplicate_rejected"
-                                    ),
-                                    result_path=planned_trial_for_tool.get("result_path"),
-                                    manual_review_reason=(
-                                        None
-                                        if _is_baseline_link
-                                        else duplicate_marker.get("duplicate_reason")
-                                    ),
-                                )
                             turn_recorded_iteration = True
                             tool_execution = duplicate_rejection
                             if _is_baseline_link:
@@ -3466,12 +2498,6 @@ class AgentOrchestrator:
                                     duplicate_marker.get("primary_metric"),
                                 )
                         else:
-                            if planned_trial_for_tool:
-                                await self._store.update_planned_trial_status(
-                                    research_id=config.id,
-                                    trial_id=planned_trial_for_tool["trial_id"],
-                                    status="running",
-                                )
                             command_started_at = time.time()
                             output_callback = None
                             if block.name == "bash":
@@ -3523,18 +2549,6 @@ class AgentOrchestrator:
                             research_id, turn, block.name,
                             tool_result[:200],
                         )
-                        if (
-                            block.name == "bash"
-                            and _is_setup_command(raw_command_for_tool)
-                            and tool_meta.get("policy_allowed") is not False
-                            and tool_meta.get("returncode") in (0, None)
-                        ):
-                            await self._ensure_structured_plan_materialized(
-                                config=config,
-                                workspace=workspace,
-                                agent_log=agent_log,
-                                turn=turn,
-                            )
                         if (
                             block.name == "bash"
                             and tool_meta.get("policy_allowed") is False
@@ -3612,91 +2626,21 @@ class AgentOrchestrator:
                         _cmd_str = redact_sensitive_text(
                             str(block.input.get("command", ""))
                         )
-                        if block.name == "bash" and (
-                            any(
-                                token in _cmd_str
-                                for token in (
-                                    "prepare.py",
-                                    "run_phase1c_",
-                                    "run_phase1b_",
-                                )
-                            )
-                            # ARC-011 review C4 (P4-016): a skill's declared
-                            # scripts (its eval) are that skill's
-                            # iteration-producing commands — a relayed marker
-                            # is backed by a real run for them too, not only
-                            # the ML script families.
-                            or any(
-                                str(script) in _cmd_str
-                                for script in (
-                                    skill_policy_extension.get("allowed_scripts")
-                                    or ()
-                                )
+                        # ARC-011 review C4 (P4-016): a skill's declared
+                        # scripts are that skill's iteration-producing
+                        # commands — a relayed marker is backed by a real run.
+                        if block.name == "bash" and any(
+                            str(script) in _cmd_str
+                            for script in (
+                                skill_policy_extension.get("allowed_scripts") or ()
                             )
                         ):
                             turn_ran_training_command = True
 
                         # Universal detection: scan bash output for
-                        # prepare.py --- delimited metrics blocks.
-                        # This works regardless of LLM model since it's
-                        # parsing deterministic Python script output.
-
-                        # ML-59: Check for HPO study output first (mode: hpo_study)
-                        if (
-                            block.name == "bash"
-                            and not turn_recorded_iteration
-                            and "---" in tool_result
-                            and is_hpo_study_output(tool_result)
-                        ):
-                            hpo_result = parse_hpo_study_output(tool_result)
-                            if hpo_result and hpo_result.status in ("completed", "success"):
-                                # Record as a special HPO study iteration
-                                iteration_count += 1
-                                hpo_marker = hpo_result.to_dict()
-                                self._attach_runtime_command_metadata(
-                                    hpo_marker, tool_meta,
-                                )
-                                hpo_marker["decision"] = "hpo_screening"
-                                hpo_marker["config_snapshot"] = _pending_snapshot
-                                hpo_marker["primary_metric"] = hpo_result.best_composite
-                                hpo_marker["metric_name"] = "hpo_best_composite"
-                                hpo_marker["search_phase"] = "hpo_screening"
-                                hpo_marker["description"] = (
-                                    f"HPO study completed: {hpo_result.completed_trials}/"
-                                    f"{hpo_result.n_trials} trials, best composite="
-                                    f"{hpo_result.best_composite:.4f} (turn {turn})"
-                                )
-                                self._attach_planned_trial_metadata(
-                                    hpo_marker,
-                                    planned_trial_for_tool,
-                                )
-                                await self._record_iteration(
-                                    research_id, iteration_count,
-                                    hpo_marker, total_cost,
-                                    workspace=workspace,
-                                    turn=turn,
-                                    command=_cmd_str,
-                                )
-                                await self._finish_planned_trial(
-                                    config=config,
-                                    planned_trial=planned_trial_for_tool,
-                                    marker=hpo_marker,
-                                    status="completed",
-                                )
-                                turn_recorded_iteration = True
-                                logger.info(
-                                    "Research %s turn %d: HPO study completed "
-                                    "(%d/%d trials, best=%.4f)",
-                                    research_id, turn,
-                                    hpo_result.completed_trials,
-                                    hpo_result.n_trials,
-                                    hpo_result.best_composite or 0.0,
-                                )
-                                await agent_log.append(
-                                    "hpo_study", json.dumps(hpo_marker)[:5000],
-                                    turn=turn,
-                                )
-
+                        # --- delimited metrics blocks. This works regardless
+                        # of LLM model since it's parsing deterministic
+                        # Python script output.
                         elif (
                             block.name == "bash"
                             and not turn_recorded_iteration
@@ -3748,12 +2692,8 @@ class AgentOrchestrator:
                                 # is the sole source of truth for the config.
                                 marker_from_tool["config_snapshot"] = _pending_snapshot
                                 marker_from_tool["description"] = (
-                                    f"Auto-detected from prepare.py output "
+                                    f"Auto-detected from experiment output "
                                     f"(turn {turn})"
-                                )
-                                self._attach_planned_trial_metadata(
-                                    marker_from_tool,
-                                    planned_trial_for_tool,
                                 )
                                 await self._record_iteration(
                                     research_id, iteration_count,
@@ -3761,12 +2701,6 @@ class AgentOrchestrator:
                                     workspace=workspace,
                                     turn=turn,
                                     command=_cmd_str,
-                                )
-                                await self._finish_planned_trial(
-                                    config=config,
-                                    planned_trial=planned_trial_for_tool,
-                                    marker=marker_from_tool,
-                                    status="completed",
                                 )
                                 turn_recorded_iteration = True
                                 logger.info(
@@ -3835,12 +2769,8 @@ class AgentOrchestrator:
                                 crash_marker["config_snapshot"] = _pending_snapshot
                                 crash_marker["description"] = (
                                     f"Failed ({metrics.status}) — "
-                                    f"auto-detected from prepare.py output "
+                                    f"auto-detected from experiment output "
                                     f"(turn {turn})"
-                                )
-                                self._attach_planned_trial_metadata(
-                                    crash_marker,
-                                    planned_trial_for_tool,
                                 )
                                 await self._record_iteration(
                                     research_id, iteration_count,
@@ -3848,12 +2778,6 @@ class AgentOrchestrator:
                                     workspace=workspace,
                                     turn=turn,
                                     command=_cmd_str,
-                                )
-                                await self._finish_planned_trial(
-                                    config=config,
-                                    planned_trial=planned_trial_for_tool,
-                                    marker=crash_marker,
-                                    status="failed",
                                 )
                                 turn_recorded_iteration = True
                                 logger.info(
@@ -3863,20 +2787,12 @@ class AgentOrchestrator:
                                     metrics.status,
                                 )
 
-                        # Fallback: if bash timed out or output was piped,
-                        # check for a last_metrics.txt marker file written
-                        # by prepare.py on completion.  Also trigger when
-                        # the agent runs a training script directly (e.g.
-                        # run_phase1c_direction.py) to handle cases where
-                        # prepare.py was bypassed.
+                        # Fallback: if bash timed out or the output was
+                        # digested, check for a marker file declared by the
+                        # skill's output_parser.fallback section.
                         if (
                             block.name == "bash"
                             and not turn_recorded_iteration
-                            and (
-                                "prepare.py" in _cmd_str
-                                or "run_phase1c_" in _cmd_str
-                                or "run_phase1b_" in _cmd_str
-                            )
                         ):
                             marker_text = await self._read_marker_file_async(
                                 config, min_mtime=command_started_at,
@@ -3935,22 +2851,12 @@ class AgentOrchestrator:
                                         f"Auto-detected from marker file "
                                         f"(turn {turn})"
                                     )
-                                    self._attach_planned_trial_metadata(
-                                        marker_from_file,
-                                        planned_trial_for_tool,
-                                    )
                                     await self._record_iteration(
                                         research_id, iteration_count,
                                         marker_from_file, total_cost,
                                         workspace=workspace,
                                         turn=turn,
                                         command=_cmd_str,
-                                    )
-                                    await self._finish_planned_trial(
-                                        config=config,
-                                        planned_trial=planned_trial_for_tool,
-                                        marker=marker_from_file,
-                                        status="completed",
                                     )
                                     turn_recorded_iteration = True
                                     logger.info(
@@ -3978,22 +2884,12 @@ class AgentOrchestrator:
                                         f"auto-detected from marker file "
                                         f"(turn {turn})"
                                     )
-                                    self._attach_planned_trial_metadata(
-                                        crash_marker,
-                                        planned_trial_for_tool,
-                                    )
                                     await self._record_iteration(
                                         research_id, iteration_count,
                                         crash_marker, total_cost,
                                         workspace=workspace,
                                         turn=turn,
                                         command=_cmd_str,
-                                    )
-                                    await self._finish_planned_trial(
-                                        config=config,
-                                        planned_trial=planned_trial_for_tool,
-                                        marker=crash_marker,
-                                        status="failed",
                                     )
                                     turn_recorded_iteration = True
                                     logger.info(
@@ -4006,11 +2902,6 @@ class AgentOrchestrator:
                         if (
                             block.name == "bash"
                             and not turn_recorded_iteration
-                            and (
-                                "prepare.py" in _cmd_str
-                                or "run_phase1c_" in _cmd_str
-                                or "run_phase1b_" in _cmd_str
-                            )
                         ):
                             failed_status = self._infer_failed_attempt_status(
                                 tool_result
@@ -4034,10 +2925,6 @@ class AgentOrchestrator:
                                 self._attach_runtime_command_metadata(
                                     failed_marker, tool_meta,
                                 )
-                                self._attach_planned_trial_metadata(
-                                    failed_marker,
-                                    planned_trial_for_tool,
-                                )
                                 await self._record_iteration(
                                     research_id, iteration_count,
                                     failed_marker, total_cost,
@@ -4045,30 +2932,12 @@ class AgentOrchestrator:
                                     turn=turn,
                                     command=_cmd_str,
                                 )
-                                await self._finish_planned_trial(
-                                    config=config,
-                                    planned_trial=planned_trial_for_tool,
-                                    marker=failed_marker,
-                                    status="failed",
-                                )
                                 turn_recorded_iteration = True
                                 logger.info(
                                     "Research %s turn %d: recorded failed "
                                     "attempt %d (%s) from command status",
                                     research_id, turn, iteration_count,
                                     failed_status,
-                                )
-
-                        if planned_trial_for_tool and not turn_recorded_iteration:
-                            rc = tool_meta.get("returncode")
-                            if tool_meta.get("timed_out") or (
-                                isinstance(rc, int) and rc != 0
-                            ):
-                                await self._store.update_planned_trial_status(
-                                    research_id=config.id,
-                                    trial_id=planned_trial_for_tool["trial_id"],
-                                    status="failed",
-                                    result_path=planned_trial_for_tool.get("result_path"),
                                 )
 
                 # Secondary: check for explicit ITERATION_RESULT: markers
@@ -4092,10 +2961,6 @@ class AgentOrchestrator:
                         agent_text, session_nonce=nonce_bytes,
                     )
                     if marker:
-                        self._attach_planned_trial_metadata(
-                            marker,
-                            last_planned_trial_for_turn,
-                        )
                         # ARC-011 P4-003: record the verification outcome so a
                         # metrics_verified/unverified row is auditable. For
                         # enforced skills the key is set by _verify_nonce; its
@@ -4144,10 +3009,9 @@ class AgentOrchestrator:
                                 "system",
                                 (
                                     "ITERATION_RESULT marker was ignored: "
-                                    "no prepare.py / run_phase1c_ / "
-                                    "run_phase1b_ command ran this turn. "
-                                    "Emit markers only after a real training "
-                                    "run."
+                                    "no experiment command ran this turn. "
+                                    "Emit markers only after a real "
+                                    "experiment run."
                                 ),
                                 turn=turn,
                             )
@@ -4505,11 +3369,6 @@ class AgentOrchestrator:
 
             # ML-60: Extract compact insights before rebuilding resume
             await self._extract_session_insights(research_id)
-
-            # Auto-update research resume for this instrument
-            await self._update_research_resume(
-                config.subject_id, config.variant,
-            )
 
             # ── ML-53 Fix 2.4 / ARC-011 §4.3: Auto-promote standalone sessions ──
             # Promote only on a net running→completed completion signalled by
@@ -5927,18 +4786,6 @@ class AgentOrchestrator:
             if any(metrics.get(k) for k in phase_specific_keys):
                 return True
 
-            # G-C: tsfm_sweeps confirmed via the server's tabular-fallback
-            # signal is genuine. prepare.py only emits (and only ever
-            # populates) tsfm_fallback_validation when is_tsfm_candidate=False,
-            # so its presence is a trustworthy server determination — not an
-            # LLM bare boolean floating the phase up.
-            fallback_validation = metrics.get("tsfm_fallback_validation")
-            fallback_passed = fallback_validation is True or (
-                isinstance(fallback_validation, dict)
-                and fallback_validation.get("passed") is True
-            )
-            if current_phase == _TSFM_FALLBACK_GENUINE_PHASE and fallback_passed:
-                return True
         return False
 
     async def _maybe_global_stagnation_terminate(
@@ -6081,13 +4928,6 @@ class AgentOrchestrator:
             return "failed"
         return None
 
-    # Training prepare.py runs compute their OWN GPU timeout (up to ~70 min for a
-    # quick multi-seed walk-forward trial). If the agent under-sets timeout_s, the
-    # bash tool kills the run before it records a metric — observed losing the very
-    # first trial of a sweep to a 1800s setting. Floor training commands at the 2h
-    # default so the agent's choice can never truncate a trial below its budget.
-    _TRAINING_COMMAND_TIMEOUT_FLOOR_S = 7200
-
     @staticmethod
     def _effective_tool_timeout(input_data: Dict[str, Any]) -> int:
         timeout = input_data.get("timeout_s", 7200)
@@ -6095,13 +4935,7 @@ class AgentOrchestrator:
             timeout = int(timeout)
         except (TypeError, ValueError):
             timeout = 7200
-        floor = 900
-        command = str(input_data.get("command", "") or "")
-        # A prepare.py training run (not the legacy --hpo study path) must not be
-        # killed below the 2h default regardless of the agent's timeout_s.
-        if "prepare.py" in command and "--hpo" not in command:
-            floor = AgentOrchestrator._TRAINING_COMMAND_TIMEOUT_FLOOR_S
-        return max(timeout, floor)
+        return max(timeout, 900)
 
     @staticmethod
     def _runtime_command_status(tool_meta: Dict[str, Any]) -> str:

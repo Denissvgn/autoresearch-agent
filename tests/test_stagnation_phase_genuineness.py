@@ -152,6 +152,17 @@ async def test_explicit_phase_key_makes_phase_genuine(tmp_path: Path) -> None:
     )
 
     orchestrator = AgentOrchestrator(store)
+
+    class _ProbeSkill:
+        def blocker_classification(self):
+            return {
+                "actionable_blockers": [],
+                "phase_evidence_keys": {
+                    "promotion_proposal": ["development_promotion_metadata"],
+                },
+            }
+
+    orchestrator._session_skills["res_real_phase"] = _ProbeSkill()
     genuine = await orchestrator._phase_advancement_is_genuine(
         "res_real_phase", "promotion_proposal",
     )
@@ -215,108 +226,6 @@ async def test_non_auto_evidence_iteration_is_genuine(tmp_path: Path) -> None:
     assert await orchestrator._phase_advancement_is_genuine(
         "res_real", "tsfm_sweeps",
     ) is True
-
-
-@pytest.mark.asyncio
-async def test_gc_tsfm_fallback_validation_is_genuine(tmp_path: Path) -> None:
-    """G-C: a tabular-only instrument emits only tsfm_fallback_validation
-    (+auto_phase_evidence) in tsfm_sweeps. That server signal must count as
-    genuine so stagnation is suppressed there.
-    """
-    workspace = tmp_path / "ws"
-    workspace.mkdir(parents=True)
-    store = ResultsStore(str(tmp_path / "store.db"))
-    await store.initialize()
-
-    await _seed_session_with_iterations(
-        store, "res_gc_tsfm",
-        workspace=workspace,
-        iterations=[
-            {
-                "primary_metric": 0.61,
-                "decision": "discard",
-                "phase": "tsfm_sweeps",
-                "metrics": {
-                    "auto_phase_evidence": True,
-                    "tsfm_fallback_validation": True,
-                },
-            }
-        ],
-        current_phase="tsfm_sweeps",
-    )
-
-    orchestrator = AgentOrchestrator(store)
-    assert await orchestrator._phase_advancement_is_genuine(
-        "res_gc_tsfm", "tsfm_sweeps",
-    ) is True
-
-
-@pytest.mark.asyncio
-async def test_gc_tsfm_structured_fallback_validation_is_genuine(tmp_path: Path) -> None:
-    workspace = tmp_path / "ws"
-    workspace.mkdir(parents=True)
-    store = ResultsStore(str(tmp_path / "store.db"))
-    await store.initialize()
-
-    await _seed_session_with_iterations(
-        store, "res_gc_tsfm_structured",
-        workspace=workspace,
-        iterations=[
-            {
-                "primary_metric": 0.61,
-                "decision": "discard",
-                "phase": "tsfm_sweeps",
-                "metrics": {
-                    "auto_phase_evidence": True,
-                    "tsfm_fallback_validation": {
-                        "passed": True,
-                        "reason": "tabular_candidate_family",
-                        "candidate_family": "tabular",
-                        "is_tsfm_candidate": False,
-                    },
-                },
-            }
-        ],
-        current_phase="tsfm_sweeps",
-    )
-
-    orchestrator = AgentOrchestrator(store)
-    assert await orchestrator._phase_advancement_is_genuine(
-        "res_gc_tsfm_structured", "tsfm_sweeps",
-    ) is True
-
-
-@pytest.mark.asyncio
-async def test_gc_tsfm_auto_only_without_fallback_not_genuine(
-    tmp_path: Path,
-) -> None:
-    """G-C is scoped: tsfm_sweeps with auto_phase_evidence but NO
-    tsfm_fallback_validation (and no tsfm/tsfm_adapter) stays non-genuine —
-    anti-gaming preserved.
-    """
-    workspace = tmp_path / "ws"
-    workspace.mkdir(parents=True)
-    store = ResultsStore(str(tmp_path / "store.db"))
-    await store.initialize()
-
-    await _seed_session_with_iterations(
-        store, "res_gc_tsfm_neg",
-        workspace=workspace,
-        iterations=[
-            {
-                "primary_metric": 0.61,
-                "decision": "discard",
-                "phase": "tsfm_sweeps",
-                "metrics": {"auto_phase_evidence": True},
-            }
-        ],
-        current_phase="tsfm_sweeps",
-    )
-
-    orchestrator = AgentOrchestrator(store)
-    assert await orchestrator._phase_advancement_is_genuine(
-        "res_gc_tsfm_neg", "tsfm_sweeps",
-    ) is False
 
 
 @pytest.mark.asyncio

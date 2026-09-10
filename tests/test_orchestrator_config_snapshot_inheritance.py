@@ -268,7 +268,7 @@ async def test_promotion_iteration_inherits_from_most_recent_snapshot(
         training_time_s=None,
     )
 
-    marker4 = _promotion_marker("multi_seed_robustness")
+    marker4 = _promotion_marker("promotion_proposal")
     await AgentOrchestrator(store)._record_iteration(
         "res_latest", 4, marker4, 0.10,
     )
@@ -386,16 +386,11 @@ async def test_consistency_report_passes_after_inheritance(
 async def test_all_promotion_family_phases_trigger_inheritance(
     tmp_path: Path,
 ) -> None:
-    """All four phases in _PROMOTION_FAMILY must trigger inheritance.
+    """Every phase in _PROMOTION_FAMILY must trigger inheritance.
 
     Feeds each phase in turn as a separate session so they're isolated.
     """
-    phases = (
-        "multi_seed_robustness",
-        "inference_parity_replay",
-        "calibration_replay_gates",
-        "promotion_proposal",
-    )
+    phases = ("promotion_proposal",)
     snap = "agent_strategy: AGGR\nhorizon: 30\n"
 
     for i, phase in enumerate(phases):
@@ -491,7 +486,7 @@ async def test_phase_from_session_phase_state_json_also_triggers_inheritance(
     )
 
     # Inject phase_state_json into the session row
-    phase_state = json.dumps({"current_phase": "calibration_replay_gates"})
+    phase_state = json.dumps({"current_phase": "promotion_proposal"})
     await store.update_session("res_from_state", phase_state_json=phase_state)
 
     # marker has NO search_phase — phase must be detected from session state
@@ -500,7 +495,7 @@ async def test_phase_from_session_phase_state_json_also_triggers_inheritance(
         "metric_name": "auc",
         "all_gates_passed": True,
         "decision": "keep",
-        "description": "calibration replay",
+        "description": "promotion proposal",
         # no search_phase, no config_snapshot
     }
     await AgentOrchestrator(store)._record_iteration(
@@ -571,95 +566,3 @@ async def test_attach_consistency_report_persists_resolved_search_phase(
     )
 
 
-@pytest.mark.asyncio
-async def test_record_iteration_stores_evidence_artifact_blocker_for_seed_trials(
-    tmp_path: Path,
-) -> None:
-    """_record_iteration passes search_phase into consistency reports.
-
-    Duplicate seed trial run IDs must appear as an operator-visible blocker in
-    consistency_report_json, not only as hidden phase-state gating logic.
-    """
-    store = ResultsStore(str(tmp_path / "db_seed_blocker.sqlite"))
-    await store.initialize()
-    await _create_session(store, session_id="res_seed_blocker")
-
-    snap = "agent_strategy: BALA\nhorizon: 15\n"
-    await store.add_iteration(
-        research_id="res_seed_blocker", iteration=1, primary_metric=0.65,
-        metric_name="auc", all_gates_passed=True, decision="keep",
-        description="", config_snapshot=snap, metrics_json="{}",
-        training_time_s=42.0,
-    )
-
-    marker2: Dict[str, Any] = {
-        "primary_metric": 0.65,
-        "metric_name": "auc",
-        "all_gates_passed": True,
-        "decision": "keep",
-        "description": "synthetic multi-seed evidence",
-        "search_phase": "multi_seed_robustness",
-        "training_time_s": None,
-        "seed_trials": [{"mlflow_run_id": "run-SAME"} for _ in range(5)],
-        "n_seed_trials": 5,
-        "seeds_passed_gates": True,
-    }
-    await AgentOrchestrator(store)._record_iteration(
-        "res_seed_blocker", 2, marker2, 0.05,
-    )
-
-    row = await store.get_iteration("res_seed_blocker", 2)
-    report = json.loads(row["consistency_report_json"])
-    assert "missing_config_snapshot" not in report.get("blockers", [])
-    assert "evidence_artifact_missing_for_multi_seed_robustness" in report.get(
-        "blockers", []
-    )
-
-    session = await store.get_session("res_seed_blocker")
-    phase_state = json.loads(session["phase_state_json"])
-    assert phase_state["blocked"] is True
-    assert "evidence_artifact_missing_for_multi_seed_robustness" in (
-        phase_state["block_reason"] or ""
-    )
-
-
-@pytest.mark.asyncio
-async def test_record_iteration_stores_evidence_artifact_blocker_for_calibration(
-    tmp_path: Path,
-) -> None:
-    """Invalid calibration evidence is persisted in consistency_report_json."""
-    store = ResultsStore(str(tmp_path / "db_cal_blocker.sqlite"))
-    await store.initialize()
-    await _create_session(store, session_id="res_cal_blocker")
-
-    snap = "agent_strategy: BALA\nhorizon: 15\n"
-    await store.add_iteration(
-        research_id="res_cal_blocker", iteration=1, primary_metric=0.65,
-        metric_name="auc", all_gates_passed=True, decision="keep",
-        description="", config_snapshot=snap, metrics_json="{}",
-        training_time_s=42.0,
-    )
-
-    marker2: Dict[str, Any] = {
-        "primary_metric": 0.65,
-        "metric_name": "auc",
-        "all_gates_passed": True,
-        "decision": "keep",
-        "description": "calibration evidence missing selected run",
-        "search_phase": "calibration_replay_gates",
-        "training_time_s": None,
-        "calibration_full_validation": {
-            "selected": {"run_id": None, "metrics": {"ece": 0.02}},
-        },
-        "economic_replay": {"gates": {"all_gates_passed": True}},
-    }
-    await AgentOrchestrator(store)._record_iteration(
-        "res_cal_blocker", 2, marker2, 0.05,
-    )
-
-    row = await store.get_iteration("res_cal_blocker", 2)
-    report = json.loads(row["consistency_report_json"])
-    assert "missing_config_snapshot" not in report.get("blockers", [])
-    assert "evidence_artifact_missing_for_calibration_replay_gates" in report.get(
-        "blockers", []
-    )

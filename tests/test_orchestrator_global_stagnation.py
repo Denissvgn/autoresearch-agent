@@ -348,7 +348,7 @@ async def test_global_stagnation_does_not_fire_in_exempt_phase(
     """Phase-aware guard: stagnation must NOT fire when current_phase is exempt
     AND the agent did genuine work in that phase (Fix 5).
 
-    tsfm_sweeps is a validation phase — metric improvement is not expected.
+    promotion_proposal is a validation phase — metric improvement is not expected.
     To honor the exemption we require at least one in-phase iteration carrying
     explicit (non-auto) agent evidence; otherwise the phase was advanced via
     permissive auto-evidence and stagnation should still fire.
@@ -361,7 +361,7 @@ async def test_global_stagnation_does_not_fire_in_exempt_phase(
     await _seed_session(store, rid, best_iteration=1, best_metric=0.6394)
     await store.update_session(
         rid,
-        phase_state_json=_json.dumps({"current_phase": "tsfm_sweeps"}),
+        phase_state_json=_json.dumps({"current_phase": "promotion_proposal"}),
     )
 
     await store.add_iteration(
@@ -371,23 +371,34 @@ async def test_global_stagnation_does_not_fire_in_exempt_phase(
         metric_name="composite_direction_score",
         all_gates_passed=True,
         decision="keep",
-        description="genuine tsfm exploration",
+        description="genuine promotion exploration",
         config_snapshot=None,
         metrics_json=_json.dumps(
-            {"tsfm_adapter": "moirai", "auto_phase_evidence": True}
+            {"promotion_metadata": {"owner": "t"}, "auto_phase_evidence": True}
         ),
         training_time_s=120.0,
-        search_phase="tsfm_sweeps",
+        search_phase="promotion_proposal",
     )
 
     orch = AgentOrchestrator(store)
+
+    class _ProbeSkill:
+        def blocker_classification(self):
+            return {
+                "actionable_blockers": [],
+                "phase_evidence_keys": {
+                    "promotion_proposal": ["promotion_metadata"],
+                },
+            }
+
+    orch._session_skills[rid] = _ProbeSkill()
 
     result = await orch._maybe_global_stagnation_terminate(
         research_id=rid,
         iteration_count=13,  # gap=12 >= default window=12 — would normally fire
     )
     assert result is None, (
-        "Stagnation must be suppressed in tsfm_sweeps once genuine work exists"
+        "Stagnation must be suppressed in promotion_proposal once genuine work exists"
     )
 
 

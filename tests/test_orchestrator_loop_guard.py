@@ -51,6 +51,7 @@ from src.core.llm_provider import (
     TextBlock,
     Usage,
 )
+from src.core import orchestrator as orchestrator_module
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig
 from src.core.results_store import ResultsStore
 
@@ -64,7 +65,8 @@ def _make_config(research_id: str) -> ResearchConfig:
         id=research_id,
         instrument="DOGE_USDT",
         timeframe="15m",
-        model_type="direction",
+        model_type="prompt-engineering",
+        skill_id="prompt-engineering",
         tag="ar4-test",
         max_iterations=100,
         max_budget_usd=50.0,
@@ -77,7 +79,7 @@ async def _seed_session(store: ResultsStore, research_id: str) -> None:
         session_id=research_id,
         instrument="DOGE_USDT",
         timeframe="15m",
-        model_type="direction",
+        model_type="prompt-engineering",
         tag="ar4-test",
         quick_mode=False,
         max_iterations=100,
@@ -206,7 +208,7 @@ async def test_run_honors_terminate_request_without_phase_kick(
     phase_kick = AsyncMock(return_value={"reason": "should_not_call", "text": "no"})
 
     with (
-        patch.object(orch, "_load_skill_async", new=AsyncMock(return_value="# skill")),
+        patch.object(orchestrator_module, "_load_packaged_skill_md", return_value="# skill"),
         patch.object(orch, "_load_claude_md_async", new=AsyncMock(return_value="")),
         patch.object(
             orch,
@@ -217,7 +219,6 @@ async def test_run_honors_terminate_request_without_phase_kick(
         ),
         patch.object(orch, "_build_phase_continuation_kick", new=phase_kick),
         patch.object(orch, "_extract_session_insights", new=AsyncMock()),
-        patch.object(orch, "_update_research_resume", new=AsyncMock()),
     ):
         await orch.run(config)
 

@@ -93,6 +93,12 @@ async def test_fresh_marker_is_consumed_when_min_mtime_in_past(
     await store.initialize()
     orchestrator = AgentOrchestrator(store)
 
+    class _ProbeSkill:
+        def marker_file_paths(self, config):
+            return [marker_path]
+
+    orchestrator._session_skills["res_test"] = _ProbeSkill()
+
     text = orchestrator._read_marker_file(
         ResearchConfig(
             id="res_test",
@@ -127,6 +133,12 @@ async def test_marker_read_without_min_mtime_preserves_legacy_behavior(
     store = ResultsStore(str(tmp_path / "autoresearch.sqlite"))
     await store.initialize()
     orchestrator = AgentOrchestrator(store)
+
+    class _ProbeSkill:
+        def marker_file_paths(self, config):
+            return [marker_path]
+
+    orchestrator._session_skills["res_test"] = _ProbeSkill()
 
     text = orchestrator._read_marker_file(
         ResearchConfig(

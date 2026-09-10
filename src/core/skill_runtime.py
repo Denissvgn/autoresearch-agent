@@ -1,19 +1,16 @@
 """``SkillRuntime`` protocol — the single contract between skill author and
 orchestrator (ARC-011 P1-023).
 
-This module introduces the ``SkillRuntime`` protocol: every domain-specific
+This module defines the ``SkillRuntime`` protocol: every domain-specific
 decision the orchestrator used to make via ``if config.model_type == ...`` is
 declared as a method on this protocol. The orchestrator (P1-027) materializes
 one ``SkillRuntime`` per session and reaches every domain-specific behavior
 through ``skill.<method>()``.
 
-The full method surface is the §7.5 sketch in
-``UNIVERSAL_RESEARCH_AGENT_GENERALIZATION_ANALYSIS.md`` (lines 773-849),
-materialized here as a Python ``Protocol``. Three transitional implementations
-land in P1-024/025/026 (``DirectionSkillRuntime`` / ``VolatilitySkillRuntime`` /
-``RLSkillRuntime``) that **delegate to the current hardcoded code** — no
-behavior change, just relocation. Phase 2 replaces them with manifest-driven
-runtimes built from ``skills/<id>/SKILL.yaml``.
+The only implementation is ``ManifestSkillRuntime``, driven entirely by a
+validated ``ResearchSkillManifest`` loaded from ``skills/<id>/SKILL.yaml``.
+(The transitional per-model runtimes that delegated to the orchestrator's
+hardcoded ML code paths were removed together with the trading skills.)
 
 Design decisions baked in here (D1-D3 from the plan):
 
@@ -27,16 +24,9 @@ Design decisions baked in here (D1-D3 from the plan):
   plain dicts (byte-identical behavior, zero construction churn). The storage
   layer returns dicts everywhere; a dataclass would force ``.to_dict()`` churn
   across the stack — rejected for a "behavior-identical" phase.
-* **``session_nonce`` is accepted but ignored by transitional runtimes (D2).**
-  The ``parse_iteration`` signature accepts ``session_nonce: bytes`` for the P4
-  anti-forgery work, but no nonce validation exists today. Recorded as an
-  AC-deviation (P1-007 house style) in the CHANGELOG and module docstring.
-* **``skill_id`` / ``skill_version`` (D3).** ``ResearchConfig`` gains these two
-  optional fields (defaults ``""``); transitional runtimes derive them from
-  ``config.model_type`` (e.g. ``"direction" → ("direction-autotuner", "1")``).
-  No DB schema or API change is required for the transitional shell (the fields
-  default to empty); a real schema migration lands when Phase 2 makes manifests
-  authoritative.
+* **``session_nonce`` threading (D2).** ``parse_iteration`` accepts
+  ``session_nonce: bytes``; manifest runtimes enforce the echoed-nonce contract
+  when the skill declares ``output_parser.require_signed_metrics``.
 
 P1-023 references protocols introduced by the three prerequisite epics:
 ``OutputParser`` (P1-010), ``PromotionTarget`` (P1-015), ``PreflightCheck``
@@ -299,306 +289,6 @@ class SkillRuntime(Protocol):
 
 
 # ---------------------------------------------------------------------------
-# Transitional runtimes (P1-024 / P1-025 / P1-026).
-#
-# Each delegates to the current hardcoded code paths — behavior is identical,
-# just relocated out of the orchestrator's ``if config.model_type`` branches.
-# They hold a reference to the orchestrator instance (which owns the existing
-# private prompt-builder / skill-loader / resume methods) and delegate to
-# module-level helpers for the rest (``phases_for_model``, ``_ALLOWED_SCRIPTS``,
-# ``build_trial_identity``, ``build_structured_hpo_plan``). Phase 2 replaces
-# these with manifest-driven runtimes built from ``skills/<id>/SKILL.yaml``.
-# ---------------------------------------------------------------------------
-
-# model_type → (skill_id, skill_version). The skill ids match the on-disk
-# skills/<id>/ directory names the orchestrator's _load_skill map already uses
-# (orchestrator.py). skill_version is "1" for all three transitional skills.
-_SKILL_IDENTITY: dict[str, tuple[str, str]] = {
-    "direction": ("direction-autotuner", "1"),
-    "volatility": ("volatility-autotuner", "1"),
-    "rl": ("rl-autotuner", "1"),
-}
-
-
-class _BaseTransitionalSkillRuntime:
-    """Shared delegation logic for the three transitional runtimes.
-
-    Subclasses set ``_model_type``; everything else delegates to the
-    orchestrator instance + module-level helpers unchanged.
-    """
-
-    _model_type: str
-
-    def __init__(self, orchestrator: Any) -> None:
-        self._orch = orchestrator
-
-    # ── Identity ──────────────────────────────────────────────────
-    @property
-    def skill_id(self) -> str:
-        return _SKILL_IDENTITY[self._model_type][0]
-
-    @property
-    def skill_version(self) -> str:
-        return _SKILL_IDENTITY[self._model_type][1]
-
-    # ── Prompt construction (delegate to orchestrator) ────────────
-    def system_prompt(self) -> str:
-        # Mirrors orchestrator.run()'s system_prompt assembly: claude.md +
-        # skill SKILL.md content. _load_skill maps model_type → skills dir.
-        import asyncio
-
-        claude_md = self._orch._load_claude_md()
-        skill_content = self._orch._load_skill(self._model_type)
-        return f"{claude_md}\n\n---\n\n{skill_content}"
-
-    def directive_prompt(self, config: "ResearchConfig") -> str:
-        # Delegates to the orchestrator's existing _build_prompt, which already
-        # branches on model_type (RL HPO path, RL enrichment, etc.).
-        return self._orch._build_prompt(config)
-
-    def resume_prompt(
-        self,
-        config: "ResearchConfig",
-        parent: SessionRecord,
-        parent_iterations: list[IterationRecord],
-    ) -> str:
-        # _build_resume_prompt is async on the orchestrator; the protocol
-        # declares sync here for the typing surface. P1-027 wires the actual
-        # call path (which awaits the orchestrator method directly).
-        import asyncio
-
-        return asyncio.get_event_loop().run_until_complete(
-            self._orch._build_resume_prompt(config)
-        )
-
-    # ── Command policy ────────────────────────────────────────────
-    def command_policy_extension(self) -> CommandPolicyExtension:
-        # Today the orchestrator has one global _ALLOWED_SCRIPTS allow-list
-        # (command_policy.py). The transitional runtime returns the
-        # model-type-relevant subset: the shared scripts (setup.py, resume.py)
-        # plus the model-specific prepare.py. RL also adds enrich_rl_dataset.py.
-        from src.core.command_policy import _ALLOWED_SCRIPTS
-
-        shared = [
-            s for s in _ALLOWED_SCRIPTS
-            if "prepare.py" not in s and "enrich" not in s
-        ]
-        model_prepare = f"scripts/autotuner/{self._model_type}/prepare.py"
-        scripts = shared + ([model_prepare] if model_prepare in _ALLOWED_SCRIPTS else [])
-        if self._model_type == "rl":
-            enrich = "scripts/autotuner/enrich_rl_dataset.py"
-            if enrich in _ALLOWED_SCRIPTS:
-                scripts.append(enrich)
-        return {"allowed_scripts": sorted(set(scripts))}
-
-    # ── Iteration detection ───────────────────────────────────────
-    def parse_iteration(
-        self,
-        raw_output: str,
-        *,
-        session_nonce: Optional[bytes] = None,
-        config_snapshot: Optional[str] = None,
-    ) -> Optional[dict[str, Any]]:
-        # D2: session_nonce is ignored (no nonce validation exists today).
-        # Delegates to the orchestrator's parser instances (P1-013).
-        from src.core.output_parser import DelimitedKVParser, JSONMarkerParser
-
-        if "ITERATION_RESULT:" in raw_output:
-            return JSONMarkerParser().parse_iteration(
-                raw_output, session_nonce=session_nonce
-            )
-        return DelimitedKVParser().parse(raw_output)
-
-    def marker_file_paths(self, config: "ResearchConfig") -> list[Path]:
-        # Mirrors orchestrator._read_marker_file's base_dir derivation.
-        import os
-
-        from src.config import settings
-
-        instrument_underscore = config.instrument.replace("-", "_")
-        base_dir = os.path.join(
-            settings.workspace_root,
-            "runs", "autotuner",
-            f"{instrument_underscore}_{config.timeframe}",
-            config.model_type,
-        )
-        return [Path(base_dir) / "last_metrics.txt"]
-
-    # ── Phase contract ────────────────────────────────────────────
-    def phase_plan(self) -> list[Phase]:
-        from src.core.research_phase_plan import phases_for_model
-
-        return phases_for_model(self._model_type)  # type: ignore[return-value]
-
-    def phase_advancement_rule(self, phase_id: str) -> AdvancementRule:
-        # _PHASE_ADVANCEMENT_KEYS maps phase_id → tuple of evidence key strings.
-        from src.core.research_phase_plan import _PHASE_ADVANCEMENT_KEYS
-
-        return {"evidence_keys": _PHASE_ADVANCEMENT_KEYS.get(phase_id, ())}
-
-    def blocker_classification(self) -> dict[str, Any]:
-        # Transitional runtimes carry no manifest override — the orchestrator's
-        # module-level defaults apply (ARC-011 review C2-4).
-        return {}
-
-    # ── W11 anti-forgery capabilities (ARC-011 review C3) ────────
-    # Transitional/ML skills do not enforce signed metrics (their eval
-    # scripts don't echo a nonce — the P4-004 backfill is deferred), so the
-    # orchestrator must neither deliver the nonce env nor verify KV blocks
-    # for them (byte-identical legacy behavior).
-    @property
-    def requires_signed_metrics(self) -> bool:
-        return False
-
-    @property
-    def nonce_field(self) -> str:
-        return "server_nonce"
-
-    # ── Trial identity (dedup) ────────────────────────────────────
-    def trial_identity(
-        self,
-        config: "ResearchConfig",
-        *,
-        command: str,
-        config_snapshot: Optional[str] = None,
-        planned_trial: Optional[dict] = None,
-    ) -> dict:
-        from src.core.iteration_snapshot import build_trial_identity
-
-        return build_trial_identity(
-            instrument=config.instrument,
-            timeframe=config.timeframe,
-            model_type=config.model_type,
-            config_snapshot=config_snapshot,
-            command=command,
-            marker=planned_trial,
-            quick_mode=config.quick_mode,
-        )
-
-    # ── Preflight ─────────────────────────────────────────────────
-    def preflight_checks(self) -> list["PreflightCheck"]:
-        from src.core.preflight import preflight_check_from_target
-        from src.core.service_preflight import build_service_preflight_targets
-
-        targets = build_service_preflight_targets(model_type=self._model_type)
-        return [preflight_check_from_target(t) for t in targets]
-
-    # ── Promotion ─────────────────────────────────────────────────
-    def promotion_target(self) -> "PromotionTarget":
-        from src.core.promotion_target import FilePathPromotionTarget
-
-        return FilePathPromotionTarget()
-
-    # ── Output parsing ────────────────────────────────────────────
-    def output_parser(self) -> "OutputParser":
-        from src.core.output_parser import DelimitedKVParser
-
-        return DelimitedKVParser()
-
-    def iteration_marker_parser(self) -> "OutputParser":
-        from src.core.output_parser import JSONMarkerParser
-
-        return JSONMarkerParser()
-
-    # ── Insights (delegate to orchestrator) ───────────────────────
-    def insights_prompt(
-        self,
-        session: SessionRecord,
-        iterations: list[IterationRecord],
-    ) -> str:
-        # The orchestrator's insights-prompt builder is inlined in the
-        # completion path; transitional runtime returns an empty prompt (the
-        # orchestrator still builds it directly during P1-027 until the logic
-        # is fully extracted in a later task). Documented deviation.
-        return ""
-
-    # ── Cross-session memory (delegate to orchestrator) ───────────
-    def research_resume_path(self, config: "ResearchConfig") -> Path:
-        # Mirrors orchestrator._load_research_resume's path derivation.
-        import os
-
-        from src.config import settings
-
-        instrument_underscore = config.instrument.replace("-", "_")
-        return Path(os.path.join(
-            settings.workspace_root,
-            "runs", "autotuner",
-            f"{instrument_underscore}_{config.timeframe}",
-            config.model_type,
-            "research_resume.md",
-        ))
-
-    def generate_research_resume(
-        self,
-        config: "ResearchConfig",
-        store: "StateStore",
-    ) -> str:
-        # Delegates to the orchestrator's existing resume generator.
-        return self._orch._load_research_resume(config)
-
-    # ── Structured HPO (optional) ─────────────────────────────────
-    def structured_hpo_plan(
-        self,
-        config: "ResearchConfig",
-    ) -> Optional[StructuredHPOPlan]:
-        if not getattr(config, "enable_hpo", False):
-            return None
-        from src.core.structured_hpo import build_structured_hpo_plan
-
-        return build_structured_hpo_plan(  # type: ignore[return-value]
-            research_id=config.id,
-            instrument=config.instrument,
-            timeframe=config.timeframe,
-            model_type=config.model_type,
-            max_iterations=config.max_iterations,
-            max_budget_usd=config.max_budget_usd,
-            enable_hpo=config.enable_hpo,
-            hpo_trials=config.hpo_trials,
-            timeout_s=config.timeout_s,
-            quick_mode=config.quick_mode,
-            trading_mode=config.trading_mode,
-            hpo_timesteps=config.hpo_timesteps,
-        )
-
-    # ── Subjects / variants enumeration ───────────────────────────
-    def list_subjects(self) -> list[SubjectDescriptor]:
-        # Greenfield (D1): no subject/variant domain exists for the ML skills
-        # today. Returns [] until Phase 2+ introduces manifest-driven subjects.
-        return []
-
-    def list_variants(self, subject_id: str) -> list[VariantDescriptor]:
-        return []
-
-
-class DirectionSkillRuntime(_BaseTransitionalSkillRuntime):
-    """Transitional runtime for the ``direction`` model type (ARC-011 P1-024).
-
-    Delegates to the current hardcoded direction code paths. Behavior identical.
-    """
-
-    _model_type = "direction"
-
-
-class VolatilitySkillRuntime(_BaseTransitionalSkillRuntime):
-    """Transitional runtime for the ``volatility`` model type (ARC-011 P1-025).
-
-    Delegates to the current hardcoded volatility code paths. Behavior identical.
-    """
-
-    _model_type = "volatility"
-
-
-class RLSkillRuntime(_BaseTransitionalSkillRuntime):
-    """Transitional runtime for the ``rl`` model type (ARC-011 P1-026).
-
-    Delegates to the current hardcoded RL code paths (including the RL HPO
-    workflow and dataset-enrichment step). Behavior identical.
-    """
-
-    _model_type = "rl"
-
-
-# ---------------------------------------------------------------------------
 # Manifest-driven runtime (ARC-011 P2-007).
 #
 # A generic ``ManifestSkillRuntime`` that satisfies the ``SkillRuntime`` protocol
@@ -697,12 +387,72 @@ class ManifestSkillRuntime:
         }
 
     def directive_prompt(self, config: "ResearchConfig") -> str:
-        # Delegates to the orchestrator's existing _build_prompt, which branches
-        # on model_type. P2-017 (model_type as a read-only alias of skill_id)
-        # keeps this working; a fully declarative prompt builder is a follow-up.
-        # The manifest's prompt section (setup/experiment_command) is consumed by
-        # _build_prompt via the existing model_type dispatch today.
-        return self._orch._build_prompt(config)
+        """Build the session-directing user prompt from the manifest.
+
+        Structure: goal header → manifest-declared setup/experiment commands →
+        fixed skill_params notice → promotion handoff → focus hint →
+        cross-session resume block → phase contract. Every domain-specific
+        line comes from the manifest; the orchestrator contributes only the
+        generic scaffolding (budget, handoff contract, phase rendering).
+        """
+        from src.core.orchestrator import PROMOTION_HANDOFF_INSTRUCTION
+
+        parts: list[str] = [
+            (
+                f"Run research for skill '{self.skill_id}' — subject "
+                f"{config.subject_id}, variant {config.variant} "
+                f"(tag: {config.tag}). Max {config.max_iterations} iterations."
+            )
+        ]
+
+        prompt_cfg = self._manifest.prompt
+        steps: list[str] = []
+        if prompt_cfg is not None:
+            if prompt_cfg.setup_command:
+                steps.append(
+                    "1. Setup:\n"
+                    f"```bash\n{prompt_cfg.setup_command}\n```"
+                )
+            if prompt_cfg.experiment_command:
+                steps.append(
+                    (
+                        f"{len(steps) + 1}. Experiment command "
+                        "(run once per iteration):\n"
+                        f"```bash\n{prompt_cfg.experiment_command}\n```"
+                    )
+                )
+        if steps:
+            parts.append(
+                "Execute these steps IN ORDER — do not explore first:\n\n"
+                + "\n\n".join(steps)
+            )
+
+        fixed = {
+            key: value
+            for key, value in (getattr(config, "skill_params", None) or {}).items()
+            if value is not None
+        }
+        if fixed:
+            fields_str = ", ".join(f"{k}: {v}" for k, v in fixed.items())
+            parts.append(
+                f"**FIXED SETTINGS (operator-supplied, do NOT modify):** "
+                f"{fields_str}."
+            )
+
+        parts.append(PROMOTION_HANDOFF_INSTRUCTION)
+        parts.append(
+            "Run autonomously. Start with the steps above without exploring "
+            "the filesystem first."
+        )
+        if config.focus_hint:
+            parts.append(f"Focus hint: {config.focus_hint}")
+        resume_block = self._orch._load_research_resume(config)
+        if resume_block:
+            parts.append(resume_block.strip())
+        phase_contract = self._orch._build_phase_contract_block(config)
+        if phase_contract:
+            parts.append(phase_contract.strip())
+        return "\n\n".join(p for p in parts if p)
 
     def resume_prompt(
         self,
@@ -710,11 +460,91 @@ class ManifestSkillRuntime:
         parent: SessionRecord,
         parent_iterations: list[IterationRecord],
     ) -> str:
-        import asyncio
+        """Build the continuation prompt for a resumed session.
 
-        return asyncio.get_event_loop().run_until_complete(
-            self._orch._build_resume_prompt(config)
+        Generic version of the legacy resume prompt: reports the parent's
+        best result and iteration history, points the agent at the preserved
+        workspace, and re-issues the manifest's experiment command.
+        """
+        from src.core.gate_status import training_gates_passed_from_iteration
+        from src.core.orchestrator import PROMOTION_HANDOFF_INSTRUCTION
+
+        parent_id = config.resumed_from
+        parent_insights = (parent or {}).get("insights", "") or ""
+        parent_best_iter = (parent or {}).get("best_iteration")
+        parent_best_metric = (parent or {}).get("best_metric")
+
+        iter_lines = []
+        for it in parent_iterations or []:
+            num = it.get("iteration", "?")
+            pm = it.get("primary_metric")
+            metric_s = f"{pm:.4f}" if pm is not None else "—"
+            gates = "✅" if training_gates_passed_from_iteration(it) else "❌"
+            decision = it.get("decision", "?")
+            desc = (it.get("description") or "")[:150]
+            iter_lines.append(
+                f"  {num}. metric={metric_s} gates={gates} "
+                f"decision={decision} — {desc}"
+            )
+        iter_summary = (
+            "\n".join(iter_lines) if iter_lines else "  (no iterations recorded)"
         )
+
+        best_info = ""
+        if parent_best_metric is not None:
+            best_info = (
+                f"Best result so far: iteration {parent_best_iter}, "
+                f"metric={parent_best_metric:.4f}\n"
+            )
+        insights_block = ""
+        if parent_insights.strip():
+            insights_block = (
+                f"\n**Insights from parent session:**\n{parent_insights.strip()}\n"
+            )
+
+        prompt_cfg = self._manifest.prompt
+        experiment_cmd = (
+            prompt_cfg.experiment_command if prompt_cfg is not None else None
+        )
+        continue_block = ""
+        if experiment_cmd:
+            continue_block = (
+                "Continue iterating with the experiment command:\n"
+                f"```bash\n{experiment_cmd}\n```"
+            )
+
+        parts = [
+            (
+                f"**CONTINUATION SESSION** — Resuming research for skill "
+                f"'{self.skill_id}' on {config.subject_id} / {config.variant} "
+                f"(tag: {config.tag})."
+            ),
+            (
+                f"The previous session (id: {parent_id[:12] if parent_id else '?'}) "
+                f"recorded {len(parent_iterations or [])} iterations.\n"
+                f"{best_info}"
+                f"You have {config.max_iterations} iterations remaining."
+            ),
+            f"## Parent session iteration history\n{iter_summary}",
+            insights_block,
+            (
+                "## Instructions\n\n"
+                "The workspace is ALREADY SET UP from the previous session — "
+                "do NOT repeat setup or the baseline."
+            ),
+            continue_block,
+            PROMOTION_HANDOFF_INSTRUCTION,
+            (
+                "Build on the parent session's findings. Do NOT repeat "
+                "experiments that already failed. Run autonomously."
+            ),
+        ]
+        if config.focus_hint:
+            parts.append(f"Focus hint: {config.focus_hint}")
+        resume_block = self._orch._load_research_resume(config)
+        if resume_block:
+            parts.append(resume_block.strip())
+        return "\n\n".join(p for p in parts if p)
 
     # ── Command policy ────────────────────────────────────────────
     def command_policy_extension(self) -> CommandPolicyExtension:
@@ -948,35 +778,17 @@ class ManifestSkillRuntime:
     ) -> str:
         return self._orch._load_research_resume(config)
 
-    # ── Structured HPO (optional) ─────────────────────────────────
+    # ── Structured HPO (reserved) ─────────────────────────────────
     def structured_hpo_plan(
         self,
         config: "ResearchConfig",
     ) -> Optional[StructuredHPOPlan]:
-        # The runtime toggle is config.enable_hpo (mirrors the transitional
-        # runtime). The manifest's structured_hpo.enabled is the default
-        # capability flag — overridden by the session opt-in. The manifest's
-        # max_trials / plan_generator feed build_structured_hpo_plan in a
-        # follow-up; today the builder reads the config values directly.
-        if not getattr(config, "enable_hpo", False):
-            return None
-        from src.core.structured_hpo import build_structured_hpo_plan
-
-        model_type = getattr(config, "model_type", "") or ""
-        return build_structured_hpo_plan(  # type: ignore[return-value]
-            research_id=config.id,
-            instrument=config.instrument,
-            timeframe=config.timeframe,
-            model_type=model_type,
-            max_iterations=config.max_iterations,
-            max_budget_usd=config.max_budget_usd,
-            enable_hpo=config.enable_hpo,
-            hpo_trials=config.hpo_trials,
-            timeout_s=config.timeout_s,
-            quick_mode=config.quick_mode,
-            trading_mode=config.trading_mode,
-            hpo_timesteps=config.hpo_timesteps,
-        )
+        # The ``structured_hpo`` manifest section is parsed and reserved, but
+        # the former server-owned HPO trial-planner engine (built for the ML
+        # tuning skills) was removed with them. Skills that need planned
+        # trials should ship a ``plan_generator`` plugin; until one is
+        # registered this returns None (no planned-trial enforcement).
+        return None
 
     # ── Subjects / variants enumeration ───────────────────────────
     def list_subjects(self) -> list[SubjectDescriptor]:
@@ -996,74 +808,48 @@ def materialize_skill_runtime(
     orchestrator: Any,
     config: "ResearchConfig",
 ) -> SkillRuntime:
-    """Build the ``SkillRuntime`` for a session (P1-027 helper, P2-007 update).
+    """Build the ``SkillRuntime`` for a session.
 
-    Prefers a manifest-driven ``ManifestSkillRuntime`` when ``config.skill_id``
-    resolves in the registry (P2-007); otherwise falls back to the transitional
-    runtimes (P1-024..026) keyed by ``config.model_type``. The fallback keeps
-    the switchover per-skill and reversible: a skill not yet lifted into
-    ``skills/<id>/SKILL.yaml`` keeps working through its transitional runtime.
-
-    ARC-011 review C2 (2026-08-15): an **explicit** ``skill_id`` that the
-    registry rejects raises ``SkillConfigError`` instead of silently degrading
-    to the transitional runtime — a canonical session must not run different
-    (hardcoded) behavior than the skill it asked for. Legacy sessions
-    (``skill_id=""``) never hit this path.
+    Every session is manifest-driven: ``config.skill_id`` must resolve in the
+    skill registry. A missing/empty ``skill_id`` or one the registry rejects
+    raises ``SkillConfigError`` — there is no transitional fallback anymore.
+    (The legacy ML runtimes were removed together with the trading skills.)
     """
-    # ── P2-007: manifest-driven path ──────────────────────────────────────
     skill_id = config.skill_id
-    if skill_id:
-        try:
-            from src.core.skill_registry import default_registry
-
-            manifest = default_registry.get(skill_id)
-        except Exception as exc:  # noqa: BLE001 — re-raised below with context
-            raise SkillConfigError(
-                f"skill_id {skill_id!r} was rejected by the skill registry — "
-                "refusing to silently fall back to the transitional runtime "
-                f"(the manifest is missing, invalid, or was removed by a "
-                f"reload): {exc}"
-            ) from exc
-        if manifest is not None:
-            return ManifestSkillRuntime(manifest, orchestrator)
-
-    # ── Transitional path (P1-024..026) ───────────────────────────────────
-    model_type = config.model_type or _model_type_from_skill_id(config.skill_id)
-    cls = {
-        "direction": DirectionSkillRuntime,
-        "volatility": VolatilitySkillRuntime,
-        "rl": RLSkillRuntime,
-    }.get(model_type)
-    if cls is None:
-        raise ValueError(
-            f"Unknown model_type/skill_id for SkillRuntime materialization: "
-            f"model_type={config.model_type!r} skill_id={config.skill_id!r}"
+    if not skill_id:
+        raise SkillConfigError(
+            "session has no skill_id — every session must name an installed "
+            "skill (legacy model_type-only sessions are no longer supported)"
         )
-    return cls(orchestrator)  # type: ignore[return-value]
+    try:
+        from src.core.skill_registry import default_registry
 
-
-def _model_type_from_skill_id(skill_id: str) -> str:
-    """Reverse-map a skill_id to its model_type (e.g. direction-autotuner → direction)."""
-    for mt, (sid, _) in _SKILL_IDENTITY.items():
-        if sid == skill_id:
-            return mt
-    return ""
+        manifest = default_registry.get(skill_id)
+    except Exception as exc:  # noqa: BLE001 — re-raised below with context
+        raise SkillConfigError(
+            f"skill_id {skill_id!r} was rejected by the skill registry "
+            f"(the manifest is missing, invalid, or was removed by a "
+            f"reload): {exc}"
+        ) from exc
+    if manifest is None:
+        raise SkillConfigError(
+            f"skill_id {skill_id!r} is not registered; cannot materialize a "
+            "SkillRuntime"
+        )
+    return ManifestSkillRuntime(manifest, orchestrator)
 
 
 __all__ = [
     "AdvancementRule",
     "CommandPolicyExtension",
-    "DirectionSkillRuntime",
     "IterationRecord",
     "ManifestSkillRuntime",
     "Phase",
-    "RLSkillRuntime",
     "SessionRecord",
     "SkillConfigError",
     "SkillRuntime",
     "StructuredHPOPlan",
     "SubjectDescriptor",
     "VariantDescriptor",
-    "VolatilitySkillRuntime",
     "materialize_skill_runtime",
 ]

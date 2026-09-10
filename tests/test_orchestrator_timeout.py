@@ -41,6 +41,7 @@ except ModuleNotFoundError:
 
 from src.core.command_runner import CommandProcessRegistry, CommandRunResult, GovernedCommandRunner
 from src.core.llm_provider import ProviderResponse, StopReason, ToolUseBlock, Usage
+from src.core import orchestrator as orchestrator_module
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig, _tool_bash
 from src.core.results_store import ResultsStore
 
@@ -71,7 +72,8 @@ def _make_config(research_id: str, workspace: str, *, timeout_s: int = 2) -> Res
         id=research_id,
         instrument="DOGE_USDT",
         timeframe="15m",
-        model_type="direction",
+        model_type="prompt-engineering",
+        skill_id="prompt-engineering",
         tag="p0-006",
         max_iterations=3,
         max_budget_usd=100.0,
@@ -167,11 +169,10 @@ async def test_capped_command_is_reaped_and_session_times_out(
     orchestrator = AgentOrchestrator(store)
 
     with (
-        patch.object(orchestrator, "_load_skill_async", new=AsyncMock(return_value="# stub")),
+        patch.object(orchestrator_module, "_load_packaged_skill_md", return_value="# stub"),
         patch.object(orchestrator, "_load_claude_md_async", new=AsyncMock(return_value="")),
         patch.object(orchestrator, "_refresh_phase_state", new=AsyncMock(return_value=None)),
         patch.object(orchestrator, "_extract_session_insights", new=AsyncMock(return_value=None)),
-        patch.object(orchestrator, "_update_research_resume", new=AsyncMock(return_value=None)),
         patch.object(
             orchestrator,
             "_call_llm_with_retry",

@@ -35,6 +35,7 @@ except ModuleNotFoundError:
     )
     sys.modules["anthropic"] = _fake_anthropic
 
+from src.core import orchestrator as orchestrator_module
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig
 from src.core.results_store import ResultsStore
 
@@ -48,7 +49,8 @@ def _make_config(research_id: str, workspace: str) -> ResearchConfig:
         id=research_id,
         instrument="DOGE_USDT",
         timeframe="15m",
-        model_type="direction",
+        model_type="prompt-engineering",
+        skill_id="prompt-engineering",
         tag="ar2-test",
         max_iterations=1,
         max_budget_usd=100.0,
@@ -101,11 +103,7 @@ async def test_run_failure_writes_terminal_reason_error_unrecoverable(
 
     # Patch the two filesystem loaders that run before the try block.
     with (
-        patch.object(
-            orchestrator,
-            "_load_skill_async",
-            new=AsyncMock(return_value="# skill stub"),
-        ),
+        patch.object(orchestrator_module, "_load_packaged_skill_md", return_value="# skill stub"),
         patch.object(
             orchestrator,
             "_load_claude_md_async",
@@ -145,7 +143,7 @@ async def test_run_failure_preserves_exc_class_name_for_different_exception_type
     orchestrator = AgentOrchestrator(store)
 
     with (
-        patch.object(orchestrator, "_load_skill_async", new=AsyncMock(return_value="")),
+        patch.object(orchestrator_module, "_load_packaged_skill_md", return_value=""),
         patch.object(orchestrator, "_load_claude_md_async", new=AsyncMock(return_value="")),
         patch.object(
             orchestrator,
@@ -181,7 +179,7 @@ async def test_cancelled_error_does_not_write_terminal_reason(
     orchestrator = AgentOrchestrator(store)
 
     with (
-        patch.object(orchestrator, "_load_skill_async", new=AsyncMock(return_value="")),
+        patch.object(orchestrator_module, "_load_packaged_skill_md", return_value=""),
         patch.object(orchestrator, "_load_claude_md_async", new=AsyncMock(return_value="")),
         patch.object(
             orchestrator,
@@ -213,7 +211,7 @@ async def test_run_failure_error_message_truncated_at_2000_chars(
     long_msg = "x" * 5000
 
     with (
-        patch.object(orchestrator, "_load_skill_async", new=AsyncMock(return_value="")),
+        patch.object(orchestrator_module, "_load_packaged_skill_md", return_value=""),
         patch.object(orchestrator, "_load_claude_md_async", new=AsyncMock(return_value="")),
         patch.object(
             orchestrator,
