@@ -134,14 +134,16 @@ def _failed_or_pruned(iterations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             continue
         metrics = _parse_json(row.get("metrics_json")) or {}
         status = metrics.get("status")
-        if row.get("decision") == "discard" or status in {"failed", "error", "timeout", "pruned", "crash"}:
+        if row.get(
+            "decision") == "discard" or status in {"failed", "error", "timeout", "pruned", "crash"}:
             rows.append(_candidate_summary(row))
     return rows
 
 
 def _candidate_summary(row: Dict[str, Any]) -> Dict[str, Any]:
     metrics = _parse_json(row.get("metrics_json")) or {}
-    snapshot = _parse_json(row.get("attempt_snapshot_json")) or metrics.get("attempt_snapshot") or {}
+    snapshot = _parse_json(
+        row.get("attempt_snapshot_json")) or metrics.get("attempt_snapshot") or {}
     report = parse_consistency_report(row.get("consistency_report_json"))
     training_gates_passed = training_gates_passed_from(
         metrics,
@@ -539,7 +541,7 @@ _BLOCKER_LABELS = {
     "missing_multi_seed_rl_validation": "Multi-seed RL validation is missing.",
     "missing_nested_validation": "Nested or blocked-time RL validation is missing.",
     "missing_paper_promotion": "A paper promotion record is required first.",
-    "missing_paper_validation": "Paper trading validation evidence is missing.",
+    "missing_paper_validation": "Paper-scope validation evidence is missing.",
     "missing_production_approval": "Production approval is required.",
     "missing_rl_economic_replay": "RL economic replay evidence is missing.",
     "missing_rl_feature_bundle_hash": "The RL feature bundle hash is missing.",
@@ -1184,7 +1186,8 @@ def _operations_warnings(
         (item for item in scope_status if item.get("scope") == "development"),
         {},
     )
-    if development_scope.get("status") in {"ready", "promoted"} and production_scope.get("status") != "promoted":
+    if development_scope.get(
+        "status") in {"ready", "promoted"} and production_scope.get("status") != "promoted":
         add(
             "development_only_candidate",
             "warning",

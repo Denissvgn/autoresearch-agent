@@ -25,7 +25,6 @@ from __future__ import annotations
 from src.core.consistency_validator import check_adaptive_feature_sweep
 from src.core.result_artifact import merge_result_payload
 
-
 # --- Fix A: enricher must not nullify computed marker values --------------- #
 
 

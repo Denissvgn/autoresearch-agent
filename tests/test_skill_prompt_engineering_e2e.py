@@ -99,7 +99,8 @@ class TestEvalScorerNonceEcho:
             env={**os.environ, "AUTORESEARCH_SESSION_NONCE": nonce},
         )
         assert result.returncode == 0, result.stderr
-        marker_line = [l for l in result.stdout.splitlines() if l.startswith("ITERATION_RESULT:")]
+        marker_line = [ln for ln in result.stdout.splitlines(
+            ) if ln.startswith("ITERATION_RESULT:")]
         assert len(marker_line) == 1
         payload = json.loads(marker_line[0][len("ITERATION_RESULT:"):])
         assert payload["server_nonce"] == nonce

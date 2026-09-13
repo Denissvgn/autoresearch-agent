@@ -33,7 +33,6 @@ except ModuleNotFoundError:
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig
 from src.core.results_store import ResultsStore
 
-
 _BASELINE_YAML = (
     "instrument: DOGE_USDT\n"
     "timeframe: 15m\n"
@@ -357,8 +356,9 @@ async def test_baseline_capture_same_session_duplicate_still_rejected(
         focus_hint=None,
     )
 
-    from src.core.iteration_snapshot import build_trial_identity, trial_identity_hash
     import json
+
+    from src.core.iteration_snapshot import build_trial_identity, trial_identity_hash
 
     identity = build_trial_identity(
         instrument="DOGE_USDT",

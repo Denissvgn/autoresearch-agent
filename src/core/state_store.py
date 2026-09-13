@@ -2195,7 +2195,8 @@ class SQLiteStateStore:
                     attempt_snapshot_hash, consistency_report_json,
                     training_time_s, api_cost_usd, created_at, mlflow_run_id,
                     search_phase)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (
+                       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     research_id, iteration, primary_metric, metric_name,
                     int(all_gates_passed) if all_gates_passed is not None else None,

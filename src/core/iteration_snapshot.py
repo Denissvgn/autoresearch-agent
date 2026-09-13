@@ -15,7 +15,6 @@ import yaml
 
 from src.core.artifact_reference import normalize_optional_artifact_ref
 
-
 TRIAL_IDENTITY_SCHEMA_VERSION = "autoresearch_trial_identity.v1"
 
 

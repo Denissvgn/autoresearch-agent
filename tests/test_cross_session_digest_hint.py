@@ -93,10 +93,14 @@ async def test_cross_session_summary_groups_by_hash_and_excludes_current(
     await _make_session(store, "res_prior_b")
     await _make_session(store, "res_current")
 
-    await _add_iter(store, "res_prior_a", 1, primary_metric=0.62, canonical_config_hash="hash-alpha")
-    await _add_iter(store, "res_prior_a", 2, primary_metric=0.64, canonical_config_hash="hash-alpha")
+    await _add_iter(
+        store, "res_prior_a", 1, primary_metric=0.62, 
+            canonical_config_hash="hash-alpha")
+    await _add_iter(
+        store, "res_prior_a", 2, primary_metric=0.64, canonical_config_hash="hash-alpha")
     await _add_iter(store, "res_prior_b", 1, primary_metric=0.60, canonical_config_hash="hash-beta")
-    await _add_iter(store, "res_current", 1, primary_metric=0.55, canonical_config_hash="hash-gamma")
+    await _add_iter(
+        store, "res_current", 1, primary_metric=0.55, canonical_config_hash="hash-gamma")
 
     rows = await store.get_cross_session_iteration_summary(
         instrument="DOGE_USDT",

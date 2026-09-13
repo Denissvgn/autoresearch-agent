@@ -8,8 +8,8 @@ import json
 import logging
 import math
 import os
-import tempfile
 import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -17,13 +17,13 @@ from typing import Any, Dict, Optional
 import httpx
 import yaml
 
+from src.config import secret_value, settings
 from src.core.artifact_reference import (
     first_valid_artifact_ref,
     normalize_artifact_references_in_mapping,
     normalize_optional_artifact_ref,
 )
 from src.core.blocker_classifier import classify_blockers
-from src.config import secret_value, settings
 from src.core.consistency_validator import build_consistency_report
 from src.core.development_gate_bundle import (
     evaluate_development_gate_bundle,
@@ -37,8 +37,8 @@ from src.core.development_signal_health import build_development_signal_health
 from src.core.gate_status import training_gates_passed_from_iteration
 from src.core.legacy_alias import model_type_to_skill_id
 from src.core.promotion_target import (
-        FilePathPromotionTarget,
-        PromotionTarget,
+    FilePathPromotionTarget,
+    PromotionTarget,
 )
 from src.core.research_phase_plan import build_phase_state
 from src.core.state_store import StateStore
@@ -97,7 +97,10 @@ PROMOTION_SCOPES = (
     CANARY_PROMOTION_SCOPE,
     PRODUCTION_PROMOTION_SCOPE,
 )
-MLFLOW_COMPOSITES_API_PREFIX = "/api/v1/composites"
+# Historical: the platform composite PATCH was removed with the
+# platform cleanup. The name stays for import compat; the value now only
+# labels locally computed composite score bookkeeping in metrics payloads.
+MLFLOW_COMPOSITES_API_PREFIX = "/api/v1/composites"  # domain-coupling: historical-name
 QUALITY_BASELINE_MODE = "development_quality_baseline"
 QUALITY_BASELINE_BLOCKER = "best_metric_below_development_baseline"
 
@@ -1675,7 +1678,8 @@ class ConfigPromoter:
         metrics_payload: Dict[str, Any],
         development_metadata: Dict[str, Any],
     ) -> Dict[str, Any]:
-        rl_oos = metrics_payload.get("rl_oos") if isinstance(metrics_payload.get("rl_oos"), dict) else {}
+        rl_oos = metrics_payload.get(
+            "rl_oos") if isinstance(metrics_payload.get("rl_oos"), dict) else {}
         blockers = set((development_metadata.get("gate_bundle") or {}).get("blockers") or [])
         rl_blockers = {
             "missing_oof_provenance",

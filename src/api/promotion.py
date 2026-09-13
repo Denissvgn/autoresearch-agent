@@ -268,7 +268,7 @@ async def promote_preview(
             metadata={"scope": payload.scope},
             error_message=str(e),
         )
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except FileNotFoundError as e:
         await _audit(
             request,
@@ -278,7 +278,7 @@ async def promote_preview(
             metadata={"scope": payload.scope},
             error_message=str(e),
         )
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.post("/research/{research_id}/promote/confirm")
@@ -319,7 +319,7 @@ async def promote_confirm(
             metadata=audit_metadata,
             error_message=str(e),
         )
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except FileNotFoundError as e:
         await _audit(
             request,
@@ -329,7 +329,7 @@ async def promote_confirm(
             metadata=audit_metadata,
             error_message=str(e),
         )
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except RuntimeError as e:
         await _audit(
             request,
@@ -339,7 +339,7 @@ async def promote_confirm(
             metadata=audit_metadata,
             error_message=str(e),
         )
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/promotions")
@@ -354,9 +354,10 @@ async def rollback_development_promotion(
     model_type: str,
     instrument: str,
     timeframe: str,
-    request: PromotionRollbackRequest = PromotionRollbackRequest(),
+    request: PromotionRollbackRequest = PromotionRollbackRequest(),  # noqa: B008 - pydantic body default; regenerating openapi.yaml would churn the contract
 ):
     """Restore the latest development config for an instrument/timeframe."""
+    request = request or PromotionRollbackRequest()
     metadata = {
         "model_type": model_type,
         "instrument": instrument,
@@ -385,4 +386,4 @@ async def rollback_development_promotion(
             metadata=metadata,
             error_message=str(e),
         )
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e

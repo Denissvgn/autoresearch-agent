@@ -51,7 +51,6 @@ from src.core.orchestrator import AgentOrchestrator, ResearchConfig
 from src.core.research_phase_plan import build_phase_state
 from src.core.results_store import ResultsStore
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

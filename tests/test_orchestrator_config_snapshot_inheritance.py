@@ -42,7 +42,6 @@ except ModuleNotFoundError:
 from src.core.orchestrator import AgentOrchestrator
 from src.core.results_store import ResultsStore
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
@@ -347,7 +346,8 @@ async def test_inheritance_not_applied_when_no_previous_snapshot_exists(
 async def test_consistency_report_passes_after_inheritance(
     tmp_path: Path,
 ) -> None:
-    """AR-3 acceptance: after inheritance the consistency report has no missing_config_snapshot blocker.
+    """AR-3 acceptance: after inheritance the consistency report has no
+    missing_config_snapshot blocker.
 
     Seeds a 'keep' iteration with a real config_snapshot, then calls
     _record_iteration for a promotion_proposal iteration without one.  The
@@ -393,7 +393,7 @@ async def test_all_promotion_family_phases_trigger_inheritance(
     phases = ("promotion_proposal",)
     snap = "agent_strategy: AGGR\nhorizon: 30\n"
 
-    for i, phase in enumerate(phases):
+    for phase in phases:
         db_path = str(tmp_path / f"db_{phase}.sqlite")
         store = ResultsStore(db_path)
         await store.initialize()

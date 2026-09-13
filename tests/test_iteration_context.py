@@ -57,7 +57,8 @@ def test_iteration_context_digest_summarizes_best_recent_blockers_and_duplicates
         session=session,
         iterations=iterations,
         planned_trials=[{"status": "completed"}, {"status": "planned"}],
-        hpo_studies=[{"study_id": "hpo_res_context", "status": "planned", "completed_trials": 1, "max_trials": 3}],
+        hpo_studies=[{"study_id": "hpo_res_context", 
+            "status": "planned", "completed_trials": 1, "max_trials": 3}],
     )
 
     assert ITERATION_CONTEXT_DIGEST_MARKER in digest

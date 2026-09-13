@@ -260,7 +260,7 @@ def _psi(current: list[float], training: list[float]) -> float:
     return sum(
         (current_value - training_value)
         * math.log(current_value / training_value)
-        for current_value, training_value in zip(current_dist, training_dist)
+        for current_value, training_value in zip(current_dist, training_dist, strict=False)
     )
 
 
@@ -269,7 +269,7 @@ def _kl(current: list[float], training: list[float]) -> float:
     training_dist = _normalize_histogram(training)
     return sum(
         current_value * math.log(current_value / training_value)
-        for current_value, training_value in zip(current_dist, training_dist)
+        for current_value, training_value in zip(current_dist, training_dist, strict=False)
     )
 
 

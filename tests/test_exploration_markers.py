@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from src.core.iteration_context import derive_exploration_markers
 
-
 # --- Direction: any direction-salient knob diff → tabular_sweep_variant -- #
 
 

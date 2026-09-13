@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, Mapping, Optional
 
-
 _BLOCKER_LABELS = {
     "best_metric_below_development_baseline": (
         "Candidate best metric is below the latest eligible development baseline."
@@ -34,7 +33,7 @@ _BLOCKER_LABELS = {
     "missing_multi_seed_rl_validation": "Multi-seed RL validation is missing.",
     "missing_nested_validation": "Nested or blocked-time RL validation is missing.",
     "missing_paper_promotion": "A paper promotion record is required first.",
-    "missing_paper_validation": "Paper trading validation evidence is missing.",
+    "missing_paper_validation": "Paper-scope validation evidence is missing.",
     "missing_per_regime_calibration_status": "Per-regime calibration status is missing.",
     "missing_production_approval": "Production approval is required.",
     "missing_reliability_diagram": "Calibration reliability diagram is missing.",

@@ -2584,7 +2584,9 @@ class AgentOrchestrator:
                                 _log_file.write_text(tool_result, encoding="utf-8")
                                 _full_log_rel = str(
                                     _log_file.relative_to(settings.workspace_root)
-                                ) if str(_log_file).startswith(str(settings.workspace_root)) else str(_log_file)
+                                ) if str(_log_file).startswith(
+                                    str(settings.workspace_root)
+                                ) else str(_log_file)
                             except Exception as _log_exc:  # noqa: BLE001
                                 logger.debug("Full-log persist failed: %s", _log_exc)
                             agent_visible_result = digest_command_output(
@@ -3495,7 +3497,8 @@ class AgentOrchestrator:
 
             if not training_gates_passed_from_iteration(best_record):
                 logger.info(
-                    "ML-53: Auto-promote skipped for %s - best iteration %d did not pass training gates",
+                    "ML-53: Auto-promote skipped for %s - best iteration %d "
+                    "did not pass training gates",
                     research_id, best_iter,
                 )
                 return

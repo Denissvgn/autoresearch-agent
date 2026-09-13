@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import MutableMapping
 from typing import Any
 
-
 SENTINEL_ARTIFACT_STRINGS = frozenset({"", "none", "null", "n/a", "na"})
 
 ARTIFACT_REFERENCE_KEYS = frozenset(

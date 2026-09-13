@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.core.results_store import ResultsStore, _LATEST_SCHEMA_VERSION
+from src.core.results_store import _LATEST_SCHEMA_VERSION, ResultsStore
 
 
 def test_latest_schema_version_includes_v4_migration() -> None:

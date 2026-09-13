@@ -27,7 +27,6 @@ from src.core import orchestrator as orchestrator_module
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig
 from src.core.results_store import ResultsStore
 
-
 _FRESH_MARKER = "\n".join(
     [
         "---",

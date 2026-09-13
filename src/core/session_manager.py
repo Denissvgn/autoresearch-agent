@@ -451,9 +451,9 @@ class SessionManager:
 
         Called before each new session so that DB session boundaries align
         with filesystem artifact boundaries.  The archive directory sits
-        alongside the model directory:
+        alongside the session workspace directory:
 
-            runs/autotuner/{instrument}_{timeframe}/archive/{model}.{ts}/
+            runs/<subject>_<variant>/archive/<skill>.<ts>/
 
         Handles PermissionError gracefully (e.g. files created by docker exec
         as root while the server runs as appuser) by falling back to

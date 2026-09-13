@@ -333,7 +333,10 @@ class Settings(BaseSettings):
     # --- Optional MLflow tracking (generic; empty = disabled) ---
     mlflow_tracking_uri: str = Field(
         default="",
-        description="MLflow tracking server URI (e.g. http://mlflow:5000). Empty disables MLflow integration.",
+        description=(
+            "MLflow tracking server URI (e.g. http://mlflow:5000). "
+            "Empty disables MLflow integration."
+        ),
     )
     mlflow_external_url: str = Field(
         default="",

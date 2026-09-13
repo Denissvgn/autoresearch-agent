@@ -21,7 +21,6 @@ from src.core.legacy_alias import (
 )
 from src.core.orchestrator import ResearchConfig
 
-
 # ===========================================================================
 # P2-019 — legacy alias registry
 # ===========================================================================

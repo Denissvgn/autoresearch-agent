@@ -413,7 +413,9 @@ def evaluate_development_gate_bundle(
             source="development_gate_bundle",
         ),
         "waivers": sorted(waivers),
-        # MQ-C1: which per-instrument thresholds were in force (None = global).
+        # MQ-C1 (historical): which per-subject thresholds were in force
+        # (None = global). Key name retained for pre-migration DB-row compat;
+        # identifiers are opaque strings under the subject/variant alias scheme.
         "instrument_gate_overrides": bundle.get("instrument_gate_overrides"),
     }
 
@@ -533,7 +535,9 @@ def _evaluate_rl_development_gate_bundle(
             source="development_gate_bundle",
         ),
         "waivers": sorted(waivers),
-        # MQ-C1: which per-instrument thresholds were in force (None = global).
+        # MQ-C1 (historical): which per-subject thresholds were in force
+        # (None = global). Key name retained for pre-migration DB-row compat;
+        # identifiers are opaque strings under the subject/variant alias scheme.
         "instrument_gate_overrides": bundle.get("instrument_gate_overrides"),
     }
 
@@ -780,7 +784,8 @@ def _evaluate_rl_economic_replay_gates(
     if tier_checks.get("profit_score_required", True):
         add_check(
             "rl_profit_score_required",
-            _first_number(replay.get("rl_profit_score"), payload.get("rl_profit_score")) is not None,
+            _first_number(
+                replay.get("rl_profit_score"), payload.get("rl_profit_score")) is not None,
             "missing_rl_profit_score",
             {"rl_profit_score": replay.get("rl_profit_score") or payload.get("rl_profit_score")},
         )

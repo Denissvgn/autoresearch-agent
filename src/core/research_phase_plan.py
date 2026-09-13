@@ -15,7 +15,6 @@ from src.core.consistency_validator import (  # AR-5/AR-6
     check_evidence_artifact,
 )
 
-
 # Direction-research phase plan.
 #
 # Each entry carries `min_iterations` (a soft floor enforced when phase advance
@@ -483,12 +482,13 @@ FAILED_ITERATION_STATUSES: frozenset[str] = frozenset(
 # / the orchestrator results.json synthesis). Their presence proves an iteration
 # produced genuine RL OOS metrics — used to gate the RL ``validation`` phase so
 # it cannot complete on non-RL or contentless iterations.
+# NOTE: historical metric names retained for pre-migration DB-row rendering;
+# new skills declare their own evidence keys via the manifest.
 RL_OOS_EVIDENCE_KEYS: tuple[str, ...] = (
     "mean_oos_sharpe",
     "rl_profit_score",
     "folds_passed",
     "oos_sharpe",
-    "trading_score",
     "mean_oos_return",
 )
 

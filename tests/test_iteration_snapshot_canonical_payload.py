@@ -19,7 +19,6 @@ from src.core.iteration_snapshot import (
     canonical_config_payload,
 )
 
-
 # ---------------------------------------------------------------------------
 # canonical_config_payload
 # ---------------------------------------------------------------------------

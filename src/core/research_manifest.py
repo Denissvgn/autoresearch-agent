@@ -282,18 +282,23 @@ def manifest_pretty_json(manifest: ResearchSessionManifest) -> str:
 
 
 def _default_objective(model_type: str) -> str:
+    # Domain-neutral fallback: legacy ML skill ids keep their historical copy
+    # for pre-migration session rendering; any other skill id gets a generic
+    # objective naming the skill directly.
     return {
         "direction": "improve calibrated direction_proba for development promotion",
         "volatility": "improve calibrated volatility_proba for development promotion",
-        "rl": "improve PPO OOS trading robustness using honest predictive inputs",
-    }.get(model_type, f"improve {model_type} model")
+        "rl": "improve out-of-sample robustness using honest predictive inputs",
+    }.get(model_type, f"improve {model_type} skill for development promotion")
 
 
 def _default_model_family(model_type: str) -> str:
+    # Historical family labels retained for pre-migration session rendering;
+    # unknown skill ids fall back to the skill id itself.
     return {
         "direction": "stacked_tabular_direction",
         "volatility": "stacked_tabular_volatility",
-        "rl": "ppo_trading_agent",
+        "rl": "policy_optimization_agent",
     }.get(model_type, model_type)
 
 

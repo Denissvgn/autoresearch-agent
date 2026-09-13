@@ -522,7 +522,8 @@ def check_evidence_artifact(
     """
     if metrics.get("force_evidence_acceptance") is True:
         logger.warning(
-            "check_evidence_artifact: force_evidence_acceptance=True for phase %s — skipping artifact validation",
+            "check_evidence_artifact: force_evidence_acceptance=True "
+            "for phase %s — skipping artifact validation",
             phase_id,
         )
         return None

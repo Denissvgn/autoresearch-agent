@@ -48,6 +48,17 @@ target-version = "py312"
 select = ["E", "F", "B", "I"]
 ignore = ["E402", "F401", "F541", "F841"]
 
+[tool.ruff.lint.per-file-ignores]
+# Legacy phase-plan tables kept only to render pre-migration DB rows; the
+# long lines are historical data strings.
+"src/core/research_phase_plan.py" = ["E501"]
+# Defense-in-depth denylist lines name the legacy platform secret explicitly
+# so it can never leak into a child/plugin env; exempt from line length.
+"src/core/command_runner.py" = ["E501"]
+"src/core/plugin_runner.py" = ["E501"]
+# Historical fixture strings pinning legacy feature-lane names.
+"tests/test_result_artifact_ingestion.py" = ["E501"]
+
 [tool.black]
 line-length = 100
 target-version = ["py312"]

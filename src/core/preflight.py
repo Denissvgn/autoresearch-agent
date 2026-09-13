@@ -8,7 +8,7 @@ branch):
 
 * ``HTTPHealthCheck`` (P1-020) — wraps ``service_preflight._check_target``.
 * ``TCPConnectCheck`` (P1-020) — wraps ``service_preflight._check_tcp_target``
-  (used for the ``nats`` TCP-connect probe).
+  (generic TCP-connect probe for skill-declared ``tcp`` preflight targets).
 
 ``service_preflight.build_service_preflight_targets`` (P1-021) now returns
 ``list[PreflightCheck]`` and ``run_service_preflight`` dispatches via
@@ -100,8 +100,8 @@ class HTTPHealthCheck:
 class TCPConnectCheck:
     """TCP-connect probe (ARC-011 P1-020).
 
-    Wraps ``service_preflight._check_tcp_target`` unchanged. Used for the
-    ``nats`` dependency. Opens its own socket via ``asyncio.open_connection`` —
+    Wraps ``service_preflight._check_tcp_target`` unchanged. Used for generic
+    skill-declared ``tcp`` targets. Opens its own socket via ``asyncio.open_connection`` —
     the ``client`` arg is ignored.
     """
 

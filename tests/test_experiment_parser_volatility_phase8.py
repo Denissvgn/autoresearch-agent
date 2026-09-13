@@ -1,4 +1,5 @@
-"""Tests for experiment_parser handling of phases 6-8 evidence keys emitted by volatility prepare.py.
+"""Tests for experiment_parser handling of phases 6-8 evidence keys
+emitted by the volatility experiment scripts.
 
 Phases 6 (multi_seed_robustness), 7 (inference_parity_replay), and 8 (promotion_proposal)
 use identical evidence key emission patterns in both direction and volatility prepare.py.

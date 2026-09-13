@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.core.experiment_parser import parse_prepare_output
 from src.core.consistency_validator import build_consistency_report
+from src.core.experiment_parser import parse_prepare_output
 
 
 def _block(extra: str = "") -> str:
@@ -140,5 +140,6 @@ class TestAutoPhaseEvidenceConsistencyGuard:
             metrics_payload=metrics,
         )
         assert report.get("passed") is True, (
-            f"Tabular sweep with auto_phase_evidence should pass; blockers: {report.get('blockers')}"
+            f"Tabular sweep with auto_phase_evidence should pass; blockers: {report.get(
+                'blockers')}"
         )

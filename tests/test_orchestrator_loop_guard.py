@@ -45,13 +45,13 @@ except ModuleNotFoundError:
     )
     sys.modules["anthropic"] = _stub
 
+from src.core import orchestrator as orchestrator_module
 from src.core.llm_provider import (
     ProviderResponse,
     StopReason,
     TextBlock,
     Usage,
 )
-from src.core import orchestrator as orchestrator_module
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig
 from src.core.results_store import ResultsStore
 

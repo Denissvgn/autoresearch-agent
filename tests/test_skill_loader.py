@@ -169,7 +169,8 @@ def test_schema_phase_advancement_plugin_requires_plugin_path():
 # --- P5-014 / P5-028 / P5-029 manifest field additions --------------------
 
 
-@pytest.mark.parametrize("cat", ["optimization", "generative", "exploratory", "validation", "design"])
+@pytest.mark.parametrize(
+    "cat", ["optimization", "generative", "exploratory", "validation", "design"])
 def test_schema_accepts_all_five_categories(cat: str):
     """P5-014: the Category literal covers all five ARC-011 §13 values."""
     data = _minimal_manifest_dict()

@@ -39,9 +39,9 @@ except ModuleNotFoundError:
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
     )
 
+from src.core import orchestrator as orchestrator_module
 from src.core.command_runner import CommandProcessRegistry, CommandRunResult, GovernedCommandRunner
 from src.core.llm_provider import ProviderResponse, StopReason, ToolUseBlock, Usage
-from src.core import orchestrator as orchestrator_module
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig, _tool_bash
 from src.core.results_store import ResultsStore
 

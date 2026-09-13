@@ -62,8 +62,12 @@ def main() -> int:
             text = path.read_text(encoding="utf-8", errors="replace")
             for lineno, line in enumerate(text.splitlines(), 1):
                 # Lines that STRIP legacy platform secret names are allowed
-                # (defense-in-depth denylists).
-                if "domain-coupling: denylist" in line:
+                # (defense-in-depth denylists), as are lines that explicitly
+                # document a retained historical name.
+                if (
+                    "domain-coupling: denylist" in line
+                    or "domain-coupling: historical-name" in line
+                ):
                     continue
                 if PATTERN.search(line):
                     violations.append(f"{rel}:{lineno}: {line.strip()[:100]}")

@@ -38,7 +38,6 @@ from src.core.consistency_validator import (
 )
 from src.core.research_phase_plan import build_phase_state
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
@@ -649,7 +648,6 @@ def test_inference_parity_not_completed_when_run_id_from_prior_phase() -> None:
 
 from src.core.consistency_validator import _is_synthetic_promotion_iteration  # noqa: E402
 from src.core.research_phase_plan import _prior_best_metrics  # noqa: E402
-
 
 # Shared prior-best fixture for AR-6 unit tests.
 _PRIOR_BEST = {

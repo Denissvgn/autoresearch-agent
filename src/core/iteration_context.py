@@ -125,10 +125,12 @@ _KNOB_TO_MARKER: dict[str, dict[str, str]] = {
         # Feature-lane toggles (nested under feature_config) — flipping a lane is a
         # deliberate feature-set change, so credit it as a tabular_sweep_variant so
         # the phase advances and the iter is not treated as a no-op/duplicate.
+        # NOTE: feature_config.vdmc_enabled is a historical lane key retained for
+        # pre-migration config_snapshot rendering; new skills declare lanes via manifest.
         "feature_config.funding_features_enabled": "tabular_sweep_variant",
         "feature_config.open_interest_features_enabled": "tabular_sweep_variant",
         "feature_config.directional_change_features_enabled": "tabular_sweep_variant",
-        "feature_config.vdmc_enabled": "tabular_sweep_variant",
+        "feature_config.vdmc_enabled": "tabular_sweep_variant",  # historical lane key
         "feature_config.spectral_features_enabled": "tabular_sweep_variant",
     },
     "volatility": {
@@ -472,7 +474,10 @@ def _next_guidance(iterations: List[Mapping[str, Any]]) -> str:
     if blockers:
         return "address the latest blockers before treating the candidate as promotable."
     if training_gates_passed_from_iteration(latest):
-        return "compare against best metric and collect promotion evidence instead of repeating the same trial."
+        return (
+            "compare against best metric and collect promotion evidence "
+            "instead of repeating the same trial."
+        )
     return "adjust one bounded tuning dimension and explain the expected metric impact."
 
 

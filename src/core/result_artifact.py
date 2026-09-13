@@ -16,7 +16,6 @@ from src.core.artifact_reference import (
     normalize_optional_artifact_ref,
 )
 
-
 RESULT_ARTIFACT_SCHEMA_VERSION = "autoresearch_result_artifact.v1"
 
 _NESTED_RESULT_KEYS = (

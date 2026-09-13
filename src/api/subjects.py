@@ -11,9 +11,9 @@ Endpoints (all under ``/api/v1``):
 * ``GET /subjects?skill_id=…``                — subjects for a skill
 * ``GET /subjects/{subject_id}/variants?skill_id=…``  — variants for a subject
 
-The legacy ``GET /instruments`` endpoint stays in ``research.py`` (§10
-guarantee #5) and is unaffected; this module adds the canonical
-skill-parameterized surface.
+The legacy ``GET /instruments`` alias was removed with the trading-skills
+cleanup; the canonical skill-parameterized ``GET /subjects`` surface below
+is the only enumeration API.
 """
 
 from __future__ import annotations

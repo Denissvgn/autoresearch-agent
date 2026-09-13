@@ -604,8 +604,11 @@ async def get_best_iteration(research_id: str):
 @router.get("/research/{research_id}/agent-log")
 async def get_agent_log(
     research_id: str,
-    after: Optional[int] = Query(default=None, description="Return only entries after this line number (0-based)"),
-    format: Optional[str] = Query(default=None, description="Set to 'json' for raw structured entries"),
+    after: Optional[int] = Query(
+        default=None,
+        description="Return only entries after this line number (0-based)"),
+    format: Optional[str] = Query(
+        default=None, description="Set to 'json' for raw structured entries"),
 ):
     """Agent conversation log — full Claude transcript captured during execution."""
     after_line = after if isinstance(after, int) and after > 0 else 0

@@ -20,7 +20,6 @@ import pytest
 
 from src.core.research_phase_plan import build_phase_state
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -187,7 +186,8 @@ async def test_replay_iterations_iter101_has_no_config_snapshot(
 async def test_replay_iterations_iter90_has_real_training_data(
     replay_iterations,
 ) -> None:
-    """Iter 90: the real training iteration — config_snapshot + mlflow_run_id + training_time_s present."""
+    """Iter 90: the real training iteration — config_snapshot + mlflow_run_id
+    + training_time_s present."""
     ctx = await replay_iterations()
     iter_90 = _iter_by_number(ctx.iterations, 90)
     assert iter_90["config_snapshot"] is not None, (

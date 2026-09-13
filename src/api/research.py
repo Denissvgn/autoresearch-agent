@@ -522,7 +522,7 @@ async def start_research(request: Request, req: StartResearchRequest):
             metadata=metadata,
             error_message=str(e),
         )
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail=str(e)) from e
 
 
 @router.get("/research")
@@ -785,7 +785,7 @@ async def continue_research(
             metadata=metadata,
             error_message=str(e),
         )
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail=str(e)) from e
 
 
 @router.post("/research/{research_id}/runtime-resume", status_code=201)
@@ -830,7 +830,7 @@ async def runtime_resume_research(
             metadata=metadata,
             error_message=str(e),
         )
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail=str(e)) from e
 
 
 @router.delete("/research/{research_id}")
