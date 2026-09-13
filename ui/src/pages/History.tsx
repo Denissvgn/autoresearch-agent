@@ -96,12 +96,12 @@ export default function History() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="search instrument, tag, id…"
+            placeholder="search subject, tag, id…"
             style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--fg)', fontSize: 12, fontFamily: "'IBM Plex Mono', monospace" }}
           />
         </div>
         <select className="select mono" value={instrument} onChange={(e) => setInstrument(e.target.value)}>
-          <option value="">all instruments</option>
+          <option value="">all subjects</option>
           {instruments.map((i) => (
             <option key={i} value={i}>{i}</option>
           ))}
@@ -133,7 +133,7 @@ export default function History() {
                 <tr>
                   <th>When</th>
                   <th>Session</th>
-                  <th>Instrument</th>
+                  <th>Subject</th>
                   <th>Model</th>
                   <th className="num">Iters</th>
                   <th className="num">Best</th>

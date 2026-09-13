@@ -607,45 +607,19 @@ type MetricDiagnostic = MetricDef & {
 };
 type DetailEntry = { key?: string; label: string; value: ReactNode };
 
-const MODEL_METRICS: Record<string, MetricDef[]> = {
-  direction: [
-    { key: 'walkforward_auc', label: 'WF AUC' },
-    { key: 'auc', label: 'AUC' },
-    { key: 'precision', label: 'Precision' },
-    { key: 'recall', label: 'Recall' },
-    { key: 'f1', label: 'F1' },
-    { key: 'signal_rate', label: 'Signal Rate' },
-    { key: 'optimal_threshold', label: 'Threshold' },
-    { key: 'prediction_horizon', label: 'Horizon' },
-    { key: 'ece_calibrated', label: 'ECE', better: 'low' },
-    { key: 'brier_score_calibrated', label: 'Brier', better: 'low' },
-  ],
-  volatility: [
-    { key: 'walkforward_auc', label: 'WF AUC' },
-    { key: 'auc', label: 'AUC' },
-    { key: 'precision', label: 'Precision' },
-    { key: 'recall', label: 'Recall' },
-    { key: 'f1', label: 'F1' },
-    { key: 'positive_rate', label: 'Positive Rate' },
-    { key: 'atr_mult', label: 'ATR Mult' },
-    { key: 'signal_rate', label: 'Signal Rate' },
-    { key: 'optimal_threshold', label: 'Threshold' },
-    { key: 'ece_calibrated', label: 'ECE', better: 'low' },
-    { key: 'brier_score_calibrated', label: 'Brier', better: 'low' },
-  ],
-  rl: [
-    { key: 'rl_profit_score', label: 'RL Profit' },
-    { key: 'mean_oos_sharpe', label: 'OOS Sharpe' },
-    { key: 'mean_oos_return', label: 'OOS Return' },
-    { key: 'mean_oos_drawdown', label: 'OOS Drawdown', better: 'low' },
-    { key: 'mean_oos_trades', label: 'OOS Trades' },
-    { key: 'trading_score', label: 'Trading Score' },
-    { key: 'post_cost_return', label: 'Post-Cost Return' },
-    { key: 'max_drawdown', label: 'Replay Drawdown', better: 'low' },
-    { key: 'trade_count', label: 'Replay Trades' },
-    { key: 'turnover', label: 'Turnover' },
-  ],
-};
+// Metric columns come from the skill's metric_schema when available; the
+// fallback auto-derives columns from the metrics the iterations carry.
+function fallbackMetrics(iterations: Iteration[]): MetricDef[] {
+  const seen = new Set<string>();
+  for (const it of iterations) {
+    for (const key of Object.keys(it.secondary_metrics ?? {})) {
+      if (typeof it.secondary_metrics?.[key]?.value === 'number') seen.add(key);
+      if (seen.size >= 8) break;
+    }
+    if (seen.size >= 8) break;
+  }
+  return Array.from(seen).map((key) => ({ key, label: key, better: undefined }));
+}
 
 function metricValue(iteration: Iteration, key: string): unknown {
   const secondary = iteration.secondary_metrics?.[key]?.value;
@@ -712,17 +686,17 @@ function recordDetailEntries(
     .map(([key, value]) => ({ key, label: metricLabel(key), value: renderDetailValue(value) }));
 }
 
-function diagnosticsFor(iterations: Iteration[], modelType: string): MetricDiagnostic[] {
-  const defs = MODEL_METRICS[modelType] || [];
+function diagnosticsFor(iterations: Iteration[]): MetricDiagnostic[] {
+  const defs = fallbackMetrics(iterations);
   const discovered = new Set<string>();
   for (const it of iterations) {
     Object.keys(it.secondary_metrics || {}).forEach((key) => discovered.add(key));
   }
-  const allDefs = [
+  const allDefs: MetricDef[] = [
     ...defs,
     ...Array.from(discovered)
       .filter((key) => !defs.some((def) => def.key === key))
-      .map((key) => ({ key, label: metricLabel(key) })),
+      .map((key): MetricDef => ({ key, label: metricLabel(key) })),
   ];
 
   return allDefs.map((def) => {
@@ -926,7 +900,7 @@ function MetricsTab({ iterations, modelType, chartSeries }: { iterations: Iterat
     if (!vals.length) return '—';
     return `${(vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1)}s`;
   })();
-  const diagnostics = useMemo(() => diagnosticsFor(orderedIterations, modelType), [orderedIterations, modelType]);
+  const diagnostics = useMemo(() => diagnosticsFor(orderedIterations), [orderedIterations]);
 
   const selectIteration = (iteration: number) => {
     setSelectedIteration(iteration);

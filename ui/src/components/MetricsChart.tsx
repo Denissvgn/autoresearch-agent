@@ -12,40 +12,28 @@ interface Props {
 }
 
 // Key secondary metrics worth charting per model type.
-// These are the most important signals for visual trend analysis.
-// Used as fallback when no manifest chart_series is provided (P3-024).
-const CHART_METRICS: Record<string, { key: string; label: string; color: string }[]> = {
-  direction: [
-    { key: 'walkforward_auc', label: 'WF AUC', color: '#34D399' },
-    { key: 'f1', label: 'F1', color: '#FBBF24' },
-    { key: 'signal_rate', label: 'Signal Rate', color: '#F472B6' },
-  ],
-  volatility: [
-    { key: 'walkforward_auc', label: 'WF AUC', color: '#34D399' },
-    { key: 'f1', label: 'F1', color: '#FBBF24' },
-    { key: 'positive_rate', label: 'Positive Rate', color: '#F472B6' },
-  ],
-  rl: [
-    { key: 'mean_oos_sharpe', label: 'OOS Sharpe', color: '#34D399' },
-    { key: 'mean_oos_return', label: 'OOS Return', color: '#FBBF24' },
-    { key: 'mean_oos_drawdown', label: 'OOS Drawdown', color: '#F87171' },
-  ],
-};
-
+// Manifest chart_series (metric_schema.chart_series) are the primary source;
+// when absent, the first numeric secondary metrics observed in the iterations
+// are used as a generic fallback (P3-024).
 const DEFAULT_COLORS = ['#34D399', '#FBBF24', '#F472B6', '#60A5FA', '#F87171', '#A78BFA'];
 
-function detectModelType(iterations: Iteration[]): string {
+function fallbackSeries(iterations: Iteration[]): { key: string; label: string; color: string }[] {
+  const seen = new Set<string>();
   for (const it of iterations) {
     const sm = it.secondary_metrics;
     if (!sm) continue;
-    if ('walkforward_auc' in sm) {
-      // Direction vs volatility: check for atr_mult
-      if ('atr_mult' in sm) return 'volatility';
-      return 'direction';
+    for (const key of Object.keys(sm)) {
+      const value = sm[key]?.value;
+      if (typeof value === 'number') seen.add(key);
+      if (seen.size >= 3) break;
     }
-    if ('mean_oos_sharpe' in sm) return 'rl';
+    if (seen.size >= 3) break;
   }
-  return '';
+  return Array.from(seen).map((key, i) => ({
+    key,
+    label: key,
+    color: DEFAULT_COLORS[i % DEFAULT_COLORS.length],
+  }));
 }
 
 function trainingGatesPassed(iteration: Iteration): boolean {
@@ -53,7 +41,6 @@ function trainingGatesPassed(iteration: Iteration): boolean {
 }
 
 export default function MetricsChart({ iterations, selectedIteration = null, onSelectIteration, chartSeries }: Props) {
-  const modelType = detectModelType(iterations);
 
   // P3-024: manifest-driven chart series take priority over the hardcoded
   // per-model-type fallback. When chartSeries is provided (from
@@ -65,7 +52,7 @@ export default function MetricsChart({ iterations, selectedIteration = null, onS
         label: col.label,
         color: DEFAULT_COLORS[i % DEFAULT_COLORS.length],
       }))
-    : (CHART_METRICS[modelType] || []);
+    : fallbackSeries(iterations);
   const [enabledLines, setEnabledLines] = useState<Set<string>>(new Set(['metric']));
 
   const data = iterations.map((it) => {

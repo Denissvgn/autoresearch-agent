@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import type { Iteration, MetricColumn } from '../api/client';
-import { calculateCompositeRLScore, RL_COMPOSITE_COEFFICIENTS } from '../utils/formulas';
 
 interface Props {
   iterations: Iteration[];
@@ -128,50 +127,6 @@ export default function IterationsTable({ iterations, bestIteration, tableColumn
                 {isExpanded && (
                   <tr key={`${it.iteration}-detail`} className="border-b border-gray-800 bg-gray-900/50">
                     <td colSpan={8 + extraCols.length} className="py-3 px-6">
-                      {/* Formula breakdown for composite_rl_score */}
-                      {it.metric_name === 'composite_rl_score' &&
-                        it.secondary_metrics?.mean_oos_sharpe &&
-                        it.secondary_metrics?.mean_oos_return &&
-                        it.secondary_metrics?.mean_oos_drawdown &&
-                        (() => {
-                          const s = Number(it.secondary_metrics.mean_oos_sharpe.value);
-                          const r = Number(it.secondary_metrics.mean_oos_return.value);
-                          const d = Number(it.secondary_metrics.mean_oos_drawdown.value);
-                          const cv = it.secondary_metrics?.sharpe_cv ? Number(it.secondary_metrics.sharpe_cv.value) : 0;
-                          const { termS, termR, termD, termCV, total } = calculateCompositeRLScore(s, r, d, cv);
-                          const wS = RL_COMPOSITE_COEFFICIENTS.sharpe.weight;
-                          const wR = RL_COMPOSITE_COEFFICIENTS.return.weight;
-                          const wD = RL_COMPOSITE_COEFFICIENTS.drawdown.weight;
-                          const wCV = RL_COMPOSITE_COEFFICIENTS.cv.weight;
-                          return (
-                            <div className="mb-3 rounded bg-gray-800/70 px-3 py-2 font-mono text-xs flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                              <span className="text-gray-500 font-sans font-semibold text-[11px] uppercase tracking-wider mr-2">composite =</span>
-                              <span className="text-gray-400">{wS.toFixed(1)}×</span>
-                              <span className="text-green-400">{s.toFixed(4)}</span>
-                              <span className="text-gray-400">+</span>
-                              <span className="text-gray-400">{wR.toFixed(1)}×</span>
-                              <span className="text-green-400">{r.toFixed(4)}</span>
-                              <span className="text-gray-400">−</span>
-                              <span className="text-gray-400">{wD.toFixed(1)}×</span>
-                              <span className="text-red-400">{d.toFixed(4)}</span>
-                              <span className="text-gray-400">−</span>
-                              <span className="text-gray-400">{wCV.toFixed(1)}×</span>
-                              <span className="text-orange-400">{cv.toFixed(4)}</span>
-                              <span className="text-gray-600">=</span>
-                              <span className="text-green-400">{termS.toFixed(4)}</span>
-                              <span className="text-gray-600">+</span>
-                              <span className="text-green-400">{termR.toFixed(4)}</span>
-                              <span className="text-gray-600">−</span>
-                              <span className="text-red-400">{termD.toFixed(4)}</span>
-                              <span className="text-gray-600">−</span>
-                              <span className="text-orange-400">{termCV.toFixed(4)}</span>
-                              <span className="text-gray-400">=</span>
-                              <span className={`font-bold ${total >= 0 ? 'text-green-300' : 'text-red-300'}`}>
-                                {total.toFixed(4)}
-                              </span>
-                            </div>
-                          );
-                        })()}
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 text-xs">
                         {hasSecondary && Object.entries(it.secondary_metrics).map(([key, m]) => (
                           <div key={key} className="bg-gray-800 rounded px-2 py-1.5">

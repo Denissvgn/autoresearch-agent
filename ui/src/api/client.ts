@@ -198,10 +198,8 @@ export interface ScopedPromotionMetadata {
 }
 
 export interface StartResearchRequest {
-  instrument: string;
-  timeframe: string;
-  model_type: string;
-  /** P3-013: canonical skill fields (sent alongside legacy for dual-shape). */
+  /** Canonical skill shape; legacy instrument/timeframe/model_type aliases
+   *  are still accepted by the server for old clients. */
   skill_id?: string;
   subject_id?: string;
   variant?: string;
@@ -212,16 +210,6 @@ export interface StartResearchRequest {
   max_budget_usd?: number;
   timeout_minutes?: number;
   focus_hint?: string;
-  // RL-specific fixed settings (not in tuning space)
-  trading_mode?: 'stock' | 'margin';
-  agent_strategy?: 'AGGR' | 'CONS' | 'BALA' | 'SCAL';
-  initial_balance?: number;
-  // ML-59: HPO settings (RL only)
-  enable_hpo?: boolean;
-  hpo_trials?: number;
-  hpo_timesteps?: number;
-  // ML-63: Pipeline settings
-  phase_budgets?: { direction?: number; volatility?: number; rl?: number };
 }
 
 export interface HpoTrial {
@@ -446,12 +434,6 @@ export interface SystemStatus {
   active_sessions: number;
   max_concurrent: number;
   sessions: Array<{ id: string; instrument: string; model_type: string; status: string }>;
-}
-
-export interface InstrumentInfo {
-  name: string;
-  instrument: string;
-  timeframe: string;
 }
 
 export interface ModelInfo {
@@ -686,8 +668,6 @@ export const api = {
     triggerDownload(`${BASE}/research/${id}/download/results`),
 
   // Meta
-  getInstruments: () => request<InstrumentInfo[]>('/instruments'),
-
   getModels: () => request<ModelInfo[]>('/models'),
 
   getStatus: () => request<SystemStatus>('/status'),

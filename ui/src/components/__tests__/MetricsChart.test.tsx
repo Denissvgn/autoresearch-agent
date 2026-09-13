@@ -47,26 +47,26 @@ describe('MetricsChart series selection (P3-024)', () => {
     expect(screen.getByRole('button', { name: 'Custom B' })).toBeInTheDocument();
   });
 
-  it('falls back to the hardcoded direction series when no manifest is given', () => {
+  it('falls back to the observed numeric metrics when no manifest is given', () => {
     render(<MetricsChart iterations={[makeIteration()]} />);
-    // walkforward_auc present in secondary_metrics → detected as 'direction'
-    // (no atr_mult → direction, not volatility).
-    expect(screen.getByRole('button', { name: 'WF AUC' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'F1' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Signal Rate' })).toBeInTheDocument();
+    // The generic fallback derives series from the iteration's own numeric
+    // secondary metrics (up to three).
+    expect(screen.getByRole('button', { name: 'walkforward_auc' })).toBeInTheDocument();
   });
 
-  it('detects the rl model type from secondary metrics for the fallback', () => {
+  it('falls back to skill-specific metrics when present', () => {
     render(
       <MetricsChart
         iterations={[makeIteration({
-          secondary_metrics: { mean_oos_sharpe: { label: 'OOS Sharpe', value: 1.2 } },
+          secondary_metrics: {
+            score: { label: 'Score', value: 0.8 },
+            precision: { label: 'Precision', value: 0.6 },
+          },
         })]}
       />,
     );
-    expect(screen.getByRole('button', { name: 'OOS Sharpe' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'OOS Return' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'OOS Drawdown' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'score' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'precision' })).toBeInTheDocument();
   });
 
   it('renders the empty state when there are no iterations', () => {

@@ -1,109 +1,62 @@
 // New research wizard — 720px centered layout per hifi/screen-new.jsx.
-// Skill-aware: uses SkillPicker (P3-021) + DynamicFormFields (P3-022) when
-// skills are available from GET /skills; falls back to legacy model-type
-// selector + hardcoded instrument/timeframe for backward compat.
+// Skill-aware: uses SkillPicker + DynamicFormFields from the selected skill's
+// manifest (GET /skills); falls back to a subject/variant free-form pair.
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useInstruments, useModels, useStartResearch, useSkills, useSkillFormFields } from '../hooks/useResearch';
-import { Field, Icon, Segmented } from '../components/hifi/primitives';
+import { useModels, useStartResearch, useSkills, useSkillFormFields } from '../hooks/useResearch';
+import { Field, Icon } from '../components/hifi/primitives';
 import SkillPicker from '../components/SkillPicker';
 import DynamicFormFields from '../components/DynamicFormFields';
-import type { SkillSummary, FormField } from '../api/client';
-
-const TIMEFRAMES = ['5m', '15m', '1h', '4h'];
-
-interface ModelCard {
-  id: string;
-  name: string;
-  desc: string;
-  icon: string;
-}
-
-const FALLBACK_MODELS: ModelCard[] = [
-  { id: 'direction', name: 'direction', desc: 'Up/down classifier with calibration', icon: 'arrU' },
-  { id: 'volatility', name: 'volatility', desc: 'ATR breakout / regime detector', icon: 'bolt' },
-  { id: 'rl', name: 'rl', desc: 'PPO agent for execution policy', icon: 'flask' },
-];
 
 const FOCUS_EXAMPLES = [
-  'temporal stability',
-  'lower drawdown',
-  'reduce overtrading',
+  'improve robustness',
+  'reduce overfitting',
+  'explore a new dimension',
 ];
 
 export default function NewResearch() {
   const navigate = useNavigate();
   const startMut = useStartResearch();
-  const { data: instruments } = useInstruments();
   const { data: models } = useModels();
 
-  const [instrument, setInstrument] = useState('');
-  const [timeframe, setTimeframe] = useState('15m');
-  const [modelType, setModelType] = useState('direction');
+  const [subject, setSubject] = useState('');
+  const [variant, setVariant] = useState('default');
   const [tag, setTag] = useState('');
   const [focusHint, setFocusHint] = useState('');
   const [maxIterations, setMaxIterations] = useState(30);
   const [maxBudget, setMaxBudget] = useState(10);
   const [timeoutMinutes, setTimeoutMinutes] = useState(120);
   const [quickMode, setQuickMode] = useState(false);
-  // RL knobs
-  const [tradingMode, setTradingMode] = useState<'stock' | 'margin'>('stock');
-  const [agentStrategy, setAgentStrategy] = useState<'AGGR' | 'CONS' | 'BALA' | 'SCAL'>('BALA');
-  const [initialBalance, setInitialBalance] = useState(10000);
 
   // P3-021 / P3-022: skill-aware form state.
   const { data: skills } = useSkills();
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null);
   const { data: skillFormFieldsData } = useSkillFormFields(selectedSkillId);
   const [skillParams, setSkillParams] = useState<Record<string, unknown>>({});
-  const skillFormFields: FormField[] = skillFormFieldsData?.form_fields ?? [];
+  const skillFormFields = skillFormFieldsData?.form_fields ?? [];
 
-  // Sync modelType from the selected skill's legacy alias.
+  // Default the subject/variant to the selected skill's first enumeration.
   useEffect(() => {
-    if (!selectedSkillId || !skills) return;
-    const skill = skills.find((s) => s.id === selectedSkillId);
-    if (skill?.model_type) {
-      setModelType(skill.model_type);
-    }
-  }, [selectedSkillId, skills]);
+    if (!selectedSkillId) return;
+    setSubject((prev) => prev || 'default');
+  }, [selectedSkillId]);
 
-  // When form fields include instrument/timeframe, sync them into the legacy state.
+  // When form fields include subject/variant, sync them into the state.
   useEffect(() => {
     if (skillFormFields.length === 0) return;
-    const instrumentField = skillFormFields.find((f) => f.name === 'instrument' || f.name === 'subject_id');
-    const timeframeField = skillFormFields.find((f) => f.name === 'timeframe' || f.name === 'variant');
-    if (instrumentField) {
-      const val = skillParams[instrumentField.name];
-      if (typeof val === 'string' && val) setInstrument(val);
+    const subjectField = skillFormFields.find((f) => f.name === 'subject_id');
+    const variantField = skillFormFields.find((f) => f.name === 'variant');
+    if (subjectField) {
+      const val = skillParams[subjectField.name];
+      if (typeof val === 'string' && val) setSubject(val);
     }
-    if (timeframeField) {
-      const val = skillParams[timeframeField.name];
-      if (typeof val === 'string' && val) setTimeframe(val);
+    if (variantField) {
+      const val = skillParams[variantField.name];
+      if (typeof val === 'string' && val) setVariant(val);
     }
   }, [skillFormFields, skillParams]);
 
-  const instrumentOptions = useMemo(() => {
-    const seen = new Set<string>();
-    return (instruments ?? [])
-      .map((inst) => inst.instrument.trim())
-      .filter((name) => {
-        if (!name || seen.has(name)) return false;
-        seen.add(name);
-        return true;
-      });
-  }, [instruments]);
-
-  const modelCards: ModelCard[] = useMemo(() => {
-    if (models && models.length > 0) {
-      return models.map((m) => ({
-        id: m.id,
-        name: m.name,
-        desc: m.skill || m.id,
-        icon: m.id === 'rl' || m.id.startsWith('pipeline') ? 'flask' : m.id === 'volatility' ? 'bolt' : 'arrU',
-      }));
-    }
-    return FALLBACK_MODELS;
-  }, [models]);
+  const modelCount = useMemo(() => (models?.length ?? 0), [models]);
 
   // Cheap estimates surfaced in the preview row.
   const estRuntime = useMemo(() => {
@@ -115,20 +68,16 @@ export default function NewResearch() {
   }, [maxIterations, quickMode]);
   const estCost = useMemo(() => Math.min(maxBudget, maxIterations * (quickMode ? 0.04 : 0.24)), [maxIterations, maxBudget, quickMode]);
 
-  const isRlLike = modelType === 'rl' || modelType.startsWith('pipeline');
+  const skillSelected = Boolean(selectedSkillId);
 
   const handleStart = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!instrument) return;
+    if (!skillSelected || !subject) return;
     startMut.mutate(
       {
-        instrument,
-        timeframe,
-        model_type: modelType,
-        // P3-013: canonical skill fields (dual-shape — both shapes sent).
         skill_id: selectedSkillId ?? undefined,
-        subject_id: instrument || undefined,
-        variant: timeframe || undefined,
+        subject_id: subject,
+        variant,
         skill_params: Object.keys(skillParams).length > 0 ? skillParams : undefined,
         tag: tag || undefined,
         quick_mode: quickMode,
@@ -136,13 +85,6 @@ export default function NewResearch() {
         max_budget_usd: maxBudget,
         timeout_minutes: timeoutMinutes,
         focus_hint: focusHint || undefined,
-        ...(isRlLike
-          ? {
-              trading_mode: tradingMode,
-              agent_strategy: agentStrategy,
-              initial_balance: initialBalance,
-            }
-          : {}),
       },
       { onSuccess: (session) => navigate(`/research/${session.id}`) },
     );
@@ -159,8 +101,8 @@ export default function NewResearch() {
           </div>
           <h1 className="h1">Start a new research session</h1>
           <p className="subtle" style={{ maxWidth: 540, lineHeight: 1.5 }}>
-            Configure the instrument and target model. The agent will explore configs, evaluate
-            gates, and surface promotable candidates.
+            Pick a skill and set its parameters. The agent will explore configurations,
+            evaluate gates, and surface promotable candidates.
           </p>
         </div>
 
@@ -174,92 +116,52 @@ export default function NewResearch() {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 16 }}>
-              {skillFormFields.length > 0 ? (
-                /* P3-022: dynamic form fields from the selected skill's manifest */
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <DynamicFormFields
-                    fields={skillFormFields}
-                    values={skillParams}
-                    onChange={(name, value) => setSkillParams((prev) => ({ ...prev, [name]: value }))}
-                    skillId={selectedSkillId ?? undefined}
-                  />
-                </div>
-              ) : (
-                <>
-                  <Field label="Instrument" required>
-                    {instrumentOptions.length > 0 ? (
-                      <select className="select mono" value={instrument} onChange={(e) => setInstrument(e.target.value)} required>
-                        <option value="">Select…</option>
-                        {instrumentOptions.map((name) => (
-                          <option key={name} value={name}>
-                            {name}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        className="input mono"
-                        value={instrument}
-                        onChange={(e) => setInstrument(e.target.value)}
-                        placeholder="e.g. DOGE_USDT"
-                        required
-                      />
-                    )}
-                  </Field>
-                  <Field label="Timeframe" required>
-                    <Segmented options={TIMEFRAMES} value={timeframe} onChange={setTimeframe} />
-                  </Field>
-                </>
+            {/* P3-021: skill picker selects the installed skill. */}
+            <Field label="Skill" required>
+              <SkillPicker
+                skills={skills ?? []}
+                selected={selectedSkillId}
+                onSelect={(id) => {
+                  setSelectedSkillId(id);
+                  setSkillParams({});
+                }}
+              />
+              {modelCount === 0 && (
+                <span className="subtle" style={{ fontSize: 11 }}>
+                  No skills installed — add a package under skills/ and reload.
+                </span>
               )}
-            </div>
+            </Field>
 
-            {/* P3-021: skill picker replaces the hardcoded model-type selector. */}
-            {skills && skills.length > 0 ? (
-              <Field label="Skill" required>
-                <SkillPicker
-                  skills={skills}
-                  selected={selectedSkillId}
-                  onSelect={(id) => {
-                    setSelectedSkillId(id);
-                    setSkillParams({});
-                  }}
-                />
-              </Field>
+            {skillFormFields.length > 0 ? (
+              /* P3-022: dynamic form fields from the selected skill's manifest */
+              <DynamicFormFields
+                fields={skillFormFields}
+                values={skillParams}
+                onChange={(name, value) => setSkillParams((prev) => ({ ...prev, [name]: value }))}
+                skillId={selectedSkillId ?? undefined}
+              />
             ) : (
-              <Field label="Model type" required>
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(${modelCards.length}, 1fr)`, gap: 12 }}>
-                  {modelCards.map((m) => {
-                    const on = modelType === m.id;
-                    return (
-                      <button
-                        type="button"
-                        key={m.id}
-                        onClick={() => setModelType(m.id)}
-                        className="card"
-                        style={{
-                          padding: 14,
-                          textAlign: 'left',
-                          background: on ? 'var(--surface-2)' : 'var(--surface)',
-                          borderColor: on ? 'var(--fg)' : 'var(--line-soft)',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-                          <Icon name={m.icon} color={on ? 'var(--fg)' : 'var(--muted)'} />
-                          {on && <Icon name="check" color="var(--green)" />}
-                        </div>
-                        <div className="mono" style={{ fontSize: 13, fontWeight: 600 }}>
-                          {m.name}
-                        </div>
-                        <div className="subtle" style={{ fontSize: 11, marginTop: 4 }}>
-                          {m.desc}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </Field>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 16 }}>
+                <Field label="Subject" required help="The entity this research operates on.">
+                  <input
+                    className="input mono"
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                    placeholder="e.g. default"
+                    required
+                  />
+                </Field>
+                <Field label="Variant" required>
+                  <input
+                    className="input mono"
+                    value={variant}
+                    onChange={(e) => setVariant(e.target.value)}
+                    placeholder="e.g. production"
+                    required
+                  />
+                </Field>
+              </div>
             )}
           </div>
 
@@ -292,7 +194,7 @@ export default function NewResearch() {
                 rows={2}
                 value={focusHint}
                 onChange={(e) => setFocusHint(e.target.value)}
-                placeholder="e.g. Improve temporal stability without inflating turnover."
+                placeholder="e.g. Improve robustness without inflating cost."
               />
               <div className="row gap-2" style={{ marginTop: 6 }}>
                 {FOCUS_EXAMPLES.map((ex) => (
@@ -337,50 +239,6 @@ export default function NewResearch() {
               <span className="check__box" onClick={() => setQuickMode(!quickMode)} />
               <span>Quick mode (fewer iterations, reduced sample size)</span>
             </label>
-
-            {isRlLike && (
-              <div
-                className="card card--raised"
-                style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}
-              >
-                <span className="label">rl environment</span>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-                  <Field label="Market">
-                    <select
-                      className="select mono"
-                      value={tradingMode}
-                      onChange={(e) => setTradingMode(e.target.value as 'stock' | 'margin')}
-                    >
-                      <option value="stock">stock (no leverage)</option>
-                      <option value="margin">margin (3x)</option>
-                    </select>
-                  </Field>
-                  <Field label="Strategy">
-                    <select
-                      className="select mono"
-                      value={agentStrategy}
-                      onChange={(e) => setAgentStrategy(e.target.value as 'AGGR' | 'CONS' | 'BALA' | 'SCAL')}
-                    >
-                      <option value="BALA">balanced</option>
-                      <option value="AGGR">aggressive</option>
-                      <option value="CONS">conservative</option>
-                      <option value="SCAL">scalping</option>
-                    </select>
-                  </Field>
-                  <Field label="Initial balance ($)">
-                    <input
-                      className="input mono"
-                      type="number"
-                      value={initialBalance}
-                      onChange={(e) => setInitialBalance(Number(e.target.value))}
-                      min={100}
-                      max={1000000}
-                      step={1000}
-                    />
-                  </Field>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Preview row */}
@@ -415,7 +273,7 @@ export default function NewResearch() {
               <button
                 type="submit"
                 className="btn btn--solid"
-                disabled={startMut.isPending || !instrument}
+                disabled={startMut.isPending || !skillSelected || !subject}
               >
                 {startMut.isPending ? 'Starting…' : 'Start research'}
                 <Icon name="arrR" size={12} />

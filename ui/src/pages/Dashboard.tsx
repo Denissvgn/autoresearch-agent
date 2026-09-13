@@ -212,7 +212,7 @@ export default function Dashboard() {
               <input
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="search instrument, tag, id…"
+                placeholder="search subject, tag, id…"
                 style={{
                   flex: 1,
                   background: 'transparent',
@@ -236,7 +236,7 @@ export default function Dashboard() {
               <thead>
                 <tr>
                   <th>Session</th>
-                  <th>Instrument</th>
+                  <th>Subject</th>
                   <th>Model</th>
                   <th className="num">Iters</th>
                   <th className="num">Best metric</th>

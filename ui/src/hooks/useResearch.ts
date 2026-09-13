@@ -155,9 +155,6 @@ export function useAgentLog(id: string, isActive = false) {
   });
 }
 
-export function useInstruments() {
-  return useQuery({ queryKey: ['instruments'], queryFn: api.getInstruments, staleTime: 60_000 });
-}
 
 export function useModels() {
   return useQuery({ queryKey: ['models'], queryFn: api.getModels, staleTime: 60_000 });

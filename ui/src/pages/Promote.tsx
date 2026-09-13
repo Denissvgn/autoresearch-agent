@@ -24,7 +24,7 @@ interface ScopeOption {
 
 const SCOPES: ScopeOption[] = [
   { id: 'development', label: 'development', risk: 'low', desc: 'Internal sandbox; no external impact.', icon: 'flask' },
-  { id: 'paper', label: 'paper', risk: 'low', desc: 'Paper-trading runner; mirrors prod observations.', icon: 'book' },
+  { id: 'paper', label: 'paper', risk: 'low', desc: 'Shadow runner; mirrors production observations.', icon: 'book' },
   { id: 'canary', label: 'canary', risk: 'med', desc: 'Limited live deployment with auto-rollback gates.', icon: 'bolt' },
   { id: 'production', label: 'production', risk: 'high', desc: 'Full production roll-out. Fail-closed delegated.', icon: 'server' },
 ];
