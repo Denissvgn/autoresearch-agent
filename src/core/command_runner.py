@@ -60,17 +60,14 @@ _CHILD_ENV_PREFIXES: tuple[str, ...] = ("PYTHON", "LC_")
 # experiment script. Subtracted last so a name cannot leak even if it were to
 # appear in the allow-list above.
 #
-# NOTE: ML_ADMIN_TOKEN is intentionally NOT forbidden. In config.py it is an
-# alias for BOTH rl_trainer_service_token (which rl/prepare.py needs to call
-# rl-trainer) AND mlflow_service_auth_token (the production-promotion token).
-# It cannot be cleanly stripped by name without breaking RL auth; splitting
-# that alias is tracked as a follow-up to P0-023.
+# NOTE: ML_ADMIN_TOKEN was historically a platform admin-token alias; it is
+# now stripped like the other control-plane secrets.
 _FORBIDDEN_CHILD_ENV: frozenset[str] = frozenset(
     {
         "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY",
         "AUTORESEARCH_API_TOKEN",
         "AUTORESEARCH_PROMETHEUS_TOKEN", "PROMETHEUS_TOKEN",
-        "AUTORESEARCH_MLFLOW_SERVICE_AUTH_TOKEN", "MLFLOW_SERVICE_AUTH_TOKEN",
+        "AUTORESEARCH_MLFLOW_SERVICE_AUTH_TOKEN", "MLFLOW_SERVICE_AUTH_TOKEN",  # domain-coupling: denylist
         "SERVICE_AUTH_TOKEN",
         "AUTORESEARCH_INFERENCE_SERVICE_AUTH_TOKEN",
         "INFERENCE_SERVICE_AUTH_TOKEN",

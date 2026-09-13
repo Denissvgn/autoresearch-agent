@@ -2,6 +2,44 @@
 
 ## Unreleased
 
+- **Universal research system conversion — TRAID platform artifacts removed.**
+  The service is now a domain-neutral research agent driven entirely by
+  installed skill packages (`skills/<id>/SKILL.yaml`).
+  - Removed the vendored platform packages (`libs/` ×8,
+    `traid_training_sdk/`) and their path dependencies; the X-Request-ID
+    header middleware, OAuth2 token introspection, and logging are inlined
+    as small generic implementations. Vault settings loading removed
+    (env/.env only).
+  - Removed the three trading skills (ml-direction/ml-volatility/ml-rl),
+    the workspace autotuner skill copies, gate bundles, and the trading
+    CLAUDE.md; `prompt-engineering` is the reference skill. The workspace
+    venv is a slim generic baseline.
+  - The legacy ML orchestrator path (~1000 lines) and the three transitional
+    runtimes are gone; `ManifestSkillRuntime` is the only runtime and
+    every session must name an installed skill. Prompts, phases, command
+    policy (default-deny), parsers, marker fallbacks, preflight, and
+    promotion targets all come from the manifest.
+  - Pipeline mode (direction→volatility→rl orchestration), the structured
+    HPO trial planner, and the platform evidence collector (inference
+    paper-replay) are removed. Preflight checks are skill-declared.
+  - Platform service settings (mlflow-service, data-ingest, trainers,
+    feature/inference/admin/vdmc/nats URLs, service tokens, artifact-store
+    flags) removed; optional MLflow tracking stays generic. mlflow-service
+    composite promotion removed — promotions record locally; unsupported
+    targets skip loudly.
+  - Trading request fields (trading_mode/agent_strategy/initial_balance,
+    flat HPO knobs) removed from the API; `model_type` accepts any skill id
+    (identity alias fallback), legacy URL/field aliases keep working.
+    `/instruments` and `/pipelines` endpoints removed; `/models` lists
+    installed skills.
+  - Promotion targets use the generic `<skill>/<subject>_<variant>.yaml`
+    layout; the promote.py subprocess handoff is replaced by the atomic
+    direct write (metadata sidecar first).
+  - The UI drops the trading controls; skill pickers, manifest-driven form
+    fields, metric schemas, and Subject/variant vocabulary throughout.
+  - Historical review documents moved to `docs/history/`. A
+    domain-coupling guard (`scripts/check_domain_coupling.py`) runs in CI.
+
 - **ARC-011 implementation review C5 (2026-08-15) — cross-worker
   stop/pause/resume works at the SessionManager entry point (P6-004 / H3;
   ADR §6.2's design is finally reachable).** All four control methods

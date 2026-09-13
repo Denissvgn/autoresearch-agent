@@ -421,10 +421,6 @@ class Settings(BaseSettings):
         return f"{self.workspace_root}/.github/skills"
 
     @property
-    def autotuner_scripts_dir(self) -> str:
-        return f"{self.workspace_root}/scripts/autotuner"
-
-    @property
     def configs_dir(self) -> str:
         return f"{self.workspace_root}/configs"
 

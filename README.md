@@ -1,22 +1,26 @@
 # Autoresearch Agent
 
-Autonomous ML model tuning service. An LLM agent iteratively runs training experiments, adjusts hyperparameters, and promotes winning configurations — without human intervention.
+Universal autonomous research agent. An LLM agent iteratively runs experiments,
+adjusts parameters, and promotes winning configurations — for any domain you
+can describe as a **skill** (a manifest + primer + experiment command).
 
-> **Standalone repository.** This project was extracted from the TRAID platform
-> monorepo (`services/autoresearch-agent`) with its full git history. The shared
-> libraries it depends on (`libs/`) and the training SDK (`traid_training_sdk/`)
-> are vendored into this repository, so it builds and tests on its own.
-> Platform training assets (autotuner scripts, ML trainers, production configs)
-> are **not** bundled — see [Workspace](#workspace) for running against a full
-> ML stack.
+The service is domain-neutral: every domain-specific decision — the system
+prompt, allowed commands, output format, phase plan, preflight checks, metric
+schema, and promotion target — is declared by an installed skill package
+(`skills/<id>/SKILL.yaml`). Adding a domain means adding a directory, not
+changing orchestrator or UI code. The bundled `prompt-engineering` skill is
+the reference example.
 
 ## How It Works
 
 ```
-UI (React) → FastAPI backend → LLM agent loop (Anthropic SDK)
+UI (React) → FastAPI backend → LLM agent loop (Anthropic / OpenAI)
+                                  ↓
+                        Skill manifest (SKILL.yaml):
+                          prompt · commands · parser · phases
                                   ↓
                             Tool-use calls:
-                              bash → prepare.py → real ML services
+                              bash → the skill's experiment command
                               read_file / write_file → edit configs
                                   ↓
                             Iteration auto-detected from stdout
@@ -25,19 +29,16 @@ UI (React) → FastAPI backend → LLM agent loop (Anthropic SDK)
                             Results → SQLite + WebSocket → UI
 ```
 
-The agent gets 5 sandboxed tools (`bash`, `read_file`, `write_file`, `glob`, `grep`) and a directive prompt with exact commands. It runs `setup.py` to create a workspace, reads the tuning strategy from the model-specific SKILL.md, then loops: edit `train.yaml` → run `prepare.py` → check metrics → keep or revert. The orchestrator auto-detects completed iterations by parsing `prepare.py` stdout — no reliance on the LLM to report results.
+The agent gets 5 sandboxed tools (`bash`, `read_file`, `write_file`, `glob`,
+`grep`) and a directive prompt assembled from the skill's manifest. The
+orchestrator auto-detects completed iterations by parsing the skill's declared
+output format — no reliance on the LLM to report results. Every training
+attempt records an immutable snapshot (command, config hash, artifact
+provenance); sessions persist phase state, consistency reports, and
+reconstructable operational summaries.
 
-Each session now starts from an immutable `research_session_manifest.v1` written
-to the run workspace and persisted in SQLite. Each training attempt records an
-`autoresearch_iteration_attempt.v1` snapshot with the command/API request,
-config hash, environment metadata, and artifact/provenance hashes when present;
-failed, timed-out, and pruned attempts remain visible even when no metric is
-produced.
-
-M8 also makes the server the operational source of truth for autonomous
-direction research: sessions persist `autoresearch_phase_state.v1`, structured
-HPO plans, cross-service consistency reports, and reconstructable
-`autoresearch_state.v1` summaries for API/UI clients.
+Each session starts from an immutable `research_session_manifest.v2` written
+to the run workspace and persisted in SQLite.
 
 ## Quick Start
 
@@ -61,29 +62,17 @@ Required variables:
 | `ANTHROPIC_MODEL` | Model name supported by that backend | provider model name |
 | `AUTORESEARCH_API_TOKEN` | Bearer token for operator/UI API calls | locally generated random value |
 
-Optional local controls such as `AUTORESEARCH_BIND_HOST`,
-`AUTORESEARCH_HOST`, `AUTORESEARCH_PORT`, CORS origins, identity-service
-introspection, Prometheus scrape auth, mlflow-service write auth, VDMC service
-URL, preflight flags, iteration limits, and budget limits are documented in
-`.env.example`.
-
-API clients may authenticate with `AUTORESEARCH_API_TOKEN`. Admin JWTs issued by
-identity-service are also accepted when `AUTORESEARCH_IDENTITY_SERVICE_URL`
-or its fallback alias `IDENTITY_SERVICE_URL` is configured; the static token
-remains useful for local operator/UI workflows.
-
-In platform deployments, settings are loaded with this precedence: process
-environment and `.env` values first, then Vault defaults from
-`secret/config/autoresearch-agent/<env>`, then code defaults. The high-value
-`ANTHROPIC_AUTH_TOKEN`, `AUTORESEARCH_API_TOKEN`, and optional
-`AUTORESEARCH_PROMETHEUS_TOKEN` and `AUTORESEARCH_MLFLOW_SERVICE_AUTH_TOKEN`
-should live in Vault outside local development. `AUTORESEARCH_PROMETHEUS_TOKEN`
-is required in production; without it the `/metrics` endpoint is disabled.
+Skills may declare `llm.provider: openai`; set `OPENAI_BASE_URL` /
+`OPENAI_API_KEY` for those. Optional controls — bind host/port, CORS origins,
+OAuth2 token introspection, Prometheus scrape auth, optional MLflow tracking,
+preflight flags, iteration limits, and budget limits — are documented in
+`.env.example`. `AUTORESEARCH_PROMETHEUS_TOKEN` is required in production;
+without it the `/metrics` endpoint is disabled.
 
 Autoresearch-agent is intentionally deployed as a single-instance SQLite
 control-plane service. Keep Uvicorn at one worker and do not scale the
-container above one replica unless session state and idempotency locks are
-moved to a distributed store.
+container above one replica unless a Postgres backend
+(`AUTORESEARCH_DATABASE_URL`) is configured.
 
 ### 2. Build and run
 
@@ -106,9 +95,9 @@ The Docker build consumes the tracked UI source, `package.json`, and
 `ui/dist/`, and coverage outputs while keeping `.env.example`, package
 manifests, and source files available to Docker builds.
 
-The service starts on **port 8030**. When running as part of the TRAID ML
-platform, the platform services must already be running on the same Docker
-network (`traid-network`); see [Required Platform Services](#required-platform-services).
+The service starts on **port 8030**. Skills that declare `preflight:` HTTP
+checks in their manifest require the target services to be reachable from the
+container.
 
 ### 3. Open the UI
 
@@ -133,14 +122,14 @@ Fill in the form:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| **Instrument** | Yes | Trading pair to tune for (e.g. `DOGE_USDT`, `BTC_USDT`). Dropdown shows available instruments from existing configs. |
-| **Timeframe** | Yes | Candle timeframe: `5m`, `15m`, `1h`, or `4h` |
-| **Model Type** | Yes | Which model to tune: `direction` (price direction prediction), `volatility` (breakout detection), or `rl` (PPO trading agent) |
-| **Tag** | Optional | Label for this session (e.g. `doge-apr01`, `btc-horizon-sweep`) |
-| **Focus Hint** | Optional | Free-text guidance for the agent (e.g. "try increasing deadzone_width" or "sweep learning rates") |
-| **Max Iterations** | Optional | Cap on training iterations (default: 30, range: 1–100) |
+| **Skill** | Yes | The installed skill to run (from `GET /skills`) |
+| **Skill parameters** | Varies | Rendered from the skill's `ui.form_fields` (e.g. an eval-set path) |
+| **Subject / Variant** | Yes* | The entity and variant this research operates on (*when the skill declares no form fields) |
+| **Tag** | Optional | Label for this session (e.g. `sweep-lr`) |
+| **Focus Hint** | Optional | Free-text guidance for the agent (e.g. "improve robustness without inflating cost") |
+| **Max Iterations** | Optional | Cap on experiment iterations (default: 30, range: 1–100) |
 | **Max Budget ($)** | Optional | Spending limit for LLM API calls (default: $10, range: $1–$100) |
-| **Quick Mode** | Optional | Checkbox — uses reduced dataset and fewer folds for faster but less precise results |
+| **Quick Mode** | Optional | Checkbox — reduced sample sizes for faster but less precise results |
 
 Click **"Start Research"**. You'll be redirected to the session detail page.
 
@@ -149,9 +138,9 @@ Click **"Start Research"**. You'll be redirected to the session detail page.
 The detail page shows real-time progress:
 
 - **Stats row** — current iteration number, best metric value, best iteration number, cumulative API cost, mode (quick/standard)
-- **State** tab — current phase, next action, phase table, top candidates, failed/pruned configs, HPO study IDs, budget usage, rollback target, and smoke status
-- **Metrics Chart** tab — line chart of the primary metric across iterations. Green dots = all quality gates passed; red dots = gates failed
-- **Iterations** tab — table with columns: iteration number, metric name, value, gates (✓/✗), decision (keep/discard), training time, attempt snapshots, artifact hashes, and consistency reports
+- **State** tab — current phase, next action, phase table, top candidates, failed/pruned attempts, budget usage, and rollback target
+- **Metrics Chart** tab — line chart of the primary metric across iterations, with the skill's declared series as overlays. Green dots = all quality gates passed; red dots = gates failed
+- **Iterations** tab — per-iteration metrics (columns from the skill's `metric_schema`), decisions (keep/discard), attempt snapshots, and consistency reports
 - **Agent Log** tab — raw LLM conversation transcript (tool calls and responses)
 
 **Controls while running:**
@@ -159,35 +148,61 @@ The detail page shows real-time progress:
 - **Resume** — continues a paused session
 - **Stop** — permanently ends the session
 
-### Promoting a Config
+### Promoting a Result
 
 After a session completes (or is stopped), if it has a best iteration:
 
 1. Click **"Promote Config"** on the session detail page
 2. A modal opens showing:
-   - Target path where the config will be written (e.g. `configs/instrument_configs/DOGE_USDT_15m.yaml`)
+   - The promotion target declared by the skill (file path, or a registry API for supported kinds)
    - The winning iteration number
    - Side-by-side diff: current production config vs. proposed new config
 3. Review the diff, then click **"Confirm Promotion"**
 
-Development-scope promotion writes the best config to
-`configs/instrument_configs/` so future training and inference use it as the
-new baseline. Paper and canary scopes record auditable local decisions.
-Production-scope promotion is fail-closed and delegates the live lifecycle
-transition to mlflow-service: autoresearch resolves the matching non-retired
-composite by winning `model_registry_name:model_version`, then calls
-`POST /api/v1/composites/{composite_id}/promote` with
-`Authorization: Bearer $AUTORESEARCH_MLFLOW_SERVICE_AUTH_TOKEN` and
-`X-Service-Name: autoresearch-agent`. If mlflow-service cannot be updated, no
-local production promotion record is created.
+Development-scope promotion writes the winning config to the skill's declared
+target path. Paper and canary scopes record auditable local decisions.
+Production-scope promotion requires an HMAC-signed approval
+(`AUTORESEARCH_PRODUCTION_APPROVAL_VERIFIER`); promotion targets the skill
+declares that the local machinery cannot execute (e.g. `registry_api`)
+**skip loudly** with an audit trail instead of pretending.
 
 ### History
 
 The **History** page shows:
 - **Past Sessions** — all completed/stopped/failed sessions with metrics
-- **Config Promotions** — log of every config promotion with timestamp, source session, and target path
+- **Config Promotions** — log of every promotion with timestamp, source session, and target path
 
 ---
+
+## Skills
+
+A skill is a directory under `skills/`:
+
+```
+skills/<skill-id>/
+├── SKILL.yaml     # Manifest: llm, params, metrics, phases, command policy,
+│                  #   output parser, preflight, promotion target, UI hints
+├── SKILL.md       # Primer — the agent's domain instructions
+├── bootstrap.py   # Optional: workspace initialization plugin
+├── eval/          # Skill-owned experiment scripts (e.g. eval/run.py)
+└── knowledge/     # Optional: reference material for the agent
+```
+
+The manifest schema is `research_skill.v1` (see
+`docs/adr/arc-011-manifest-spike/` for drafted examples of several domains).
+Highlights:
+
+- `llm` — provider (`anthropic`/`openai`), models, primer file
+- `param_schema` / `ui.form_fields` — validated skill parameters and the form the UI renders
+- `metric_schema` — primary metric, gates, chart series, table columns
+- `phase_plan` — server-tracked research phases with evidence keys
+- `command_policy` — allowed scripts/executables/copyable files (the base policy is default-deny)
+- `output_parser` — `delimited_kv` or `json_marker`, with optional anti-forgery nonce enforcement
+- `preflight` — dependency checks (`local_file`, `http_health`, `tcp`) run before a session starts
+- `promotion_target` — `file_path` (wired) or `registry_api` (loud skip until a target implementation is registered)
+
+`POST /api/v1/skills/reload` re-discovers installed skills (non-production
+environments); a new skill appears with no orchestrator or UI code changes.
 
 ## Architecture
 
@@ -197,36 +212,24 @@ autoresearch-agent/
 │   ├── main.py                 # App entry, lifespan, CORS, static files
 │   ├── config.py               # Settings (env vars → pydantic)
 │   ├── core/
-│   │   ├── orchestrator.py     # LLM agent tool-use loop
+│   │   ├── orchestrator.py     # Domain-neutral LLM agent tool-use loop
+│   │   ├── skill_runtime.py    # ManifestSkillRuntime (the only runtime)
+│   │   ├── skill_registry.py   # Skill discovery / hot reload
 │   │   ├── session_manager.py  # asyncio task lifecycle
-│   │   ├── results_store.py    # SQLite persistence (aiosqlite)
-│   │   ├── research_phase_plan.py # Direction phase state derivation
-│   │   ├── structured_hpo.py   # Bounded HPO plan metadata
-│   │   ├── consistency_validator.py # Cross-service candidate gate reports
-│   │   ├── research_state.py   # API/UI session-state summaries
-│   │   ├── experiment_parser.py# Parse prepare.py output + ITERATION_RESULT markers
-│   │   └── config_promoter.py  # Write winning configs to production path
-│   ├── api/
-│   │   ├── research.py         # Session CRUD + control endpoints
-│   │   ├── results.py          # Iterations, best, agent log
-│   │   └── promotion.py        # Preview + confirm promotion
-│   └── ws/
-│       └── events.py           # WebSocket broadcaster
+│   │   ├── results_store.py    # SQLite persistence (aiosqlite; Postgres optional)
+│   │   ├── command_policy.py   # Default-deny governed command policy
+│   │   ├── service_preflight.py# Skill-declared dependency checks
+│   │   └── config_promoter.py  # Promotion preview/confirm/rollback
+│   ├── api/                    # research, results, promotion, skills, subjects, audit, auth
+│   └── ws/events.py            # WebSocket broadcaster
 ├── ui/                         # React 18 + TypeScript + Vite + Tailwind
-│   └── src/
-│       ├── pages/              # Dashboard, NewResearch, ResearchDetail, History
-│       ├── components/         # MetricsChart, IterationsTable, AgentLog, etc.
-│       ├── hooks/              # React Query hooks with auto-refetch
-│       └── api/client.ts       # API client + TypeScript types
-├── libs/                       # Vendored shared libraries (observability, config, …)
-├── traid_training_sdk/         # Vendored training SDK
-├── skills/                     # Agent skill definitions (ml-direction, ml-rl)
+├── skills/                     # Installed skill packages
+├── docs/adr/                   # Skill-manifest drafts and ADRs
 ├── Dockerfile                  # 3-stage build (UI → Python deps → runtime)
-├── CLAUDE.md                   # Agent system prompt ("Act, Don't Explore")
+├── CLAUDE.md                   # Agent workspace context
 ├── pyproject.toml              # Server Python dependencies
-├── poetry.lock                 # Reproducible server dependency lock
-├── RUNBOOK.md                  # Auth, metrics, health, Docker, UID, parity ops
-├── CHANGELOG.md                # Service-level consistency changes
+├── RUNBOOK.md                  # Ops: auth, metrics, health, Docker, parity
+├── CHANGELOG.md
 ├── .env.example                # Tracked sanitized environment template
 └── .env                        # Local ignored API credentials
 ```
@@ -234,7 +237,10 @@ autoresearch-agent/
 ### Key API Endpoints
 
 The documented API prefix is `/api/v1`. The legacy `/api` prefix remains
-available for backward compatibility but is not the UI default.
+available for backward compatibility but is not the UI default. Requests may
+use the canonical shape (`skill_id`/`subject_id`/`variant`/`skill_params`) or
+the legacy aliases (`model_type`/`instrument`/`timeframe`); responses carry
+both.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -246,19 +252,21 @@ available for backward compatibility but is not the UI default.
 | `POST` | `/api/v1/research/{id}/resume` | Resume a paused session |
 | `DELETE` | `/api/v1/research/{id}` | Delete a session (not while running) |
 | `GET` | `/api/v1/research/{id}/iterations` | Get all iterations |
-| `GET` | `/api/v1/research/{id}/hpo-studies` | Get structured HPO plans/results |
 | `GET` | `/api/v1/research/{id}/state` | Get reconstructable operational session state |
 | `GET` | `/api/v1/research/{id}/best` | Get best iteration |
 | `GET` | `/api/v1/research/{id}/agent-log` | Get agent conversation log |
-| `POST` | `/api/v1/research/{id}/promote/preview` | Preview config promotion |
+| `POST` | `/api/v1/research/{id}/promote/preview` | Preview promotion |
 | `POST` | `/api/v1/research/{id}/promote/confirm` | Confirm promotion for the requested scope |
 | `GET` | `/api/v1/promotions` | List all promotions |
-| `GET` | `/api/v1/instruments` | Available instruments |
-| `GET` | `/api/v1/models` | Available model types |
+| `GET` | `/api/v1/skills` | Installed skills |
+| `GET` | `/api/v1/skills/{id}` | Skill descriptor + sub-resources |
+| `POST` | `/api/v1/skills/reload` | Re-discover installed skills |
+| `GET` | `/api/v1/subjects` | Subjects/variants a skill can run on |
+| `GET` | `/api/v1/models` | Legacy alias for the skills list |
 | `GET` | `/api/v1/status` | Server status and settings |
 | `GET` | `/info` | Service metadata and preferred API paths |
 | `GET` | `/health` | Lightweight Docker health endpoint |
-| `GET` | `/health/ready` | Kubernetes-style readiness with dependency preflight |
+| `GET` | `/health/ready` | Kubernetes-style readiness |
 | `GET` | `/monitoring/health` | Dependency/preflight-style readiness |
 | `GET` | `/metrics` | Prometheus metrics (disabled unless bearer-token scrape auth is configured) |
 | `WS` | `/ws/events` | WebSocket for real-time events |
@@ -266,8 +274,6 @@ available for backward compatibility but is not the UI default.
 ### Docker Compose (example)
 
 ```yaml
-# Example standalone deployment; when running inside the TRAID platform,
-# use the platform's compose files instead.
 services:
   autoresearch-agent:
     container_name: autoresearch_agent
@@ -276,7 +282,7 @@ services:
     volumes:
       - autoresearch_runs:/app/workspace/runs    # Experiment artifacts
       - autoresearch_db:/app/workspace/db         # SQLite database
-      - ./workspace:/app/workspace                # Optional: training workspace (see below)
+      - ./workspace:/app/workspace                # Skill experiment workspaces
     deploy:
       resources:
         limits: { memory: 2G, cpus: "2.0" }
@@ -284,105 +290,57 @@ services:
 
 ## Workspace
 
-Training sessions execute inside a workspace directory (default
-`/app/workspace`, override with `AUTORESEARCH_WORKSPACE_ROOT`). This repository
-bundles the workspace *skeleton*: the agent skills
-(`direction-autotuner`, `volatility-autotuner`, `rl-autotuner`), the promotion
-gate bundles, a Python venv with the ML dependencies
-(`requirements-workspace.txt`), and the vendored shared libraries.
+Sessions execute inside a workspace directory (default `/app/workspace`,
+override with `AUTORESEARCH_WORKSPACE_ROOT`). The image bundles a generic
+Python venv (`requirements-workspace.txt`); skills that need heavier domain
+dependencies (ML frameworks, GPU stacks) install their own via their
+bootstrap step or document them in their SKILL.md.
 
-It does **not** bundle the platform training assets — the autotuner scripts
-(`scripts/autotuner/`), the ML trainers (`ensemble-trainer`, `rl-trainer`), and
-production configs. To run full ML tuning sessions, mount a workspace that
-contains those assets (as the TRAID platform image does), e.g.:
-
-```bash
-docker run -v /path/to/platform/workspace:/app/workspace …
-```
-
-Without them, the service still runs: the API, UI, session management, SQLite
-persistence, replay tooling, and promotion preview/confirm for
-development-scope promotions all work standalone.
-
-### Required Platform Services
-
-The agent calls these services over Docker DNS during training (only present in
-a full TRAID platform deployment):
-
-| Service | URL (inside Docker) | Purpose |
-|---------|---------------------|---------|
-| Data Ingest | `data-ingest:8000` | Market OHLCV data |
-| Feature Service | `feature-service:8000` | Technical indicators |
-| Ensemble Trainer | `ensemble-trainer:8000` | Walk-forward model training |
-| RL Trainer | `rl-trainer:8000` | PPO agent training |
-| VDMC Indicator | `vdmc-indicator:8000` | VDMC readiness for RL/pipeline sessions |
-| MLflow | `mlflow:5000` | Experiment tracking |
-| MLflow Service | `mlflow-service:8000` | Promotion/composite API |
-| Admin Service | `admin-service:8000` | Admin API discovery/status |
-| MinIO | `minio:9000` | Model artifact storage |
-
-The agent intentionally does not publish NATS events or use `libs.model_naming`
-today. It drives the ML services through REST calls, records session state in
-SQLite, and computes promotion paths locally; event publishing and shared model
-naming remain future integration surfaces.
+Skills declare their dependency readiness in their manifest's `preflight:`
+section — those checks run before each session starts and gate it on
+readiness (with an explicit operator override).
 
 ### Runtime State
-
-The compose stack persists autoresearch state across restarts:
 
 | Path | Volume/Mount | Purpose |
 |------|--------------|---------|
 | `/app/workspace/runs` | `autoresearch_runs` | Run workspaces, manifests, attempt snapshots, logs |
 | `/app/workspace/db` | `autoresearch_db` | SQLite research/iteration/promotion database |
-| `/host/configs` | `../configs` bind mount | Development config promotion target |
+| `/host/configs` | bind mount | Optional file-path promotion target root |
 
 SQLite schema changes are versioned by `ResultsStore.initialize()` through a
-single-row `schema_version` table and numbered idempotent migrations. This is
-the service's Alembic alternative and preserves the single-container SQLite
-operational model.
-
-`GET /api/v1/status` exposes the Docker DNS service URLs, including
-`vdmc_indicator`, browser MLflow URL, and persistence paths currently used by
-the server. The same URL set is copied into each session manifest for
-reproducibility. VDMC readiness is required for `rl`, `pipeline`, and
-health-wide `all` preflight checks; it is observed but non-blocking for
-`direction` and `volatility` sessions.
+single-row `schema_version` table and numbered idempotent migrations. A
+Postgres backend is available via `AUTORESEARCH_DATABASE_URL` for
+multi-worker deployments.
 
 The container runs as UID/GID `1000` by default (`APP_UID`/`APP_GID` build
 args). Ensure any host-owned workspace or configs path used for promotions is
 writable by that identity.
 
-### Direction Upgrade Runbooks
-
-- `RUNBOOK.md` covers service auth, metrics, health/readiness, Docker build,
-  UID handling, and workspace dependency parity.
-- In the TRAID platform monorepo, `docs/ml/autoresearch_direction_runbook.md`
-  covers operator workflow, phase-state inspection, HPO rules, promotion
-  readiness, rollback triggers, and verification commands;
-  `docs/ml/development_promotion_rollback_guide.md` covers development
-  promotion preview/confirm requirements and rollback procedure; and
-  `docs/ml/direction_prediction_model_card.md` defines the model-card fields
-  expected for direction candidates and promoted development configs.
-
 ### Supported LLM Backends
 
-Any API compatible with the Anthropic Messages format:
+Any API compatible with the Anthropic Messages format, plus OpenAI:
 
-| Backend | `ANTHROPIC_BASE_URL` | `ANTHROPIC_MODEL` |
-|---------|---------------------|-------------------|
-| Anthropic | `https://api.anthropic.com` | `claude-sonnet-4-20250514` |
-| DashScope proxy | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `qwen3.5-plus` |
-| Any Anthropic-compatible proxy | Custom URL | Model name supported by proxy |
+| Backend | Setting | Example |
+|---------|---------|---------|
+| Anthropic | `ANTHROPIC_BASE_URL` / `ANTHROPIC_MODEL` | `https://api.anthropic.com`, `claude-sonnet-4-20250514` |
+| OpenAI (per-skill) | `OPENAI_BASE_URL` / `OPENAI_API_KEY` | `https://api.openai.com/v1`, `gpt-4o` |
+| Any compatible proxy | custom URL | model name supported by proxy |
 
 ### Resource Defaults
 
 | Setting | Default | Env Variable |
-|---------|---------|-------------|
+|---------|---------|--------------|
 | Max iterations per session | 30 | `AUTORESEARCH_MAX_ITERATIONS` |
 | Max API budget per session | $10.00 | `AUTORESEARCH_MAX_BUDGET_USD` |
 | Experiment timeout | 2 hours | `AUTORESEARCH_TIMEOUT_S` |
 | Max concurrent sessions | 2 | `AUTORESEARCH_MAX_CONCURRENT` |
 | Quick mode default | off | `AUTORESEARCH_DEFAULT_QUICK_MODE` |
+
+### Operations
+
+`RUNBOOK.md` covers service auth, metrics, health/readiness, Docker build,
+UID handling, and parity-suite operations.
 
 ---
 

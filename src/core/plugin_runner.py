@@ -87,7 +87,7 @@ from src.core.command_runner import _terminate_process_group_without_communicate
 #: The base allow-list for plugin subprocesses (X-004 §4.2). Strictly narrower
 #: than ``command_runner._CHILD_ENV_ALLOWLIST`` (the agent path): plugins get
 #: shell/locale/runtime + venv only. No ``AWS_*``, no service tokens, no
-#: ``MLFLOW_TRACKING_URI``, no ``DATA_INGEST_URL``. Manifest-declared ``env``
+#: ``MLFLOW_TRACKING_URI`` and no service URLs. Manifest-declared ``env``
 #: keys (``PluginCaps.env``) are merged in on top.
 _PLUGIN_ENV_ALLOWLIST: frozenset[str] = frozenset(
     {
@@ -112,13 +112,13 @@ _FORBIDDEN_PLUGIN_ENV: frozenset[str] = frozenset(
         "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY",
         "AUTORESEARCH_API_TOKEN",
         "AUTORESEARCH_PROMETHEUS_TOKEN", "PROMETHEUS_TOKEN",
-        "AUTORESEARCH_MLFLOW_SERVICE_AUTH_TOKEN", "MLFLOW_SERVICE_AUTH_TOKEN",
+        "AUTORESEARCH_MLFLOW_SERVICE_AUTH_TOKEN", "MLFLOW_SERVICE_AUTH_TOKEN",  # domain-coupling: denylist
         "SERVICE_AUTH_TOKEN",
         "AUTORESEARCH_INFERENCE_SERVICE_AUTH_TOKEN",
         "INFERENCE_SERVICE_AUTH_TOKEN",
         "AUTORESEARCH_PRODUCTION_APPROVAL_VERIFIER",
         "PRODUCTION_APPROVAL_VERIFIER",
-        "AUTORESEARCH_RL_TRAINER_SERVICE_TOKEN", "RL_TRAINER_SERVICE_TOKEN",
+        "AUTORESEARCH_RL_TRAINER_SERVICE_TOKEN", "RL_TRAINER_SERVICE_TOKEN",  # domain-coupling: denylist
         "ML_ADMIN_TOKEN",
         "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
         "AWS_SESSION_TOKEN", "AWS_DEFAULT_REGION", "AWS_REGION",

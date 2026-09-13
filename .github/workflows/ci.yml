@@ -38,6 +38,9 @@ jobs:
       - name: Lockfile check
         run: poetry check --lock
 
+      - name: Domain-coupling guard
+        run: python scripts/check_domain_coupling.py
+
       - name: Ruff
         run: poetry run ruff check --config pyproject.toml src tests --output-format=github
 

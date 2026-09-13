@@ -23,10 +23,10 @@ Usage::
 
     .venv/bin/python scripts/migrate_sqlite_to_postgres.py \\
         --sqlite /app/workspace/db/experiments.db \\
-        --dsn "postgresql://admin:pass@postgres_db:5432/traid_platform_db"
+        --dsn "postgresql://user:pass@postgres:5432/autoresearch"
 
-The target Postgres DB must already exist (the platform's shared
-``traid_platform_db`` is fine). The script creates the schema if missing.
+The target Postgres DB must already exist. The script creates the schema if
+missing.
 """
 
 from __future__ import annotations

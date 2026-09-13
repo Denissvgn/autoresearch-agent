@@ -117,7 +117,7 @@ class ConfigPromoter:
         # _metadata_sidecar_path, _rollback_*_path, _extract_strategy_market,
         # _write_text_file) now delegate to this target. Defaults to
         # FilePathPromotionTarget for back-compat — all three construction sites
-        # (main.py, orchestrator auto-promote, pipeline_controller) pass only
+        # (main.py and the orchestrator's auto-promote path) pass only
         # the store and get the default.
         self._target: "PromotionTarget" = target or FilePathPromotionTarget()
 
@@ -544,84 +544,22 @@ class ConfigPromoter:
             metadata["rollback_target"] = rollback_snapshot_path
             metadata["rollback_readiness"] = rollback_readiness
 
-        # Use promote.py script if available, otherwise write directly
-        promote_script = os.path.join(
-            settings.autotuner_scripts_dir, "promote.py",
+        # Atomic write — Phase 3.1: write metadata sidecar first so a crash
+        # mid-promotion never leaves an active config without provenance
+        # metadata; then atomically swap the config.
+        metadata_path = self._metadata_sidecar_path(target_path, preview["iteration"])
+        metadata = self._finalize_development_promotion_metadata(
+            metadata=metadata,
+            metadata_path=metadata_path,
+            promotion_record_created=True,
         )
-        metadata_already_written = False
-        if os.path.exists(promote_script):
-            # Write the DB config snapshot to a versioned, immutable path
-            # so promote.py reads the server-confirmed config and never
-            # touches the mutable workspace best_train.yaml.
-            snap_filename = f"snapshot_iter_{preview['iteration']}.yaml"
-            snap_path = os.path.join(workspace_path, snap_filename)
-            await asyncio.to_thread(
-                Path(snap_path).write_text,
-                preview["new_config"],
-                encoding="utf-8",
-            )
-
-            cmd = [
-                settings.venv_python,
-                promote_script,
-                "--model", model_type,
-                "--workspace", os.path.dirname(workspace_path),
-                "--instrument", instrument,
-                "--timeframe", timeframe,
-                "--configs-dir", settings.host_configs_path,
-                "--config-file", snap_path,
-            ]
-            if mlflow_run_id:
-                cmd.extend(["--mlflow-run-id", mlflow_run_id])
-            if metric_name:
-                cmd.extend(["--metric-name", metric_name])
-            if metric_value is not None:
-                cmd.extend(["--metric-value", str(metric_value)])
-            # ML-64: Pass model artifacts dir for stable model persistence
-            artifacts_dir = self._resolve_artifacts_dir(
-                workspace_path,
-                model_type,
-                instrument,
-                timeframe,
-                metrics_payload=best_metrics_payload,
-                attempt_snapshot=best_attempt_snapshot,
-            )
-            if artifacts_dir:
-                cmd.extend(["--model-artifacts-dir", artifacts_dir])
-            cmd.extend([
-                "--stable-models-dir",
-                os.path.join(settings.workspace_root, "runs", "promoted_models"),
-            ])
-            result = await asyncio.to_thread(
-                subprocess.run,
-                cmd,
-                cwd=settings.workspace_root,
-                capture_output=True,
-                text=True,
-                timeout=60,
-            )
-            if result.returncode != 0:
-                raise RuntimeError(
-                    f"promote.py failed (exit {result.returncode}): {result.stderr}"
-                )
-            logger.info("promote.py succeeded: %s", result.stdout[:500])
-        else:
-            # Direct write fallback — Phase 3.1: write metadata sidecar
-            # first so a crash mid-promotion never leaves an active config
-            # without provenance metadata; then atomically swap the config.
-            metadata_path = self._metadata_sidecar_path(target_path, preview["iteration"])
-            metadata = self._finalize_development_promotion_metadata(
-                metadata=metadata,
-                metadata_path=metadata_path,
-                promotion_record_created=True,
-            )
-            await self._write_text_file(
-                metadata_path,
-                json.dumps(metadata, indent=2, sort_keys=True) + "\n",
-            )
-            await self._write_text_file(target_path, preview["new_config"])
-            logger.info("Wrote promoted config to %s", target_path)
-            metadata_already_written = True
+        await self._write_text_file(
+            metadata_path,
+            json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+        )
+        await self._write_text_file(target_path, preview["new_config"])
+        logger.info("Wrote promoted config to %s", target_path)
+        metadata_already_written = True
 
         if not metadata_already_written:
             metadata_path = self._metadata_sidecar_path(target_path, preview["iteration"])
