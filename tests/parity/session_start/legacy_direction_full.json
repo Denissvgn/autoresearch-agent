@@ -1,51 +1,40 @@
 {
   "category": "session_start",
-  "function": "construct_research_config",
   "description": "legacy direction request with trading_mode and agent_strategy",
-  "input": {
-    "request": {
-      "id": "res_parity0001",
-      "instrument": "DOGE_USDT",
-      "timeframe": "15m",
-      "model_type": "direction",
-      "tag": "parity-baseline",
-      "max_iterations": 30,
-      "max_budget_usd": 10.0,
-      "trading_mode": "margin",
-      "agent_strategy": "AGGR"
-    }
-  },
   "expected": {
+    "focus_hint": null,
     "id": "res_parity0001",
     "instrument": "DOGE_USDT",
-    "timeframe": "15m",
-    "model_type": "direction",
-    "tag": "parity-baseline",
-    "quick_mode": false,
-    "max_iterations": 30,
     "max_budget_usd": 10.0,
-    "timeout_s": 0,
-    "focus_hint": null,
-    "workspace_path": "",
-    "trading_mode": "margin",
-    "agent_strategy": "AGGR",
-    "initial_balance": null,
-    "enable_hpo": false,
-    "hpo_trials": 20,
-    "hpo_timesteps": 50000,
-    "resumed_from": null,
+    "max_iterations": 30,
+    "model_type": "direction",
     "pipeline_id": null,
+    "quick_mode": false,
+    "resumed_from": null,
     "skill_id": "",
+    "skill_params": {},
     "skill_version": "",
     "subject_id": "DOGE_USDT",
+    "tag": "parity-baseline",
+    "timeframe": "15m",
+    "timeout_s": 0,
     "variant": "15m",
-    "skill_params": {
-      "hpo_trials": 20,
-      "hpo_timesteps": 50000,
-      "trading_mode": "margin",
-      "agent_strategy": "AGGR"
+    "workspace_path": ""
+  },
+  "function": "construct_research_config",
+  "input": {
+    "request": {
+      "agent_strategy": "AGGR",
+      "id": "res_parity0001",
+      "instrument": "DOGE_USDT",
+      "max_budget_usd": 10.0,
+      "max_iterations": 30,
+      "model_type": "direction",
+      "tag": "parity-baseline",
+      "timeframe": "15m",
+      "trading_mode": "margin"
     }
   },
-  "source_sha": "f2300939d6fb3252f2dd2f714dce0c4efcd0ec3e",
-  "recapture": "ARC-011 P2-017: ResearchConfig gained canonical subject_id/variant/skill_params fields (derived from legacy instrument/timeframe in __post_init__; flat ML fields mirror into skill_params). skill_id stays \"\" by default (derived at materialize_skill_runtime, not construction, to preserve the transitional-runtime back-compat). Re-captured under the append-only-with-linked-task rule.\nARC-011 P4-002: ResearchConfig gained session_nonce (a per-build 32-byte hex anti-forgery secret). NOT re-captured — it is non-deterministic; the parity engine now DROPS session_nonce from the normalized snapshot (_engine._DROP_KEY_RE) so the golden expected block is byte-identical and no secret is baked into a fixture."
+  "recapture": "ARC-011 P2-017: ResearchConfig gained canonical subject_id/variant/skill_params fields (derived from legacy instrument/timeframe in __post_init__; flat ML fields mirror into skill_params). skill_id stays \"\" by default (derived at materialize_skill_runtime, not construction, to preserve the transitional-runtime back-compat). Re-captured under the append-only-with-linked-task rule.\nARC-011 P4-002: ResearchConfig gained session_nonce (a per-build 32-byte hex anti-forgery secret). NOT re-captured \u2014 it is non-deterministic; the parity engine now DROPS session_nonce from the normalized snapshot (_engine._DROP_KEY_RE) so the golden expected block is byte-identical and no secret is baked into a fixture.",
+  "source_sha": "f2300939d6fb3252f2dd2f714dce0c4efcd0ec3e"
 }

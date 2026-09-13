@@ -161,11 +161,8 @@ class ConfigPromoter:
         best_yaml = config_snapshot
         config_snapshot_sha256 = self._sha256_text(best_yaml)
 
-        # Determine target path on host (ML-67: extract strategy+market from config)
-        _strategy, _market = self._extract_strategy_market(best_yaml)
         target_path = self._get_target_path(
             model_type, instrument, timeframe,
-            strategy=_strategy, market_type=_market,
         )
 
         # Read current config if it exists
@@ -2847,28 +2844,14 @@ class ConfigPromoter:
             return model_abs
         return None
 
-    def _extract_strategy_market(self, yaml_str: str) -> tuple:
-        """Extract agent_strategy and trading_mode from a YAML config string.
-
-        ARC-011 P1-017: delegates to the PromotionTarget impl. Returns
-        (strategy, market_type) with defaults if not found.
-        """
-        return self._target.extract_strategy_market(yaml_str)
-
     def _get_target_path(
         self,
         model_type: str, instrument: str, timeframe: str,
-        strategy: str = "BALA", market_type: str = "stock",
     ) -> str:
-        """Determine the host config file path for promotion.
-
-        ARC-011 P1-017: delegates to the PromotionTarget impl. ML-67: RL
-        configs include strategy + market_type in the filename.
-        """
+        """Determine the host config file path for promotion."""
         return self._target.target_path(
             model_type=model_type,
             instrument=instrument,
             timeframe=timeframe,
-            strategy=strategy,
-            market_type=market_type,
         )
+

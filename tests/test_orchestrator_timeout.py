@@ -168,6 +168,16 @@ async def test_capped_command_is_reaped_and_session_times_out(
 
     orchestrator = AgentOrchestrator(store)
 
+    from src.core.skill_runtime import ManifestSkillRuntime
+
+    monkeypatch.setattr(
+        ManifestSkillRuntime,
+        "command_policy_extension",
+        lambda self: {
+            "allowed_scripts": {"scripts/autotuner/enrich_rl_dataset.py"},
+        },
+    )
+
     with (
         patch.object(orchestrator_module, "_load_packaged_skill_md", return_value="# stub"),
         patch.object(orchestrator, "_load_claude_md_async", new=AsyncMock(return_value="")),
@@ -208,7 +218,12 @@ async def test_capped_command_is_reaped_and_session_times_out(
 @pytest.mark.asyncio
 async def test_registry_kill_all_reaps_in_flight_subprocess(tmp_path: Path) -> None:
     workspace, child_pid_path = _make_hanging_workspace(tmp_path)
-    runner = GovernedCommandRunner(workspace_root=str(workspace))
+    runner = GovernedCommandRunner(
+        workspace_root=str(workspace),
+        policy_extension={"allowed_scripts": {
+            "scripts/autotuner/enrich_rl_dataset.py",
+        }},
+    )
     registry = CommandProcessRegistry()
     research_id = "res_p0006_killall"
 

@@ -9,19 +9,10 @@ from pathlib import Path
 from typing import Iterable, Mapping
 
 _ALLOWED_PYTHON = (".venv/bin/python", "./.venv/bin/python")
-_ALLOWED_SCRIPTS = {
-    "scripts/autotuner/setup.py",
-    "scripts/autotuner/direction/prepare.py",
-    "scripts/autotuner/volatility/prepare.py",
-    "scripts/autotuner/rl/prepare.py",
-    "scripts/autotuner/enrich_rl_dataset.py",
-    "scripts/autotuner/resume.py",
-}
-_PREPARE_SCRIPTS = {
-    "scripts/autotuner/direction/prepare.py",
-    "scripts/autotuner/volatility/prepare.py",
-    "scripts/autotuner/rl/prepare.py",
-}
+# Default-deny: no script is allowed by the base policy. Every skill declares
+# its own ``allowed_scripts`` in its SKILL.yaml command_policy section; the
+# orchestrator merges them in as the policy extension.
+_ALLOWED_SCRIPTS: set[str] = set()
 _DISALLOWED_EXECUTABLES = {
     "apt",
     "apt-get",
@@ -51,14 +42,10 @@ _SECRET_MARKERS = (
     "secret",
     "token",
 )
-_COPY_FILENAMES = {"train.yaml", "best_train.yaml"}
-_CAT_FILENAMES = {
-    "best_train.yaml",
-    "hpo_results.json",
-    "last_metrics.txt",
-    "results.json",
-    "train.yaml",
-}
+# Default-deny file sets; skills declare copyable/readable files via their
+# manifest command_policy section.
+_COPY_FILENAMES: set[str] = set()
+_CAT_FILENAMES: set[str] = set()
 
 
 @dataclass(frozen=True)
@@ -204,7 +191,7 @@ def _evaluate_python(
 ) -> CommandDecision:
     scripts = _ALLOWED_SCRIPTS if allowed_scripts is None else allowed_scripts
     if len(argv) < 2:
-        return _reject("Python commands must invoke an approved autotuner script")
+        return _reject("Python commands must invoke a script the skill declares allowed")
     script = _workspace_relative(argv[1], workspace_root)
     exec_argv = argv
     # ARC-011 review C4 (P4-016): a skill manifest declares its scripts
@@ -245,23 +232,28 @@ def _validate_prepare_config(
     *,
     copyable_files: set[str] | None = None,
 ) -> str | None:
+    """Confine a script's ``--config`` target to the session workspace.
+
+    Applies to any allowed script invocation that passes ``--config`` — the
+    config an experiment reads or writes must live in the session workspace
+    and be an operator-declared copyable file (default-deny when the skill
+    declares none).
+    """
     copyable = _COPY_FILENAMES if copyable_files is None else copyable_files
-    if script not in _PREPARE_SCRIPTS:
-        return None
     if "--config" not in argv:
-        return "prepare.py commands must specify --config"
+        return None
     index = argv.index("--config")
     if index == len(argv) - 1:
-        return "prepare.py --config requires a path"
+        return "--config requires a path"
     config_path = _resolve_workspace_file(
         argv[index + 1],
         workspace_root=workspace_root,
         session_workspace=session_workspace,
     )
     if session_workspace and not _is_within(config_path, session_workspace):
-        return "prepare.py --config must point inside the session workspace"
+        return "--config must point inside the session workspace"
     if os.path.basename(config_path) not in copyable:
-        return "prepare.py --config may only target train.yaml or best_train.yaml"
+        return "--config may only target files the skill declares copyable"
     return None
 
 
@@ -292,7 +284,7 @@ def _evaluate_cp(
         if not _is_within(path, session_workspace):
             return _reject("cp may only operate inside the session workspace")
         if os.path.basename(path) not in copyable:
-            return _reject("cp may only copy train.yaml and best_train.yaml")
+            return _reject("cp may only copy files the skill declares copyable")
     return _allow(["cp", *resolved], operation="cp:workspace-config")
 
 

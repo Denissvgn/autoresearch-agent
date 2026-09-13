@@ -28,12 +28,6 @@ def _build_manifest(**overrides):
         max_budget_usd=2.5,
         timeout_s=3600,
         focus_hint="calibration",
-        trading_mode=None,
-        agent_strategy=None,
-        initial_balance=None,
-        enable_hpo=False,
-        hpo_trials=20,
-        hpo_timesteps=50000,
         overrides=overrides or None,
     )
 
@@ -137,12 +131,6 @@ def test_manifest_carries_canonical_dual_shape_fields(model_type, expected_skill
         max_budget_usd=1.0,
         timeout_s=60,
         focus_hint=None,
-        trading_mode=None,
-        agent_strategy=None,
-        initial_balance=None,
-        enable_hpo=False,
-        hpo_trials=0,
-        hpo_timesteps=0,
     )
     assert manifest.skill_id == expected_skill_id
     assert manifest.subject_id == "BTC_USDT"

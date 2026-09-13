@@ -83,7 +83,7 @@ async def test_duplicate_training_guard_rejects_same_identity():
 
     orchestrator = object.__new__(AgentOrchestrator)
     orchestrator._store = Store()
-    config = _config("direction", enable_hpo=True)
+    config = _config("direction")
 
     rejection, marker = await orchestrator._guard_duplicate_training_attempt(
         config=config,

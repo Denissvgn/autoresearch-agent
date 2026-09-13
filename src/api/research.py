@@ -70,12 +70,6 @@ def _start_metadata(req: "StartResearchRequest") -> dict[str, Any]:
         "max_iterations": req.max_iterations,
         "max_budget_usd": req.max_budget_usd,
         "timeout_minutes": req.timeout_minutes,
-        "trading_mode": req.trading_mode,
-        "agent_strategy": req.agent_strategy,
-        "initial_balance": req.initial_balance,
-        "enable_hpo": req.enable_hpo,
-        "hpo_trials": req.hpo_trials,
-        "hpo_timesteps": req.hpo_timesteps,
         "manifest_supplied": req.manifest is not None,
     }
 
@@ -445,32 +439,6 @@ class StartResearchRequest(BaseModel):
         default=None, max_length=1000,
         description="Optional hint for the agent about what to focus on",
     )
-    # RL-specific fixed settings (not part of tuning space)
-    trading_mode: Optional[str] = Field(
-        default=None, pattern="^(stock|margin)$",
-        description="Market type: stock (no leverage) or margin (3x leverage). RL only.",
-    )
-    agent_strategy: Optional[str] = Field(
-        default=None, pattern="^(AGGR|CONS|BALA|SCAL)$",
-        description="Agent strategy: AGGR, CONS, BALA, SCAL. RL only.",
-    )
-    initial_balance: Optional[float] = Field(
-        default=None, ge=100, le=1_000_000,
-        description="Starting balance in USD for RL training.",
-    )
-    # ML-59: HPO settings (RL only)
-    enable_hpo: Optional[bool] = Field(
-        default=None,
-        description="Enable Optuna HPO screening phase before LLM refinement. RL only.",
-    )
-    hpo_trials: Optional[int] = Field(
-        default=None, ge=5, le=200,
-        description="Number of Optuna trials for HPO screening (default: 20). RL only.",
-    )
-    hpo_timesteps: Optional[int] = Field(
-        default=None, ge=10000, le=500000,
-        description="Timesteps per HPO trial (default: 50000). RL only.",
-    )
     manifest: Optional[Dict[str, Any]] = Field(
         default=None,
         description=(
@@ -527,12 +495,6 @@ async def start_research(request: Request, req: StartResearchRequest):
             max_budget_usd=req.max_budget_usd,
             timeout_minutes=req.timeout_minutes,
             focus_hint=req.focus_hint,
-            trading_mode=req.trading_mode,
-            agent_strategy=req.agent_strategy,
-            initial_balance=req.initial_balance,
-            enable_hpo=req.enable_hpo,
-            hpo_trials=req.hpo_trials,
-            hpo_timesteps=req.hpo_timesteps,
             manifest=req.manifest,
             # ARC-011 implementation review C1 (2026-08-15): forward the
             # canonical shape instead of dropping it after validation —

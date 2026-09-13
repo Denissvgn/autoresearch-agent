@@ -69,8 +69,6 @@ class PromotionTarget(Protocol):
         model_type: str,
         instrument: str,
         timeframe: str,
-        strategy: str = "BALA",
-        market_type: str = "stock",
     ) -> str:
         """Derive the host config file path for a promoted config."""
         ...
@@ -99,11 +97,6 @@ class PromotionTarget(Protocol):
         self, target_path: str, promotion_id: int
     ) -> str:
         """Derive the JSON sidecar path recording a rollback's metadata."""
-        ...
-
-    def extract_strategy_market(self, yaml_str: str) -> tuple:
-        """Extract ``(agent_strategy, trading_mode)`` from a YAML config string
-        (used to derive the RL production path). Defaults ``("BALA", "stock")``."""
         ...
 
     async def write(self, path: str, content: str) -> None:
@@ -160,31 +153,18 @@ class FilePathPromotionTarget:
         model_type: str,
         instrument: str,
         timeframe: str,
-        strategy: str = "BALA",
-        market_type: str = "stock",
     ) -> str:
         """Determine the host config file path for promotion.
 
-        Moved verbatim from ``ConfigPromoter._get_target_path``. ML-67: RL
-        configs include strategy + market_type in the filename.
+        Generic layout: ``<host_configs>/<skill_id>/<subject>_<variant>.yaml``
+        under the host configs root.
         """
         host_configs = settings.host_configs_path
-        if model_type in ("direction", "volatility"):
-            return os.path.join(
-                host_configs,
-                "instrument_configs",
-                f"{instrument}_{timeframe}.yaml",
-            )
-        elif model_type == "rl":
-            strat = strategy.upper()
-            mkt = market_type.lower()
-            return os.path.join(
-                host_configs,
-                "rl",
-                f"{instrument}_{timeframe}_{strat}_{mkt}_production.yaml",
-            )
-        else:
-            raise ValueError(f"Unknown model type: {model_type}")
+        return os.path.join(
+            host_configs,
+            str(model_type or "skill").replace("/", "-"),
+            f"{instrument}_{timeframe}.yaml",
+        )
 
     def metadata_sidecar_path(
         self,
@@ -231,24 +211,6 @@ class FilePathPromotionTarget:
                 f"{path.name}.development-rollback.promotion-{promotion_id}.json"
             )
         )
-
-    def extract_strategy_market(self, yaml_str: str) -> tuple:
-        """Extract agent_strategy and trading_mode from a YAML config string.
-
-        Moved verbatim from ``ConfigPromoter._extract_strategy_market``. Returns
-        ``(strategy, market_type)`` with defaults if not found.
-        """
-        try:
-            import yaml as _yaml
-            cfg = _yaml.safe_load(yaml_str)
-            if not isinstance(cfg, dict):
-                return "BALA", "stock"
-            strategy = (cfg.get("agent_strategy") or "BALA").upper()
-            env = cfg.get("environment") or {}
-            market = (env.get("trading_mode") or cfg.get("trading_mode") or "stock").lower()
-            return strategy, market
-        except Exception:
-            return "BALA", "stock"
 
     async def write(self, path: str, content: str) -> None:
         """Atomic write: tmp file → fsync → os.replace.

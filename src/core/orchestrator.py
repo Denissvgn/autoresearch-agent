@@ -90,7 +90,6 @@ from src.core.research_phase_plan import (
     incomplete_phase_ids,
     phase_cap_exceeded,
     phase_state_json,
-    phases_for_model,
 )
 from src.core.result_artifact import enrich_marker_from_result_artifact
 from src.core.skill_runtime import (
@@ -163,14 +162,6 @@ class ResearchConfig:
     timeout_s: int = 0  # 0 = use server default
     focus_hint: Optional[str] = None
     workspace_path: str = ""
-    # RL-specific fixed settings (not in tuning space)
-    trading_mode: Optional[str] = None   # stock | margin
-    agent_strategy: Optional[str] = None  # AGGR | CONS | BALA | SCAL
-    initial_balance: Optional[float] = None
-    # ML-59: HPO configuration
-    enable_hpo: bool = False
-    hpo_trials: int = 20
-    hpo_timesteps: int = 50000
     # ML-62: Session resume on timeout
     resumed_from: Optional[str] = None  # parent session ID when continuing
     # ML-63: Parent pipeline ID for phase sessions
@@ -185,8 +176,6 @@ class ResearchConfig:
     # model_type/instrument/timeframe fields derive from them (via the legacy
     # alias registry P2-019). Callers may pass either shape: legacy
     # (instrument/timeframe/model_type) or canonical (subject_id/variant/skill_id).
-    # The flat ML fields below (enable_hpo/hpo_*/trading_mode/...) also mirror
-    # into skill_params so manifest-driven runtimes read them from one dict.
     subject_id: str = ""
     variant: str = ""
     skill_params: dict = None  # type: ignore[assignment]  # set in __post_init__
@@ -211,13 +200,6 @@ class ResearchConfig:
         # skill_params.get(...); until then both surfaces stay populated).
         if self.skill_params is None:
             object.__setattr__(self, "skill_params", {})
-        sp = self.skill_params
-        for flat in ("enable_hpo", "hpo_trials", "hpo_timesteps",
-                     "trading_mode", "agent_strategy", "initial_balance"):
-            value = getattr(self, flat)
-            if flat not in sp and value is not None and value is not False:
-                sp[flat] = value
-
         # Canonical subject/variant fields win; otherwise derive from legacy.
         if not self.subject_id:
             object.__setattr__(self, "subject_id", self.instrument)
@@ -1245,12 +1227,9 @@ class AgentOrchestrator:
         terminate after a few thousand `tabular_sweeps` iterations declaring
         the task done.
         """
-        # ARC-011 review C2-1: prefer the skill runtime's plan (manifest-
-        # driven sessions) over the hardcoded per-model table; identical for
-        # the ML skills today (X-002 parity), divergent for new skills.
+        # ARC-011 review C2-1: the phase plan comes from the session's
+        # skill runtime; skills without a declared plan get no contract.
         phases = self._skill_phase_plan(config)
-        if not phases:
-            phases = phases_for_model(config.domain)
         if not phases:
             return ""
         lines = [

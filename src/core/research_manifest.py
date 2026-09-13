@@ -163,12 +163,6 @@ def build_research_manifest(
     max_budget_usd: float,
     timeout_s: int,
     focus_hint: Optional[str],
-    trading_mode: Optional[str],
-    agent_strategy: Optional[str],
-    initial_balance: Optional[float],
-    enable_hpo: bool,
-    hpo_trials: int,
-    hpo_timesteps: int,
     overrides: Optional[Dict[str, Any]] = None,
 ) -> ResearchSessionManifest:
     """Build and validate a complete manifest from request/server state."""
@@ -252,14 +246,11 @@ def build_research_manifest(
             "db_path": settings.db_path,
             "host_configs_path": settings.host_configs_path,
             "anthropic_model": settings.anthropic_model,
-            "trading_mode": trading_mode,
-            "agent_strategy": agent_strategy,
-            "initial_balance": initial_balance,
         },
         "hpo": {
-            "enabled": enable_hpo,
-            "trials": hpo_trials if enable_hpo else None,
-            "timesteps": hpo_timesteps if enable_hpo else None,
+            "enabled": False,
+            "trials": None,
+            "timesteps": None,
         },
         "focus_hint": focus_hint,
         # ARC-011 review C3 (2026-08-15): the per-session anti-forgery nonce

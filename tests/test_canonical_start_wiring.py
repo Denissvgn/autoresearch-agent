@@ -127,14 +127,13 @@ async def _start_and_capture(
 
 
 async def test_canonical_fields_reach_research_config(monkeypatch, tmp_path):
-    """The exact scenario from the review: canonical skill_params must not be
-    silently dropped (previously ran with enable_hpo=False, hpo_trials=20)."""
+    """Canonical skill_params reach ResearchConfig verbatim."""
     _configure(monkeypatch, tmp_path)
     session, orch = await _start_and_capture(
         monkeypatch,
         tmp_path,
         skill_id="ml-direction",
-        skill_params={"enable_hpo": True, "hpo_trials": 100},
+        skill_params={"eval_set": "eval.jsonl"},
         subject_id="DOGE_USDT",
         variant="15m",
     )
@@ -142,50 +141,32 @@ async def test_canonical_fields_reach_research_config(monkeypatch, tmp_path):
     cfg = orch.captured_config
     assert cfg is not None
     assert cfg.skill_id == "ml-direction"
-    assert cfg.enable_hpo is True
-    assert cfg.hpo_trials == 100
     assert cfg.subject_id == "DOGE_USDT"
     assert cfg.variant == "15m"
-    assert cfg.skill_params["enable_hpo"] is True
-    assert cfg.skill_params["hpo_trials"] == 100
-    # The canonical HPO intent propagates past the config: the built HPO plan
-    # (merged into the session manifest) is enabled, not "disabled".
-    import json
-
-    manifest = json.loads(session["manifest_json"])
-    assert manifest["hpo"]["enabled"] is True
+    assert cfg.skill_params == {"eval_set": "eval.jsonl"}
 
 
 async def test_skill_params_win_over_legacy_flat_fields(monkeypatch, tmp_path):
-    """Canonical wins when both shapes are present — including an explicit
-    false / small value overriding a truthy legacy one."""
+    """Canonical skill_params reach the config unchanged (no flat-field
+    merging exists anymore)."""
     _configure(monkeypatch, tmp_path)
     _, orch = await _start_and_capture(
         monkeypatch,
         tmp_path,
-        enable_hpo=True,
-        hpo_trials=200,
         skill_id="ml-direction",
         skill_params={"enable_hpo": False, "hpo_trials": 5},
     )
     cfg = orch.captured_config
     assert cfg is not None
-    assert cfg.enable_hpo is False
-    assert cfg.hpo_trials == 5
+    assert cfg.skill_params == {"enable_hpo": False, "hpo_trials": 5}
 
-
-async def test_legacy_start_keeps_transitional_defaults(monkeypatch, tmp_path):
-    """Back-compat: without canonical fields, skill_id stays empty (transitional
-    runtime) and the flat legacy HPO knobs behave exactly as before."""
+async def test_legacy_start_keeps_canonical_defaults(monkeypatch, tmp_path):
+    """Back-compat: a legacy-shape start (no canonical fields) leaves
+    skill_id empty and skill_params a plain empty dict."""
     _configure(monkeypatch, tmp_path)
-    _, orch = await _start_and_capture(
-        monkeypatch, tmp_path, enable_hpo=True, hpo_trials=50,
-    )
+    _, orch = await _start_and_capture(monkeypatch, tmp_path)
     cfg = orch.captured_config
     assert cfg is not None
     assert cfg.skill_id == ""
-    assert cfg.enable_hpo is True
-    assert cfg.hpo_trials == 50
-    # Flat fields mirror into skill_params per ResearchConfig.__post_init__.
-    assert cfg.skill_params["enable_hpo"] is True
-    assert cfg.skill_params["hpo_trials"] == 50
+    assert cfg.skill_params == {}
+

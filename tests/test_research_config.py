@@ -131,48 +131,6 @@ def test_skill_id_when_explicitly_set():
     assert cfg.skill_id == "ml-direction"
 
 
-def test_skill_params_initializes_to_dict():
-    """skill_params is always a dict after construction (never None). The
-    non-falsy flat-field defaults (hpo_trials=20, hpo_timesteps=50000) mirror
-    into it; falsy defaults (enable_hpo=False, trading_mode=None) do not."""
-    cfg = ResearchConfig(
-        id="s1", instrument="BTCUSD", timeframe="5m", model_type="direction"
-    )
-    assert isinstance(cfg.skill_params, dict)
-    # Non-falsy defaults mirror in.
-    assert cfg.skill_params.get("hpo_trials") == 20
-    assert cfg.skill_params.get("hpo_timesteps") == 50000
-    # Falsy defaults do not.
-    assert "enable_hpo" not in cfg.skill_params
-    assert "trading_mode" not in cfg.skill_params
-
-
-def test_flat_ml_fields_mirror_into_skill_params():
-    """The flat ML fields (enable_hpo/hpo_*/trading_mode/...) mirror into
-    skill_params so manifest-driven runtimes read them from one dict (P2-018).
-    Fields that are falsy (None/False) are not mirrored."""
-    cfg = ResearchConfig(
-        id="s1", instrument="BTCUSD", timeframe="5m", model_type="rl",
-        enable_hpo=True, hpo_trials=15, hpo_timesteps=25000,
-        trading_mode="margin", agent_strategy="AGGR", initial_balance=10000.0,
-    )
-    assert cfg.skill_params["enable_hpo"] is True
-    assert cfg.skill_params["hpo_trials"] == 15
-    assert cfg.skill_params["hpo_timesteps"] == 25000
-    assert cfg.skill_params["trading_mode"] == "margin"
-    assert cfg.skill_params["agent_strategy"] == "AGGR"
-    assert cfg.skill_params["initial_balance"] == 10000.0
-
-
-def test_falsy_flat_fields_not_mirrored():
-    """enable_hpo=False / trading_mode=None are NOT mirrored (they're defaults)."""
-    cfg = ResearchConfig(
-        id="s1", instrument="BTCUSD", timeframe="5m", model_type="direction"
-    )
-    assert "enable_hpo" not in cfg.skill_params
-    assert "trading_mode" not in cfg.skill_params
-
-
 def test_skill_params_passed_explicitly_are_preserved():
     """A caller can pass skill_params directly; it's not overwritten."""
     cfg = ResearchConfig(
@@ -188,3 +146,19 @@ def test_skill_version_field_exists():
         id="s1", instrument="BTCUSD", timeframe="5m", model_type="direction"
     )
     assert cfg.skill_version == ""
+
+
+def test_skill_params_initializes_to_dict():
+    """skill_params is always a dict after construction (never None)."""
+    cfg = ResearchConfig(
+        id="s1", instrument="BTCUSD", timeframe="5m", model_type="direction"
+    )
+    assert cfg.skill_params == {}
+
+
+def test_skill_params_roundtrip():
+    cfg = ResearchConfig(
+        id="s1", instrument="BTCUSD", timeframe="5m", model_type="direction",
+        skill_params={"eval_set": "eval.jsonl"},
+    )
+    assert cfg.skill_params == {"eval_set": "eval.jsonl"}

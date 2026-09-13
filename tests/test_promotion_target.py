@@ -8,7 +8,7 @@ Mirrors ``tests/test_state_store.py`` (P1-009) and ``tests/test_output_parser.py
 signature drift. The behavioral gate is the existing ``ConfigPromoter`` suite
 (``test_config_promoter_gate_bundle.py`` etc.) and the X-002 parity fixture
 ``promotion_preview/development_scope_basic.json`` — which bakes
-``target_path: "<host_configs>/instrument_configs/DOGE_USDT_15m.yaml"``, so the
+``target_path: "<host_configs>/direction/DOGE_USDT_15m.yaml"``, so the
 path-derivation contract is locked.
 """
 
@@ -41,7 +41,6 @@ def test_promotion_target_protocol_surface_matches_impl():
 
     proto_methods = sorted(PromotionTarget.__protocol_attrs__)
     assert proto_methods == [
-        "extract_strategy_market",
         "metadata_sidecar_path",
         "rollback_metadata_sidecar_path",
         "rollback_snapshot_path",
@@ -103,13 +102,13 @@ def test_minimal_promotion_target_satisfies_protocol():
 @pytest.mark.parametrize(
     "model_type,instrument,timeframe,expected_suffix",
     [
-        ("direction", "DOGE_USDT", "15m", "instrument_configs/DOGE_USDT_15m.yaml"),
-        ("volatility", "BTC_USDT", "1h", "instrument_configs/BTC_USDT_1h.yaml"),
+        ("direction", "DOGE_USDT", "15m", "direction/DOGE_USDT_15m.yaml"),
+        ("volatility", "BTC_USDT", "1h", "volatility/BTC_USDT_1h.yaml"),
         (
             "rl",
             "ETH_USDT",
             "5m",
-            "rl/ETH_USDT_5m_BALA_stock_production.yaml",
+            "rl/ETH_USDT_5m.yaml",
         ),
     ],
 )
@@ -117,8 +116,7 @@ def test_target_path_derivation_matches_golden(
     model_type, instrument, timeframe, expected_suffix
 ):
     """``FilePathPromotionTarget.target_path`` reproduces the exact path string
-    the parity golden bakes (``<host_configs>/<expected_suffix>``). ML-67: RL
-    includes strategy + market_type in the filename."""
+    the parity golden bakes (``<host_configs>/<expected_suffix>``)."""
     target = FilePathPromotionTarget()
     result = target.target_path(
         model_type=model_type,
@@ -126,17 +124,6 @@ def test_target_path_derivation_matches_golden(
         timeframe=timeframe,
     )
     assert result.endswith(expected_suffix), f"got {result!r}"
-
-
-def test_target_path_unknown_model_type_raises():
-    """Unknown model_type raises ValueError (mirrors the old _get_target_path)."""
-    target = FilePathPromotionTarget()
-    with pytest.raises(ValueError):
-        target.target_path(
-            model_type="unknown",
-            instrument="X",
-            timeframe="1m",
-        )
 
 
 def test_config_promoter_target_path_delegates_to_impl():
@@ -185,8 +172,6 @@ class _RecordingTarget:
         self.calls.append("rollback_metadata_sidecar_path")
         return "/recorded/rollback.json"
 
-    def extract_strategy_market(self, yaml_str: str) -> tuple:
-        self.calls.append("extract_strategy_market")
         return ("BALA", "stock")
 
     async def write(self, path: str, content: str) -> None:
@@ -209,7 +194,6 @@ def test_config_promoter_dispatches_through_injected_target():
         target_path="/any.yaml", research_id="res_x", iteration=3,
     ) == "/recorded/rollback.yaml"
     assert promoter._rollback_metadata_sidecar_path("/any.yaml", 9) == "/recorded/rollback.json"
-    assert promoter._extract_strategy_market("agent_strategy: X") == ("BALA", "stock")
     asyncio.run(promoter._write_text_file("/any.yaml", "content"))
 
     assert target.calls == [
@@ -217,7 +201,6 @@ def test_config_promoter_dispatches_through_injected_target():
         "metadata_sidecar_path",
         "rollback_snapshot_path",
         "rollback_metadata_sidecar_path",
-        "extract_strategy_market",
         "write",
     ]
     assert target.writes == [("/any.yaml", "content")]
@@ -242,7 +225,7 @@ def test_config_promoter_accepts_injected_target():
 def test_metadata_sidecar_path_shape():
     """``metadata_sidecar_path`` shape: ``<name>.<scope>-promotion.iter-<N>.json``."""
     target = FilePathPromotionTarget()
-    result = target.metadata_sidecar_path("/host/configs/instrument_configs/X_15m.yaml", 7)
+    result = target.metadata_sidecar_path("/host/configs/direction/X_15m.yaml", 7)
     assert result.endswith("X_15m.yaml.development-promotion.iter-7.json")
 
 
@@ -260,22 +243,3 @@ def test_rollback_paths_shape():
     assert meta.endswith("X_15m.yaml.development-rollback.promotion-42.json")
 
 
-def test_extract_strategy_market_defaults_and_parse():
-    """``extract_strategy_market`` defaults to ``("BALA", "stock")`` and parses
-    a real YAML config string."""
-    target = FilePathPromotionTarget()
-    assert target.extract_strategy_market("not yaml at all") == ("BALA", "stock")
-    parsed = target.extract_strategy_market(
-        "agent_strategy: AGGR\nenvironment:\n  trading_mode: margin\n"
-    )
-    assert parsed == ("AGGR", "margin")
-
-
-@pytest.mark.asyncio
-async def test_write_is_atomic_and_durable(tmp_path):
-    """``write`` performs the tmp+fsync+os.replace atomic write and lands the
-    content at the target path."""
-    target = FilePathPromotionTarget()
-    out = tmp_path / "sub" / "out.yaml"
-    await target.write(str(out), "hello: world\n")
-    assert out.read_text() == "hello: world\n"

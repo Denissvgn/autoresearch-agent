@@ -508,7 +508,6 @@ def test_legacy_start_forwards_no_canonical_fields(client: TestClient):
             "instrument": "DOGE_USDT",
             "timeframe": "15m",
             "model_type": "direction",
-            "enable_hpo": True,
         },
     )
     assert response.status_code == 201
@@ -517,9 +516,7 @@ def test_legacy_start_forwards_no_canonical_fields(client: TestClient):
     assert captured["skill_params"] is None
     assert captured["subject_id"] is None
     assert captured["variant"] is None
-    # Legacy flat HPO knob still passed through.
-    assert captured["enable_hpo"] is True
-    # And the legacy audit metadata carries no canonical keys (None extras
+    # The legacy audit metadata carries no canonical keys (None extras
     # are dropped by record_api_audit_event).
     start_events = [
         e for e in _test_store.audit_events
@@ -528,4 +525,3 @@ def test_legacy_start_forwards_no_canonical_fields(client: TestClient):
     metadata = start_events[0]["request_metadata"]
     assert "skill_id" not in metadata
     assert "skill_params" not in metadata
-    assert metadata["enable_hpo"] is True

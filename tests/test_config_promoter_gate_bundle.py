@@ -1831,7 +1831,7 @@ async def test_preview_derives_addressable_rollback_and_smoke_readiness(
     monkeypatch.setattr(
         config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
     )
-    target = tmp_path / "configs" / "instrument_configs" / "DOGE_USDT_15m.yaml"
+    target = tmp_path / "configs" / "direction" / "DOGE_USDT_15m.yaml"
     target.parent.mkdir(parents=True)
     target.write_text("agent_strategy: OLD\n", encoding="utf-8")
     metrics = _passing_metrics()
@@ -1864,7 +1864,7 @@ async def test_confirm_writes_rollback_snapshot_and_rollback_restores_previous_c
     monkeypatch.setattr(
         config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
     )
-    target = tmp_path / "configs" / "instrument_configs" / "DOGE_USDT_15m.yaml"
+    target = tmp_path / "configs" / "direction" / "DOGE_USDT_15m.yaml"
     target.parent.mkdir(parents=True)
     target.write_text("agent_strategy: OLD\n", encoding="utf-8")
     workspace = tmp_path / "workspace"
@@ -2036,7 +2036,7 @@ async def test_preview_emits_development_signal_health_metrics(
     monkeypatch.setattr(
         config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
     )
-    target = tmp_path / "configs" / "instrument_configs" / "DOGE_USDT_15m.yaml"
+    target = tmp_path / "configs" / "direction" / "DOGE_USDT_15m.yaml"
     target.parent.mkdir(parents=True)
     target.write_text("agent_strategy: OLD\n", encoding="utf-8")
     store = FakePromotionStore(_best_iteration(_passing_m7_remaining_metrics()))
@@ -2063,7 +2063,7 @@ async def test_preview_blocks_missing_development_signal_health_metrics(
     monkeypatch.setattr(
         config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
     )
-    target = tmp_path / "configs" / "instrument_configs" / "DOGE_USDT_15m.yaml"
+    target = tmp_path / "configs" / "direction" / "DOGE_USDT_15m.yaml"
     target.parent.mkdir(parents=True)
     target.write_text("agent_strategy: OLD\n", encoding="utf-8")
     metrics = _passing_m7_remaining_metrics()
@@ -2088,7 +2088,7 @@ async def test_preview_records_inference_reload_validation(
     monkeypatch.setattr(
         config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
     )
-    target = tmp_path / "configs" / "instrument_configs" / "DOGE_USDT_15m.yaml"
+    target = tmp_path / "configs" / "direction" / "DOGE_USDT_15m.yaml"
     target.parent.mkdir(parents=True)
     target.write_text("agent_strategy: OLD\n", encoding="utf-8")
     store = FakePromotionStore(_best_iteration(_passing_m7_remaining_metrics()))
@@ -2188,7 +2188,7 @@ async def test_confirm_blocks_reload_failure_before_replacing_prior_config(
     monkeypatch.setattr(
         config_promoter.settings, "host_configs_path", str(tmp_path / "configs")
     )
-    target = tmp_path / "configs" / "instrument_configs" / "DOGE_USDT_15m.yaml"
+    target = tmp_path / "configs" / "direction" / "DOGE_USDT_15m.yaml"
     target.parent.mkdir(parents=True)
     target.write_text("agent_strategy: OLD\n", encoding="utf-8")
     metrics = _passing_m7_remaining_metrics()

@@ -123,16 +123,8 @@ def _config(**overrides: Any) -> ResearchConfig:
 
 def test_phase_contract_block_sources_from_manifest_not_constants(monkeypatch):
     """With ``skill_id`` set, the prompt's phase contract renders the
-    manifest's phase plan even when the hardcoded per-model table is
-    unavailable — proving the runtime (not ``phases_for_model``) is the
-    production source."""
-    def _no_constants(model_type: str) -> list:
-        raise AssertionError(
-            "phases_for_model must not be consulted for manifest-driven "
-            f"sessions (called with {model_type!r})"
-        )
-
-    monkeypatch.setattr(orchestrator_module, "phases_for_model", _no_constants)
+    manifest's phase plan — the skill runtime is the production source;
+    sessions whose skill declares no plan get no contract."""
     orch = AgentOrchestrator(MagicMock())  # type: ignore[arg-type]
 
     block = orch._build_phase_contract_block(
@@ -142,12 +134,7 @@ def test_phase_contract_block_sources_from_manifest_not_constants(monkeypatch):
     for phase in _manifest("prompt-engineering").phase_plan:
         assert phase.id in block, f"manifest phase {phase.id!r} missing from contract"
 
-    # The transitional fallback is gone for legacy sessions only: with no
-    # skill_id the (patched-to-explode) table would be consulted, so instead
-    # prove the branch selection with a returning patch.
-    monkeypatch.setattr(
-        orchestrator_module, "phases_for_model", lambda mt: [],
-    )
+    # No skill_id → no runtime → no contract.
     legacy_block = orch._build_phase_contract_block(_config())
     assert legacy_block == ""
 

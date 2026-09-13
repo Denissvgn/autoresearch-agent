@@ -235,17 +235,9 @@ class SessionManager:
         max_budget_usd: Optional[float] = None,
         timeout_minutes: Optional[int] = None,
         focus_hint: Optional[str] = None,
-        trading_mode: Optional[str] = None,
-        agent_strategy: Optional[str] = None,
-        initial_balance: Optional[float] = None,
-        enable_hpo: Optional[bool] = None,
-        hpo_trials: Optional[int] = None,
-        hpo_timesteps: Optional[int] = None,
         manifest: Optional[Dict[str, Any]] = None,
         # ARC-011 implementation review C1 (2026-08-15): canonical start
-        # shape, forwarded by the API after P3-013 validation. Legacy
-        # callers omit these and keep the exact previous behavior
-        # (skill_id="" → transitional runtime, flat-field HPO knobs).
+        # shape, forwarded by the API after P3-013 validation.
         skill_id: Optional[str] = None,
         skill_params: Optional[Dict[str, Any]] = None,
         subject_id: Optional[str] = None,
@@ -276,27 +268,6 @@ class SessionManager:
             f"{settings.runs_dir}/{instrument}_{timeframe}/{model_type}"
         )
 
-        # ARC-011 implementation review C1 (2026-08-15): canonical
-        # skill_params are no longer validated-then-dropped. Recognized flat
-        # ML knobs inside skill_params win over the legacy keyword arguments
-        # — the same "canonical wins" rule _translate_canonical_request
-        # applies to skill_id/subject_id/variant. Presence-based (not
-        # truthiness-based) so an explicit false / small canonical value
-        # overrides a truthy legacy one.
-        params = dict(skill_params or {})
-        if params.get("enable_hpo") is not None:
-            enable_hpo = bool(params["enable_hpo"])
-        if params.get("hpo_trials") is not None:
-            hpo_trials = int(params["hpo_trials"])
-        if params.get("hpo_timesteps") is not None:
-            hpo_timesteps = int(params["hpo_timesteps"])
-        if params.get("trading_mode") is not None:
-            trading_mode = params["trading_mode"]
-        if params.get("agent_strategy") is not None:
-            agent_strategy = params["agent_strategy"]
-        if params.get("initial_balance") is not None:
-            initial_balance = params["initial_balance"]
-
         config = ResearchConfig(
             id=research_id,
             instrument=instrument,
@@ -309,20 +280,8 @@ class SessionManager:
             timeout_s=timeout_minutes * 60 if timeout_minutes else 0,
             focus_hint=focus_hint,
             workspace_path=workspace_path,
-            trading_mode=trading_mode,
-            agent_strategy=agent_strategy,
-            initial_balance=initial_balance,
-            enable_hpo=enable_hpo or False,
-            hpo_trials=hpo_trials or 20,
-            hpo_timesteps=hpo_timesteps or 50000,
-            # ARC-011 review C1: canonical fields are authoritative when
-            # supplied — skill_id routes materialize_skill_runtime to the
-            # manifest-driven runtime; subject_id/variant are pure aliases
-            # that __post_init__ derives from instrument/timeframe when
-            # empty. The full params dict is kept so manifest-driven
-            # runtimes read every knob from one surface.
             skill_id=skill_id or "",
-            skill_params=params,
+            skill_params=skill_params or {},
             subject_id=subject_id or "",
             variant=variant or "",
         )
@@ -562,12 +521,6 @@ class SessionManager:
             max_budget_usd=config.max_budget_usd,
             timeout_s=config.timeout_s,
             focus_hint=config.focus_hint,
-            trading_mode=config.trading_mode,
-            agent_strategy=config.agent_strategy,
-            initial_balance=config.initial_balance,
-            enable_hpo=config.enable_hpo,
-            hpo_trials=config.hpo_trials,
-            hpo_timesteps=config.hpo_timesteps,
             overrides=overrides,
         )
         # ARC-011 P4-002, revised by review C3 (2026-08-15): the per-session

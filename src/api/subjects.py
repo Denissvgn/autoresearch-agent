@@ -86,40 +86,7 @@ def _enumerate_subjects(manifest: ResearchSkillManifest) -> List[Dict[str, Any]]
             {"id": s.id, "label": s.label or s.id}
             for s in subjects_cfg.static
         ]
-    return _legacy_instrument_glob(manifest)
-
-
-def _legacy_instrument_glob(manifest: ResearchSkillManifest) -> List[Dict[str, Any]]:
-    """Fall-back subject enumeration for ML skills: glob instrument config files.
-
-    Mirrors the existing ``GET /instruments`` logic so ML skills that declare
-    ``subjects.enumerator: scripts/list_subjects.py`` still get a useful list
-    without a subprocess call.
-    """
-    import glob
-    import os
-
-    subjects: List[Dict[str, Any]] = []
-    instrument_dir = os.path.join(settings.configs_dir, "instrument_configs")
-    if os.path.isdir(instrument_dir):
-        for path in sorted(glob.glob(os.path.join(instrument_dir, "*.yaml"))):
-            filename = os.path.basename(path)
-            name = filename.rsplit(".", 1)[0]
-            parts = name.rsplit("_", 1)
-            if len(parts) == 2 and parts[1] in (
-                "1m", "5m", "15m", "30m", "1h", "4h", "1d",
-            ):
-                instrument = "_".join(parts[0].split("_")[:2])
-                subjects.append({"id": instrument, "label": instrument})
-            else:
-                subjects.append({"id": name, "label": name})
-    seen: set[str] = set()
-    unique: List[Dict[str, Any]] = []
-    for s in subjects:
-        if s["id"] not in seen:
-            seen.add(s["id"])
-            unique.append(s)
-    return unique
+    return []
 
 
 def _enumerate_variants(manifest: ResearchSkillManifest, subject_id: str) -> List[str]:
@@ -129,31 +96,7 @@ def _enumerate_variants(manifest: ResearchSkillManifest, subject_id: str) -> Lis
         return []
     if variants_cfg.static:
         return list(variants_cfg.static)
-    return _legacy_timeframe_glob(manifest, subject_id)
-
-
-def _legacy_timeframe_glob(
-    manifest: ResearchSkillManifest, subject_id: str
-) -> List[str]:
-    """Fall-back variant enumeration for ML skills: derive timeframes from
-    instrument config filenames."""
-    import glob
-    import os
-
-    instrument_dir = os.path.join(settings.configs_dir, "instrument_configs")
-    timeframes: List[str] = []
-    if os.path.isdir(instrument_dir):
-        for path in sorted(glob.glob(os.path.join(instrument_dir, "*.yaml"))):
-            filename = os.path.basename(path)
-            name = filename.rsplit(".", 1)[0]
-            parts = name.rsplit("_", 1)
-            if len(parts) == 2:
-                instrument = "_".join(parts[0].split("_")[:2])
-                if instrument == subject_id and parts[1] in (
-                    "1m", "5m", "15m", "30m", "1h", "4h", "1d",
-                ):
-                    timeframes.append(parts[1])
-    return timeframes or ["5m", "15m", "1h", "4h"]
+    return []
 
 
 @router.get("/subjects")

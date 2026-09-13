@@ -44,22 +44,29 @@ def _workspace(tmp_path: Path) -> tuple[str, str]:
     return str(workspace), str(session)
 
 
-def test_command_policy_allows_known_training_operations(tmp_path: Path):
+def test_base_policy_is_default_deny_for_scripts(tmp_path: Path):
     workspace, session = _workspace(tmp_path)
 
+    decision = evaluate_command_policy(
+        ".venv/bin/python scripts/autotuner/setup.py --instrument X",
+        workspace_root=workspace,
+        session_workspace=session,
+    )
+    assert not decision.allowed
+
+
+def test_command_policy_allows_skill_declared_operations(tmp_path: Path):
+    workspace, session = _workspace(tmp_path)
+
+    extension = {
+        "allowed_scripts": {"scripts/autotuner/setup.py"},
+        "copyable_files": {"train.yaml", "best_train.yaml"},
+        "readable_files": {"results.json"},
+    }
     allowed = [
         (
             ".venv/bin/python scripts/autotuner/setup.py "
             "--instrument DOGE_USDT --timeframe 15m --models direction"
-        ),
-        (
-            f"cd {workspace} && .venv/bin/python "
-            "scripts/autotuner/direction/prepare.py "
-            " --config runs/autotuner/DOGE_USDT_15m/direction/train.yaml --quick"
-        ),
-        (
-            "cp runs/autotuner/DOGE_USDT_15m/direction/train.yaml "
-            "runs/autotuner/DOGE_USDT_15m/direction/best_train.yaml"
         ),
         "cat runs/autotuner/DOGE_USDT_15m/direction/results.json",
     ]
@@ -69,6 +76,7 @@ def test_command_policy_allows_known_training_operations(tmp_path: Path):
             command,
             workspace_root=workspace,
             session_workspace=session,
+            policy_extension=extension,
         )
         assert decision.allowed, command
         assert decision.argv[0] != "bash"
@@ -161,6 +169,9 @@ def test_governed_runner_executes_without_shell_and_redacts_output(tmp_path: Pat
     runner = GovernedCommandRunner(
         workspace_root=workspace,
         session_workspace=session,
+        policy_extension={"allowed_scripts": {
+            "scripts/autotuner/enrich_rl_dataset.py",
+        }},
     )
     result = runner.run(
         ".venv/bin/python scripts/autotuner/enrich_rl_dataset.py "
@@ -194,6 +205,9 @@ def test_governed_runner_streams_redacted_output_chunks(tmp_path: Path):
     runner = GovernedCommandRunner(
         workspace_root=workspace,
         session_workspace=session,
+        policy_extension={"allowed_scripts": {
+            "scripts/autotuner/enrich_rl_dataset.py",
+        }},
     )
     result = runner.run(
         ".venv/bin/python scripts/autotuner/enrich_rl_dataset.py "
@@ -235,6 +249,9 @@ def test_governed_runner_timeout_cleans_process_group(tmp_path: Path):
     runner = GovernedCommandRunner(
         workspace_root=workspace,
         session_workspace=session,
+        policy_extension={"allowed_scripts": {
+            "scripts/autotuner/enrich_rl_dataset.py",
+        }},
     )
     result = runner.run(
         ".venv/bin/python scripts/autotuner/enrich_rl_dataset.py "
@@ -321,7 +338,13 @@ def test_governed_runner_strips_control_plane_secrets_from_child_env(
         encoding="utf-8",
     )
 
-    runner = GovernedCommandRunner(workspace_root=workspace, session_workspace=session)
+    runner = GovernedCommandRunner(
+        workspace_root=workspace,
+        session_workspace=session,
+        policy_extension={"allowed_scripts": {
+            "scripts/autotuner/enrich_rl_dataset.py",
+        }},
+    )
     result = runner.run(
         ".venv/bin/python scripts/autotuner/enrich_rl_dataset.py "
         "--instrument DOGE_USDT --timeframe 15m",
@@ -399,7 +422,13 @@ def test_governed_runner_extra_env_delivers_nonce(tmp_path: Path):
     workspace, session = _workspace(tmp_path)
     script, dump_path = _nonce_dump_script(Path(workspace))
 
-    runner = GovernedCommandRunner(workspace_root=workspace, session_workspace=session)
+    runner = GovernedCommandRunner(
+        workspace_root=workspace,
+        session_workspace=session,
+        policy_extension={"allowed_scripts": {
+            "scripts/autotuner/enrich_rl_dataset.py",
+        }},
+    )
     nonce = "deadbeef" * 8
     result = runner.run(
         ".venv/bin/python scripts/autotuner/enrich_rl_dataset.py "
@@ -422,7 +451,13 @@ def test_governed_runner_without_extra_env_has_no_nonce(tmp_path: Path, monkeypa
     workspace, session = _workspace(tmp_path)
     script, dump_path = _nonce_dump_script(Path(workspace))
 
-    runner = GovernedCommandRunner(workspace_root=workspace, session_workspace=session)
+    runner = GovernedCommandRunner(
+        workspace_root=workspace,
+        session_workspace=session,
+        policy_extension={"allowed_scripts": {
+            "scripts/autotuner/enrich_rl_dataset.py",
+        }},
+    )
     result = runner.run(
         ".venv/bin/python scripts/autotuner/enrich_rl_dataset.py "
         "--instrument DOGE_USDT --timeframe 15m",
@@ -450,6 +485,9 @@ def test_execute_tool_threads_extra_env_to_bash(tmp_path: Path):
         workspace,
         session,
         extra_env={"AUTORESEARCH_SESSION_NONCE": nonce},
+        policy_extension={"allowed_scripts": {
+            "scripts/autotuner/enrich_rl_dataset.py",
+        }},
     )
     assert result.meta["returncode"] == 0, result.content
     assert dump_path.read_text(encoding="utf-8") == nonce, (
