@@ -27,7 +27,7 @@ feeding ``ConfigPromoter.preview`` rather than being part of the write surface.
 The extraction is **behavior-identical**: every path-derivation string and the
 atomic-write (tmp+fsync+``os.replace`` + directory fsync) body are unchanged.
 The X-002 parity fixture ``promotion_preview/development_scope_basic.json``
-bakes ``target_path: "<host_configs>/instrument_configs/DOGE_USDT_15m.yaml"``,
+bakes ``target_path: "<host_configs>/<skill>/<subject>_<variant>.yaml"``,
 so the derivation must stay byte-identical. Mirrors the P1-010..012
 ``OutputParser`` and P1-006/007 ``StateStore`` precedents.
 
