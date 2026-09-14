@@ -127,6 +127,7 @@ from src.core.state_store import StateStore
 from src.core.trial_workspace import (
     TrialContext,
     build_trial_context,
+    is_trial_eligible_command,
     trial_marker_candidates,
 )
 from src.ws.events import broadcaster
@@ -252,6 +253,62 @@ PROMOTION_HANDOFF_INSTRUCTION = (
     "Promotion handoff: Do not promote directly. Finish with a best validated "
     "config and let the server preview/confirm."
 )
+
+# ---------------------------------------------------------------------------
+# Turn-execution state for one assistant turn (P2 parallel-trial dispatch)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class TurnTrialState:
+    """Mutable per-turn execution state owned by the agent tool loop.
+
+    The sequential path mutates one instance inline (byte-identical behavior:
+    ``results_by_index`` is assembled into ``tool_results`` in block order at
+    the end of the turn). The parallel path hands the same instance to each
+    deferred trial finalizer — the mutation *points* are identical, only the
+    execution of the subprocesses overlaps. ``results_by_index`` (not an
+    append-order list) is what keeps per-trial ``ToolResultBlock``s aligned
+    with their blocks when trials finish out of order.
+    """
+
+    # -- turn-scoped identity -------------------------------------------------
+    research_id: str
+    turn: int
+    workspace: str
+    # -- live counters/flags (loop mutations, shared by finalize) --------------
+    iteration_count: int = 0
+    duplicate_rejected_count: int = 0
+    turn_recorded_iteration: bool = False
+    turn_ran_training_command: bool = False
+    policy_rejections_consecutive: int = 0
+    policy_aborted: bool = False
+    # -- result assembly (block index -> tool result, ordered at drain time) ---
+    results_by_index: Dict[int, RequestBlock] = field(default_factory=dict)
+    # -- Track D1 inert-change detection (session-scoped set, shared ref) ------
+    seen_primary_metrics: set = field(default_factory=set)
+
+
+@dataclass
+class PendingTrial:
+    """One deferred trial execution (P2 parallel-trial dispatch).
+
+    Pre-work (stage, snapshot, duplicate guard, runtime record) already ran
+    sequentially at the block's loop position; ``task`` runs the governed
+    subprocess. Finalization happens in block order at drain time via
+    ``AgentOrchestrator._finalize_tool_result``.
+    """
+
+    block_index: int
+    block: ToolUseBlock
+    task: asyncio.Task
+    trial_ctx: TrialContext
+    cmd_str: str
+    pending_snapshot: Optional[str]
+    runtime_command_id: Optional[int]
+    command_started_at: Optional[float]
+    tool_meta: Dict[str, Any]
+
 
 # ---------------------------------------------------------------------------
 # Orchestrator
@@ -618,6 +675,507 @@ class AgentOrchestrator:
 
     async def _load_claude_md_async(self) -> str:
         return await asyncio.to_thread(self._load_claude_md)
+
+    async def _drain_oldest_pending_trial(
+        self,
+        pending_trials: "list[PendingTrial]",
+        state: TurnTrialState,
+        *,
+        config: ResearchConfig,
+        turn: int,
+        total_cost: float,
+        agent_log: AgentLogWriter,
+        skill: SkillRuntime,
+        skill_policy_extension: Mapping[str, Any],
+        nonce_bytes: Optional[bytes],
+        skill_nonce_field: str,
+        skill_requires_signed: bool,
+    ) -> None:
+        """Await the oldest deferred trial and finalize it (block order).
+
+        P2 parallel-trial dispatch: the trial's subprocess ran concurrently
+        with its siblings (each in its own staged trial dir); finalization
+        applies the shared per-command cascade — still in block order — so
+        iteration numbering, policy-rejection counting, and the agent log
+        stay deterministic. ``per_trial_recording=True`` lets every isolated
+        trial record its own iteration (the point of parallel trials)
+        instead of being suppressed by the sequential first-wins turn flag.
+        """
+        pending = pending_trials.pop(0)
+        try:
+            tool_execution = await pending.task
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — mirror _execute_tool's catch-all
+            logger.warning(
+                "Research %s turn %d: trial task failed: %s",
+                state.research_id, turn, exc, exc_info=exc,
+            )
+            tool_execution = ToolExecutionResult(f"Tool error (bash): {exc}")
+        # The execution result's meta (policy decision, returncode, timeout,
+        # normalized command) only exists once the task completes — merge it
+        # with the trial-provenance fields captured at dispatch time so the
+        # finalized row carries both.
+        tool_meta: Dict[str, Any] = dict(tool_execution.meta or {})
+        tool_meta.update(pending.tool_meta)
+        await self._finalize_tool_result(
+            block=pending.block,
+            block_index=pending.block_index,
+            tool_execution=tool_execution,
+            tool_meta=tool_meta,
+            config=config,
+            turn=turn,
+            total_cost=total_cost,
+            state=state,
+            cmd_str=pending.cmd_str,
+            trial_dir=pending.trial_ctx.trial_dir,
+            pending_snapshot=pending.pending_snapshot,
+            runtime_command_id=pending.runtime_command_id,
+            command_started_at=pending.command_started_at,
+            agent_log=agent_log,
+            skill=skill,
+            skill_policy_extension=skill_policy_extension,
+            nonce_bytes=nonce_bytes,
+            skill_nonce_field=skill_nonce_field,
+            skill_requires_signed=skill_requires_signed,
+            per_trial_recording=True,
+        )
+
+    async def _finalize_tool_result(  # noqa: C901 - mechanical move, see below
+        self,
+        *,
+        block: ToolUseBlock,
+        block_index: int,
+        tool_execution: ToolExecutionResult,
+        tool_meta: Dict[str, Any],
+        config: ResearchConfig,
+        turn: int,
+        total_cost: float,
+        state: TurnTrialState,
+        cmd_str: str,
+        trial_dir: Optional[str],
+        pending_snapshot: Optional[str],
+        runtime_command_id: Optional[int],
+        command_started_at: Optional[float],
+        agent_log: AgentLogWriter,
+        skill: SkillRuntime,
+        skill_policy_extension: Mapping[str, Any],
+        nonce_bytes: Optional[bytes],
+        skill_nonce_field: str,
+        skill_requires_signed: bool,
+        per_trial_recording: bool = False,
+    ) -> None:
+        # -- helper prologue shared by both finalize halves -------------------
+        research_id = state.research_id
+        workspace = state.workspace
+        tool_result = tool_execution.content
+        if runtime_command_id is not None:
+            tool_meta = dict(tool_meta)
+            tool_meta["runtime_command_id"] = runtime_command_id
+            await self._store.finish_runtime_command(
+                runtime_command_id,
+                status=self._runtime_command_status(tool_meta),
+                returncode=tool_meta.get("returncode"),
+                timed_out=bool(tool_meta.get("timed_out")),
+                output_preview=tool_result[:5000],
+                metadata=tool_meta,
+            )
+        logger.info(
+            "Research %s turn %d: tool=%s result=%s",
+            research_id, turn, block.name,
+            tool_result[:200],
+        )
+        if (
+            block.name == "bash"
+            and tool_meta.get("policy_allowed") is False
+        ):
+            await self._record_command_policy_rejection(
+                config=config,
+                turn=turn,
+                command=str(block.input.get("command", "")),
+                tool_meta=tool_meta,
+            )
+            state.policy_rejections_consecutive += 1
+            if state.policy_rejections_consecutive >= _MAX_CONSECUTIVE_POLICY_REJECTIONS:
+                state.policy_aborted = True
+                logger.warning(
+                    "Research %s: aborting after %d "
+                    "consecutive policy rejections",
+                    research_id,
+                    state.policy_rejections_consecutive,
+                )
+                await agent_log.append(
+                    "system",
+                    f"Aborting: {state.policy_rejections_consecutive} "
+                    "consecutive command-policy rejections. "
+                    "Operator review required.",
+                    turn=turn,
+                )
+        elif (
+            block.name == "bash"
+            and tool_meta.get("policy_allowed") is True
+        ):
+            state.policy_rejections_consecutive = 0
+        await agent_log.append(
+            "tool_result", tool_result[:5000], turn=turn,
+            meta={
+                "tool_id": block.id,
+                "tool_name": block.name,
+                **tool_meta,
+            },
+        )
+        # Track D2: digest large bash outputs before they enter
+        # the agent's context — the raw `tool_result` variable
+        # stays untouched for the server-side marker parsing
+        # below (ITERATION_RESULT / `---` metrics / HPO study).
+        agent_visible_result = tool_result
+        if (
+            block.name == "bash"
+            and len(tool_result) > settings.agent_output_digest_max_chars > 0
+        ):
+            _full_log_rel = None
+            try:
+                _log_dir = Path(workspace) / "command_logs"
+                _log_dir.mkdir(parents=True, exist_ok=True)
+                _log_file = _log_dir / f"turn_{turn:03d}_{block.id[-8:]}.log"
+                _log_file.write_text(tool_result, encoding="utf-8")
+                _full_log_rel = str(
+                    _log_file.relative_to(settings.workspace_root)
+                ) if str(_log_file).startswith(
+                    str(settings.workspace_root)
+                ) else str(_log_file)
+            except Exception as _log_exc:  # noqa: BLE001
+                logger.debug("Full-log persist failed: %s", _log_exc)
+            agent_visible_result = digest_command_output(
+                tool_result,
+                max_chars=settings.agent_output_digest_max_chars,
+                full_log_path=_full_log_rel,
+            )
+            logger.info(
+                "Research %s turn %d: digested bash output "
+                "%d → %d chars",
+                research_id, turn,
+                len(tool_result), len(agent_visible_result),
+            )
+        state.results_by_index[block_index] = ToolResultBlock(
+            tool_use_id=block.id,
+            content=agent_visible_result,
+        )
+        # ARC-011 review C4 (P4-016): a skill's declared
+        # scripts are that skill's iteration-producing
+        # commands — a relayed marker is backed by a real run.
+        if block.name == "bash" and any(
+            str(script) in cmd_str
+            for script in (
+                skill_policy_extension.get("allowed_scripts") or ()
+            )
+        ):
+            state.turn_ran_training_command = True
+
+        # Universal detection: scan bash output for
+        # --- delimited metrics blocks. This works regardless
+        # of LLM model since it's parsing deterministic
+        # Python script output.
+        elif (
+            block.name == "bash"
+            and not (state.turn_recorded_iteration and not per_trial_recording)
+            and "---" in tool_result
+        ):
+            metrics = parse_prepare_output(tool_result)
+            # ARC-011 review C3: this auto-detect path
+            # previously bypassed W11 verification entirely
+            # (parse_prepare_output takes no nonce) — any
+            # bash output containing a `---` block was
+            # recorded as an iteration even for enforced
+            # skills. Route the parsed block through the
+            # four-state _verify_nonce check first.
+            _kv_result = (
+                metrics.to_dict()
+                if (
+                    metrics.primary_metric is not None
+                    and metrics.status in ("completed", "success")
+                )
+                else None
+            )
+            if _kv_result is not None:
+                _kv_result = await self._verify_kv_metrics(
+                    research_id,
+                    _kv_result,
+                    turn=turn,
+                    agent_log=agent_log,
+                    session_nonce=nonce_bytes,
+                    nonce_field=skill_nonce_field,
+                    requires_signed=skill_requires_signed,
+                    source="bash_output",
+                    pipeline_id=config.pipeline_id,
+                )
+            if _kv_result is not None:
+                state.iteration_count += 1
+                marker_from_tool = _kv_result
+                self._attach_runtime_command_metadata(
+                    marker_from_tool, tool_meta,
+                )
+                # Determine keep/discard by comparing against
+                # current session best — not just gates.
+                decision = await self._infer_decision(
+                    research_id,
+                    metrics.primary_metric,
+                    metrics.training_gates_passed,
+                )
+                marker_from_tool["decision"] = decision
+                # Attach the pre-captured snapshot so the DB
+                # is the sole source of truth for the config.
+                marker_from_tool["config_snapshot"] = pending_snapshot
+                marker_from_tool["description"] = (
+                    f"Auto-detected from experiment output "
+                    f"(turn {turn})"
+                )
+                await self._record_iteration(
+                    research_id, state.iteration_count,
+                    marker_from_tool, total_cost,
+                    workspace=workspace,
+                    turn=turn,
+                    command=cmd_str,
+                )
+                state.turn_recorded_iteration = True
+                logger.info(
+                    "Research %s turn %d: auto-detected "
+                    "iteration %d from bash output "
+                    "(%s=%.4f, training_gates=%s)",
+                    research_id, turn, state.iteration_count,
+                    metrics.metric_name,
+                    metrics.primary_metric,
+                    metrics.training_gates_passed,
+                )
+                # Track D1: bit-identical metric from a new
+                # config ⇒ the changed knob is INERT for the
+                # scored artifact. Tell the agent explicitly —
+                # otherwise it reads the rerun as evidence and
+                # keeps probing dead dimensions (observed:
+                # Option-A meta/stacking knobs, no-data
+                # lanes, non-winner roster removals).
+                _metric_val = float(metrics.primary_metric)
+                if (
+                    _metric_val in state.seen_primary_metrics
+                    and state.results_by_index
+                    and isinstance(state.results_by_index.get(block_index), ToolResultBlock)
+                ):
+                    last = state.results_by_index[block_index]
+                    assert isinstance(last, ToolResultBlock)
+                    state.results_by_index[block_index] = ToolResultBlock(
+                        tool_use_id=last.tool_use_id,
+                        content=(
+                            str(last.content)
+                            + "\n\n⚠️ INERT CHANGE DETECTED: this run "
+                            f"reproduced an earlier iteration's metric "
+                            f"BIT-IDENTICALLY ({_metric_val:.6f}). "
+                            "Training is deterministic — an identical "
+                            "metric from a different config means the "
+                            "knob(s) you changed do NOT affect the "
+                            "scored artifact (e.g. Option-A-inert "
+                            "meta/stacking knobs, feature lanes with "
+                            "no data, removing non-winning roster "
+                            "members). Do NOT count this as evidence; "
+                            "switch to a different search dimension."
+                        ),
+                    )
+                    await agent_log.append(
+                        "system",
+                        f"Inert-change note injected (metric "
+                        f"{_metric_val:.6f} repeated)",
+                        turn=turn,
+                    )
+                state.seen_primary_metrics.add(_metric_val)
+            elif (
+                metrics.status in (
+                    "crash", "timeout", "failed", "error",
+                    "pruned",
+                )
+            ):
+                # Record failed attempts as first-class discard
+                # iterations so the full audit trail is in DB
+                # and the agent cannot revisit the same invalid
+                # config region without a recorded trace.
+                state.iteration_count += 1
+                crash_marker = metrics.to_dict()
+                self._attach_runtime_command_metadata(
+                    crash_marker, tool_meta,
+                )
+                crash_marker["decision"] = "discard"
+                crash_marker["config_snapshot"] = pending_snapshot
+                crash_marker["description"] = (
+                    f"Failed ({metrics.status}) — "
+                    f"auto-detected from experiment output "
+                    f"(turn {turn})"
+                )
+                await self._record_iteration(
+                    research_id, state.iteration_count,
+                    crash_marker, total_cost,
+                    workspace=workspace,
+                    turn=turn,
+                    command=cmd_str,
+                )
+                state.turn_recorded_iteration = True
+                logger.info(
+                    "Research %s turn %d: recorded failed "
+                    "attempt %d (%s) from bash output",
+                    research_id, turn, state.iteration_count,
+                    metrics.status,
+                )
+
+        # Fallback: if bash timed out or the output was
+        # digested, check for a marker file declared by the
+        # skill's output_parser.fallback section.
+        if (
+            block.name == "bash"
+            and not (state.turn_recorded_iteration and not per_trial_recording)
+        ):
+            marker_text = await self._read_marker_file_async(
+                config, min_mtime=command_started_at,
+                trial_dir=trial_dir,
+            )
+            _rc_for_marker = tool_meta.get("returncode")
+            _command_succeeded = (
+                _rc_for_marker is None
+                or (
+                    isinstance(_rc_for_marker, int)
+                    and _rc_for_marker == 0
+                )
+            )
+            if marker_text:
+                metrics = parse_prepare_output(marker_text)
+                # ARC-011 review C3: same W11 verification
+                # as the bash auto-detect path — the marker
+                # file is written by the sanctioned script
+                # and must carry the echoed nonce for
+                # enforced skills.
+                _file_result = (
+                    metrics.to_dict()
+                    if (
+                        _command_succeeded
+                        and metrics.primary_metric is not None
+                        and metrics.status in ("completed", "success")
+                    )
+                    else None
+                )
+                if _file_result is not None:
+                    _file_result = await self._verify_kv_metrics(
+                        research_id,
+                        _file_result,
+                        turn=turn,
+                        agent_log=agent_log,
+                        session_nonce=nonce_bytes,
+                        nonce_field=skill_nonce_field,
+                        requires_signed=skill_requires_signed,
+                        source="marker_file",
+                        pipeline_id=config.pipeline_id,
+                    )
+                if _file_result is not None:
+                    state.iteration_count += 1
+                    marker_from_file = _file_result
+                    self._attach_runtime_command_metadata(
+                        marker_from_file, tool_meta,
+                    )
+                    decision = await self._infer_decision(
+                        research_id,
+                        metrics.primary_metric,
+                        metrics.training_gates_passed,
+                    )
+                    marker_from_file["decision"] = decision
+                    # Attach snapshot for marker-file path too.
+                    marker_from_file["config_snapshot"] = pending_snapshot
+                    marker_from_file["description"] = (
+                        f"Auto-detected from marker file "
+                        f"(turn {turn})"
+                    )
+                    await self._record_iteration(
+                        research_id, state.iteration_count,
+                        marker_from_file, total_cost,
+                        workspace=workspace,
+                        turn=turn,
+                        command=cmd_str,
+                    )
+                    state.turn_recorded_iteration = True
+                    logger.info(
+                    "Research %s turn %d: auto-detected "
+                    "iteration %d from marker file "
+                    "(%s=%.4f, training_gates=%s)",
+                        research_id, turn, state.iteration_count,
+                        metrics.metric_name,
+                        metrics.primary_metric,
+                        metrics.training_gates_passed,
+                    )
+                elif metrics.status in (
+                    "crash", "timeout", "failed", "error",
+                    "pruned",
+                ):
+                    state.iteration_count += 1
+                    crash_marker = metrics.to_dict()
+                    self._attach_runtime_command_metadata(
+                        crash_marker, tool_meta,
+                    )
+                    crash_marker["decision"] = "discard"
+                    crash_marker["config_snapshot"] = pending_snapshot
+                    crash_marker["description"] = (
+                        f"Failed ({metrics.status}) — "
+                        f"auto-detected from marker file "
+                        f"(turn {turn})"
+                    )
+                    await self._record_iteration(
+                        research_id, state.iteration_count,
+                        crash_marker, total_cost,
+                        workspace=workspace,
+                        turn=turn,
+                        command=cmd_str,
+                    )
+                    state.turn_recorded_iteration = True
+                    logger.info(
+                        "Research %s turn %d: recorded failed "
+                        "attempt %d (%s) from marker file",
+                        research_id, turn, state.iteration_count,
+                        metrics.status,
+                    )
+
+        if (
+            block.name == "bash"
+            and not (state.turn_recorded_iteration and not per_trial_recording)
+        ):
+            failed_status = self._infer_failed_attempt_status(
+                tool_result
+            )
+            if failed_status:
+                state.iteration_count += 1
+                failed_marker = {
+                    "status": failed_status,
+                    "primary_metric": None,
+                    "metric_name": None,
+                    "training_gates_passed": False,
+                    "all_gates_passed": False,
+                    "decision": "discard",
+                    "description": (
+                        f"Failed ({failed_status}) — "
+                        f"server-detected training command "
+                        f"failure (turn {turn})"
+                    ),
+                    "config_snapshot": pending_snapshot,
+                }
+                self._attach_runtime_command_metadata(
+                    failed_marker, tool_meta,
+                )
+                await self._record_iteration(
+                    research_id, state.iteration_count,
+                    failed_marker, total_cost,
+                    workspace=workspace,
+                    turn=turn,
+                    command=cmd_str,
+                )
+                state.turn_recorded_iteration = True
+                logger.info(
+                    "Research %s turn %d: recorded failed "
+                    "attempt %d (%s) from command status",
+                    research_id, turn, state.iteration_count,
+                    failed_status,
+                )
 
     async def _read_marker_file_async(
         self,
@@ -1984,16 +2542,46 @@ class AgentOrchestrator:
 
                 # Process response content blocks
                 assistant_content = response.content
-                tool_results = []
                 agent_text = ""
-                turn_recorded_iteration = False
-                turn_ran_training_command = False
-                # P2 per-workdir state: 1-based index of bash commands within
-                # this turn (all bash blocks counted — deterministic trial
-                # naming even when only some are trial-eligible).
+                # P2 parallel-trial dispatch: one mutable state holder per
+                # turn; ``tool_results`` is assembled in block order at the
+                # end of the block loop (identical order for the sequential
+                # path).
+                tool_results: list[RequestBlock] = []
+                turn_state = TurnTrialState(
+                    research_id=research_id,
+                    turn=turn,
+                    workspace=workspace,
+                    seen_primary_metrics=seen_primary_metrics,
+                    iteration_count=iteration_count,
+                    duplicate_rejected_count=duplicate_rejected_count,
+                )
+                # 1-based index of bash commands within this turn (all bash
+                # blocks counted — deterministic trial naming even when only
+                # some are trial-eligible).
                 turn_bash_seq = 0
 
-                for block in assistant_content:
+                # P2 parallel-trial dispatch gate: only engage when the skill
+                # opted into execution.concurrency > 1 AND the turn carries at
+                # least two sanctioned experiment commands. Otherwise the
+                # loop below runs byte-identical to the sequential path.
+                _eligible_bash_count = sum(
+                    1
+                    for b in assistant_content
+                    if isinstance(b, ToolUseBlock)
+                    and b.name == "bash"
+                    and isinstance(b.input, dict)
+                    and is_trial_eligible_command(
+                        b.input.get("command"),
+                        skill_policy_extension.get("allowed_scripts"),
+                    )
+                )
+                parallel_trials_enabled = (
+                    execution_concurrency > 1 and _eligible_bash_count >= 2
+                )
+                pending_trials: list[PendingTrial] = []
+
+                for block_index, block in enumerate(assistant_content):
                     if isinstance(block, TextBlock):
                         agent_text += block.text
                         if block.text.strip():
@@ -2135,17 +2723,17 @@ class AgentOrchestrator:
                                     "policy_operation"
                                 ) == "baseline.linked"
                             )
-                            iteration_count += 1
                             if not _is_baseline_link:
-                                duplicate_rejected_count += 1
+                                turn_state.duplicate_rejected_count += 1
+                            turn_state.iteration_count += 1
                             await self._record_iteration(
-                                research_id, iteration_count,
+                                research_id, turn_state.iteration_count,
                                 duplicate_marker, total_cost,
                                 workspace=workspace,
                                 turn=turn,
                                 command=redact_sensitive_text(raw_command_for_tool),
                             )
-                            turn_recorded_iteration = True
+                            turn_state.turn_recorded_iteration = True
                             tool_execution = duplicate_rejection
                             if _is_baseline_link:
                                 logger.info(
@@ -2178,6 +2766,63 @@ class AgentOrchestrator:
                                 if isinstance(block.input, dict)
                                 else None
                             )
+                            # P2 parallel-trial dispatch: defer BEFORE the
+                            # inline await — cap in-flight at the skill's
+                            # declared concurrency (drain-oldest), start the
+                            # subprocess task in its staged trial dir, and
+                            # finalize in block order at drain time.
+                            if (
+                                parallel_trials_enabled
+                                and _trial_ctx is not None
+                                and _trial_ctx.is_trial
+                            ):
+                                while len(pending_trials) >= execution_concurrency:
+                                    await self._drain_oldest_pending_trial(
+                                        pending_trials, turn_state,
+                                        config=config, turn=turn,
+                                        total_cost=total_cost,
+                                        agent_log=agent_log,
+                                        skill=skill,
+                                        skill_policy_extension=skill_policy_extension,
+                                        nonce_bytes=nonce_bytes,
+                                        skill_nonce_field=skill_nonce_field,
+                                        skill_requires_signed=skill_requires_signed,
+                                    )
+                                tool_meta: Dict[str, Any] = {
+                                    "trial_dir": _trial_ctx.trial_dir,
+                                    "trial_seq": _trial_ctx.seq,
+                                }
+                                task = asyncio.create_task(asyncio.to_thread(
+                                    _execute_tool,
+                                    block.name,
+                                    block.input,
+                                    settings.workspace_root,
+                                    workspace,
+                                    output_callback,
+                                    command_deadline_mono=_command_deadline_mono,
+                                    proc_registry=self._command_procs,
+                                    research_id=research_id,
+                                    extra_env=_nonce_env_for_command(
+                                        nonce_extra_env, _bash_cmd,
+                                        skill_policy_extension,
+                                    ),
+                                    policy_extension=skill_policy_extension,
+                                    cwd=_trial_ctx.trial_dir,
+                                ))
+                                pending_trials.append(PendingTrial(
+                                    block_index=block_index,
+                                    block=block,
+                                    task=task,
+                                    trial_ctx=_trial_ctx,
+                                    cmd_str=redact_sensitive_text(
+                                        raw_command_for_tool
+                                    ),
+                                    pending_snapshot=_pending_snapshot,
+                                    runtime_command_id=runtime_command_id,
+                                    command_started_at=command_started_at,
+                                    tool_meta=tool_meta,
+                                ))
+                                continue
                             tool_execution = await asyncio.to_thread(
                                 _execute_tool,
                                 block.name,
@@ -2213,419 +2858,62 @@ class AgentOrchestrator:
                             tool_meta = dict(tool_meta)
                             tool_meta["trial_dir"] = _trial_ctx.trial_dir
                             tool_meta["trial_seq"] = _trial_ctx.seq
-                        if runtime_command_id is not None:
-                            tool_meta = dict(tool_meta)
-                            tool_meta["runtime_command_id"] = runtime_command_id
-                            await self._store.finish_runtime_command(
-                                runtime_command_id,
-                                status=self._runtime_command_status(tool_meta),
-                                returncode=tool_meta.get("returncode"),
-                                timed_out=bool(tool_meta.get("timed_out")),
-                                output_preview=tool_result[:5000],
-                                metadata=tool_meta,
-                            )
-                        logger.info(
-                            "Research %s turn %d: tool=%s result=%s",
-                            research_id, turn, block.name,
-                            tool_result[:200],
-                        )
-                        if (
-                            block.name == "bash"
-                            and tool_meta.get("policy_allowed") is False
-                        ):
-                            await self._record_command_policy_rejection(
-                                config=config,
-                                turn=turn,
-                                command=str(block.input.get("command", "")),
-                                tool_meta=tool_meta,
-                            )
-                            policy_rejections_consecutive += 1
-                            if policy_rejections_consecutive >= _MAX_CONSECUTIVE_POLICY_REJECTIONS:
-                                _policy_aborted = True
-                                logger.warning(
-                                    "Research %s: aborting after %d "
-                                    "consecutive policy rejections",
-                                    research_id,
-                                    policy_rejections_consecutive,
-                                )
-                                await agent_log.append(
-                                    "system",
-                                    f"Aborting: {policy_rejections_consecutive} "
-                                    "consecutive command-policy rejections. "
-                                    "Operator review required.",
-                                    turn=turn,
-                                )
-                        elif (
-                            block.name == "bash"
-                            and tool_meta.get("policy_allowed") is True
-                        ):
-                            policy_rejections_consecutive = 0
-                        await agent_log.append(
-                            "tool_result", tool_result[:5000], turn=turn,
-                            meta={
-                                "tool_id": block.id,
-                                "tool_name": block.name,
-                                **tool_meta,
-                            },
-                        )
-                        # Track D2: digest large bash outputs before they enter
-                        # the agent's context — the raw `tool_result` variable
-                        # stays untouched for the server-side marker parsing
-                        # below (ITERATION_RESULT / `---` metrics / HPO study).
-                        agent_visible_result = tool_result
-                        if (
-                            block.name == "bash"
-                            and len(tool_result) > settings.agent_output_digest_max_chars > 0
-                        ):
-                            _full_log_rel = None
-                            try:
-                                _log_dir = Path(workspace) / "command_logs"
-                                _log_dir.mkdir(parents=True, exist_ok=True)
-                                _log_file = _log_dir / f"turn_{turn:03d}_{block.id[-8:]}.log"
-                                _log_file.write_text(tool_result, encoding="utf-8")
-                                _full_log_rel = str(
-                                    _log_file.relative_to(settings.workspace_root)
-                                ) if str(_log_file).startswith(
-                                    str(settings.workspace_root)
-                                ) else str(_log_file)
-                            except Exception as _log_exc:  # noqa: BLE001
-                                logger.debug("Full-log persist failed: %s", _log_exc)
-                            agent_visible_result = digest_command_output(
-                                tool_result,
-                                max_chars=settings.agent_output_digest_max_chars,
-                                full_log_path=_full_log_rel,
-                            )
-                            logger.info(
-                                "Research %s turn %d: digested bash output "
-                                "%d → %d chars",
-                                research_id, turn,
-                                len(tool_result), len(agent_visible_result),
-                            )
-                        tool_results.append(ToolResultBlock(
-                            tool_use_id=block.id,
-                            content=agent_visible_result,
-                        ))
-                        _cmd_str = redact_sensitive_text(
-                            str(block.input.get("command", ""))
-                        )
-                        # ARC-011 review C4 (P4-016): a skill's declared
-                        # scripts are that skill's iteration-producing
-                        # commands — a relayed marker is backed by a real run.
-                        if block.name == "bash" and any(
-                            str(script) in _cmd_str
-                            for script in (
-                                skill_policy_extension.get("allowed_scripts") or ()
-                            )
-                        ):
-                            turn_ran_training_command = True
-
-                        # Universal detection: scan bash output for
-                        # --- delimited metrics blocks. This works regardless
-                        # of LLM model since it's parsing deterministic
-                        # Python script output.
-                        elif (
-                            block.name == "bash"
-                            and not turn_recorded_iteration
-                            and "---" in tool_result
-                        ):
-                            metrics = parse_prepare_output(tool_result)
-                            # ARC-011 review C3: this auto-detect path
-                            # previously bypassed W11 verification entirely
-                            # (parse_prepare_output takes no nonce) — any
-                            # bash output containing a `---` block was
-                            # recorded as an iteration even for enforced
-                            # skills. Route the parsed block through the
-                            # four-state _verify_nonce check first.
-                            _kv_result = (
-                                metrics.to_dict()
-                                if (
-                                    metrics.primary_metric is not None
-                                    and metrics.status in ("completed", "success")
-                                )
+                        await self._finalize_tool_result(
+                            block=block,
+                            block_index=block_index,
+                            tool_execution=tool_execution,
+                            tool_meta=tool_meta,
+                            config=config,
+                            turn=turn,
+                            total_cost=total_cost,
+                            state=turn_state,
+                            cmd_str=redact_sensitive_text(
+                                str(block.input.get("command", ""))
+                            ),
+                            trial_dir=(
+                                _trial_ctx.trial_dir
+                                if _trial_ctx is not None and _trial_ctx.is_trial
                                 else None
-                            )
-                            if _kv_result is not None:
-                                _kv_result = await self._verify_kv_metrics(
-                                    research_id,
-                                    _kv_result,
-                                    turn=turn,
-                                    agent_log=agent_log,
-                                    session_nonce=nonce_bytes,
-                                    nonce_field=skill_nonce_field,
-                                    requires_signed=skill_requires_signed,
-                                    source="bash_output",
-                                    pipeline_id=config.pipeline_id,
-                                )
-                            if _kv_result is not None:
-                                iteration_count += 1
-                                marker_from_tool = _kv_result
-                                self._attach_runtime_command_metadata(
-                                    marker_from_tool, tool_meta,
-                                )
-                                # Determine keep/discard by comparing against
-                                # current session best — not just gates.
-                                decision = await self._infer_decision(
-                                    research_id,
-                                    metrics.primary_metric,
-                                    metrics.training_gates_passed,
-                                )
-                                marker_from_tool["decision"] = decision
-                                # Attach the pre-captured snapshot so the DB
-                                # is the sole source of truth for the config.
-                                marker_from_tool["config_snapshot"] = _pending_snapshot
-                                marker_from_tool["description"] = (
-                                    f"Auto-detected from experiment output "
-                                    f"(turn {turn})"
-                                )
-                                await self._record_iteration(
-                                    research_id, iteration_count,
-                                    marker_from_tool, total_cost,
-                                    workspace=workspace,
-                                    turn=turn,
-                                    command=_cmd_str,
-                                )
-                                turn_recorded_iteration = True
-                                logger.info(
-                                    "Research %s turn %d: auto-detected "
-                                    "iteration %d from bash output "
-                                    "(%s=%.4f, training_gates=%s)",
-                                    research_id, turn, iteration_count,
-                                    metrics.metric_name,
-                                    metrics.primary_metric,
-                                    metrics.training_gates_passed,
-                                )
-                                # Track D1: bit-identical metric from a new
-                                # config ⇒ the changed knob is INERT for the
-                                # scored artifact. Tell the agent explicitly —
-                                # otherwise it reads the rerun as evidence and
-                                # keeps probing dead dimensions (observed:
-                                # Option-A meta/stacking knobs, no-data
-                                # lanes, non-winner roster removals).
-                                _metric_val = float(metrics.primary_metric)
-                                if (
-                                    _metric_val in seen_primary_metrics
-                                    and tool_results
-                                    and isinstance(tool_results[-1], ToolResultBlock)
-                                ):
-                                    last = tool_results[-1]
-                                    tool_results[-1] = ToolResultBlock(
-                                        tool_use_id=last.tool_use_id,
-                                        content=(
-                                            str(last.content)
-                                            + "\n\n⚠️ INERT CHANGE DETECTED: this run "
-                                            f"reproduced an earlier iteration's metric "
-                                            f"BIT-IDENTICALLY ({_metric_val:.6f}). "
-                                            "Training is deterministic — an identical "
-                                            "metric from a different config means the "
-                                            "knob(s) you changed do NOT affect the "
-                                            "scored artifact (e.g. Option-A-inert "
-                                            "meta/stacking knobs, feature lanes with "
-                                            "no data, removing non-winning roster "
-                                            "members). Do NOT count this as evidence; "
-                                            "switch to a different search dimension."
-                                        ),
-                                    )
-                                    await agent_log.append(
-                                        "system",
-                                        f"Inert-change note injected (metric "
-                                        f"{_metric_val:.6f} repeated)",
-                                        turn=turn,
-                                    )
-                                seen_primary_metrics.add(_metric_val)
-                            elif (
-                                metrics.status in (
-                                    "crash", "timeout", "failed", "error",
-                                    "pruned",
-                                )
-                            ):
-                                # Record failed attempts as first-class discard
-                                # iterations so the full audit trail is in DB
-                                # and the agent cannot revisit the same invalid
-                                # config region without a recorded trace.
-                                iteration_count += 1
-                                crash_marker = metrics.to_dict()
-                                self._attach_runtime_command_metadata(
-                                    crash_marker, tool_meta,
-                                )
-                                crash_marker["decision"] = "discard"
-                                crash_marker["config_snapshot"] = _pending_snapshot
-                                crash_marker["description"] = (
-                                    f"Failed ({metrics.status}) — "
-                                    f"auto-detected from experiment output "
-                                    f"(turn {turn})"
-                                )
-                                await self._record_iteration(
-                                    research_id, iteration_count,
-                                    crash_marker, total_cost,
-                                    workspace=workspace,
-                                    turn=turn,
-                                    command=_cmd_str,
-                                )
-                                turn_recorded_iteration = True
-                                logger.info(
-                                    "Research %s turn %d: recorded failed "
-                                    "attempt %d (%s) from bash output",
-                                    research_id, turn, iteration_count,
-                                    metrics.status,
-                                )
+                            ),
+                            pending_snapshot=_pending_snapshot,
+                            runtime_command_id=runtime_command_id,
+                            command_started_at=command_started_at,
+                            agent_log=agent_log,
+                            skill=skill,
+                            skill_policy_extension=skill_policy_extension,
+                            nonce_bytes=nonce_bytes,
+                            skill_nonce_field=skill_nonce_field,
+                            skill_requires_signed=skill_requires_signed,
+                        )
 
-                        # Fallback: if bash timed out or the output was
-                        # digested, check for a marker file declared by the
-                        # skill's output_parser.fallback section.
-                        if (
-                            block.name == "bash"
-                            and not turn_recorded_iteration
-                        ):
-                            marker_text = await self._read_marker_file_async(
-                                config, min_mtime=command_started_at,
-                                trial_dir=(
-                                    _trial_ctx.trial_dir
-                                    if _trial_ctx is not None and _trial_ctx.is_trial
-                                    else None
-                                ),
-                            )
-                            _rc_for_marker = tool_meta.get("returncode")
-                            _command_succeeded = (
-                                _rc_for_marker is None
-                                or (
-                                    isinstance(_rc_for_marker, int)
-                                    and _rc_for_marker == 0
-                                )
-                            )
-                            if marker_text:
-                                metrics = parse_prepare_output(marker_text)
-                                # ARC-011 review C3: same W11 verification
-                                # as the bash auto-detect path — the marker
-                                # file is written by the sanctioned script
-                                # and must carry the echoed nonce for
-                                # enforced skills.
-                                _file_result = (
-                                    metrics.to_dict()
-                                    if (
-                                        _command_succeeded
-                                        and metrics.primary_metric is not None
-                                        and metrics.status in ("completed", "success")
-                                    )
-                                    else None
-                                )
-                                if _file_result is not None:
-                                    _file_result = await self._verify_kv_metrics(
-                                        research_id,
-                                        _file_result,
-                                        turn=turn,
-                                        agent_log=agent_log,
-                                        session_nonce=nonce_bytes,
-                                        nonce_field=skill_nonce_field,
-                                        requires_signed=skill_requires_signed,
-                                        source="marker_file",
-                                        pipeline_id=config.pipeline_id,
-                                    )
-                                if _file_result is not None:
-                                    iteration_count += 1
-                                    marker_from_file = _file_result
-                                    self._attach_runtime_command_metadata(
-                                        marker_from_file, tool_meta,
-                                    )
-                                    decision = await self._infer_decision(
-                                        research_id,
-                                        metrics.primary_metric,
-                                        metrics.training_gates_passed,
-                                    )
-                                    marker_from_file["decision"] = decision
-                                    # Attach snapshot for marker-file path too.
-                                    marker_from_file["config_snapshot"] = _pending_snapshot
-                                    marker_from_file["description"] = (
-                                        f"Auto-detected from marker file "
-                                        f"(turn {turn})"
-                                    )
-                                    await self._record_iteration(
-                                        research_id, iteration_count,
-                                        marker_from_file, total_cost,
-                                        workspace=workspace,
-                                        turn=turn,
-                                        command=_cmd_str,
-                                    )
-                                    turn_recorded_iteration = True
-                                    logger.info(
-                                    "Research %s turn %d: auto-detected "
-                                    "iteration %d from marker file "
-                                    "(%s=%.4f, training_gates=%s)",
-                                        research_id, turn, iteration_count,
-                                        metrics.metric_name,
-                                        metrics.primary_metric,
-                                        metrics.training_gates_passed,
-                                    )
-                                elif metrics.status in (
-                                    "crash", "timeout", "failed", "error",
-                                    "pruned",
-                                ):
-                                    iteration_count += 1
-                                    crash_marker = metrics.to_dict()
-                                    self._attach_runtime_command_metadata(
-                                        crash_marker, tool_meta,
-                                    )
-                                    crash_marker["decision"] = "discard"
-                                    crash_marker["config_snapshot"] = _pending_snapshot
-                                    crash_marker["description"] = (
-                                        f"Failed ({metrics.status}) — "
-                                        f"auto-detected from marker file "
-                                        f"(turn {turn})"
-                                    )
-                                    await self._record_iteration(
-                                        research_id, iteration_count,
-                                        crash_marker, total_cost,
-                                        workspace=workspace,
-                                        turn=turn,
-                                        command=_cmd_str,
-                                    )
-                                    turn_recorded_iteration = True
-                                    logger.info(
-                                        "Research %s turn %d: recorded failed "
-                                        "attempt %d (%s) from marker file",
-                                        research_id, turn, iteration_count,
-                                        metrics.status,
-                                    )
-
-                        if (
-                            block.name == "bash"
-                            and not turn_recorded_iteration
-                        ):
-                            failed_status = self._infer_failed_attempt_status(
-                                tool_result
-                            )
-                            if failed_status:
-                                iteration_count += 1
-                                failed_marker = {
-                                    "status": failed_status,
-                                    "primary_metric": None,
-                                    "metric_name": None,
-                                    "training_gates_passed": False,
-                                    "all_gates_passed": False,
-                                    "decision": "discard",
-                                    "description": (
-                                        f"Failed ({failed_status}) — "
-                                        f"server-detected training command "
-                                        f"failure (turn {turn})"
-                                    ),
-                                    "config_snapshot": _pending_snapshot,
-                                }
-                                self._attach_runtime_command_metadata(
-                                    failed_marker, tool_meta,
-                                )
-                                await self._record_iteration(
-                                    research_id, iteration_count,
-                                    failed_marker, total_cost,
-                                    workspace=workspace,
-                                    turn=turn,
-                                    command=_cmd_str,
-                                )
-                                turn_recorded_iteration = True
-                                logger.info(
-                                    "Research %s turn %d: recorded failed "
-                                    "attempt %d (%s) from command status",
-                                    research_id, turn, iteration_count,
-                                    failed_status,
-                                )
+                # P2 parallel-trial dispatch: drain any remaining deferred
+                # trials in block order, then assemble tool_results in block
+                # order (identical to the sequential path's append order) and
+                # write the mutated counters back to the loop locals.
+                if pending_trials:
+                    while pending_trials:
+                        await self._drain_oldest_pending_trial(
+                            pending_trials, turn_state,
+                            config=config, turn=turn,
+                            total_cost=total_cost, agent_log=agent_log,
+                            skill=skill,
+                            skill_policy_extension=skill_policy_extension,
+                            nonce_bytes=nonce_bytes,
+                            skill_nonce_field=skill_nonce_field,
+                            skill_requires_signed=skill_requires_signed,
+                        )
+                tool_results.extend(
+                    turn_state.results_by_index[i]
+                    for i in sorted(turn_state.results_by_index)
+                )
+                iteration_count = turn_state.iteration_count
+                duplicate_rejected_count = turn_state.duplicate_rejected_count
+                turn_recorded_iteration = turn_state.turn_recorded_iteration
+                turn_ran_training_command = turn_state.turn_ran_training_command
+                policy_rejections_consecutive = (
+                    turn_state.policy_rejections_consecutive
+                )
+                _policy_aborted = _policy_aborted or turn_state.policy_aborted
 
                 # Secondary: check for explicit ITERATION_RESULT: markers
                 # in agent text. If the model emits one, it may carry richer
@@ -4591,3 +4879,9 @@ class AgentOrchestrator:
             "policy_operation": tool_meta.get("policy_operation"),
             "normalized_command": tool_meta.get("normalized_command"),
         }
+        # P2 per-workdir provenance: surface which isolated trial directory
+        # produced this iteration (absent on the sequential path — its rows
+        # stay byte-identical).
+        if tool_meta.get("trial_dir") is not None:
+            marker["trial_dir"] = tool_meta["trial_dir"]
+            marker["trial_seq"] = tool_meta.get("trial_seq")

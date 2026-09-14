@@ -229,8 +229,22 @@ class GovernedCommandRunner:
         child_env = _build_child_env()
         if extra_env:
             child_env.update(extra_env)
+        argv = decision.argv
+        if (
+            cwd is not None
+            and argv
+            and not os.path.isabs(argv[0])
+            and os.path.sep in argv[0]
+        ):
+            # P2 trial-directory execution: a path-like executable (the
+            # sanctioned ``.venv/bin/python``) lives beside the workspace
+            # root, outside the session workspace, so trial staging cannot
+            # carry it into the trial dir. Resolve it against the same root
+            # the default cwd used; bare executable names (cp, cat) keep
+            # PATH lookup, which the cwd override never affected.
+            argv = [os.path.join(self._workspace_root, argv[0]), *argv[1:]]
         proc = subprocess.Popen(
-            decision.argv,
+            argv,
             cwd=cwd if cwd is not None else self._workspace_root,
             env=child_env,
             stdout=subprocess.PIPE,
