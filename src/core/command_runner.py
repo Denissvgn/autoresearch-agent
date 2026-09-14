@@ -199,7 +199,15 @@ class GovernedCommandRunner:
         proc_registry: CommandProcessRegistry | None = None,
         research_id: str | None = None,
         extra_env: Mapping[str, str] | None = None,
+        cwd: str | None = None,
     ) -> CommandRunResult:
+        """Validate and execute one approved command without invoking a shell.
+
+        ``cwd`` (P2 per-workdir state) optionally overrides the subprocess
+        working directory — used for trial-directory execution. The policy
+        still validates against the session workspace (a trial dir lives
+        inside it), so the override never widens what a command may touch.
+        """
         decision = evaluate_command_policy(
             command,
             workspace_root=self._workspace_root,
@@ -223,7 +231,7 @@ class GovernedCommandRunner:
             child_env.update(extra_env)
         proc = subprocess.Popen(
             decision.argv,
-            cwd=self._workspace_root,
+            cwd=cwd if cwd is not None else self._workspace_root,
             env=child_env,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

@@ -48,7 +48,7 @@ import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Protocol
+from typing import Any, Optional, Protocol
 
 from src.config import settings
 
@@ -225,6 +225,180 @@ class FilePathPromotionTarget:
         await asyncio.to_thread(_atomic_write_text, path, content)
 
 
+class WebhookPromotionTarget:
+    """Promote by POSTing the winning config to an HTTP endpoint (P1-3).
+
+    Implements the file-shaped ``PromotionTarget`` protocol so the whole
+    ``ConfigPromoter`` gate/metadata/rollback machinery keeps working: every
+    write lands atomically in a local provenance tree
+    (``<workspace_root>/promotions/...``), and the *primary* config write is
+    additionally delivered to the declared webhook endpoint with an
+    ``Idempotency-Key`` and optional Bearer auth. Delivery failures raise
+    ``WebhookDeliveryError`` so ``confirm`` surfaces them (fail-closed).
+
+    Serves both ``promotion_target.kind: webhook`` manifests and
+    ``kind: registry_api`` manifests (a registry register-endpoint is a
+    webhook delivery with an auth secret).
+    """
+
+    def __init__(
+        self,
+        *,
+        endpoint: str,
+        auth_env_var: str | None = None,
+        timeout_s: float = 10.0,
+        retries: int = 2,
+        local_root: str | None = None,
+    ) -> None:
+        if not endpoint:
+            raise ValueError("WebhookPromotionTarget requires an endpoint")
+        self.endpoint = endpoint
+        self.auth_env_var = auth_env_var
+        self.timeout_s = timeout_s
+        self.retries = max(0, retries)
+        self.local_root = local_root or os.path.join(
+            settings.workspace_root, "promotions"
+        )
+        #: Primary config paths derived by ``target_path`` — only these are
+        #: delivered to the endpoint; sidecars/rollback snapshots stay local.
+        self._primary_paths: set[str] = set()
+        #: Last delivery outcome (for audit/tests).
+        self.last_delivery: dict[str, Any] | None = None
+
+    # ── PromotionTarget protocol: local provenance paths ──────────────────
+
+    def target_path(
+        self,
+        *,
+        model_type: str,
+        instrument: str,
+        timeframe: str,
+    ) -> str:
+        path = os.path.join(
+            self.local_root,
+            str(model_type or "skill").replace("/", "-"),
+            f"{instrument}_{timeframe}.yaml",
+        )
+        self._primary_paths.add(path)
+        return path
+
+    def metadata_sidecar_path(
+        self,
+        target_path: str,
+        iteration: int,
+        *,
+        scope: str = "development",
+    ) -> str:
+        path = Path(target_path)
+        return str(
+            path.with_name(
+                f"{path.name}.{scope}-promotion.iter-{iteration}.json"
+            )
+        )
+
+    def rollback_snapshot_path(
+        self,
+        *,
+        target_path: str,
+        research_id: str,
+        iteration: int,
+    ) -> str:
+        path = Path(target_path)
+        safe_research_id = "".join(
+            char if char.isalnum() or char in {"-", "_"} else "_"
+            for char in research_id
+        )
+        return str(
+            path.with_name(
+                f"{path.name}.development-rollback."
+                f"{safe_research_id}.iter-{iteration}.yaml"
+            )
+        )
+
+    def rollback_metadata_sidecar_path(
+        self, target_path: str, promotion_id: int
+    ) -> str:
+        path = Path(target_path)
+        return str(
+            path.with_name(
+                f"{path.name}.development-rollback.promotion-{promotion_id}.json"
+            )
+        )
+
+    async def write(self, path: str, content: str) -> None:
+        """Atomic local write; deliver to the endpoint on the primary path."""
+        await asyncio.to_thread(_atomic_write_text, path, content)
+        if path in self._primary_paths:
+            await self.deliver(path, content)
+
+    # ── Webhook delivery ──────────────────────────────────────────────────
+
+    async def deliver(self, path: str, content: str) -> dict[str, Any]:
+        """POST the promoted config to the endpoint (retries, idempotent key).
+
+        Raises :class:`WebhookDeliveryError` after the final failed attempt —
+        fail-closed so the caller records the promotion as failed rather than
+        pretending the remote side received it.
+        """
+        import hashlib
+        from datetime import datetime, timezone
+
+        import httpx
+
+        idempotency_key = hashlib.sha256(
+            f"{path}:{content}".encode()
+        ).hexdigest()[:32]
+        headers = {
+            "Content-Type": "application/json",
+            "Idempotency-Key": idempotency_key,
+        }
+        token = os.environ.get(self.auth_env_var, "") if self.auth_env_var else ""
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        payload = {
+            "target_path": path,
+            "config": content,
+            "promoted_at": datetime.now(timezone.utc).isoformat(),
+            "endpoint": self.endpoint,
+        }
+
+        attempts = self.retries + 1
+        last_error: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout_s) as client:
+                    resp = await client.post(
+                        self.endpoint, json=payload, headers=headers
+                    )
+                if 200 <= resp.status_code < 300:
+                    self.last_delivery = {
+                        "endpoint": self.endpoint,
+                        "status_code": resp.status_code,
+                        "idempotency_key": idempotency_key,
+                        "attempt": attempt,
+                        "response": resp.text[:512],
+                    }
+                    return self.last_delivery
+                last_error = RuntimeError(
+                    f"webhook {self.endpoint} answered HTTP "
+                    f"{resp.status_code}: {resp.text[:200]}"
+                )
+                if resp.status_code < 500:
+                    break  # 4xx will not improve with retries
+            except (httpx.TimeoutException, httpx.TransportError) as exc:
+                last_error = exc
+            if attempt < attempts:
+                await asyncio.sleep(0.5 * attempt)
+        raise WebhookDeliveryError(
+            f"webhook delivery to {self.endpoint} failed after "
+            f"{attempts} attempt(s): {last_error}"
+        )
+
+
+class WebhookDeliveryError(RuntimeError):
+    """A webhook promotion delivery failed after all retries (fail-closed)."""
+
+
 class SkillRegistryPromotionTarget:
     """Promote a draft skill into the live registry (ARC-011 P5-011).
 
@@ -333,4 +507,6 @@ __all__ = [
     "SkillPromotionError",
     "SkillPromotionResult",
     "SkillRegistryPromotionTarget",
+    "WebhookDeliveryError",
+    "WebhookPromotionTarget",
 ]

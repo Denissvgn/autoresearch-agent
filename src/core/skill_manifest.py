@@ -96,8 +96,9 @@ PreflightKind = Literal["http_health", "tcp", "local_file"]
 
 #: Promotion-target discriminator (ARC-011 §9 ``promotion_target.primary.kind``).
 #: ``file_path`` → ``FilePathPromotionTarget`` (P1-015); ``registry_api`` /
-#: ``artifact_store`` / ``git_branch`` are v1 slots enriched by G5 / G10.
-PromotionKind = Literal["file_path", "registry_api", "artifact_store", "git_branch"]
+#: ``webhook`` → ``WebhookPromotionTarget`` (P1-3); ``artifact_store`` /
+#: ``git_branch`` are v1 slots enriched by G5 / G10.
+PromotionKind = Literal["file_path", "registry_api", "artifact_store", "git_branch", "webhook"]
 
 #: Skill-plugin kinds (ARC-011 §5.3 / X-004 §6). Each maps to an optional
 #: on-disk Python file in the skill package, executed via the governed
@@ -682,6 +683,24 @@ class GitBranchTarget(BaseModel):
     pr_template: Optional[dict[str, Any]] = None
 
 
+class WebhookTarget(BaseModel):
+    """``kind: webhook`` — POST the winning config to an HTTP endpoint (P1-3).
+
+    The delivery is idempotent (``Idempotency-Key`` derived from the promoted
+    content) and fail-closed (delivery failure fails the confirm). A local
+    provenance copy is always written under ``<workspace>/promotions/``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["webhook"] = "webhook"
+    endpoint: str
+    #: Name of the env var carrying the optional Bearer token.
+    auth_secret: Optional[str] = None
+    timeout_s: float = Field(default=10.0, gt=0)
+    retries: int = Field(default=2, ge=0)
+
+
 #: Discriminated union over ``kind``. The literal ``kind`` tag lets pydantic
 #: pick the right model and emit field-specific errors on mismatch.
 PromotionTargetKind = Union[
@@ -689,6 +708,7 @@ PromotionTargetKind = Union[
     RegistryApiTarget,
     ArtifactStoreTarget,
     GitBranchTarget,
+    WebhookTarget,
 ]
 
 
@@ -820,6 +840,23 @@ class UIConfig(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class ExecutionConfig(BaseModel):
+    """Per-skill execution capabilities (P1-4).
+
+    ``concurrency`` declares how many independent trial commands the skill's
+    experiment loop may run in parallel (1..3). The default ``1`` preserves
+    today's strictly-sequential behavior; a skill opts in explicitly. Actual
+    parallel dispatch in the orchestrator loop is staged behind this field —
+    the sequential loop's per-command state (duplicate guard, runtime-command
+    records, snapshots, iteration recording) must be per-workdir before
+    concurrent execution is safe.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    concurrency: int = Field(default=1, ge=1, le=3)
+
+
 class ResearchSkillManifest(BaseModel):
     """A validated ``research_skill.v1`` skill descriptor (ARC-011 P2-001).
 
@@ -871,6 +908,8 @@ class ResearchSkillManifest(BaseModel):
     #: system prompt on the next session. When ``false`` (default), insights
     #: land in ``knowledge/prior_findings/`` but require operator review first.
     auto_absorb_insights: bool = False
+    #: P1-4: per-skill execution capabilities (parallel trial opt-in).
+    execution: Optional[ExecutionConfig] = None
     #: P5-029: timestamp of the last operator review of the knowledge corpus.
     #: Drives the UI "knowledge stale" badge against ``refresh_cadence_days``.
     knowledge_last_reviewed: Optional[str] = Field(
@@ -955,6 +994,7 @@ __all__ = [
     "PluginCaps",
     "PluginEntry",
     "PluginsConfig",
+    "ExecutionConfig",
     # Sections
     "LLMConfig",
     "WorkspaceConfig",
@@ -982,6 +1022,7 @@ __all__ = [
     "RegistryApiTarget",
     "ArtifactStoreTarget",
     "GitBranchTarget",
+    "WebhookTarget",
     "PromotionTargetKind",
     "PromotionTarget",
     "TrialIdentityConfig",

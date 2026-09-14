@@ -491,6 +491,30 @@ export interface SubjectInfo {
   label: string;
 }
 
+// ── Leaderboard types (P0-4) ──────────────────────────────────────────
+
+export interface LeaderboardEntry {
+  research_id: string;
+  subject_id: string | null;
+  variant: string | null;
+  tag: string | null;
+  status: string;
+  best_metric: number | null;
+  metric_name: string | null;
+  best_iteration: number | null;
+  iterations: number;
+  total_api_cost_usd: number;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface SkillLeaderboard {
+  skill_id: string;
+  metric: { field: string; label: string; direction: string; format: string };
+  items: LeaderboardEntry[];
+  total: number;
+}
+
 export function getAutoresearchApiToken(): string | null {
   const envToken = import.meta.env.VITE_AUTORESEARCH_API_TOKEN as string | undefined;
   if (envToken?.trim()) return envToken.trim();
@@ -652,6 +676,11 @@ export const api = {
   confirmPromotion: (id: string, body?: PromotionScopeRequest) =>
     request<Promotion>(`/research/${id}/promote/confirm`, {
       method: 'POST',
+      headers: {
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+        // P1-3: idempotent confirm — a retried promotion must not double-deliver.
+        'Idempotency-Key': makeIdempotencyKey('promote-confirm', id),
+      },
       body: body ? JSON.stringify(body) : undefined,
     }),
 
@@ -686,6 +715,10 @@ export const api = {
 
   getSkillVersions: (id: string) =>
     request<{ skill_id: string; versions: Array<{ version: string; schema_version: string; current: boolean }> }>(`/skills/${id}/versions`),
+
+  // Leaderboard (P0-4)
+  getSkillLeaderboard: (id: string, limit = 20) =>
+    request<SkillLeaderboard>(`/skills/${encodeURIComponent(id)}/leaderboard?limit=${limit}`),
 
   reloadSkills: () =>
     request<{ status: string; reloaded: number; available: string[] }>('/skills/reload', { method: 'POST' }),

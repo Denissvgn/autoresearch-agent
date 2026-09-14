@@ -2,6 +2,97 @@
 
 ## Unreleased
 
+- **P0+P1 useful-area push — real skills, demo mode, leaderboard, webhook
+  promotion, and the first orchestrator split.**
+  - **P0-1 real scorer chain (prompt-engineering).** The eval scorer is no
+    longer a sha256 stub: `--scorer-url`/`SCORER_URL` remote scorer →
+    OpenAI judge (`OPENAI_API_KEY`, judge capped at 50 examples) → the
+    deterministic offline fallback (flagged `scorer: fallback`). The
+    `ITERATION_RESULT:` + `server_nonce` anti-forgery contract is unchanged;
+    the winning scorer link is recorded in the metrics (`scorer` field).
+  - **P0-2 two offline real skills.** `skills/code-refactor/` (syntax + lint
+    + JSONL test-ledger scorer) and `skills/db-config-tuning/` (deterministic
+    offline TPS/latency bench model) join `prompt-engineering` as installed
+    `research_skill.v1` packages — both validate through the loader, pass the
+    domain-coupling guard, and run their eval CLIs with zero network.
+  - **P0-3 demo mode.** `AUTORESEARCH_DEMO=true` routes every LLM call to the
+    zero-credential `MockProvider` (scripted edit-run-keep loop, $0 cost) —
+    `docker run -e AUTORESEARCH_DEMO=true` shows a working session with no
+    API keys. The provider router refuses the mock when
+    `ENVIRONMENT=production` (fail-closed).
+  - **P0-4 leaderboard.** New `GET /api/v1/skills/{id}/leaderboard` —
+    cross-session comparison ranked by the skill's declared primary-metric
+    direction (legacy `model_type` aliases merged), with limit + graceful
+    no-store behavior. New UI Leaderboard page (skill picker + ranked table)
+    wired into the topbar; the Dashboard's fabricated 3-point sparkline is
+    replaced with the session's real metric series.
+  - **P1-3 webhook promotion (E2E).** New `WebhookPromotionTarget`: keeps the
+    full gate/metadata/rollback machinery, writes a local provenance copy
+    under `<workspace>/promotions/`, and delivers the primary config to the
+    declared endpoint with an `Idempotency-Key`, optional Bearer auth
+    (`auth_secret` names the env var), 5xx retries, and fail-closed delivery
+    errors. Manifest `promotion_target.kind: webhook` is a new schema kind;
+    `registry_api` with an endpoint now builds the same delivery target
+    (was: audited `unsupported_promotion_target` skip). The manual
+    preview/confirm API path picks the session's skill target via
+    `_promoter_for_session`; the UI confirm now sends an `Idempotency-Key`.
+    `examples/prompt-registry/` ships a runnable receiver proving the loop.
+  - **P1-1 orchestrator split (first slice).** The agent tool surface —
+    `ToolExecutionResult`, `AGENT_TOOLS`, path-safety helpers, the five tool
+    implementations, the packaged-primer loader, and the W11 nonce-env
+    narrowing — moved verbatim to `src/core/agent_tools.py` (mypy-clean and
+    NOT excluded from type checking), with back-compat re-exports in
+    `orchestrator.py` (4887 → 4511 lines). One test patch-seam updated.
+  - **P1-2 legacy quarantine.** New `src/compat/` package:
+    `legacy_alias.py` moved (core module is now a shim; all importers
+    unchanged), the RL/feature-readiness enrichment helpers moved out of
+    `api/results.py` into `src/compat/ml_enrichment.py`, and the historical
+    phase tables (`DIRECTION_PHASES` / `VOLATILITY_PHASES` /
+    `FALLBACK_PHASES`, `phases_for_model`, `RL_OOS_EVIDENCE_KEYS`,
+    `_PHASE_PRIMARY_SWEEP_KEYS`) moved out of
+    `src/core/research_phase_plan.py` into
+    `src/compat/legacy_phase_tables.py` (1361 → 1095 lines of live
+    machinery, re-exported for every existing importer). The slimmed
+    `research_phase_plan.py` is now E501-clean, guard-clean without an
+    exemption, and **removed from the mypy exclude list** (type-checked,
+    zero errors). The domain-coupling guard now documents the compat
+    exemptions by name.
+  - **P1-4 parallel-trial plumbing.** New manifest
+    `execution.concurrency` (1..3, default 1 = today's sequential behavior)
+    exposed through the `SkillRuntime` protocol. Actual parallel dispatch is
+    staged behind the field — the sequential loop's per-command state must
+    become per-workdir first.
+  - **P2 per-workdir trial state (the ``execution.concurrency``
+    prerequisite).** New `src/core/trial_workspace.py`: a `TrialContext`
+    per bash command carries the execution workdir (session workspace by
+    default — byte-identical behavior), and a skill opted into
+    `execution.concurrency > 1` gets each *sanctioned* experiment command
+    (one invoking a manifest-declared `allowed_scripts` entry — the same
+    predicate as the W11 nonce narrowing) executed inside its own staged
+    trial directory under `<workspace>/.trials/turn-XXX-seq-YY/`: a copy
+    of the session state (server logs/snapshots/caches excluded, staging
+    fail-opens to the session workspace). Threaded through the loop: the
+    pre-run `--config` snapshot resolves against the trial copy
+    (containment still anchored to the session workspace), the governed
+    subprocess runs with `cwd=` the trial dir (`GovernedCommandRunner` /
+    `_tool_bash` / `_execute_tool` gained the `cwd` override), the
+    marker-file fallback checks the trial dir first (stale staging copies
+    discarded by the existing `min_mtime` check), and the runtime-command
+    record + recorded-iteration metadata carry `trial_dir`/`trial_seq`
+    provenance. The parallel `asyncio.gather` dispatch itself is the next
+    step — the stateful parts (duplicate guard, runtime records, iteration
+    recording) stay sequential and are now per-workdir-safe.
+  - Tests: `test_mock_provider.py`, `test_leaderboard_api.py`,
+    `test_webhook_promotion.py`, `test_execution_concurrency.py` added
+    (25 new tests); the registry_api skip pin in
+    `test_manifest_runtime_production_path.py` updated to the new delivery
+    contract. ruff clean; mypy delta vs HEAD is zero new errors
+    (`research_phase_plan.py`, `agent_tools.py`, and the compat phase tables
+    are now type-checked with zero errors; `ml_enrichment.py` keeps its
+    pre-move excluded posture — the code was excluded in `api/results.py`);
+    domain-coupling guard clean with `research_phase_plan.py` off the
+    exemption list.
+
 - **Universal research system conversion — TRAID platform artifacts removed.**
   The service is now a domain-neutral research agent driven entirely by
   installed skill packages (`skills/<id>/SKILL.yaml`).

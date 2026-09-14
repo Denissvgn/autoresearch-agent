@@ -208,6 +208,57 @@ def _confirm_audit_metadata(payload: PromotionScopeRequest) -> dict[str, Any]:
     return metadata
 
 
+async def _promoter_for_session(research_id: str):
+    """Pick the promoter for a session (P1-3).
+
+    Default: the injected ``_promoter`` (singleton, file target). When the
+    session's skill declares a ``webhook`` / ``registry_api`` promotion target
+    with an endpoint (and the registry is wired), a per-request
+    ``ConfigPromoter`` backed by a ``WebhookPromotionTarget`` is built so the
+    manual API path delivers like the auto-promote path does. Anything that
+    cannot be resolved (unknown skill, missing endpoint, stubbed registry)
+    falls back to the injected promoter — never fails the request here.
+    """
+    if _registry is None or _store is None:
+        return _promoter
+    try:
+        session = await _store.get_session(research_id)
+    except Exception:
+        return _promoter
+    if not session:
+        return _promoter
+    skill_id = session.get("skill_id") or ""
+    if not skill_id:
+        model_type = session.get("model_type") or ""
+        if model_type:
+            from src.core.legacy_alias import model_type_to_skill_id
+
+            skill_id = model_type_to_skill_id(model_type)
+    if not skill_id:
+        return _promoter
+    try:
+        manifest = _registry.get(skill_id)
+    except Exception:
+        return _promoter
+    primary = getattr(getattr(manifest, "promotion_target", None), "primary", None)
+    kind = getattr(primary, "kind", None)
+    if kind not in ("webhook", "registry_api"):
+        return _promoter
+    endpoint = getattr(primary, "endpoint", None)
+    if not endpoint:
+        return _promoter
+    from src.core.config_promoter import ConfigPromoter
+    from src.core.promotion_target import WebhookPromotionTarget
+
+    target = WebhookPromotionTarget(
+        endpoint=endpoint,
+        auth_env_var=getattr(primary, "auth_secret", None) or None,
+        timeout_s=getattr(primary, "timeout_s", 10.0),
+        retries=getattr(primary, "retries", 2),
+    )
+    return ConfigPromoter(_store, target=target)
+
+
 @router.post("/research/{research_id}/promote/preview")
 async def promote_preview(
     request: Request,
@@ -218,7 +269,8 @@ async def promote_preview(
     payload = payload or PromotionScopeRequest()
     approval = _approval_payload(payload.approval)
     try:
-        result = await _promoter.preview(
+        promoter = await _promoter_for_session(research_id)
+        result = await promoter.preview(
             research_id,
             scope=payload.scope,
             approval=approval,
@@ -297,7 +349,8 @@ async def promote_confirm(
         # HMAC verifier. Other scopes are unaffected.
         if (payload.scope or "").lower() == "production":
             _verify_production_approval_signature(research_id, payload)
-        result = await _promoter.confirm(
+        promoter = await _promoter_for_session(research_id)
+        result = await promoter.confirm(
             research_id,
             scope=payload.scope,
             approval=approval,

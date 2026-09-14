@@ -1,0 +1,140 @@
+schema_version: research_skill.v1
+id: code-refactor
+version: 0.1.0
+category: generative
+display_name: "Code Refactor Research"
+description: "Iterate refactors of a Python target file against syntax, lint, and test gates; promote the winner as a file."
+
+llm:
+  provider: anthropic
+  primary_model: claude-sonnet-4-20250514
+  insight_model: claude-haiku-4-20250514
+  max_output_tokens: 8192
+  system_prompt: SKILL.md
+
+workspace:
+  session_path_template: "runs/{skill_id}/{subject_id}/{variant}"
+
+subjects:
+  static:
+    - { id: autoresearch-agent, label: "Self-repo refactor target" }
+variants:
+  static: ["lint-hygiene", "complexity-drop"]
+
+param_schema:
+  type: object
+  additionalProperties: false
+  properties:
+    target_file: { type: string, description: "workspace-relative file under refactor", default: "refactor_target.py" }
+    max_complexity: { type: integer, minimum: 1, default: 10 }
+  required: []
+
+metric_schema:
+  primary:
+    field: primary_metric
+    label: "Composite Refactor Score"
+    direction: higher_is_better
+    format: ".4f"
+  gates:
+    - { field: tests_pass, label: "Tests", kind: boolean_badge }
+    - { field: no_perf_regression, label: "Perf", kind: boolean_badge }
+  chart_series:
+    - { field: composite_refactor_score, label: "Score" }
+    - { field: test_pass_rate, label: "Pass %" }
+    - { field: complexity_drop_pct, label: "Cplx drop %", axis: right }
+  iteration_table_columns:
+    - { field: primary_metric, label: "Score" }
+    - { field: tests_pass, label: "Tests", kind: icon }
+    - { field: no_perf_regression, label: "Perf", kind: icon }
+    - { field: complexity_drop_pct, label: "Cplx" }
+  goal: optimize
+
+decision_vocabulary:
+  base: [keep, discard, improve, unknown]
+  extensions: []
+  success_values: [keep, improve]
+
+phase_plan:
+  - id: baseline_capture
+    label: "Baseline capture"
+    min_iterations: 1
+    max_iterations: 2
+    evidence_keys: [baseline_metrics]
+  - id: mechanical_refactors
+    label: "Mechanical refactors"
+    min_iterations: 1
+    max_iterations: 15
+    evidence_keys: [refactor_applied]
+    next_action: "Apply low-risk mechanical refactors one at a time."
+  - id: validation
+    label: "Validation"
+    min_iterations: 1
+    max_iterations: 5
+    evidence_keys: [full_validation]
+  - id: promotion_proposal
+    label: "Promotion proposal"
+    min_iterations: 1
+    max_iterations: 2
+    evidence_keys: [promotion_proposal]
+    stagnation_exempt: true
+    next_action: "Prepare a development-scoped promotion proposal."
+phase_advancement:
+  mode: declarative
+
+command_policy:
+  allowed_python: [".venv/bin/python", "./.venv/bin/python"]
+  allowed_scripts:
+    - eval/run.py
+    - bootstrap.py
+  allowed_executables: [cp, cat, jq]
+  copyable_files: [refactor_target.py, best_refactor_target.py]
+  readable_files: [refactor_target.py, best_refactor_target.py, eval_result.json]
+  forbidden_tokens: ["|", "||", "&&", ";", "&"]
+  forbidden_substrings: ["`", "$", ">", "<", "\\n", "\\r"]
+  secret_markers: [.env, /proc/, /run/secrets, authorization, bearer, credential, id_rsa, password, secret, token]
+
+output_parser:
+  format: json_marker
+  iteration_marker: "ITERATION_RESULT:"
+  nonce_field: server_nonce
+  require_signed_metrics: true
+  required_fields: [status, primary_metric, metric_name, test_pass_rate]
+  failure_statuses: [eval_error, timeout, build_failed]
+  fallback:
+    read_results_file: eval_result.json
+    marker_dir_template: "{workspace_root}/runs/{skill_id}/{subject_id}/{variant}/"
+
+preflight:
+  - { name: target-file, kind: local_file, path: "refactor_target.py", required: false }
+
+promotion_target:
+  primary:
+    kind: file_path
+    path_template: "configs/code-refactor/{subject_id}_{variant}.py"
+    sidecar_extensions: [".{scope}-promotion.iter-{iteration}.json"]
+    atomic_write: true
+  scopes:
+    - { id: development, approval_required: false }
+    - { id: production, approval_required: true, prior_scopes: [development] }
+
+trial_identity:
+  hash_fields: [skill_id, subject_id, variant, patch_hash, target_file_hash]
+  resolve:
+    mode: declarative
+
+blocker_classification:
+  actionable_blockers: [tests_failing, lint_errors, type_errors, import_cycle]
+  phase_evidence_keys: {}
+
+structured_hpo:
+  enabled: false
+
+prompt:
+  experiment_command: |
+    .venv/bin/python eval/run.py --target refactor_target.py --tests tests_target.jsonl
+  continuation_enabled: true
+
+ui:
+  form_fields:
+    - { name: target_file, type: string, required: false, label: "Target file" }
+    - { name: max_complexity, type: integer, required: false, label: "Max complexity", default: 10 }

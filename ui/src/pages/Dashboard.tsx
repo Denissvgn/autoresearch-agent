@@ -2,7 +2,7 @@
 // Wired to existing hooks/api; design ported from hifi/screen-dashboard.jsx.
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useSessions, useSessionsPage, useStatus } from '../hooks/useResearch';
+import { useIterations, useSessions, useSessionsPage, useStatus } from '../hooks/useResearch';
 import { Icon, Sparkline, Stat, StatusBadge } from '../components/hifi/primitives';
 import { ResearchSession } from '../api/client';
 
@@ -286,15 +286,15 @@ export default function Dashboard() {
 
 function ActiveSessionCard({ session }: { session: ResearchSession }) {
   const navigate = useNavigate();
+  // P0-4: real per-session metric series (was a fabricated 3-point climb).
+  const { data: iterations } = useIterations(session.id);
+  const series = (iterations ?? [])
+    .map((it) => it.primary_metric)
+    .filter((v): v is number => typeof v === 'number');
   const progress = Math.min(
     100,
     Math.round(((session.best_iteration ?? 0) / Math.max(1, session.max_iterations)) * 100),
   );
-  // Trend placeholder — full series unavailable on this list endpoint; show a
-  // gentle climb to the current best so the card has a visual cue.
-  const series = session.best_metric != null
-    ? [session.best_metric * 0.92, session.best_metric * 0.97, session.best_metric]
-    : [0, 0, 0];
 
   return (
     <div className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -313,7 +313,7 @@ function ActiveSessionCard({ session }: { session: ResearchSession }) {
         </div>
       </div>
       <div style={{ height: 32 }}>
-        <Sparkline data={series} color="var(--fg-2)" fill />
+        <Sparkline data={series.length > 0 ? series : [0, 0]} color="var(--fg-2)" fill />
       </div>
       <div className="row gap-4">
         <Stat

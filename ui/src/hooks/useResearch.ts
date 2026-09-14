@@ -184,6 +184,16 @@ export function useSkillMetricSchema(skillId: string | null) {
   });
 }
 
+// P0-4: cross-session leaderboard for one skill.
+export function useSkillLeaderboard(skillId: string | null, limit = 20) {
+  return useQuery({
+    queryKey: ['skill-leaderboard', skillId, limit],
+    queryFn: () => api.getSkillLeaderboard(skillId!, limit),
+    enabled: Boolean(skillId),
+    refetchInterval: 30_000,
+  });
+}
+
 export function useStatus() {
   return useQuery({ queryKey: ['status'], queryFn: api.getStatus, refetchInterval: 30_000 });
 }

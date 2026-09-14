@@ -35,7 +35,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from src.api.audit import record_api_audit_event
 from src.api.auth import require_api_auth
@@ -238,6 +238,77 @@ async def get_skill_metric_schema(skill_id: str):
     """The ``metric_schema`` — primary metric, gates, chart series, table columns (P3-005)."""
     manifest = _get_or_404(skill_id)
     return manifest.metric_schema.model_dump(exclude_none=True, mode="json")
+
+
+@router.get("/skills/{skill_id}/leaderboard")
+async def get_skill_leaderboard(
+    skill_id: str,
+    limit: int = Query(default=20, ge=1, le=100, title="Limit"),
+):
+    """Cross-session leaderboard for one skill (P0-4).
+
+    Aggregates every session recorded for the skill (by ``skill_id`` and its
+    legacy ``model_type`` alias) that produced a best metric, sorted by the
+    skill's declared primary-metric direction. The comparison surface the
+    Dashboard lacked: best metric, iterations spent, cost, subject/variant.
+    """
+    manifest = _get_or_404(skill_id)
+    metric_dump = manifest.metric_schema.model_dump(exclude_none=True, mode="json")
+    primary = metric_dump.get("primary", {}) or {}
+    direction = primary.get("direction", "higher_is_better")
+
+    rows: List[Dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    if _store is not None:
+        # Non-legacy skills are their own model_type alias; legacy skills also
+        # match on the short name, so query both shapes and merge by id.
+        model_type_aliases = {skill_id, skill_id_to_model_type(skill_id)}
+        for alias in sorted(model_type_aliases):
+            if not alias:
+                continue
+            for session in await _store.list_sessions(model_type=alias, limit=500):
+                rid = str(session.get("id") or "")
+                if not rid or rid in seen_ids:
+                    continue
+                if session.get("best_metric") is None:
+                    continue
+                seen_ids.add(rid)
+                rows.append(
+                    {
+                        "research_id": rid,
+                        "subject_id": session.get("subject_id")
+                        or session.get("instrument"),
+                        "variant": session.get("variant") or session.get("timeframe"),
+                        "tag": session.get("tag"),
+                        "status": session.get("status"),
+                        "best_metric": session.get("best_metric"),
+                        "metric_name": session.get("metric_name"),
+                        "best_iteration": session.get("best_iteration"),
+                        "iterations": session.get("effective_iteration_count")
+                        or session.get("best_iteration")
+                        or 0,
+                        "total_api_cost_usd": session.get("total_api_cost_usd") or 0.0,
+                        "started_at": session.get("started_at"),
+                        "completed_at": session.get("completed_at"),
+                    }
+                )
+
+    rows.sort(
+        key=lambda r: (r.get("best_metric") is None, r.get("best_metric") or 0.0),
+        reverse=(direction == "higher_is_better"),
+    )
+    total = len(rows)
+    return {
+        "skill_id": skill_id,
+        "metric": {
+            "field": primary.get("field", "primary_metric"),
+            "label": primary.get("label", "Primary metric"),
+            "direction": direction,
+            "format": primary.get("format", ".4f"),
+        },
+        "items": rows[:limit],
+        "total": total,
+    }
 
 
 @router.get("/skills/{skill_id}/versions")

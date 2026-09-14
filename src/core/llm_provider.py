@@ -867,6 +867,96 @@ class OpenAIProvider:
         return ErrorClass(transient=False, status_code=None, retry_after_s=None)
 
 
+# ── Mock provider (P0-3 demo mode) ──────────────────────────────────────────
+
+
+class MockProvider:
+    """Zero-credential scripted provider for demos and CI (P0-3).
+
+    Replays a deterministic edit-run-keep loop without any network: each
+    ``messages_create`` emits one ``bash`` tool call running the skill's eval
+    script, then an ``end_turn`` text on the following turn. ``complete``
+    returns a canned insight summary. Cost is always 0. Clearly labeled via
+    ``name == "mock"`` so production code can refuse it.
+    """
+
+    name = "mock"
+
+    def __init__(self, *, eval_command: str = "") -> None:
+        self._eval_command = eval_command or (
+            ".venv/bin/python eval/run.py --prompt prompt.yaml "
+            "--eval eval_set.jsonl"
+        )
+        self._turn = 0
+
+    async def messages_create(
+        self,
+        *,
+        model: str,
+        system: str,
+        messages: list[Message],
+        tools: list[ToolDef],
+        max_tokens: int,
+        temperature: float | None = None,
+        stop_sequences: list[str] | None = None,
+    ) -> ProviderResponse:
+        self._turn += 1
+        if self._turn % 2 == 1:
+            return ProviderResponse(
+                content=[
+                    ToolUseBlock(
+                        id=f"mock-tool-{self._turn}",
+                        name="bash",
+                        input={"command": self._eval_command},
+                    )
+                ],
+                stop_reason=StopReason.TOOL_USE,
+                usage=Usage(input_tokens=10, output_tokens=10),
+                raw_model="mock-demo",
+            )
+        return ProviderResponse(
+            content=[
+                TextBlock(
+                    text=(
+                        "Demo turn complete. Check ITERATION_RESULT metrics; "
+                        "vary one parameter next iteration."
+                    )
+                )
+            ],
+            stop_reason=StopReason.END_TURN,
+            usage=Usage(input_tokens=10, output_tokens=10),
+            raw_model="mock-demo",
+        )
+
+    async def complete(
+        self,
+        *,
+        model: str,
+        prompt: str,
+        max_tokens: int,
+        system: str | None = None,
+    ) -> str:
+        return "Demo insight summary (mock provider, no LLM used)."
+
+    async def stream(self, **kwargs: Any) -> AsyncIterator[StreamDelta]:
+        raise NotImplementedError("MockProvider.stream is not implemented")
+        yield StreamDelta()  # pragma: no cover — makes this an async generator
+
+    def estimate_cost(self, model: str, usage: Usage) -> float:
+        return 0.0
+
+    def capabilities(self) -> ProviderCapabilities:
+        return ProviderCapabilities(
+            native_tool_use=True,
+            streaming=False,
+            system_prompt=True,
+            max_context_tokens=32_000,
+        )
+
+    def classify_error(self, exc: Exception) -> ErrorClass:
+        return ErrorClass(transient=False, status_code=None, retry_after_s=None)
+
+
 # ── Provider router (P4-010) ─────────────────────────────────────────────────
 
 
@@ -940,16 +1030,13 @@ def build_provider(
     settings_obj: Any = None,
     required_capabilities: Optional[RequiredCapabilities] = None,
 ) -> LLMProvider:
-    """Construct a ``LLMProvider`` by id (ARC-011 P4-010 router).
+    """Construct a ``LLMProvider`` by id (ARC-011 P4-010 router + P0-3 mock).
 
-    Maps a skill manifest's ``llm.provider`` (``"anthropic"`` / ``"openai"``) to
-    a concrete provider instance, reading API credentials from ``settings``.
-    The orchestrator calls this per-session (or at init for the default) so each
-    skill can select its provider declaratively. Anthropic remains the default
-    for ML skills that do not declare a provider override.
-
-    The ``settings_obj`` is injectable for tests; production passes ``None`` and
-    the function falls back to the singleton ``src.config.settings``.
+    Maps a skill manifest's ``llm.provider`` (``"anthropic"`` / ``"openai"`` /
+    ``"mock"``) to a concrete provider instance, reading API credentials from
+    ``settings``. ``"mock"`` (or ``AUTORESEARCH_DEMO=true`` with any id) yields
+    a zero-credential ``MockProvider`` for demos/CI; production refuses it
+    (see ``_refuse_mock_in_production``).
     """
     from src.config import secret_value
 
@@ -958,6 +1045,22 @@ def build_provider(
 
         settings_obj = _settings
 
+    def _demo_requested() -> bool:
+        raw = getattr(settings_obj, "demo_mode", False)
+        if isinstance(raw, bool):
+            return raw
+        return str(raw).lower() in ("1", "true", "yes")
+
+    if provider_id == "mock" or _demo_requested():
+        mock = MockProvider()
+        if str(getattr(settings_obj, "environment", "development")).lower() in (
+            "prod",
+            "production",
+        ):
+            raise ValueError("mock provider is refused in production")
+        if required_capabilities is not None:
+            required_capabilities.check(mock.capabilities(), "mock")
+        return mock
     if provider_id == "anthropic":
         provider: LLMProvider = AnthropicProvider(
             base_url=settings_obj.anthropic_base_url,
@@ -973,7 +1076,8 @@ def build_provider(
         )
     else:
         raise ValueError(
-            f"unknown LLM provider {provider_id!r}; expected 'anthropic' or 'openai'"
+            "unknown LLM provider "
+            f"{provider_id!r}; expected 'anthropic', 'openai' or 'mock'"
         )
 
     # ARC-011 P4-009: fail-closed capability check. When the caller supplies

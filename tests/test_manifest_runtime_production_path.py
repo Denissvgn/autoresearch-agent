@@ -364,13 +364,34 @@ def test_manifest_runtime_file_path_kind_returns_file_target():
 
 
 def test_manifest_runtime_registry_api_kind_raises_loudly():
-    """prompt-engineering declares ``registry_api`` — the config-promotion
-    machinery must refuse to pretend it can handle it."""
+    """P1-3: ``registry_api`` with an endpoint now builds a webhook delivery
+    target (was: loud SkillConfigError skip). A ``registry_api`` *without* an
+    endpoint still fails loudly — nowhere to deliver is a config error."""
     rt = ManifestSkillRuntime(
         _manifest("prompt-engineering"), orchestrator=MagicMock(),
     )
-    with pytest.raises(SkillConfigError, match="registry_api"):
-        rt.promotion_target()
+    target = rt.promotion_target()
+    from src.core.promotion_target import WebhookPromotionTarget
+
+    assert isinstance(target, WebhookPromotionTarget)
+    assert "prompt-registry" in target.endpoint
+
+    # No endpoint -> fail-closed SkillConfigError (unchanged posture).
+    import yaml
+
+    data = yaml.safe_load((_SKILL_YAML_READ("prompt-engineering")))
+    data["promotion_target"]["primary"] = {
+        "kind": "registry_api", "registry": "prompt-registry",
+    }
+    rt2 = ManifestSkillRuntime(
+        load_skill_manifest(yaml.safe_dump(data)), orchestrator=MagicMock(),
+    )
+    with pytest.raises(SkillConfigError, match="without an endpoint"):
+        rt2.promotion_target()
+
+
+def _SKILL_YAML_READ(skill_id: str) -> str:
+    return (SKILLS_ROOT / skill_id / "SKILL.yaml").read_text(encoding="utf-8")
 
 
 class _AutoPromoteStore:

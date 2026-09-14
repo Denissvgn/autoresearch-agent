@@ -1365,6 +1365,62 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/skills/{skill_id}/leaderboard:
+    get:
+      tags:
+      - skills
+      summary: Get Skill Leaderboard
+      description: 'Cross-session leaderboard for one skill (P0-4).
+
+
+        Aggregates every session recorded for the skill (by ``skill_id`` and its
+
+        legacy ``model_type`` alias) that produced a best metric, sorted by the
+
+        skill''s declared primary-metric direction. The comparison surface the
+
+        Dashboard lacked: best metric, iterations spent, cost, subject/variant.'
+      operationId: get_skill_leaderboard_api_v1_skills__skill_id__leaderboard_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: skill_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Skill Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          title: Limit
+          default: 20
+      - name: X-Request-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Correlation identifier; auto-generated UUID4 when missing.
+          title: X-Request-Id
+        description: Correlation identifier; auto-generated UUID4 when missing.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/skills/{skill_id}/versions:
     get:
       tags:

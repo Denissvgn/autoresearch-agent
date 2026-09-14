@@ -51,7 +51,9 @@ ignore = ["E402", "F401", "F541", "F841"]
 [tool.ruff.lint.per-file-ignores]
 # Legacy phase-plan tables kept only to render pre-migration DB rows; the
 # long lines are historical data strings.
-"src/core/research_phase_plan.py" = ["E501"]
+# P1-2: the tables moved to src/compat/legacy_phase_tables.py (the live
+# machinery in src/core/research_phase_plan.py is now E501-clean).
+"src/compat/legacy_phase_tables.py" = ["E501"]
 # Defense-in-depth denylist lines name the legacy platform secret explicitly
 # so it can never leak into a child/plugin env; exempt from line length.
 "src/core/command_runner.py" = ["E501"]
@@ -75,7 +77,10 @@ follow_imports = "skip"
 disallow_untyped_decorators = false
 exclude = [
   "src/api/(audit|promotion|research|results)\\.py",
-  "src/core/(command_policy|command_runner|config_promoter|consistency_validator|development_gate_bundle|development_inference_validation|development_signal_health|experiment_parser|iteration_snapshot|log_writer|orchestrator|pipeline_controller|research_manifest|research_phase_plan|research_state|results_store|service_preflight|session_manager|structured_hpo)\\.py",
+  "src/core/(command_policy|command_runner|config_promoter|consistency_validator|development_gate_bundle|development_inference_validation|development_signal_health|experiment_parser|iteration_snapshot|log_writer|orchestrator|pipeline_controller|research_manifest|research_state|results_store|service_preflight|session_manager|structured_hpo)\\.py",
+  # P1-2: verbatim-moved legacy code (was excluded where it lived, in
+  # src/api/results.py) — frozen in src/compat, not type-checked by design.
+  "src/compat/ml_enrichment\\.py",
 ]
 
 [tool.pytest.ini_options]

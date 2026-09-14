@@ -248,6 +248,11 @@ class SkillRuntime(Protocol):
     # ── Preflight ─────────────────────────────────────────────────
     def preflight_checks(self) -> list["PreflightCheck"]: ...
 
+    # ── Execution (P1-4) ───────────────────────────────────────────
+    def execution_concurrency(self) -> int:
+        """Max independent trial commands the loop may run in parallel."""
+        ...
+
     # ── Promotion ─────────────────────────────────────────────────
     def promotion_target(self) -> "PromotionTarget": ...
 
@@ -709,21 +714,31 @@ class ManifestSkillRuntime:
                 checks.append(HTTPHealthCheck(target))
         return checks
 
+    # ── Execution (P1-4) ───────────────────────────────────────────────
+    def execution_concurrency(self) -> int:
+        """The manifest's ``execution.concurrency`` (default 1 = sequential)."""
+        execution = getattr(self._manifest, "execution", None)
+        if execution is None:
+            return 1
+        return int(getattr(execution, "concurrency", 1) or 1)
+
     # ── Promotion ─────────────────────────────────────────────────
     def promotion_target(self) -> "PromotionTarget":
         """Build the development-scope ``PromotionTarget`` from the manifest's
         ``promotion_target.primary``.
 
-        ARC-011 review C2 (2026-08-15): the declared ``kind`` must match an
-        implemented target. ``file_path`` → ``FilePathPromotionTarget``. Every
-        other kind (``registry_api`` / ``artifact_store`` / ``git_branch``)
-        raises ``SkillConfigError`` instead of silently downgrading to a file
-        write — e.g. a ``registry_api`` promotion is a directory move +
-        lifecycle transition (``SkillRegistryPromotionTarget``), a different
-        shape the file-write ``PromotionTarget`` protocol does not cover, so
-        pretending to handle it would promote garbage paths.
+        ARC-011 review C2 (2026-08-15) + P1-3: the declared ``kind`` must match
+        an implemented target. ``file_path`` → ``FilePathPromotionTarget``;
+        ``webhook`` and ``registry_api`` (with an endpoint) →
+        ``WebhookPromotionTarget`` (idempotent POST delivery + local
+        provenance copy). Every other kind (``artifact_store`` /
+        ``git_branch``), or a ``registry_api`` without an endpoint, raises
+        ``SkillConfigError`` instead of silently downgrading to a file write.
         """
-        from src.core.promotion_target import FilePathPromotionTarget
+        from src.core.promotion_target import (
+            FilePathPromotionTarget,
+            WebhookPromotionTarget,
+        )
 
         primary = self._manifest.promotion_target.primary
         kind = getattr(primary, "kind", None)
@@ -732,11 +747,32 @@ class ManifestSkillRuntime:
             # manifest's path_template at the runtime boundary (P3 concern);
             # for Phase 2 the default target reproduces the incumbent paths.
             return FilePathPromotionTarget()
+        if kind == "webhook":
+            return WebhookPromotionTarget(
+                endpoint=primary.endpoint,
+                auth_env_var=primary.auth_secret or None,
+                timeout_s=getattr(primary, "timeout_s", 10.0),
+                retries=getattr(primary, "retries", 2),
+            )
+        if kind == "registry_api":
+            endpoint = getattr(primary, "endpoint", None)
+            if not endpoint:
+                raise SkillConfigError(
+                    f"skill {self._manifest.id!r} declares "
+                    "promotion_target.kind='registry_api' without an endpoint; "
+                    "refusing to build a webhook promotion with nowhere to "
+                    "deliver"
+                )
+            return WebhookPromotionTarget(
+                endpoint=endpoint,
+                auth_env_var=getattr(primary, "auth_secret", None) or None,
+            )
         raise SkillConfigError(
             f"skill {self._manifest.id!r} declares "
             f"promotion_target.kind={kind!r}, which has no wired "
-            "PromotionTarget implementation (only 'file_path' is); refusing "
-            "to silently downgrade to a file-path promotion"
+            "PromotionTarget implementation (file_path / webhook / "
+            "registry_api are); refusing to silently downgrade to a "
+            "file-path promotion"
         )
 
     # ── Output parsing ────────────────────────────────────────────

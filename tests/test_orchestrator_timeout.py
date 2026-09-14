@@ -286,6 +286,7 @@ class _CapturingRunner:
         proc_registry: object = None,
         research_id: object = None,
         extra_env: object = None,
+        cwd: object = None,
     ) -> CommandRunResult:
         type(self).captures.append(
             {
@@ -293,6 +294,9 @@ class _CapturingRunner:
                 "proc_registry": proc_registry,
                 "research_id": research_id,
                 "extra_env": extra_env,
+                # P2 per-workdir state: the cwd override is threaded through
+                # to the governed runner (trial-directory execution).
+                "cwd": cwd,
             }
         )
         decision = MagicMock()
@@ -303,7 +307,9 @@ class _CapturingRunner:
 def test_command_timeout_cap_respects_floor_then_budget() -> None:
     """Ample budget → the 900s floor holds; tight budget → the cap wins below it."""
     _CapturingRunner.captures = []
-    with patch("src.core.orchestrator.GovernedCommandRunner", _CapturingRunner):
+    # P1-1 split: _tool_bash now lives in src.core.agent_tools (re-exported by
+    # orchestrator); the patch seam follows the implementation module.
+    with patch("src.core.agent_tools.GovernedCommandRunner", _CapturingRunner):
         # Ample remaining budget: agent asked for 30s, floored to 900, not capped.
         _tool_bash(
             {"command": "echo hi", "timeout_s": 30},

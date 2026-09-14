@@ -20,6 +20,26 @@ from typing import Any, AsyncGenerator, Dict, Iterable, List, Mapping, Optional
 import yaml
 
 from src.config import secret_value, settings
+
+# P1-1 split: the tool surface lives in src/core/agent_tools.py; re-exported
+# here for every existing importer (tests import _execute_tool/_tool_* /
+# _load_packaged_skill_md/_nonce_env_for_command/AGENT_TOOLS from orchestrator).
+from src.core.agent_tools import (  # noqa: F401
+    AGENT_TOOLS,
+    ToolExecutionResult,
+    _config_snapshot_path_from_command,
+    _execute_tool,
+    _load_packaged_skill_md,
+    _nonce_env_for_command,
+    _normalize_command_for_plan,
+    _safe_path,
+    _safe_write_path,
+    _tool_bash,
+    _tool_glob,
+    _tool_grep,
+    _tool_read_file,
+    _tool_write_file,
+)
 from src.core.artifact_reference import normalize_artifact_references_in_mapping
 from src.core.command_runner import (
     CommandProcessRegistry,
@@ -104,6 +124,11 @@ from src.core.state_machine import (
     SessionStateMachine,
 )
 from src.core.state_store import StateStore
+from src.core.trial_workspace import (
+    TrialContext,
+    build_trial_context,
+    trial_marker_candidates,
+)
 from src.ws.events import broadcaster
 
 logger = logging.getLogger(__name__)
@@ -218,116 +243,6 @@ class ResearchConfig:
         return self.model_type
 
 
-@dataclass(frozen=True)
-class ToolExecutionResult:
-    content: str
-    meta: Dict[str, Any] = field(default_factory=dict)
-
-
-# ---------------------------------------------------------------------------
-# Tool definitions for the Claude agent
-# ---------------------------------------------------------------------------
-
-AGENT_TOOLS: list[ToolDef] = [
-    ToolDef(
-        name="bash",
-        description=(
-            "Execute one governed command in the workspace. "
-            "The working directory is the workspace root and shell syntax "
-            "such as pipes, redirection, command substitution, and command "
-            "chaining is rejected. Use .venv/bin/python for approved "
-            "autotuner Python scripts. "
-            "Default timeout is 7200s (2 hours). Set timeout_s for "
-            "shorter commands. Minimum enforced: 900s."
-        ),
-        input_schema={
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "string",
-                    "description": "The shell command to execute.",
-                },
-                "timeout_s": {
-                    "type": "integer",
-                    "description": "Timeout in seconds (default: 7200). Minimum 900.",
-                },
-            },
-            "required": ["command"],
-        },
-    ),
-    ToolDef(
-        name="read_file",
-        description="Read the contents of a file in the workspace.",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "Relative or absolute path within the workspace.",
-                },
-            },
-            "required": ["path"],
-        },
-    ),
-    ToolDef(
-        name="write_file",
-        description=(
-            "Write content to a file in the workspace. "
-            "Creates parent directories if needed."
-        ),
-        input_schema={
-            "type": "object",
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "description": "Relative or absolute path within the workspace.",
-                },
-                "content": {
-                    "type": "string",
-                    "description": "File content to write.",
-                },
-            },
-            "required": ["path", "content"],
-        },
-    ),
-    ToolDef(
-        name="glob",
-        description="List files matching a glob pattern within the workspace.",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "pattern": {
-                    "type": "string",
-                    "description": "Glob pattern (e.g. 'configs/**/*.yaml').",
-                },
-            },
-            "required": ["pattern"],
-        },
-    ),
-    ToolDef(
-        name="grep",
-        description="Search for a regex pattern in files within the workspace.",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "pattern": {
-                    "type": "string",
-                    "description": "Regex pattern to search for.",
-                },
-                "path": {
-                    "type": "string",
-                    "description": "File or directory to search in (default: workspace root).",
-                },
-                "include": {
-                    "type": "string",
-                    "description": "Glob to filter files (e.g. '*.py').",
-                },
-            },
-            "required": ["pattern"],
-        },
-    ),
-]
-
 SERVER_OWNED_SETUP_INSTRUCTION = (
     "Run the setup command exactly as shown. The server has already prepared "
     "fresh-session cleanup or continuation behavior, so do not add reset flags."
@@ -337,292 +252,6 @@ PROMOTION_HANDOFF_INSTRUCTION = (
     "Promotion handoff: Do not promote directly. Finish with a best validated "
     "config and let the server preview/confirm."
 )
-
-# ---------------------------------------------------------------------------
-# Path safety
-# ---------------------------------------------------------------------------
-
-
-def _safe_path(raw: str, workspace: str) -> str:
-    """Resolve a path and ensure it stays within the workspace."""
-    if os.path.isabs(raw):
-        resolved = Path(raw).resolve(strict=False)
-    else:
-        resolved = Path(workspace, raw).resolve(strict=False)
-    ws_real = Path(workspace).resolve(strict=False)
-    try:
-        resolved.relative_to(ws_real)
-    except ValueError as exc:
-        raise ValueError(f"Path {raw!r} resolves outside workspace") from exc
-    return str(resolved)
-
-
-def _safe_write_path(raw: str, workspace: str) -> str:
-    """Resolve a writable path and ensure existing parents stay in workspace."""
-
-    path = Path(raw) if os.path.isabs(raw) else Path(workspace, raw)
-    resolved_parent = path.parent.resolve(strict=False)
-    workspace_root = Path(workspace).resolve(strict=False)
-    try:
-        resolved_parent.relative_to(workspace_root)
-    except ValueError as exc:
-        raise ValueError(f"Path {raw!r} parent resolves outside workspace") from exc
-    if path.exists() and path.is_symlink():
-        raise ValueError(f"Path {raw!r} is a symlink and cannot be overwritten")
-    return str(resolved_parent / path.name)
-
-
-def _normalize_command_for_plan(command: str) -> str:
-    # Strip a leading ``cd <dir> && `` wrapper before normalizing: the agent
-    # prefixes its bash commands with ``cd /app/workspace && `` (per the workspace
-    # CLAUDE.md), but planned-trial ``expected_command``s are stored WITHOUT it.
-    # Without stripping, the structured-HPO guard never matches the agent's
-    # planned-trial command → every trial is rejected as off-plan → the session
-    # aborts after 5 rejections at iteration 0 (observed on the honest E1/E3 run).
-    command = re.sub(r"^\s*cd\s+\S+\s*&&\s*", "", command)
-    try:
-        return " ".join(shlex.split(command))
-    except ValueError:
-        return command.strip()
-
-
-def _config_snapshot_path_from_command(
-    command: str,
-    workspace_root: str,
-    session_workspace: str,
-) -> Optional[str]:
-    try:
-        argv = shlex.split(command)
-    except ValueError:
-        return None
-    if "--config" not in argv:
-        return None
-    index = argv.index("--config") + 1
-    if index >= len(argv):
-        return None
-    raw_path = argv[index]
-    if os.path.isabs(raw_path):
-        resolved = os.path.realpath(raw_path)
-    elif raw_path.startswith("runs/") or raw_path.startswith("./runs/"):
-        resolved = os.path.realpath(os.path.join(workspace_root, raw_path))
-    else:
-        resolved = os.path.realpath(os.path.join(session_workspace, raw_path))
-    session_real = os.path.realpath(session_workspace)
-    if not resolved.startswith(session_real + os.sep) and resolved != session_real:
-        return None
-    return resolved
-
-
-# ---------------------------------------------------------------------------
-# Tool execution
-# ---------------------------------------------------------------------------
-
-
-def _execute_tool(
-    name: str,
-    input_data: Dict[str, Any],
-    workspace: str,
-    session_workspace: str | None = None,
-    output_callback: OutputCallback | None = None,
-    *,
-    command_deadline_mono: float | None = None,
-    proc_registry: CommandProcessRegistry | None = None,
-    research_id: str | None = None,
-    extra_env: Mapping[str, str] | None = None,
-    policy_extension: Mapping[str, Any] | None = None,
-) -> ToolExecutionResult:
-    """Execute a tool call and return the text result."""
-    try:
-        if name == "bash":
-            return _tool_bash(
-                input_data, workspace, session_workspace, output_callback,
-                command_deadline_mono=command_deadline_mono,
-                proc_registry=proc_registry,
-                research_id=research_id,
-                extra_env=extra_env,
-                policy_extension=policy_extension,
-            )
-        elif name == "read_file":
-            return ToolExecutionResult(_tool_read_file(input_data, workspace))
-        elif name == "write_file":
-            return ToolExecutionResult(_tool_write_file(input_data, workspace))
-        elif name == "glob":
-            return ToolExecutionResult(_tool_glob(input_data, workspace))
-        elif name == "grep":
-            return ToolExecutionResult(_tool_grep(input_data, workspace))
-        else:
-            return ToolExecutionResult(f"Unknown tool: {name}")
-    except Exception as exc:
-        return ToolExecutionResult(f"Tool error ({name}): {exc}")
-
-
-def _tool_bash(
-    input_data: Dict[str, Any],
-    workspace: str,
-    session_workspace: str | None = None,
-    output_callback: OutputCallback | None = None,
-    *,
-    command_deadline_mono: float | None = None,
-    proc_registry: CommandProcessRegistry | None = None,
-    research_id: str | None = None,
-    extra_env: Mapping[str, str] | None = None,
-    policy_extension: Mapping[str, Any] | None = None,
-) -> ToolExecutionResult:
-    command = input_data["command"]
-    timeout = input_data.get("timeout_s", 7200)
-    # Enforce minimum timeout — agents routinely ignore tool-description hints
-    if timeout < 900:
-        timeout = 900
-    # ARC-011 P0-006: cap the per-command timeout at the session's remaining
-    # soft budget so the command_runner's own psutil kill path fires at the
-    # session boundary. The cap wins even below the 900s floor — a session
-    # about to time out must not start a 15-minute command. ``ceil`` (not
-    # truncation) so the command overruns by <1s into the grace buffer and the
-    # soft check then trips cleanly, avoiding a cap≈0 thrash of subprocesses.
-    if command_deadline_mono is not None:
-        timeout = min(timeout, max(0, math.ceil(command_deadline_mono - time.monotonic())))
-    runner = GovernedCommandRunner(
-        workspace_root=workspace,
-        session_workspace=session_workspace,
-        policy_extension=policy_extension,
-    )
-    result = runner.run(
-        command, timeout_s=timeout, output_callback=output_callback,
-        proc_registry=proc_registry, research_id=research_id,
-        extra_env=extra_env,
-    )
-    decision = result.decision
-    return ToolExecutionResult(
-        result.output,
-        meta={
-            "policy_allowed": decision.allowed,
-            "policy_reason": decision.reason,
-            "policy_operation": decision.operation,
-            "normalized_command": decision.normalized_command,
-            "returncode": result.returncode,
-            "timed_out": result.timed_out,
-        },
-    )
-
-
-def _tool_read_file(input_data: Dict[str, Any], workspace: str) -> str:
-    path = _safe_path(input_data["path"], workspace)
-    try:
-        content = Path(path).read_text(encoding="utf-8", errors="replace")
-        if len(content) > 100_000:
-            content = content[:50_000] + "\n...(truncated)...\n" + content[-50_000:]
-        return content
-    except FileNotFoundError:
-        return f"File not found: {input_data['path']}"
-
-
-def _tool_write_file(input_data: Dict[str, Any], workspace: str) -> str:
-    path = _safe_write_path(input_data["path"], workspace)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    Path(path).write_text(input_data["content"], encoding="utf-8")
-    return f"Wrote {len(input_data['content'])} bytes to {input_data['path']}"
-
-
-def _tool_glob(input_data: Dict[str, Any], workspace: str) -> str:
-    pattern = input_data["pattern"]
-    full_pattern = os.path.join(workspace, pattern)
-    matches = sorted(glob_mod.glob(full_pattern, recursive=True))
-    # Return paths relative to workspace
-    ws = str(Path(workspace).resolve(strict=False))
-    relative = []
-    for match in matches:
-        try:
-            safe_match = _safe_path(match, workspace)
-            relative.append(str(Path(safe_match).relative_to(ws)))
-        except ValueError:
-            logger.debug("Filtered glob match outside workspace: %s", match)
-    if not relative:
-        return "(no matches)"
-    return "\n".join(relative[:500])
-
-
-def _tool_grep(input_data: Dict[str, Any], workspace: str) -> str:
-    pattern = input_data["pattern"]
-    search_path = input_data.get("path", ".")
-    include = input_data.get("include", "")
-    safe_dir = _safe_path(search_path, workspace)
-
-    cmd = ["grep", "-rn", "--color=never"]
-    if include:
-        cmd += [f"--include={include}"]
-    cmd += [pattern, safe_dir]
-
-    # Phase 4.3: this synchronous subprocess.run call is intentional —
-    # _execute_tool is already invoked via ``asyncio.to_thread`` from the
-    # main agent loop, so blocking work here runs on a worker thread and
-    # cannot stall the event loop. Switching to asyncio.create_subprocess_*
-    # would force every tool call site to await individually.
-    #
-    # P0-023 / P1-029 security delta: pass ``_build_child_env()`` as ``env=``
-    # so the grep child runs with the same control-plane-secret-stripped
-    # allow-list the governed runner enforces. Without this, ``subprocess.run``
-    # defaults to inheriting the full parent env (ANTHROPIC_AUTH_TOKEN,
-    # AUTORESEARCH_API_TOKEN, AUTORESEARCH_PROMETHEUS_TOKEN, …) — exactly the
-    # leak the governed-runner path was hardened against.
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=30,
-            env=_build_child_env(),
-        )
-        output = result.stdout
-        if len(output) > 60_000:
-            output = output[:30_000] + "\n...(truncated)...\n" + output[-30_000:]
-        return output or "(no matches)"
-    except subprocess.TimeoutExpired:
-        return "Grep timed out after 30s"
-
-
-def _load_packaged_skill_md(skill_id: str, primer: str = "SKILL.md") -> str:
-    """Read the packaged ``skills/<skill_id>/<primer>`` domain primer (C2-2).
-
-    Manifest-driven sessions use the skill package's own primer instead of
-    the legacy workspace ``.github/skills/<model_type>/SKILL.md``.
-    ``primer`` is the manifest-declared filename (``llm.system_prompt``;
-    ``SKILL.md`` by default). A missing packaged primer degrades to an empty
-    string (logged) rather than failing the session — the manifest body
-    already carries the directive content.
-    """
-    from src.core.skill_registry import DEFAULT_SKILLS_ROOT
-
-    path = DEFAULT_SKILLS_ROOT / skill_id / primer
-    try:
-        return path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        logger.warning("Packaged skill primer missing for %s: %s", skill_id, path)
-        return ""
-
-
-def _nonce_env_for_command(
-    nonce_env: Optional[Mapping[str, str]],
-    command: object,
-    policy_extension: Optional[Mapping[str, Any]],
-) -> Optional[Mapping[str, str]]:
-    """Narrow the W11 nonce env delivery to the skill's declared scripts (C3).
-
-    The nonce must reach the sanctioned eval subprocess, but handing it to
-    every governed command re-creates the leak review C3 closes (any
-    sanctioned script that surfaces its environment exposes the secret to
-    the agent relaying its output). Only commands invoking one of the
-    skill's manifest-declared scripts receive the env. A false negative is
-    loud, not silent: without the env the eval cannot echo the nonce and its
-    markers are rejected with explicit guidance.
-    """
-    if nonce_env is None:
-        return None
-    declared = (policy_extension or {}).get("allowed_scripts") or ()
-    cmd = str(command or "")
-    if any(str(script) in cmd for script in declared):
-        return nonce_env
-    return None
-
 
 # ---------------------------------------------------------------------------
 # Orchestrator
@@ -994,9 +623,10 @@ class AgentOrchestrator:
         self,
         config: ResearchConfig,
         min_mtime: Optional[float] = None,
+        trial_dir: Optional[str] = None,
     ) -> Optional[str]:
         return await asyncio.to_thread(
-            self._read_marker_file, config, min_mtime,
+            self._read_marker_file, config, min_mtime, trial_dir,
         )
 
     async def _verify_kv_metrics(
@@ -1091,6 +721,7 @@ class AgentOrchestrator:
         self,
         config: ResearchConfig,
         min_mtime: Optional[float] = None,
+        trial_dir: Optional[str] = None,
     ) -> Optional[str]:
         """Read and consume a marker file declared by the skill's
         ``output_parser.fallback`` section.
@@ -1100,6 +731,12 @@ class AgentOrchestrator:
         out. When ``min_mtime`` is provided, a marker older than that
         timestamp is treated as stale (left over from a prior session)
         and ignored.
+
+        ``trial_dir`` (P2 per-workdir state): when the command executed in
+        an isolated trial directory, its marker/results files land there —
+        the trial copies are checked first, the session-workspace paths
+        stay as fallback (a staging-time copy is older than the command
+        start and the ``min_mtime`` check discards it naturally).
         """
         skill = getattr(self, "_session_skills", {}).get(config.id)
         if skill is None:
@@ -1108,6 +745,8 @@ class AgentOrchestrator:
             paths = list(skill.marker_file_paths(config))
         except Exception:
             return None
+        if trial_dir:
+            paths = trial_marker_candidates(trial_dir, paths)
         for marker_path in paths:
             if not marker_path.exists():
                 continue
@@ -2078,6 +1717,13 @@ class AgentOrchestrator:
         # the default policy sets inside ``evaluate_command_policy``; the
         # transitional runtimes return {} (parity with the hardcoded sets).
         skill_policy_extension = skill.command_policy_extension()
+        # P2 per-workdir state: the skill's parallel-trial opt-in
+        # (``execution.concurrency``, default 1 = strictly sequential,
+        # byte-identical behavior). Defensive against stub runtimes in tests.
+        try:
+            execution_concurrency = int(skill.execution_concurrency() or 1)
+        except Exception:  # noqa: BLE001 — a stub runtime must not kill the run
+            execution_concurrency = 1
         # ARC-011 review C2-1/C2-4: keep the runtime reachable by research_id
         # for the out-of-loop helpers (_refresh_phase_state derives the phase
         # plan from it; the readiness advisory derives actionable blockers;
@@ -2342,6 +1988,10 @@ class AgentOrchestrator:
                 agent_text = ""
                 turn_recorded_iteration = False
                 turn_ran_training_command = False
+                # P2 per-workdir state: 1-based index of bash commands within
+                # this turn (all bash blocks counted — deterministic trial
+                # naming even when only some are trial-eligible).
+                turn_bash_seq = 0
 
                 for block in assistant_content:
                     if isinstance(block, TextBlock):
@@ -2377,6 +2027,29 @@ class AgentOrchestrator:
                             else ""
                         )
 
+                        # P2 per-workdir state: build this command's trial
+                        # context BEFORE the pre-snapshot so the snapshot
+                        # reads the staged trial copy (the exact config the
+                        # subprocess will see). concurrency==1 (default)
+                        # keeps trial_dir=None — behavior byte-identical.
+                        _trial_ctx: TrialContext | None = None
+                        if (
+                            isinstance(block.input, dict)
+                            and block.name == "bash"
+                        ):
+                            turn_bash_seq += 1
+                            _trial_ctx = build_trial_context(
+                                research_id=research_id,
+                                turn=turn,
+                                seq=turn_bash_seq,
+                                session_workspace=workspace,
+                                command=raw_command_for_tool,
+                                allowed_scripts=(
+                                    skill_policy_extension.get("allowed_scripts")
+                                ),
+                                execution_concurrency=execution_concurrency,
+                            )
+
                         # Pre-snapshot: capture the config file a command
                         # references BEFORE running it, so the attempt has an
                         # immutable config record preserved even on crash or
@@ -2390,6 +2063,11 @@ class AgentOrchestrator:
                                 raw_command_for_tool,
                                 settings.workspace_root,
                                 workspace,
+                                base_dir=(
+                                    _trial_ctx.workdir
+                                    if _trial_ctx is not None and _trial_ctx.is_trial
+                                    else None
+                                ),
                             )
                             if snapshot_path:
                                 try:
@@ -2431,6 +2109,12 @@ class AgentOrchestrator:
                             and isinstance(block.input, dict)
                             and block.name == "bash"
                         ):
+                            _rc_metadata: Dict[str, Any] = {"tool_id": block.id}
+                            if _trial_ctx is not None and _trial_ctx.is_trial:
+                                # P2 per-workdir provenance: which isolated
+                                # trial directory this command ran in.
+                                _rc_metadata["trial_dir"] = _trial_ctx.trial_dir
+                                _rc_metadata["trial_seq"] = _trial_ctx.seq
                             runtime_command = await self._store.record_runtime_command(
                                 research_id=research_id,
                                 turn=turn,
@@ -2440,7 +2124,7 @@ class AgentOrchestrator:
                                     self._effective_tool_timeout(block.input),
                                     max(0, int(_command_deadline_mono - time.monotonic())),
                                 ),
-                                metadata={"tool_id": block.id},
+                                metadata=_rc_metadata,
                             )
                             runtime_command_id = runtime_command["id"]
 
@@ -2509,9 +2193,26 @@ class AgentOrchestrator:
                                     skill_policy_extension,
                                 ),
                                 policy_extension=skill_policy_extension,
+                                cwd=(
+                                    _trial_ctx.trial_dir
+                                    if _trial_ctx is not None and _trial_ctx.is_trial
+                                    else None
+                                ),
                             )
                         tool_result = tool_execution.content
                         tool_meta = tool_execution.meta
+                        if (
+                            _trial_ctx is not None
+                            and _trial_ctx.is_trial
+                            and isinstance(tool_meta, dict)
+                        ):
+                            # P2 per-workdir provenance flows into the runtime
+                            # command record, the marker, and the recorded
+                            # iteration's metrics (via _attach_runtime_command_
+                            # metadata consumers).
+                            tool_meta = dict(tool_meta)
+                            tool_meta["trial_dir"] = _trial_ctx.trial_dir
+                            tool_meta["trial_seq"] = _trial_ctx.seq
                         if runtime_command_id is not None:
                             tool_meta = dict(tool_meta)
                             tool_meta["runtime_command_id"] = runtime_command_id
@@ -2777,6 +2478,11 @@ class AgentOrchestrator:
                         ):
                             marker_text = await self._read_marker_file_async(
                                 config, min_mtime=command_started_at,
+                                trial_dir=(
+                                    _trial_ctx.trial_dir
+                                    if _trial_ctx is not None and _trial_ctx.is_trial
+                                    else None
+                                ),
                             )
                             _rc_for_marker = tool_meta.get("returncode")
                             _command_succeeded = (

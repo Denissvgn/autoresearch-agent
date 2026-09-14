@@ -172,6 +172,14 @@ class Settings(BaseSettings):
     )
 
     # --- Workspace ---
+    demo_mode: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("AUTORESEARCH_DEMO", "DEMO_MODE"),
+        description=(
+            "P0-3 demo mode: route all LLM calls to the zero-credential "
+            "MockProvider. Never enable in production (refused by router)."
+        ),
+    )
     workspace_root: str = Field(
         default="/app/workspace",
         validation_alias=AliasChoices("AUTORESEARCH_WORKSPACE_ROOT", "WORKSPACE_ROOT"),

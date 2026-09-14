@@ -103,6 +103,41 @@ container.
 
 Navigate to **http://localhost:8030** in your browser.
 
+### Try it with no API keys (demo mode)
+
+```bash
+docker run --rm -p 8030:8000 \
+  -e AUTORESEARCH_DEMO=true \
+  -e AUTORESEARCH_API_TOKEN=demo-token \
+  autoresearch-agent
+```
+
+`AUTORESEARCH_DEMO=true` routes every LLM call to the zero-credential
+`MockProvider` (a scripted edit-run-keep loop, $0 cost) so the whole flow —
+session start, governed commands, `ITERATION_RESULT` parsing, iterations,
+charts, leaderboard, promotion preview — runs with no LLM keys. The provider
+router refuses the mock in production (fail-closed).
+
+### Installed skills
+
+| Skill | Category | Scorer | Promotion |
+|-------|----------|--------|-----------|
+| `prompt-engineering` | generative | remote scorer → OpenAI judge → offline fallback | `registry_api` (webhook delivery) |
+| `code-refactor` | generative | offline: syntax + lint + JSONL test ledger | `file_path` |
+| `db-config-tuning` | optimization | offline: deterministic TPS/latency bench model | `file_path` |
+
+A skill is a directory under `skills/` (`SKILL.yaml` + `SKILL.md` +
+`bootstrap.py` + eval CLI); add one and `POST /api/v1/skills/reload` — no
+orchestrator or UI code changes. The **Leaderboard** page ranks every scored
+session per skill by the skill's declared metric direction
+(`GET /api/v1/skills/{id}/leaderboard`).
+
+Skills declaring `promotion_target.kind: webhook` (or `registry_api` with an
+endpoint) deliver the promoted winner to their endpoint with an
+`Idempotency-Key` and retries, keeping a local provenance copy under
+`<workspace>/promotions/`; delivery failure fails the confirm (fail-closed).
+See `examples/prompt-registry/` for a runnable receiver.
+
 ---
 
 ## Using the UI
@@ -260,6 +295,7 @@ both.
 | `GET` | `/api/v1/promotions` | List all promotions |
 | `GET` | `/api/v1/skills` | Installed skills |
 | `GET` | `/api/v1/skills/{id}` | Skill descriptor + sub-resources |
+| `GET` | `/api/v1/skills/{id}/leaderboard` | Cross-session leaderboard for one skill |
 | `POST` | `/api/v1/skills/reload` | Re-discover installed skills |
 | `GET` | `/api/v1/subjects` | Subjects/variants a skill can run on |
 | `GET` | `/api/v1/models` | Legacy alias for the skills list |

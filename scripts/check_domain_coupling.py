@@ -34,15 +34,21 @@ FORBIDDEN = [
     r"pipeline_controller",
 ]
 
-# legacy_alias.py + research_phase_plan.py keep the legacy model_type map and
-# historical phase tables so pre-migration DB rows still render.
 # state_store.py / postgres_state_store.py keep legacy columns (instrument,
 # trading_mode, ...) as storage back-compat; nothing writes trading values.
+# P1-2: the historical phase tables moved to src/compat/legacy_phase_tables.py
+# (exempt + documented below); the live machinery left in
+# src/core/research_phase_plan.py is guard-clean and no longer needs an
+# exemption.
 EXEMPT_PATHS = (
     "src/core/legacy_alias.py",
-    "src/core/research_phase_plan.py",
     "src/core/state_store.py",
     "src/core/postgres_state_store.py",
+    # P1-2: the legacy surfaces moved to src/compat/ — exempt by name so the
+    # guard documents exactly where historical vocabulary is quarantined.
+    "src/compat/legacy_alias.py",
+    "src/compat/ml_enrichment.py",
+    "src/compat/legacy_phase_tables.py",
 )
 
 TARGETS = [REPO_ROOT / "src", REPO_ROOT / "ui" / "src", REPO_ROOT / "Dockerfile"]
