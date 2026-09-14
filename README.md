@@ -239,6 +239,31 @@ Highlights:
 `POST /api/v1/skills/reload` re-discovers installed skills (non-production
 environments); a new skill appears with no orchestrator or UI code changes.
 
+### Generating a skill (Skill SDK)
+
+`autoresearch new-skill` drafts a complete package from a natural-language
+goal — the generator calls the LLM, validates the manifest against
+`research_skill.v1`, lints the emitted Python, and audits the command policy
+before anything is written. Drafts land in `skills/_drafts/<id>/` and are not
+selectable for production until promoted:
+
+```bash
+# Draft (nothing under skills/ is written in --dry-run):
+poetry run autoresearch new-skill --goal "tune a Postgres config for latency" \
+  --dry-run --dry-bootstrap     # + execute bootstrap.py in a preview overlay
+
+# Generate for real, then promote after review:
+poetry run autoresearch new-skill --goal "tune a Postgres config for latency"
+poetry run autoresearch promote-skill --id my-skill    # confirm + git tag
+```
+
+Promotion refuses to run while the policy audit reports **critical** findings
+(override with `--allow-critical`), and records a `skill/<id>/<version>` git
+tag when the skills tree lives in a repository. The UI's **Skill Studio**
+page offers the same wizard through `POST /skills/generate` — set
+`AUTORESEARCH_SKILL_GENERATOR_ENABLED=true` to expose it (it spends LLM
+tokens; promotion stays a CLI/operator act).
+
 ## Architecture
 
 ```

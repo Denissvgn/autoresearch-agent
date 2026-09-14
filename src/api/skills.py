@@ -33,9 +33,10 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 
 from src.api.audit import record_api_audit_event
 from src.api.auth import require_api_auth
@@ -313,8 +314,15 @@ async def get_skill_leaderboard(
 
 @router.get("/skills/{skill_id}/versions")
 async def get_skill_versions(skill_id: str):
-    """Declared skill versions (P3-006)."""
+    """Declared skill versions (P3-006) + best-effort git-tag history (P2).
+
+    The declared block is the manifest's own version (the source of truth).
+    The ``tags`` list surfaces ``skill/<id>/<version>`` git tags recorded by
+    ``autoresearch promote-skill`` — a docker deployment without git simply
+    reports an empty list.
+    """
     manifest = _get_or_404(skill_id)
+    tags = _skill_git_tags(skill_id)
     return {
         "skill_id": skill_id,
         "versions": [
@@ -322,9 +330,32 @@ async def get_skill_versions(skill_id: str):
                 "version": manifest.version,
                 "schema_version": manifest.schema_version,
                 "current": True,
+                "tagged": f"skill/{skill_id}/{manifest.version}" in tags,
             }
         ],
+        "tags": tags,
     }
+
+
+def _skill_git_tags(skill_id: str) -> List[str]:
+    """Git tags recorded for this skill (``skill/<id>/*``), newest-last.
+
+    Best-effort: any failure (no git, not a repo, timeout) returns ``[]`` —
+    the versions endpoint must never fail because git is unavailable.
+    """
+    import subprocess
+
+    try:
+        proc = subprocess.run(
+            ["git", "tag", "--list", f"skill/{skill_id}/*", "--sort=version:refname"],
+            cwd=str(_skill_dir(skill_id).parent), capture_output=True,
+            text=True, timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if proc.returncode != 0:
+        return []
+    return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
 
 
 @router.get("/skills/{skill_id}/changelog")
@@ -401,4 +432,141 @@ async def reload_skills(request: Request):
         "status": "ok",
         "reloaded": count,
         "available": _registry.available(),
+    }
+
+
+# ------------------------------------------------------------------
+# Skill generation (P2 Skill SDK — the API face of `autoresearch new-skill`)
+# ------------------------------------------------------------------
+
+
+class GenerateSkillRequest(BaseModel):
+    """Body for ``POST /skills/generate``."""
+
+    goal: str = Field(
+        min_length=8,
+        description="Natural-language description of the research domain.",
+    )
+    skill_id: Optional[str] = Field(
+        default=None,
+        description="Override the generated kebab-case skill id.",
+    )
+    provider: Literal["anthropic", "openai"] = Field(default="anthropic")
+    model: Optional[str] = Field(
+        default=None,
+        description="Model id (default: settings.anthropic_model).",
+    )
+
+
+@router.post("/skills/generate", status_code=201)
+async def generate_skill(body: GenerateSkillRequest, request: Request):
+    """Draft a new skill package from a goal (P2 Skill SDK).
+
+    The ``autoresearch new-skill`` CLI parity endpoint for UIs. Feature-flagged
+    (``AUTORESEARCH_SKILL_GENERATOR_ENABLED``): generation spends real LLM
+    tokens and writes a validated-but-untrusted draft into
+    ``skills/_drafts/<id>/`` — off by default, operator opt-in. Promotion of a
+    draft into the live tree stays an operator act (CLI ``promote-skill``);
+    this endpoint never moves files.
+    """
+    from src.core.llm_provider import build_provider
+    from src.core.skill_generator import (
+        SkillGenerationError,
+        SkillGenerator,
+    )
+
+    if not settings.skill_generator_enabled:
+        await _audit(
+            request,
+            action="skills.generate",
+            outcome="denied",
+            metadata={"reason": "flag_disabled"},
+            error_message="skill generator is disabled",
+        )
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "skill_generator_disabled",
+                "hint": (
+                    "Set AUTORESEARCH_SKILL_GENERATOR_ENABLED=true to expose "
+                    "LLM skill generation (it spends tokens and writes "
+                    "drafts into skills/_drafts/)."
+                ),
+            },
+        )
+    model = body.model or settings.anthropic_model
+    try:
+        provider = build_provider(body.provider)
+        draft = await SkillGenerator().generate(
+            description=body.goal,
+            provider=provider,
+            model=model,
+            skill_id=body.skill_id,
+        )
+    except SkillGenerationError as exc:
+        await _audit(
+            request,
+            action="skills.generate",
+            outcome="failure",
+            metadata={"goal": body.goal[:200]},
+            error_message=str(exc),
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "skill_generation_failed", "reason": str(exc)},
+        ) from exc
+    except Exception as exc:  # noqa: BLE001 — provider/credential failures
+        await _audit(
+            request,
+            action="skills.generate",
+            outcome="failure",
+            metadata={"goal": body.goal[:200]},
+            error_message=str(exc),
+        )
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "skill_generator_unavailable",
+                "reason": str(exc),
+                "hint": "generation needs real LLM credentials configured.",
+            },
+        ) from exc
+    await _audit(
+        request,
+        action="skills.generate",
+        outcome="success",
+        metadata={
+            "skill_id": draft.skill_id,
+            "findings": len(draft.policy_findings),
+            "critical": sum(
+                1 for f in draft.policy_findings if f.severity == "critical"
+            ),
+        },
+    )
+    return {
+        "skill_id": draft.skill_id,
+        "draft_dir": str(draft.skill_dir),
+        "files": [
+            name
+            for name, present in (
+                ("SKILL.yaml", True),
+                ("bootstrap.py", True),
+                ("SKILL.md", bool(draft.skill_md)),
+                ("eval/run.py", bool(draft.eval_run_py)),
+            )
+            if present
+        ],
+        "lifecycle_state": "draft",
+        "policy_findings": [
+            {
+                "severity": f.severity,
+                "reason": f.reason,
+                "location": f.location,
+            }
+            for f in draft.policy_findings
+        ],
+        "next": (
+            "Review the draft, then promote via the CLI: "
+            f"autoresearch promote-skill --id {draft.skill_id}"
+        ),
     }

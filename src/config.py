@@ -180,6 +180,17 @@ class Settings(BaseSettings):
             "MockProvider. Never enable in production (refused by router)."
         ),
     )
+    skill_generator_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_SKILL_GENERATOR_ENABLED", "SKILL_GENERATOR_ENABLED",
+        ),
+        description=(
+            "P2 Skill SDK: expose POST /skills/generate (LLM-drafted skill "
+            "packages). Operator opt-in — generation spends real tokens and "
+            "writes validated-but-untrusted drafts into skills/_drafts/."
+        ),
+    )
     workspace_root: str = Field(
         default="/app/workspace",
         validation_alias=AliasChoices("AUTORESEARCH_WORKSPACE_ROOT", "WORKSPACE_ROOT"),

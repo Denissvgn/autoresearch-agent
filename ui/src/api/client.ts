@@ -457,6 +457,23 @@ export interface SkillSummary {
   has_variants: boolean;
 }
 
+// ── Skill generation (P2 Skill SDK — `autoresearch new-skill` parity) ──
+
+export interface PolicyFinding {
+  severity: 'critical' | 'warning' | string;
+  reason: string;
+  location: string;
+}
+
+export interface GeneratedSkillDraft {
+  skill_id: string;
+  draft_dir: string;
+  files: string[];
+  lifecycle_state: 'draft';
+  policy_findings: PolicyFinding[];
+  next: string;
+}
+
 export interface FormField {
   name: string;
   type: string;
@@ -714,7 +731,25 @@ export const api = {
     request<MetricSchema>(`/skills/${id}/metric-schema`),
 
   getSkillVersions: (id: string) =>
-    request<{ skill_id: string; versions: Array<{ version: string; schema_version: string; current: boolean }> }>(`/skills/${id}/versions`),
+    request<{
+      skill_id: string;
+      versions: Array<{
+        version: string;
+        schema_version: string;
+        current: boolean;
+        tagged?: boolean;
+      }>;
+      tags?: string[];
+    }>(`/skills/${id}/versions`),
+
+  // Skill generation (P2 Skill SDK) — drafts only; promotion is an operator
+  // act via the CLI (`autoresearch promote-skill`).
+  generateSkill: (body: { goal: string; skill_id?: string }) =>
+    request<GeneratedSkillDraft>('/skills/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
 
   // Leaderboard (P0-4)
   getSkillLeaderboard: (id: string, limit = 20) =>

@@ -8,6 +8,7 @@ import History from './pages/History';
 import Promote from './pages/Promote';
 import Settings from './pages/Settings';
 import Leaderboard from './pages/Leaderboard';
+import Skills from './pages/Skills';
 import { Topbar, useDesignPrefs } from './components/hifi/Topbar';
 import { ResearchRealtimeBridge } from './hooks/useResearch';
 import { WebSocketProvider } from './hooks/useWebSocket';
@@ -106,6 +107,7 @@ export default function App() {
             <Route path="/research/:id/promote" element={<Promote />} />
             <Route path="/history" element={<History />} />
             <Route path="/leaderboard" element={<Leaderboard />} />
+            <Route path="/skills" element={<Skills />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>

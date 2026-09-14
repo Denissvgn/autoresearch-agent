@@ -1426,7 +1426,16 @@ paths:
       tags:
       - skills
       summary: Get Skill Versions
-      description: Declared skill versions (P3-006).
+      description: 'Declared skill versions (P3-006) + best-effort git-tag history (P2).
+
+
+        The declared block is the manifest''s own version (the source of truth).
+
+        The ``tags`` list surfaces ``skill/<id>/<version>`` git tags recorded by
+
+        ``autoresearch promote-skill`` — a docker deployment without git simply
+
+        reports an empty list.'
       operationId: get_skill_versions_api_v1_skills__skill_id__versions_get
       security:
       - HTTPBearer: []
@@ -1542,6 +1551,57 @@ paths:
         description: Correlation identifier; auto-generated UUID4 when missing.
       responses:
         '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/skills/generate:
+    post:
+      tags:
+      - skills
+      summary: Generate Skill
+      description: 'Draft a new skill package from a goal (P2 Skill SDK).
+
+
+        The ``autoresearch new-skill`` CLI parity endpoint for UIs. Feature-flagged
+
+        (``AUTORESEARCH_SKILL_GENERATOR_ENABLED``): generation spends real LLM
+
+        tokens and writes a validated-but-untrusted draft into
+
+        ``skills/_drafts/<id>/`` — off by default, operator opt-in. Promotion of a
+
+        draft into the live tree stays an operator act (CLI ``promote-skill``);
+
+        this endpoint never moves files.'
+      operationId: generate_skill_api_v1_skills_generate_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: X-Request-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Correlation identifier; auto-generated UUID4 when missing.
+          title: X-Request-Id
+        description: Correlation identifier; auto-generated UUID4 when missing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateSkillRequest'
+      responses:
+        '201':
           description: Successful Response
           content:
             application/json:
@@ -1830,6 +1890,37 @@ components:
       type: object
       title: ContinueResearchRequest
       description: 'ML-62: Request body for continuing a timed-out/completed session.'
+    GenerateSkillRequest:
+      properties:
+        goal:
+          type: string
+          minLength: 8
+          title: Goal
+          description: Natural-language description of the research domain.
+        skill_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Skill Id
+          description: Override the generated kebab-case skill id.
+        provider:
+          type: string
+          enum:
+          - anthropic
+          - openai
+          title: Provider
+          default: anthropic
+        model:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model
+          description: 'Model id (default: settings.anthropic_model).'
+      type: object
+      required:
+      - goal
+      title: GenerateSkillRequest
+      description: Body for ``POST /skills/generate``.
     HTTPValidationError:
       properties:
         detail:

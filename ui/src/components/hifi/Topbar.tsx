@@ -74,6 +74,7 @@ export function Topbar({ onToggleTheme, theme }: TopbarProps) {
   const isNew = pathname.startsWith('/research/new');
   const isHistory = pathname.startsWith('/history');
   const isLeaderboard = pathname.startsWith('/leaderboard');
+  const isSkills = pathname.startsWith('/skills');
   const isSettings = pathname.startsWith('/settings');
 
   const wsHost = (() => {
@@ -106,6 +107,9 @@ export function Topbar({ onToggleTheme, theme }: TopbarProps) {
         </NavLink>
         <NavLink to="/leaderboard" className={() => (isLeaderboard ? 'on' : undefined)}>
           Leaderboard
+        </NavLink>
+        <NavLink to="/skills" className={() => (isSkills ? 'on' : undefined)}>
+          Skills
         </NavLink>
         <NavLink to="/settings" className={() => (isSettings ? 'on' : undefined)}>
           Settings

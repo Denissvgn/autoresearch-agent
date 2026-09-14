@@ -7,6 +7,10 @@ license = "MIT"
 packages = []
 package-mode = false
 
+# P2 Skill SDK: the operator CLI (new-skill / promote-skill).
+[tool.poetry.scripts]
+autoresearch = "src.cli:main"
+
 [tool.poetry.dependencies]
 python = "^3.12"
 fastapi = "^0.109.0"
