@@ -71,6 +71,46 @@ _CLAUDE_INPUT_USD_PER_TOKEN = 3.0 / 1_000_000
 _CLAUDE_OUTPUT_USD_PER_TOKEN = 15.0 / 1_000_000
 _CLAUDE_MAX_OUTPUT_TOKENS = 8192
 
+
+def estimate_session_cost(
+    *,
+    iterations: int,
+    quick_mode: bool = False,
+    input_rate: float = _CLAUDE_INPUT_USD_PER_TOKEN,
+    output_rate: float = _CLAUDE_OUTPUT_USD_PER_TOKEN,
+) -> dict[str, float | bool | dict[str, float | int]]:
+    """Expected USD cost of one research session (P2 ops — one estimator
+    shared by the API, the UI preview, and operators).
+
+    Expected-value model, deliberately NOT the worst-case math of the
+    orchestrator's pre-spend gate (that one budgets a full max-output turn at
+    a 32k-input proxy so a session can never overspend; this one answers
+    "what will it roughly cost"): ~3 LLM calls per iteration (propose,
+    relay, occasional summary) at a session-average input size — 8k tokens
+    quick mode, 24k full — and ~1.5k output tokens per call. Same flat
+    Sonnet-baseline rates the post-call accounting uses, so the estimate and
+    the ledger agree on pricing.
+    """
+    calls_per_iteration = 3
+    input_tokens_per_call = 8_000 if quick_mode else 24_000
+    output_tokens_per_call = 1_500
+    per_iteration = calls_per_iteration * (
+        input_tokens_per_call * input_rate
+        + output_tokens_per_call * output_rate
+    )
+    total = per_iteration * max(0, iterations)
+    return {
+        "per_iteration_usd": round(per_iteration, 4),
+        "total_usd": round(total, 2),
+        "assumptions": {
+            "calls_per_iteration": calls_per_iteration,
+            "input_tokens_per_call": input_tokens_per_call,
+            "output_tokens_per_call": output_tokens_per_call,
+            "input_usd_per_mtok": input_rate * 1_000_000,
+            "output_usd_per_mtok": output_rate * 1_000_000,
+        },
+    }
+
 # HTTP status codes the pre-refactor ``_call_claude_with_retry`` treated as
 # transient (rate-limit / overloaded / bad-gateway family). Used by
 # ``AnthropicProvider.classify_error``.

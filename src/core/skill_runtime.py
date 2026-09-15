@@ -339,6 +339,12 @@ class ManifestSkillRuntime:
         return self._manifest.id
 
     @property
+    def manifest(self) -> Any:
+        """The validated ``ResearchSkillManifest`` (P2 multi-seed significance
+        reads ``metric_schema`` declarative sections from it)."""
+        return self._manifest
+
+    @property
     def skill_version(self) -> str:
         return self._manifest.version
 

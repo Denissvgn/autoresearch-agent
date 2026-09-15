@@ -4,6 +4,51 @@ info:
   description: Autonomous research agent driven by skill manifests and Claude/OpenAI sessions
   version: 0.1.0
 paths:
+  /api/v1/research/estimate-cost:
+    post:
+      tags:
+      - research
+      summary: Estimate Research Cost
+      description: 'Expected-cost preview for a planned session (P2 ops).
+
+
+        Replaces the UI''s ``$0.24 × iterations`` heuristic with the same pricing
+
+        the post-call ledger uses (``llm_provider.estimate_session_cost``) — an
+
+        expected-value estimate, not the orchestrator''s worst-case pre-spend gate.'
+      operationId: estimate_research_cost_api_v1_research_estimate_cost_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: X-Request-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Correlation identifier; auto-generated UUID4 when missing.
+          title: X-Request-Id
+        description: Correlation identifier; auto-generated UUID4 when missing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EstimateCostRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/research/start:
     post:
       tags:
@@ -1890,6 +1935,30 @@ components:
       type: object
       title: ContinueResearchRequest
       description: 'ML-62: Request body for continuing a timed-out/completed session.'
+    EstimateCostRequest:
+      properties:
+        max_iterations:
+          type: integer
+          maximum: 500.0
+          minimum: 1.0
+          title: Max Iterations
+          default: 30
+        quick_mode:
+          type: boolean
+          title: Quick Mode
+          description: Quick mode uses a smaller session-average context proxy.
+          default: false
+        max_budget_usd:
+          anyOf:
+          - type: number
+            maximum: 500.0
+            minimum: 0.1
+          - type: 'null'
+          title: Max Budget Usd
+          description: When set, the response reports whether the estimate would be capped by this budget.
+      type: object
+      title: EstimateCostRequest
+      description: Body for ``POST /research/estimate-cost`` — the New-Research preview.
     GenerateSkillRequest:
       properties:
         goal:

@@ -209,6 +209,32 @@ class Settings(BaseSettings):
         default=10.0,
         validation_alias=AliasChoices("AUTORESEARCH_MAX_BUDGET_USD", "MAX_BUDGET_USD"),
     )
+    # P2 ops: per-call token budgets (cost control at the provider boundary).
+    max_output_tokens_per_call: int = Field(
+        default=8192,
+        ge=128,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_MAX_OUTPUT_TOKENS_PER_CALL",
+            "MAX_OUTPUT_TOKENS_PER_CALL",
+        ),
+        description=(
+            "Hard cap on max_tokens per LLM call (clamped at the historical "
+            "8192 ceiling regardless of how high this is set)."
+        ),
+    )
+    max_input_tokens_per_call: int = Field(
+        default=0,
+        ge=0,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_MAX_INPUT_TOKENS_PER_CALL",
+            "MAX_INPUT_TOKENS_PER_CALL",
+        ),
+        description=(
+            "0 = uncapped. When >0, a turn whose previous call consumed more "
+            "input tokens than this forces hardest context compaction before "
+            "the next call (keeps per-call spend bounded on long sessions)."
+        ),
+    )
     experiment_timeout_s: int = Field(
         default=14400,
         validation_alias=AliasChoices(

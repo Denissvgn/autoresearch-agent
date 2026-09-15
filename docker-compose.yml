@@ -1,0 +1,54 @@
+# P2 ops defaults: one-command bring-up with Postgres as the state backend.
+#
+#   cp .env.example .env   # fill in your LLM key + API token
+#   docker compose up
+#   open http://localhost:8030
+#
+# Postgres is on by default (the plan's ops posture): AUTORESEARCH_DATABASE_URL
+# points the service at the bundled `postgres` service so the PostgresStateStore
+# backend and multi-worker scaling are exercised from the first `up`. Set
+# AUTORESEARCH_DATABASE_URL="" in .env to fall back to SQLite.
+#
+# Demo without any keys: add AUTORESEARCH_DEMO=true and
+# AUTORESEARCH_API_TOKEN=demo-token to .env — everything except Postgres
+# persistence runs on the zero-credential MockProvider.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: autoresearch
+      POSTGRES_PASSWORD: autoresearch
+      POSTGRES_DB: autoresearch
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U autoresearch -d autoresearch"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  autoresearch:
+    build: .
+    ports:
+      - "8030:8000"
+    env_file:
+      - .env
+    environment:
+      # Default DSN → the bundled Postgres. An explicit value in .env wins
+      # (compose merges env_file first, then this environment block — so
+      # clear it there to opt back into SQLite).
+      AUTORESEARCH_DATABASE_URL: postgresql://autoresearch:autoresearch@postgres:5432/autoresearch
+    volumes:
+      - workspace-data:/app/workspace
+      - host-configs:/host/configs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  workspace-data:
+  host-configs:

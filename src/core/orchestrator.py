@@ -112,6 +112,13 @@ from src.core.research_phase_plan import (
     phase_state_json,
 )
 from src.core.result_artifact import enrich_marker_from_result_artifact
+from src.core.significance import (
+    REGRESSION,
+    SIGNIFICANT,
+    best_config_hash,
+    samples_from_rows,
+    significance_verdict,
+)
 from src.core.skill_runtime import (
     SkillConfigError,
     SkillRuntime,
@@ -471,7 +478,12 @@ class AgentOrchestrator:
                     system=system_prompt,
                     messages=messages,
                     tools=AGENT_TOOLS,
-                    max_tokens=_CLAUDE_MAX_OUTPUT_TOKENS,
+                    # P2 per-token budget: operator-tunable cap, clamped at
+                    # the historical 8192 ceiling (default == byte-identical).
+                    max_tokens=min(
+                        _CLAUDE_MAX_OUTPUT_TOKENS,
+                        settings.max_output_tokens_per_call,
+                    ),
                 )
             except Exception as exc:
                 err = provider.classify_error(exc)
@@ -921,6 +933,10 @@ class AgentOrchestrator:
                     research_id,
                     metrics.primary_metric,
                     metrics.training_gates_passed,
+                    config_hash=(
+                        canonical_config_hash(pending_snapshot)
+                        if pending_snapshot else None
+                    ),
                 )
                 marker_from_tool["decision"] = decision
                 # Attach the pre-captured snapshot so the DB
@@ -1080,6 +1096,10 @@ class AgentOrchestrator:
                         research_id,
                         metrics.primary_metric,
                         metrics.training_gates_passed,
+                        config_hash=(
+                            canonical_config_hash(pending_snapshot)
+                            if pending_snapshot else None
+                        ),
                     )
                     marker_from_file["decision"] = decision
                     # Attach snapshot for marker-file path too.
@@ -2500,9 +2520,24 @@ class AgentOrchestrator:
                     )
                     break
 
-                # Call Claude (ML-68: with retry + context compaction)
+                # Call Claude (ML-68: with retry + context compaction).
+                # P2 per-token budget: an input cap >0 exceeded by the last
+                # call forces hardest compaction (keep only the newest turn)
+                # so per-call spend stays bounded on long sessions.
+                _keep_recent = settings.context_compaction_threshold // 2
+                if (
+                    settings.max_input_tokens_per_call
+                    and last_input_tokens > settings.max_input_tokens_per_call
+                ):
+                    _keep_recent = 1
+                    logger.info(
+                        "Research %s turn %d: input cap %d exceeded "
+                        "(last=%d) — compacting to the newest turn",
+                        research_id, turn, settings.max_input_tokens_per_call,
+                        last_input_tokens,
+                    )
                 _api_messages = self._compact_messages(
-                    messages, keep_recent=settings.context_compaction_threshold // 2,
+                    messages, keep_recent=_keep_recent,
                 )
                 response = await self._call_llm_with_retry(
                     messages=_api_messages,
@@ -3809,6 +3844,8 @@ class AgentOrchestrator:
         research_id: str,
         primary_metric: Optional[float],
         training_gates_passed: bool,
+        *,
+        config_hash: Optional[str] = None,
     ) -> str:
         """Determine keep/improve/discard by comparing against session best.
 
@@ -3816,6 +3853,15 @@ class AgentOrchestrator:
         - 'keep'    — training gates passed AND metric improved
         - 'improve' — training gates NOT passed but metric improved
         - 'discard' — metric did not improve or is None
+
+        P2 multi-seed significance (declarative opt-in): when the skill
+        declares ``metric_schema.significance`` and a config hash is
+        available, "improved" is decided by mean±standard-error separation
+        across repeated observations of the same config instead of the
+        fixed-epsilon point test. Inconclusive comparisons (sparse data,
+        noisy overlap) fall back to the legacy epsilon test — the gate
+        sharpens decisions, it never blocks exploration. Sessions without
+        the declaration are byte-identical to the legacy path.
         """
         if primary_metric is None:
             return "discard"
@@ -3826,6 +3872,14 @@ class AgentOrchestrator:
         metric_improved = (best is None) or (
             primary_metric > best + settings.global_stagnation_epsilon
         )
+        if config_hash is not None and best is not None:
+            sig_improved = await self._significance_improved(
+                research_id, primary_metric, config_hash,
+            )
+            if sig_improved is True:
+                metric_improved = True
+            elif sig_improved is False:
+                metric_improved = False
 
         if training_gates_passed and metric_improved:
             return "keep"
@@ -3833,6 +3887,47 @@ class AgentOrchestrator:
             return "improve"
         else:
             return "discard"
+
+    async def _significance_improved(
+        self,
+        research_id: str,
+        primary_metric: float,
+        config_hash: str,
+    ) -> Optional[bool]:
+        """Multi-seed significance verdict for one candidate (or None).
+
+        ``None`` ⇒ no declaration / sparse data / self-comparison — the
+        caller keeps the legacy epsilon decision.
+        """
+        skill = self._session_skills.get(research_id)
+        manifest = getattr(skill, "manifest", None)
+        metric_schema = getattr(manifest, "metric_schema", None)
+        sig = getattr(metric_schema, "significance", None)
+        if sig is None:
+            return None
+        direction = metric_schema.primary.direction
+        rows = await self._store.get_iterations(research_id)
+        candidate = samples_from_rows(rows, canonical_config_hash=config_hash)
+        candidate.append(float(primary_metric))
+        ref_hash = best_config_hash(rows, direction=direction)
+        if not ref_hash or ref_hash == config_hash:
+            return None
+        reference = samples_from_rows(rows, canonical_config_hash=ref_hash)
+        verdict = significance_verdict(
+            candidate, reference,
+            direction=direction,
+            min_sigma=sig.min_sigma,
+            min_samples=sig.min_samples,
+        )
+        logger.info(
+            "Research %s: significance verdict=%s (candidate n=%d vs best-config n=%d)",
+            research_id, verdict, len(candidate), len(reference),
+        )
+        if verdict == SIGNIFICANT:
+            return True
+        if verdict == REGRESSION:
+            return False
+        return None
 
     async def _record_iteration(
         self,

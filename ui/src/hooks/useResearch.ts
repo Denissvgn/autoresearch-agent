@@ -213,6 +213,27 @@ export function useStartResearch() {
   });
 }
 
+// P2 ops: server-side expected-cost preview for the New Research wizard.
+// Keyed on the form values that drive the estimate; falls back to nothing
+// while loading (the caller renders a placeholder).
+export function useCostEstimate(
+  maxIterations: number,
+  quickMode: boolean,
+  maxBudgetUsd?: number,
+) {
+  return useQuery({
+    queryKey: ['cost-estimate', maxIterations, quickMode, maxBudgetUsd ?? null],
+    queryFn: () =>
+      api.estimateCost({
+        max_iterations: maxIterations,
+        quick_mode: quickMode,
+        ...(maxBudgetUsd != null ? { max_budget_usd: maxBudgetUsd } : {}),
+      }),
+    staleTime: 300_000,
+    retry: 1,
+  });
+}
+
 export function useStopSession() {
   const qc = useQueryClient();
   return useMutation({

@@ -1,8 +1,17 @@
 # Autoresearch Agent
 
+**Terraform for iterative optimization.** Describe the loop in a declarative
+skill; the agent runs it under a governed, default-deny command policy; the
+curve goes up; winners promote through an audited, rollback-able pipeline.
+
 Universal autonomous research agent. An LLM agent iteratively runs experiments,
 adjusts parameters, and promotes winning configurations — for any domain you
 can describe as a **skill** (a manifest + primer + experiment command).
+
+Built for platform teams tuning prompts, model configs, and system
+parameters: you bring the domain as a skill package; the service brings the
+agent loop, the safety rails (default-deny commands, anti-forgery metrics,
+budget gates), the audit trail, and the promotion machinery.
 
 The service is domain-neutral: every domain-specific decision — the system
 prompt, allowed commands, output format, phase plan, preflight checks, metric
@@ -69,14 +78,22 @@ preflight flags, iteration limits, and budget limits — are documented in
 `.env.example`. `AUTORESEARCH_PROMETHEUS_TOKEN` is required in production;
 without it the `/metrics` endpoint is disabled.
 
-Autoresearch-agent is intentionally deployed as a single-instance SQLite
-control-plane service. Keep Uvicorn at one worker and do not scale the
-container above one replica unless a Postgres backend
-(`AUTORESEARCH_DATABASE_URL`) is configured.
+Autoresearch-agent ships as a single-instance SQLite control-plane service
+by default. Keep Uvicorn at one worker and do not scale the container above
+one replica unless a Postgres backend (`AUTORESEARCH_DATABASE_URL`) is
+configured — the bundled `docker-compose.yml` wires one for you.
 
 ### 2. Build and run
 
-With Docker (build context = this repository's root):
+With Docker Compose (bundles a Postgres state backend by default — the P2
+ops posture; clear `AUTORESEARCH_DATABASE_URL` in `.env` for SQLite):
+
+```bash
+cp .env.example .env   # fill in your LLM key + API token
+docker compose up
+```
+
+With plain Docker (build context = this repository's root):
 
 ```bash
 docker build -t autoresearch-agent .
@@ -229,7 +246,7 @@ Highlights:
 
 - `llm` — provider (`anthropic`/`openai`), models, primer file
 - `param_schema` / `ui.form_fields` — validated skill parameters and the form the UI renders
-- `metric_schema` — primary metric, gates, chart series, table columns
+- `metric_schema` — primary metric, gates, chart series, table columns; optional `significance` block switches keep/discard to a multi-seed mean±standard-error test
 - `phase_plan` — server-tracked research phases with evidence keys
 - `command_policy` — allowed scripts/executables/copyable files (the base policy is default-deny)
 - `output_parser` — `delimited_kv` or `json_marker`, with optional anti-forgery nonce enforcement

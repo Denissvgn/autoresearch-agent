@@ -474,6 +474,17 @@ export interface GeneratedSkillDraft {
   next: string;
 }
 
+// ── Cost estimate (P2 ops — POST /research/estimate-cost) ──────────────
+
+export interface CostEstimate {
+  per_iteration_usd: number;
+  total_usd: number;
+  uncapped_total_usd: number;
+  capped_by_budget: boolean;
+  max_budget_usd: number | null;
+  assumptions: Record<string, number>;
+}
+
 export interface FormField {
   name: string;
   type: string;
@@ -636,6 +647,14 @@ export const api = {
   // Research sessions
   startResearch: (req: StartResearchRequest) =>
     request<ResearchSession>('/research/start', { method: 'POST', body: JSON.stringify(req) }),
+
+  // P2 ops: expected-cost preview (server-side estimator — same pricing as
+  // the post-call ledger; replaces the old $0.24×iters UI heuristic).
+  estimateCost: (req: { max_iterations: number; quick_mode: boolean; max_budget_usd?: number }) =>
+    request<CostEstimate>('/research/estimate-cost', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
 
   listSessions: async () =>
     normalizeListResponse(

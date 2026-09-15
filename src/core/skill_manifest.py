@@ -269,6 +269,23 @@ class MetricColumn(BaseModel):
     format: Optional[str] = None
 
 
+class SignificanceConfig(BaseModel):
+    """Multi-seed significance gate (P2 ops — ``metric_schema.significance``).
+
+    When declared, keep/discard decisions compare mean±standard-error across
+    repeated observations of the same config (each seed rerun is a new
+    sample; the trial-identity hash keeps them distinct) instead of the
+    fixed-epsilon point test. Absent ⇒ legacy behavior, byte-identical.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Replicates required on EACH side before a verdict is possible.
+    min_samples: int = Field(default=2, ge=1, le=10)
+    #: Separation required, in standard errors of the difference.
+    min_sigma: float = Field(default=1.0, ge=0.0)
+
+
 class MetricSchema(BaseModel):
     """Metric presentation + semantics (ARC-011 §9 ``metric_schema``)."""
 
@@ -285,6 +302,8 @@ class MetricSchema(BaseModel):
         default=None,
         description="Boolean field gating satisfice completion (G11).",
     )
+    #: P2 ops: optional multi-seed mean±std significance gate.
+    significance: Optional[SignificanceConfig] = None
 
 
 # ---------------------------------------------------------------------------

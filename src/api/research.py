@@ -465,6 +465,52 @@ class StartResearchRequest(BaseModel):
 # ------------------------------------------------------------------
 
 
+class EstimateCostRequest(BaseModel):
+    """Body for ``POST /research/estimate-cost`` — the New-Research preview."""
+
+    max_iterations: int = Field(default=30, ge=1, le=500)
+    quick_mode: bool = Field(
+        default=False,
+        description="Quick mode uses a smaller session-average context proxy.",
+    )
+    max_budget_usd: Optional[float] = Field(
+        default=None,
+        ge=0.1,
+        le=500.0,
+        description=(
+            "When set, the response reports whether the estimate would be "
+            "capped by this budget."
+        ),
+    )
+
+
+@router.post("/research/estimate-cost")
+async def estimate_research_cost(req: EstimateCostRequest):
+    """Expected-cost preview for a planned session (P2 ops).
+
+    Replaces the UI's ``$0.24 × iterations`` heuristic with the same pricing
+    the post-call ledger uses (``llm_provider.estimate_session_cost``) — an
+    expected-value estimate, not the orchestrator's worst-case pre-spend gate.
+    """
+    from src.core.llm_provider import estimate_session_cost
+
+    estimate = estimate_session_cost(
+        iterations=req.max_iterations, quick_mode=req.quick_mode,
+    )
+    total = float(estimate["total_usd"])  # type: ignore[arg-type]
+    capped_by_budget = bool(
+        req.max_budget_usd is not None and total > req.max_budget_usd
+    )
+    return {
+        "per_iteration_usd": estimate["per_iteration_usd"],
+        "total_usd": min(total, req.max_budget_usd) if capped_by_budget else total,
+        "uncapped_total_usd": total,
+        "capped_by_budget": capped_by_budget,
+        "max_budget_usd": req.max_budget_usd,
+        "assumptions": estimate["assumptions"],
+    }
+
+
 @router.post("/research/start", status_code=201)
 async def start_research(request: Request, req: StartResearchRequest):
     # P3-013: translate canonical {skill_id, subject_id, variant} → legacy

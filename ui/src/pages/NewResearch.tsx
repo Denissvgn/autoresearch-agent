@@ -3,7 +3,7 @@
 // manifest (GET /skills); falls back to a subject/variant free-form pair.
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useModels, useStartResearch, useSkills, useSkillFormFields } from '../hooks/useResearch';
+import { useModels, useStartResearch, useSkills, useSkillFormFields, useCostEstimate } from '../hooks/useResearch';
 import { Field, Icon } from '../components/hifi/primitives';
 import SkillPicker from '../components/SkillPicker';
 import DynamicFormFields from '../components/DynamicFormFields';
@@ -66,7 +66,16 @@ export default function NewResearch() {
     const m = total % 60;
     return h ? `~${h}h ${m}m` : `~${m}m`;
   }, [maxIterations, quickMode]);
-  const estCost = useMemo(() => Math.min(maxBudget, maxIterations * (quickMode ? 0.04 : 0.24)), [maxIterations, maxBudget, quickMode]);
+  // P2 ops: server-side estimator (same pricing as the post-call ledger),
+  // replacing the old $0.24×iters client heuristic.
+  const { data: costEstimate, isLoading: costLoading } = useCostEstimate(
+    maxIterations, quickMode, maxBudget,
+  );
+  const estCostLabel = costLoading
+    ? '…'
+    : costEstimate
+      ? `~$${costEstimate.total_usd.toFixed(2)}${costEstimate.capped_by_budget ? ' (budget-capped)' : ''}`
+      : '—';
 
   const skillSelected = Boolean(selectedSkillId);
 
@@ -252,7 +261,7 @@ export default function NewResearch() {
             }}
           >
             <PreviewItem label="estimated runtime" value={estRuntime} />
-            <PreviewItem label="estimated cost" value={`~$${estCost.toFixed(2)}`} />
+            <PreviewItem label="estimated cost" value={estCostLabel} />
             <PreviewItem label="iteration cap" value={`${maxIterations}`} />
             <PreviewItem label="mode" value={quickMode ? 'quick' : 'standard'} />
           </div>
