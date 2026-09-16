@@ -28,6 +28,8 @@ from src.core.command_runner import (
     GovernedCommandRunner,
     OutputCallback,
     _build_child_env,
+    _collect_process_output,
+    _SessionOutputLog,
 )
 from src.core.llm_provider import ToolDef
 
@@ -275,7 +277,7 @@ def _execute_tool(
         elif name == "glob":
             return ToolExecutionResult(_tool_glob(input_data, workspace))
         elif name == "grep":
-            return ToolExecutionResult(_tool_grep(input_data, workspace))
+            return ToolExecutionResult(_tool_grep(input_data, workspace, session_workspace))
         else:
             return ToolExecutionResult(f"Unknown tool: {name}")
     except Exception as exc:
@@ -318,6 +320,9 @@ def _tool_bash(
         proc_registry=proc_registry, research_id=research_id,
         extra_env=extra_env, cwd=cwd,
     )
+    # Preserve the existing orchestrator/output_digest integration and its
+    # settings.agent_output_digest_max_chars (0 disables digesting). The runner
+    # bounds capture independently; digesting here would alter server parsing.
     decision = result.decision
     return ToolExecutionResult(
         result.output,
@@ -328,16 +333,31 @@ def _tool_bash(
             "normalized_command": decision.normalized_command,
             "returncode": result.returncode,
             "timed_out": result.timed_out,
+            "command_log_path": result.log_path,
+            "command_log_truncated": result.log_truncated,
         },
     )
 
 
 def _tool_read_file(input_data: Dict[str, Any], workspace: str) -> str:
+    """Read at most 100,001 characters, never materializing a whole large file.
+
+    >>> import tempfile
+    >>> with tempfile.TemporaryDirectory() as workspace:
+    ...     path = Path(workspace) / "large.txt"
+    ...     _ = path.write_text("x" * 100_001, encoding="utf-8")
+    ...     result = _tool_read_file({"path": "large.txt"}, workspace)
+    ...     assert result.startswith("x" * 100_000)
+    ...     assert "truncated" in result and len(result) < 100_100
+    ...     _ = path.write_text("é" * 100_000, encoding="utf-8")
+    ...     assert _tool_read_file({"path": "large.txt"}, workspace) == "é" * 100_000
+    """
     path = _safe_path(input_data["path"], workspace)
     try:
-        content = Path(path).read_text(encoding="utf-8", errors="replace")
+        with open(path, encoding="utf-8", errors="replace") as source:
+            content = source.read(100_001)
         if len(content) > 100_000:
-            content = content[:50_000] + "\n...(truncated)...\n" + content[-50_000:]
+            content = content[:100_000] + "\n...(truncated: showing first 100000 characters; use grep to narrow)...\n"
         return content
     except FileNotFoundError:
         return f"File not found: {input_data['path']}"
@@ -368,7 +388,21 @@ def _tool_glob(input_data: Dict[str, Any], workspace: str) -> str:
     return "\n".join(relative[:500])
 
 
-def _tool_grep(input_data: Dict[str, Any], workspace: str) -> str:
+def _tool_grep(
+    input_data: Dict[str, Any], workspace: str, session_workspace: str | None = None,
+) -> str:
+    """Incremental grep capture, excluding its own active log.
+
+    >>> import tempfile
+    >>> with tempfile.TemporaryDirectory() as workspace:
+    ...     _ = Path(workspace, "keep.py").write_text("match" * 30000)
+    ...     _ = Path(workspace, "skip.txt").write_text("match")
+    ...     result = _tool_grep({"pattern": "match", "include": "*.py"}, workspace)
+    ...     assert "keep.py" in result and "skip.txt" not in result
+    ...     assert "truncated" in result and len(result) <= 60020
+    ...     logs = list(Path(workspace, "logs").glob("*.log"))
+    ...     assert len(logs) == 1 and logs[0].stat().st_size > 120000
+    """
     pattern = input_data["pattern"]
     search_path = input_data.get("path", ".")
     include = input_data.get("include", "")
@@ -379,32 +413,34 @@ def _tool_grep(input_data: Dict[str, Any], workspace: str) -> str:
         cmd += [f"--include={include}"]
     cmd += [pattern, safe_dir]
 
-    # Phase 4.3: this synchronous subprocess.run call is intentional —
-    # _execute_tool is already invoked via ``asyncio.to_thread`` from the
-    # main agent loop, so blocking work here runs on a worker thread and
-    # cannot stall the event loop. Switching to asyncio.create_subprocess_*
-    # would force every tool call site to await individually.
-    #
-    # P0-023 / P1-029 security delta: pass ``_build_child_env()`` as ``env=``
-    # so the grep child runs with the same control-plane-secret-stripped
-    # allow-list the governed runner enforces. Without this, ``subprocess.run``
-    # defaults to inheriting the full parent env (ANTHROPIC_AUTH_TOKEN,
-    # AUTORESEARCH_API_TOKEN, AUTORESEARCH_PROMETHEUS_TOKEN, …) — exactly the
-    # leak the governed-runner path was hardened against.
+    # Remains synchronous under the orchestrator's asyncio.to_thread wrapper.
+    # Drain both pipes in fixed-size chunks, including arbitrarily long lines.
+    # Keep the governed child environment and the existing no-match sentinel.
+    log = None
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=30,
-            env=_build_child_env(),
+        log = _SessionOutputLog(session_workspace or workspace)
+        # Never search our own growing capture file (recursive grep would feed
+        # matches back into its output). Other existing logs remain searchable.
+        # Keep include first: GNU grep's first include/exclude rule determines
+        # whether unmatched files are searched by default.
+        cmd.insert(len(cmd) - 2, f"--exclude={log.name}")
+    except OSError:
+        pass  # collector reports unavailable logging without dropping output
+    try:
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env=_build_child_env(), start_new_session=True,
         )
-        output = result.stdout
-        if len(output) > 60_000:
-            output = output[:30_000] + "\n...(truncated)...\n" + output[-30_000:]
-        return output or "(no matches)"
-    except subprocess.TimeoutExpired:
+    except BaseException:
+        if log is not None:
+            log.close()
+        raise
+    output, _, timed_out, _, _ = _collect_process_output(
+        proc, timeout_s=30, workspace=session_workspace or workspace, log=log,
+    )
+    if timed_out:
         return "Grep timed out after 30s"
+    return output or "(no matches)"
 
 
 def _load_packaged_skill_md(skill_id: str, primer: str = "SKILL.md") -> str:

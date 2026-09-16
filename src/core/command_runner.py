@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import codecs
+import fcntl
 import os
-import queue
 import re
+import selectors
 import signal
+import stat
 import subprocess
 import threading
 import time
+import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Callable, Literal, Mapping
 
@@ -22,6 +27,128 @@ except ImportError:  # pragma: no cover - dependency is declared for runtime.
 
 
 _MAX_OUTPUT_LEN = 60_000
+_OUTPUT_CHUNK_SIZE = 8_192
+_SESSION_LOG_QUOTA_BYTES = 64 * 1024 * 1024
+_TRUNCATION_MARKER = "\n...(truncated)...\n"
+
+
+class _HeadTailBuffer:
+    """Retain a fixed-size head and rolling tail, including for newline-free data.
+
+    >>> buf = _HeadTailBuffer(8)
+    >>> buf.append("abc")
+    >>> buf.append("defgh")
+    >>> buf.getvalue()
+    'abcdefgh'
+    >>> buf.append("ijklmnop")
+    >>> buf.getvalue() == "abcd" + _TRUNCATION_MARKER + "mnop"
+    True
+    >>> len(buf.head) + len(buf.tail) <= 8
+    True
+    """
+
+    def __init__(self, limit: int = _MAX_OUTPUT_LEN) -> None:
+        self.limit = max(0, limit)
+        self.head = ""
+        self.tail = ""
+        self.total = 0
+
+    def append(self, text: str) -> None:
+        self.total += len(text)
+        head_room = max(0, (self.limit + 1) // 2 - len(self.head))
+        self.head += text[:head_room]
+        tail_limit = self.limit // 2
+        if tail_limit:
+            self.tail = (self.tail + text[head_room:])[-tail_limit:]
+
+    def getvalue(self) -> str:
+        marker = _TRUNCATION_MARKER if self.total > self.limit else ""
+        return self.head + marker + self.tail
+
+
+class _SessionOutputLog:
+    """Append child output under a shared session logs byte quota.
+
+    Quota exhaustion stops disk writes, NOT pipe draining or callbacks. Never
+    delete existing session files to reclaim space. Directory flock serializes
+    cooperating writers across worker threads/processes; no global session map
+    is retained. Other writers outside this helper do not participate.
+
+    >>> import tempfile
+    >>> with tempfile.TemporaryDirectory() as workspace:
+    ...     first = _SessionOutputLog(workspace, quota_bytes=10)
+    ...     second = _SessionOutputLog(workspace, quota_bytes=10)
+    ...     first.write("abcde")
+    ...     second.write("1234567890")
+    ...     assert second.truncated
+    ...     assert sum(p.stat().st_size for p in Path(workspace, "logs").iterdir()) == 10
+    ...     first.close()
+    ...     second.close()
+    """
+
+    def __init__(self, workspace: str, quota_bytes: int = _SESSION_LOG_QUOTA_BYTES):
+        root = Path(workspace).resolve()
+        directory = root / "logs"
+        directory.mkdir(exist_ok=True)
+        # Do not follow a workspace-provided logs symlink outside the session.
+        self._dir_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        self.quota_bytes = max(0, quota_bytes)
+        self.truncated = False
+        self._file = None
+        self.path: str | None = None
+        self._directory = directory
+        self.name = f"command-{uuid.uuid4().hex}.log"
+
+    def _used_bytes(self, directory_fd: int, depth: int = 0) -> int:
+        # Fail closed for adversarially deep trees; do not exhaust the stack/fds.
+        if depth >= 32:
+            return self.quota_bytes
+        used = 0
+        with os.scandir(directory_fd) as entries:
+            for entry in entries:
+                info = entry.stat(follow_symlinks=False)
+                if stat.S_ISREG(info.st_mode):
+                    used += info.st_size
+                elif stat.S_ISDIR(info.st_mode):
+                    child = os.open(entry.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                    dir_fd=directory_fd)
+                    try:
+                        used += self._used_bytes(child, depth + 1)
+                    finally:
+                        os.close(child)
+                if used >= self.quota_bytes:
+                    break
+        return used
+
+    def write(self, text: str) -> None:
+        if not text or self.truncated:
+            return
+        data = text.encode("utf-8", errors="replace")
+        fcntl.flock(self._dir_fd, fcntl.LOCK_EX)
+        try:
+            available = max(0, self.quota_bytes - self._used_bytes(self._dir_fd))
+            if available and self._file is None:
+                # Creation through the checked directory fd avoids path swaps.
+                fd = os.open(self.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                             0o600, dir_fd=self._dir_fd)
+                self._file = os.fdopen(fd, "wb", buffering=0)
+                self.path = str(self._directory / self.name)
+            if available:
+                # Avoid ending the UTF-8 log inside a multibyte code point.
+                part = data[:available].decode("utf-8", errors="ignore").encode("utf-8")
+                self._file.write(part)
+            self.truncated = len(data) > available
+        finally:
+            fcntl.flock(self._dir_fd, fcntl.LOCK_UN)
+
+    def close(self) -> None:
+        try:
+            if self._file is not None:
+                self._file.close()
+        finally:
+            os.close(self._dir_fd)
+
+
 _SECRET_VALUE_RE = re.compile(
     r"(?i)\b(api[_-]?key|authorization|auth[_-]?token|password|secret|token)"
     r"(\s*[:=]\s*)"
@@ -111,6 +238,8 @@ class CommandRunResult:
     decision: CommandDecision
     returncode: int | None = None
     timed_out: bool = False
+    log_path: str | None = None
+    log_truncated: bool = False
 
     @property
     def rejected(self) -> bool:
@@ -258,60 +387,28 @@ class GovernedCommandRunner:
         if proc_registry is not None and research_id is not None:
             proc_registry.register(research_id, proc)
         try:
-            stdout_chunks: list[str] = []
-            stderr_chunks: list[str] = []
-            output_queue: queue.Queue[tuple[OutputStream, str]] = queue.Queue()
-            readers = _start_output_readers(proc, output_queue)
-            timed_out = False
-            started_at = time.monotonic()
-
-            while True:
-                _drain_output_queue(
-                    output_queue, stdout_chunks, stderr_chunks, output_callback,
-                )
-                if proc.poll() is not None:
-                    if all(not reader.is_alive() for reader in readers):
-                        _drain_output_queue(
-                            output_queue, stdout_chunks, stderr_chunks, output_callback,
-                        )
-                        break
-                elif time.monotonic() - started_at > timeout_s:
-                    timed_out = True
-                    _terminate_process_group_without_communicate(proc)
-
-                if timed_out:
-                    for reader in readers:
-                        reader.join(timeout=1)
-                    _drain_output_queue(
-                        output_queue, stdout_chunks, stderr_chunks, output_callback,
-                    )
-                    partial = _combine_output(
-                        "".join(stdout_chunks), "".join(stderr_chunks),
-                    )
-                    if partial:
-                        partial = _truncate_output(redact_sensitive_text(partial))
-                    timeout_msg = f"\n[Command timed out after {timeout_s}s]"
-                    return CommandRunResult(
-                        output=(
-                            (partial + timeout_msg)
-                            if partial
-                            else f"Command timed out after {timeout_s}s"
-                        ),
-                        decision=decision,
-                        returncode=proc.returncode,
-                        timed_out=True,
-                    )
-
-                time.sleep(0.05)
-
-            output = _combine_output("".join(stdout_chunks), "".join(stderr_chunks))
-            output = _truncate_output(redact_sensitive_text(output))
-            if proc.returncode != 0:
+            stdout, stderr, timed_out, log_path, log_truncated = _collect_process_output(
+                proc, timeout_s=timeout_s,
+                workspace=self._session_workspace or self._workspace_root,
+                output_callback=output_callback,
+            )
+            output = _truncate_output(redact_sensitive_text(_combine_output(stdout, stderr)))
+            if timed_out:
+                output = (output + f"\n[Command timed out after {timeout_s}s]"
+                          if output else f"Command timed out after {timeout_s}s")
+            elif proc.returncode != 0:
                 output += f"\n[exit code: {proc.returncode}]"
+            if log_path:
+                output += f"\n[command log: {log_path}]"
+            if log_truncated:
+                output += "\n[command log truncated: session logs quota reached or log unavailable]"
             return CommandRunResult(
                 output=output or "(no output)",
                 decision=decision,
                 returncode=proc.returncode,
+                timed_out=timed_out,
+                log_path=log_path,
+                log_truncated=log_truncated,
             )
         finally:
             if proc_registry is not None and research_id is not None:
@@ -341,53 +438,155 @@ def _to_text(value: str | bytes) -> str:
     return value.decode("utf-8", errors="replace")
 
 
-def _start_output_readers(
-    proc: subprocess.Popen[str],
-    output_queue: queue.Queue[tuple[OutputStream, str]],
-) -> list[threading.Thread]:
-    def reader(stream_name: OutputStream, pipe) -> None:
-        if pipe is None:
-            return
-        try:
-            for line in iter(pipe.readline, ""):
-                if line:
-                    output_queue.put((stream_name, line))
-        finally:
+def _collect_process_output(
+    proc: subprocess.Popen,
+    *,
+    timeout_s: float,
+    workspace: str,
+    output_callback: OutputCallback | None = None,
+    log: _SessionOutputLog | None = None,
+) -> tuple[str, str, bool, str | None, bool]:
+    """Drain both pipes incrementally, without communicate(), threads or queues.
+
+    Keep callbacks line-oriented for ordinary output; exceptionally long lines
+    are delivered in bounded fragments. A dead child holding inherited pipes
+    open cannot defeat the deadline. Logging failures never stop pipe draining.
+
+    >>> import sys, tempfile
+    >>> with tempfile.TemporaryDirectory() as workspace:
+    ...     counts = {"stdout": 0, "stderr": 0}
+    ...     def callback(name, text):
+    ...         assert len(text) <= _OUTPUT_CHUNK_SIZE + 32
+    ...         counts[name] += len(text)
+    ...     code = "import os; os.write(1, b'x' * 2000000); os.write(2, b'y' * 2000000)"
+    ...     proc = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE,
+    ...                             stderr=subprocess.PIPE, start_new_session=True)
+    ...     out, err, expired, path, clipped = _collect_process_output(
+    ...         proc, timeout_s=10, workspace=workspace, output_callback=callback)
+    ...     assert not expired and not clipped and proc.returncode == 0
+    ...     assert len(out) <= 60_020 and len(err) <= 60_020
+    ...     assert counts == {"stdout": 2000000, "stderr": 2000000}
+    ...     assert Path(path).stat().st_size == 4000000
+    ...     log = _SessionOutputLog(workspace, quota_bytes=1)
+    ...     proc = subprocess.Popen([sys.executable, "-c", "print('still drained')"],
+    ...                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    ...                             start_new_session=True)
+    ...     out, _, expired, _, clipped = _collect_process_output(
+    ...         proc, timeout_s=10, workspace=workspace, log=log)
+    ...     assert "still drained" in out and clipped and not expired
+    ...     proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"],
+    ...                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    ...                             start_new_session=True)
+    ...     result = _collect_process_output(proc, timeout_s=0.05, workspace=workspace)
+    ...     assert result[2] and proc.poll() is not None
+    """
+    buffers = {name: _HeadTailBuffer() for name in ("stdout", "stderr")}
+    pending = {name: "" for name in buffers}
+    decoders = {name: codecs.getincrementaldecoder("utf-8")("replace") for name in buffers}
+    log_failed = False
+    timed_out = False
+    deadline = time.monotonic() + timeout_s
+
+    def emit(name: OutputStream, text: str) -> None:
+        nonlocal log_failed
+        text = redact_sensitive_text(text)
+        buffers[name].append(text)
+        if log is not None and not log_failed:
             try:
-                pipe.close()
+                log.write(text)
             except OSError:
-                pass
-
-    readers = [
-        threading.Thread(
-            target=reader, args=("stdout", proc.stdout), daemon=True,
-        ),
-        threading.Thread(
-            target=reader, args=("stderr", proc.stderr), daemon=True,
-        ),
-    ]
-    for thread in readers:
-        thread.start()
-    return readers
-
-
-def _drain_output_queue(
-    output_queue: queue.Queue[tuple[OutputStream, str]],
-    stdout_chunks: list[str],
-    stderr_chunks: list[str],
-    output_callback: OutputCallback | None,
-) -> None:
-    while True:
-        try:
-            stream_name, chunk = output_queue.get_nowait()
-        except queue.Empty:
-            return
-        if stream_name == "stderr":
-            stderr_chunks.append(chunk)
-        else:
-            stdout_chunks.append(chunk)
+                log_failed = True
         if output_callback:
-            output_callback(stream_name, redact_sensitive_text(chunk))
+            output_callback(name, text)
+
+    # Prefix retained across fragments prevents splitting a token-like key.
+    secret_continuation: dict[str, str | None] = {name: None for name in buffers}
+
+    def consume(name: OutputStream, text: str, final: bool = False) -> None:
+        pending[name] += text
+        while pending[name]:
+            continuation = secret_continuation[name]
+            if continuation:
+                match = re.match(continuation, pending[name])
+                if match:
+                    pending[name] = pending[name][match.end():]
+                if not pending[name]:
+                    break
+                secret_continuation[name] = None
+            newline = pending[name].find("\n", 0, _OUTPUT_CHUNK_SIZE)
+            if newline >= 0:
+                size = newline + 1
+            elif len(pending[name]) >= _OUTPUT_CHUNK_SIZE:
+                size = _OUTPUT_CHUNK_SIZE - 128
+                # If a redacted value runs through the cut, suppress its
+                # continuation too rather than leaking the remainder next time.
+                for pattern, continuation_pattern in (
+                    (_BEARER_RE, r"[A-Za-z0-9._~+/=-]+"),
+                    (_SECRET_VALUE_RE, r"[^\s'\"<>]+"),
+                ):
+                    for match in pattern.finditer(pending[name]):
+                        if match.start() < size <= match.end():
+                            if match.start() >= size - 128:
+                                size = match.start()
+                            else:
+                                secret_continuation[name] = continuation_pattern
+                            break
+                if not secret_continuation[name]:
+                    # Keep a potential key suffix intact across the cut.
+                    suffix = re.search(r"[A-Za-z_-]+$", pending[name][:size])
+                    if suffix and 0 < size - suffix.start() < 128:
+                        size = suffix.start()
+            elif final:
+                size = len(pending[name])
+            else:
+                break
+            emit(name, pending[name][:size])
+            pending[name] = pending[name][size:]
+
+    try:
+        if log is None:
+            try:
+                log = _SessionOutputLog(workspace)
+            except OSError:
+                log_failed = True
+        with selectors.DefaultSelector() as selector:
+            for name, pipe in (("stdout", proc.stdout), ("stderr", proc.stderr)):
+                if pipe is not None:
+                    os.set_blocking(pipe.fileno(), False)
+                    selector.register(pipe, selectors.EVENT_READ, name)
+            while selector.get_map() or proc.poll() is None:
+                now = time.monotonic()
+                if now >= deadline:
+                    if timed_out:
+                        break  # escaped descendants may still own pipe handles
+                    timed_out = True
+                    _terminate_process_group_without_communicate(proc)
+                    deadline = time.monotonic() + 2
+                for key, _ in selector.select(timeout=0.05):
+                    name = key.data
+                    try:
+                        chunk = os.read(key.fd, _OUTPUT_CHUNK_SIZE)
+                    except BlockingIOError:
+                        continue
+                    consume(name, decoders[name].decode(chunk, final=not chunk), final=not chunk)
+                    if not chunk:
+                        selector.unregister(key.fileobj)
+            for name in buffers:
+                consume(name, "", final=True)
+        return (
+            buffers["stdout"].getvalue(), buffers["stderr"].getvalue(), timed_out,
+            log.path if log else None, log_failed or bool(log and log.truncated),
+        )
+    finally:
+        try:
+            if proc.poll() is None:
+                _terminate_process_group_without_communicate(proc)
+        finally:
+            for pipe in (proc.stdout, proc.stderr):
+                if pipe is not None:
+                    pipe.close()
+            if log is not None:
+                log.close()
 
 
 def _truncate_output(output: str) -> str:
@@ -397,7 +596,7 @@ def _truncate_output(output: str) -> str:
 
 
 def _terminate_process_group_without_communicate(proc: subprocess.Popen[str]) -> None:
-    """Terminate a timed-out process tree while reader threads drain pipes."""
+    """Terminate a timed-out process tree without accumulating pipe output."""
 
     if psutil is not None:
         try:
@@ -440,56 +639,3 @@ def _terminate_process_group_without_communicate(proc: subprocess.Popen[str]) ->
         except ProcessLookupError:
             pass
         proc.wait(timeout=5)
-
-
-def _terminate_process_group(proc: subprocess.Popen[str]) -> tuple[str | None, str | None]:
-    """Terminate a timed-out process and its descendant tree."""
-
-    if psutil is not None:
-        try:
-            root = psutil.Process(proc.pid)
-            targets = root.children(recursive=True) + [root]
-            for process in targets:
-                try:
-                    process.terminate()
-                except psutil.NoSuchProcess:
-                    pass
-            _, alive = psutil.wait_procs(targets, timeout=5)
-            for process in alive:
-                try:
-                    process.kill()
-                except psutil.NoSuchProcess:
-                    pass
-            if alive:
-                psutil.wait_procs(alive, timeout=5)
-        except psutil.NoSuchProcess:
-            pass
-        try:
-            proc.wait(timeout=1)
-        except subprocess.TimeoutExpired:
-            try:
-                proc.kill()
-            except ProcessLookupError:
-                pass
-        try:
-            return proc.communicate(timeout=5)
-        except subprocess.TimeoutExpired:
-            try:
-                proc.kill()
-            except ProcessLookupError:
-                pass
-            return proc.communicate()
-
-    # Fallback for environments that have not installed psutil yet.
-    try:
-        os.killpg(proc.pid, signal.SIGTERM)
-    except ProcessLookupError:
-        pass
-    try:
-        return proc.communicate(timeout=5)
-    except subprocess.TimeoutExpired:
-        try:
-            os.killpg(proc.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        return proc.communicate()

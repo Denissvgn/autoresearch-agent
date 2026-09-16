@@ -154,28 +154,32 @@ def test_execute_tool_dispatches_glob(tmp_path: Path):
 
 
 def test_grep_timeout_returns_marker(tmp_path: Path, monkeypatch):
-    """A grep that exceeds the 30s wall-clock timeout returns the timeout
-    marker. ``subprocess.run(timeout=30)`` raises ``TimeoutExpired`` after
-    killing the child (the standard-library reaper handles process-tree
-    cleanup internally); ``_tool_grep`` catches the exception and returns the
-    marker string.
+    """Exercise real deadline enforcement and process cleanup with a short budget."""
+    import sys
+    import time
+    import src.core.agent_tools as tools
 
-    The production timeout is 30s; this test monkeypatches ``subprocess.run``
-    so it raises ``TimeoutExpired`` immediately, so the test runs in
-    milliseconds instead of 30s.
-    """
     workspace = _workspace(tmp_path)
+    real_popen = subprocess.Popen
+    real_collect = tools._collect_process_output
+    children = []
 
-    import src.core.orchestrator as orch_mod
+    def _slow_grep(cmd, **kwargs):
+        child = real_popen([sys.executable, "-c", "import time; time.sleep(30)"], **kwargs)
+        children.append(child)
+        return child
 
-    def _fake_run(cmd, **kwargs):
-        raise subprocess.TimeoutExpired(cmd=cmd, timeout=30)
+    def _short_deadline(child, *, timeout_s, **kwargs):
+        assert timeout_s == 30
+        return real_collect(child, timeout_s=0.1, **kwargs)
 
-    monkeypatch.setattr(orch_mod.subprocess, "run", _fake_run)
-
+    monkeypatch.setattr(tools.subprocess, "Popen", _slow_grep)
+    monkeypatch.setattr(tools, "_collect_process_output", _short_deadline)
+    start = time.monotonic()
     result = _tool_grep({"pattern": "anything"}, workspace)
-
     assert result == "Grep timed out after 30s"
+    assert time.monotonic() - start < 5
+    assert children[0].poll() is not None
 
 
 # ── security: env scrubbing (P1-029 delta, P0-023 invariant) ───────────────
@@ -219,25 +223,24 @@ def test_grep_does_not_inherit_control_plane_secrets(
             f"{name} would leak into the grep child env (P1-029 regression)"
         )
 
-    # (2) Behavioral check: _tool_grep actually passes the scrubbed env to
-    # subprocess.run. Intercept subprocess.run, capture the env= kwarg, and
-    # short-circuit the call (return an empty CompletedProcess).
-    import src.core.orchestrator as orch_mod
+    # Capture the actual Popen environment while retaining real pipe draining.
+    import src.core.agent_tools as tools
 
     captured_env: dict[str, str] = {}
+    real_popen = subprocess.Popen
 
-    def _capturing_run(cmd, **kwargs):
+    def _capturing_popen(cmd, **kwargs):
         captured_env.update(kwargs.get("env") or {})
-        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+        return real_popen(cmd, **kwargs)
 
-    monkeypatch.setattr(orch_mod.subprocess, "run", _capturing_run)
+    monkeypatch.setattr(tools.subprocess, "Popen", _capturing_popen)
 
     _tool_grep({"pattern": "alpha"}, workspace)
 
-    assert captured_env, "_tool_grep did not invoke subprocess.run"
+    assert captured_env, "_tool_grep did not invoke subprocess.Popen"
     for name in canaries:
         assert name not in captured_env, (
-            f"_tool_grep passed {name} through to subprocess.run "
+            f"_tool_grep passed {name} through to subprocess.Popen "
             f"(the env= scrubbing did not apply)"
         )
 
@@ -249,15 +252,16 @@ def test_grep_child_env_still_has_path(tmp_path: Path, monkeypatch):
     workspace = _workspace(tmp_path)
     (Path(workspace) / "a.txt").write_text("alpha\n", encoding="utf-8")
 
-    import src.core.orchestrator as orch_mod
+    import src.core.agent_tools as tools
 
     captured_env: dict[str, str] = {}
+    real_popen = subprocess.Popen
 
-    def _capturing_run(cmd, **kwargs):
+    def _capturing_popen(cmd, **kwargs):
         captured_env.update(kwargs.get("env") or {})
-        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+        return real_popen(cmd, **kwargs)
 
-    monkeypatch.setattr(orch_mod.subprocess, "run", _capturing_run)
+    monkeypatch.setattr(tools.subprocess, "Popen", _capturing_popen)
 
     _tool_grep({"pattern": "alpha"}, workspace)
 
