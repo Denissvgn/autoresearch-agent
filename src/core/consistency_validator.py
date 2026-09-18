@@ -64,8 +64,19 @@ def build_consistency_report(
     preflight: Optional[Dict[str, Any]] = None,
     search_phase: Optional[str] = None,
     mode: Optional[str] = None,
+    serving_evidence_required: bool = True,
 ) -> Dict[str, Any]:
-    """Build a readable cross-service candidate consistency report."""
+    """Build a readable cross-service candidate consistency report.
+
+    ``serving_evidence_required`` (ARC-012 P7-014): the ML serving-era
+    evidence checks — mlflow artifact references, inference feature/roster
+    parity, serving rollback targets, smoke validation — hard-block only
+    when the promotion contract includes serving an ML model. A session that
+    runs an installed skill manifest carries the skill's own contract
+    (declared metric gates + the promotion target's atomic write/rollback),
+    so for those sessions the same checks report as warnings. Default
+    ``True`` keeps the legacy trio's behavior byte-identical.
+    """
 
     metrics = metrics_payload or {}
     attempt = attempt_snapshot or {}
@@ -160,7 +171,11 @@ def build_consistency_report(
     add(
         "artifact_reference_present",
         "passed" if artifact_ref else ("failed" if hard_consistency else "warning"),
-        blocker="missing_artifact_reference" if hard_consistency else None,
+        blocker=(
+            "missing_artifact_reference"
+            if hard_consistency and serving_evidence_required
+            else None
+        ),
     )
 
     calibration = _calibration_payload(metrics)
@@ -215,13 +230,24 @@ def build_consistency_report(
         add(
             "inference_feature_roster_parity",
             "passed" if parity_passed is not False else "failed",
-            blocker="inference_feature_schema_mismatch",
+            # ARC-012 P7-014: a present-but-not-run parity payload (skill
+            # sessions have no inference roster) only blocks when the
+            # promotion contract includes serving an ML model.
+            blocker=(
+                "inference_feature_schema_mismatch"
+                if parity_passed is False and serving_evidence_required
+                else None
+            ),
         )
     else:
         add(
             "inference_feature_roster_parity",
             "failed" if hard_consistency else "warning",
-            blocker="missing_inference_parity" if hard_consistency else None,
+            blocker=(
+                "missing_inference_parity"
+                if hard_consistency and serving_evidence_required
+                else None
+            ),
         )
 
     parity_metadata = _dict_at(metrics, "parity_metadata")
@@ -405,7 +431,11 @@ def build_consistency_report(
     add(
         "rollback_target_addressable",
         "passed" if rollback_target else ("failed" if hard_consistency else "warning"),
-        blocker="missing_rollback_target" if hard_consistency else None,
+        blocker=(
+            "missing_rollback_target"
+            if hard_consistency and serving_evidence_required
+            else None
+        ),
     )
 
     smoke = preflight.get("smoke_validation") or metrics.get("smoke_validation")
@@ -413,7 +443,11 @@ def build_consistency_report(
     add(
         "smoke_or_paper_validation",
         "passed" if smoke_passed is True else ("failed" if hard_consistency else "warning"),
-        blocker="failed_smoke_validation" if hard_consistency else None,
+        blocker=(
+            "failed_smoke_validation"
+            if hard_consistency and serving_evidence_required
+            else None
+        ),
     )
 
     docs_status = metrics.get("docs_wiki_status")

@@ -82,6 +82,7 @@ from src.core.llm_provider import (
     ContentBlock,
     LLMProvider,
     Message,
+    MockProvider,
     ProviderCapabilityMismatch,
     ProviderResponse,
     RequestBlock,
@@ -2379,6 +2380,25 @@ class AgentOrchestrator:
                 )
                 self._session_models[config.id] = llm_cfg.primary_model
 
+        # ARC-012 P7-011: in demo mode every session runs on the scripted
+        # MockProvider — wired per-session so it drives THIS skill's declared
+        # ``demo_experiment_command`` and relays the skill's own iteration
+        # marker (the governed eval's verbatim output; the mock invents no
+        # metrics). The demo provider overrides the manifest's provider
+        # choice; production keeps refusing it (build_provider's fail-closed
+        # rule fires at orchestrator construction when demo is requested
+        # there).
+        _demo_command = skill.demo_experiment_command(config)
+        if (
+            _demo_command
+            and settings.demo_mode is True
+            and str(settings.environment).lower() not in ("prod", "production")
+        ):
+            self._session_providers[config.id] = MockProvider(
+                eval_command=_demo_command,
+                marker_prefix=skill.iteration_marker_prefix(),
+            )
+
         # Load system prompt. The assembly (claude.md + primer) mirrors
         # ``skill.system_prompt()`` exactly; the file reads are kept off the
         # event loop via asyncio.to_thread. The ``skill`` object is
@@ -2595,6 +2615,12 @@ class AgentOrchestrator:
                 # blocks counted — deterministic trial naming even when only
                 # some are trial-eligible).
                 turn_bash_seq = 0
+                # ARC-012 P7-011: the turn's freshest pre-run config snapshot
+                # (per-block ``_pending_snapshot`` is block-scoped) — attached
+                # to a relayed ITERATION_RESULT marker so the promotion path
+                # has its per-iteration config artifact even when the agent's
+                # marker text omits it.
+                turn_pending_snapshot: Optional[str] = None
 
                 # P2 parallel-trial dispatch gate: only engage when the skill
                 # opted into execution.concurrency > 1 AND the turn carries at
@@ -2691,6 +2717,10 @@ class AgentOrchestrator:
                                     if _trial_ctx is not None and _trial_ctx.is_trial
                                     else None
                                 ),
+                                config_flag=str(
+                                    skill_policy_extension.get("config_flag")
+                                    or "--config"
+                                ),
                             )
                             if snapshot_path:
                                 try:
@@ -2704,6 +2734,8 @@ class AgentOrchestrator:
                                         research_id,
                                         snapshot_path,
                                     )
+                            if _pending_snapshot is not None:
+                                turn_pending_snapshot = _pending_snapshot
 
                         duplicate_rejection: Optional[ToolExecutionResult] = None
                         duplicate_marker: Optional[Dict[str, Any]] = None
@@ -2971,6 +3003,17 @@ class AgentOrchestrator:
                         agent_text, session_nonce=nonce_bytes,
                     )
                     if marker:
+                        # ARC-012 P7-011: a relayed marker rarely embeds the
+                        # config it scored — attach the turn's pre-run
+                        # snapshot of the skill-declared config artifact so
+                        # promotion preview/confirm have their per-iteration
+                        # config (presence-checked: richer agent markers that
+                        # carry their own snapshot win).
+                        if (
+                            not marker.get("config_snapshot")
+                            and turn_pending_snapshot
+                        ):
+                            marker["config_snapshot"] = turn_pending_snapshot
                         # ARC-011 P4-003: record the verification outcome so a
                         # metrics_verified/unverified row is auditable. For
                         # enforced skills the key is set by _verify_nonce; its

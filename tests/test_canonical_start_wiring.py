@@ -92,6 +92,16 @@ def _configure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(settings, "host_configs_path", str(tmp_path / "host_configs"))
 
 
+def _eval_set(tmp_path: Path) -> str:
+    """A real eval set for prompt-engineering starts (P7-011: the skill's
+    bootstrap fail-closes without one outside demo mode — it must exist)."""
+    path = tmp_path / "eval_set.jsonl"
+    path.write_text(
+        '{"input": "What is 2+2?", "expected": "4"}\n', encoding="utf-8",
+    )
+    return str(path)
+
+
 async def _start_and_capture(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, **start_kwargs: Any
 ) -> tuple[Dict[str, Any], FakeOrchestrator]:
@@ -137,7 +147,7 @@ async def test_canonical_fields_reach_research_config(monkeypatch, tmp_path):
         monkeypatch,
         tmp_path,
         skill_id="prompt-engineering",
-        skill_params={"eval_set": "eval_set.jsonl"},
+        skill_params={"eval_set": _eval_set(tmp_path)},
         subject_id="default",
         variant="production",
     )
@@ -147,7 +157,7 @@ async def test_canonical_fields_reach_research_config(monkeypatch, tmp_path):
     assert cfg.skill_id == "prompt-engineering"
     assert cfg.subject_id == "default"
     assert cfg.variant == "production"
-    assert cfg.skill_params == {"eval_set": "eval_set.jsonl"}
+    assert cfg.skill_params["eval_set"] == _eval_set(tmp_path)
 
 
 async def test_skill_params_win_over_legacy_flat_fields(monkeypatch, tmp_path):
@@ -158,11 +168,11 @@ async def test_skill_params_win_over_legacy_flat_fields(monkeypatch, tmp_path):
         monkeypatch,
         tmp_path,
         skill_id="prompt-engineering",
-        skill_params={"eval_set": "eval_set.jsonl"},
+        skill_params={"eval_set": _eval_set(tmp_path)},
     )
     cfg = orch.captured_config
     assert cfg is not None
-    assert cfg.skill_params == {"eval_set": "eval_set.jsonl"}
+    assert cfg.skill_params["eval_set"] == _eval_set(tmp_path)
 
 async def test_legacy_start_without_skill_id_is_refused(monkeypatch, tmp_path):
     """ARC-012 P7-010 (B2): a legacy-shape start (``model_type`` only, no

@@ -72,19 +72,24 @@ async def _audit(
     )
 
 
-def _inject_target_kind(result: Dict[str, Any]) -> Dict[str, Any]:
+def _inject_target_kind(
+    result: Dict[str, Any], *, skill_id: str = "",
+) -> Dict[str, Any]:
     """P3-017: add ``target_kind`` to a promotion preview/confirm result.
 
     Derives the promotion target kind from the session's skill manifest so the
     UI PromotionModal can branch generically (``file_path`` vs ``registry_api``
     vs ``git_branch`` …). Additive — existing fields are never overwritten.
-    When the skill is unknown or the registry is not wired, defaults to
-    ``file_path`` (the incumbent ML target) so behavior is unchanged for legacy
-    sessions.
+    ``skill_id`` is the session-resolved id (ARC-012 P7-011: non-ML sessions
+    carry model_type="", so deriving it from the result's legacy field alone
+    mis-defaulted every non-ML preview to ``file_path``). When the skill is
+    unknown or the registry is not wired, defaults to ``file_path`` (the
+    incumbent ML target) so behavior is unchanged for legacy sessions.
     """
     if not isinstance(result, dict) or result.get("target_kind"):
         return result
-    skill_id = result.get("skill_id") or ""
+    if not skill_id:
+        skill_id = result.get("skill_id") or ""
     if not skill_id:
         model_type = result.get("model_type") or ""
         if model_type:
@@ -237,13 +242,18 @@ def _confirm_audit_metadata(payload: PromotionScopeRequest) -> dict[str, Any]:
     return metadata
 
 
-async def _promoter_for_session(research_id: str):
+async def _promoter_for_session(research_id: str) -> tuple[Any, str]:
     """Pick the promoter for a session (P1-3, centralized by P7-007).
+
+    Returns ``(promoter, skill_id)`` — the skill id is the session-resolved
+    identity ``_inject_target_kind`` keys on (ARC-012 P7-011: non-ML sessions
+    carry model_type="", so it cannot be derived from the preview result's
+    legacy fields alone).
 
     Default: the injected ``_promoter`` (singleton, file target). When the
     session's skill resolves (registry wired, skill_id on the row or derived
-    from the legacy ``model_type`` alias), the promotion target comes from
-    the SAME resolution site as the orchestrator's auto-promote path
+    from the legacy ``model_type`` alias), the promotion target comes from the
+    SAME resolution site as the orchestrator's auto-promote path
     (``promotion_target_from_manifest``): ``file_path`` (with the skill's
     declared ``path_template``) / ``webhook`` / ``registry_api`` all get a
     per-request ``ConfigPromoter`` over the resolved target. Anything that
@@ -252,13 +262,13 @@ async def _promoter_for_session(research_id: str):
     the request here.
     """
     if _registry is None or _store is None:
-        return _promoter
+        return _promoter, ""
     try:
         session = await _store.get_session(research_id)
     except Exception:
-        return _promoter
+        return _promoter, ""
     if not session:
-        return _promoter
+        return _promoter, ""
     skill_id = session.get("skill_id") or ""
     if not skill_id:
         model_type = session.get("model_type") or ""
@@ -267,11 +277,11 @@ async def _promoter_for_session(research_id: str):
 
             skill_id = model_type_to_skill_id(model_type)
     if not skill_id:
-        return _promoter
+        return _promoter, ""
     try:
         manifest = _registry.get(skill_id)
     except Exception:
-        return _promoter
+        return _promoter, skill_id
     from src.core.config_promoter import ConfigPromoter
     from src.core.promotion_target import (
         FilePathPromotionTarget,
@@ -285,13 +295,13 @@ async def _promoter_for_session(research_id: str):
         # registry_api without an endpoint): no per-session target can be
         # built; the injected promoter keeps the request answerable
         # (``target_kind`` is still surfaced by ``_inject_target_kind``).
-        return _promoter
+        return _promoter, skill_id
     if isinstance(target, FilePathPromotionTarget) and not target.path_template:
         # A file target with no declared template derives paths exactly like
         # the injected default promoter — reuse it rather than building a
         # behaviorally identical per-session promoter.
-        return _promoter
-    return ConfigPromoter(_store, target=target)
+        return _promoter, skill_id
+    return ConfigPromoter(_store, target=target), skill_id
 
 
 @router.post("/research/{research_id}/promote/preview")
@@ -304,7 +314,7 @@ async def promote_preview(
     payload = payload or PromotionPreviewRequest()
     approval = _approval_payload(payload.approval)
     try:
-        promoter = await _promoter_for_session(research_id)
+        promoter, skill_id = await _promoter_for_session(research_id)
         result = await promoter.preview(
             research_id,
             scope=payload.scope,
@@ -317,7 +327,7 @@ async def promote_preview(
             research_id=research_id,
             metadata={"scope": payload.scope},
         )
-        return _inject_target_kind(result)
+        return _inject_target_kind(result, skill_id=skill_id)
     except ValueError as e:
         # P7-008: the former string-sniffing branch for the deleted
         # "Unknown model type" message is gone — that string no longer exists
@@ -362,7 +372,7 @@ async def promote_confirm(
         # HMAC verifier. Other scopes are unaffected.
         if (payload.scope or "").lower() == "production":
             _verify_production_approval_signature(research_id, payload)
-        promoter = await _promoter_for_session(research_id)
+        promoter, skill_id = await _promoter_for_session(research_id)
         result = await promoter.confirm(
             research_id,
             scope=payload.scope,
@@ -375,7 +385,7 @@ async def promote_confirm(
             research_id=research_id,
             metadata=audit_metadata,
         )
-        return _inject_target_kind(result)
+        return _inject_target_kind(result, skill_id=skill_id)
     except ValueError as e:
         await _audit(
             request,

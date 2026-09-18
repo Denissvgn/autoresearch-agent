@@ -68,6 +68,56 @@ class TestPromptEngineeringSkillManifest:
     def test_promotion_target_is_registry_api(self, manifest):
         assert manifest.promotion_target.primary.kind == "registry_api"
 
+    def test_demo_experiment_command_declared_and_renders(self, manifest):
+        """ARC-012 P7-011: the skill declares the command the demo provider
+        executes — rendered per-session with absolute workspace paths and the
+        offline scorer flag."""
+        from src.core.orchestrator import ResearchConfig
+
+        assert manifest.prompt is not None
+        assert manifest.prompt.demo_experiment_command, (
+            "the skill must declare prompt.demo_experiment_command"
+        )
+        runtime = ManifestSkillRuntime(manifest, orchestrator=MagicMock())
+        config = ResearchConfig(
+            id="res_demo", instrument="default", timeframe="production",
+            model_type="", skill_id="prompt-engineering",
+            workspace_path="/ws/runs/prompt-engineering/default/production",
+        )
+        rendered = runtime.demo_experiment_command(config)
+        assert rendered == (
+            ".venv/bin/python eval/run.py "
+            "--prompt /ws/runs/prompt-engineering/default/production/prompt.yaml "
+            "--eval /ws/runs/prompt-engineering/default/production/eval_set.jsonl "
+            "--demo true"
+        )
+        assert runtime.iteration_marker_prefix() == "ITERATION_RESULT:"
+
+    def test_config_flag_declared_for_prompt_artifact(self, manifest):
+        """ARC-012 P7-011: the per-iteration config artifact rides --prompt —
+        policy confinement + the pre-run snapshot key on the declared flag."""
+        assert manifest.command_policy is not None
+        assert manifest.command_policy.config_flag == "--prompt"
+
+    def test_demo_command_closed_placeholder_vocabulary(self):
+        """A skill declaring an unknown placeholder (or a multi-line command)
+        is rejected at load time — the D4 rule: manifests never fail only
+        once someone runs them."""
+        import yaml
+
+        base = yaml.safe_load(SKILL_YAML.read_text(encoding="utf-8"))
+        base["prompt"]["demo_experiment_command"] = (
+            ".venv/bin/python eval/run.py --prompt {oops}/prompt.yaml"
+        )
+        with pytest.raises(Exception, match="closed vocabulary|placeholder"):
+            load_skill_manifest(yaml.safe_dump(base), settings_obj=types.SimpleNamespace())
+
+        base["prompt"]["demo_experiment_command"] = (
+            ".venv/bin/python eval/run.py\n--prompt prompt.yaml"
+        )
+        with pytest.raises(Exception, match="single shell-free command"):
+            load_skill_manifest(yaml.safe_dump(base), settings_obj=types.SimpleNamespace())
+
 
 class TestCrossProviderRouter:
     """P4-010: the provider router constructs an OpenAIProvider for openai."""
@@ -439,11 +489,20 @@ async def test_prompt_engineering_session_end_to_end(monkeypatch, tmp_path):
 
     # ── Iterations: the verified relay recorded; the forgery NOT. ──────────
     iterations = await store.get_iterations(research_id)
-    assert len(iterations) == 1, (
-        "exactly one iteration: the nonce-verified relay; the forged marker "
-        "must not be recorded"
+    # ARC-012 P7-011: with the skill's config_flag (--prompt) declared, the
+    # duplicate guard can finally identify re-runs of the same config — the
+    # scripted client's later identical evals are correctly rejected and
+    # recorded as duplicate *audit* rows (duplicate_of_iteration set). Only
+    # the nonce-verified relay is a real iteration; the forged marker must
+    # not be recorded at all.
+    real_iterations = [
+        row for row in iterations if row.get("duplicate_of_iteration") is None
+    ]
+    assert len(real_iterations) == 1, (
+        f"exactly one real iteration: the nonce-verified relay; got "
+        f"{len(real_iterations)} (forged marker must not be recorded)"
     )
-    row = iterations[0]
+    row = real_iterations[0]
     metrics = json.loads(row.get("metrics_json") or "{}")
     assert metrics.get("metrics_verification") == "metrics_verified"
     assert metrics.get("n_eval_examples") == 2, "real eval subprocess ran"

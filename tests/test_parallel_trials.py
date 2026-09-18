@@ -108,6 +108,10 @@ def _write_synthetic_skill(skills_root: Path, *, concurrency: int | None) -> Pat
         "allowed_executables": ["cp", "cat"],
         "copyable_files": ["candidates_a.yaml", "candidates_b.yaml"],
         "readable_files": ["candidates_a.yaml", "candidates_b.yaml"],
+        # The synthetic trials use the ML ``--config`` vocabulary; drop the
+        # base skill's ``--prompt`` flag (ARC-012 P7-011 config_flag) so the
+        # pre-run snapshot keys on the right argument.
+        "config_flag": "--config",
     }
     base["output_parser"] = {
         "format": "delimited_kv",

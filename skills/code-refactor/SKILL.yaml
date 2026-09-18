@@ -82,6 +82,8 @@ phase_advancement:
   mode: declarative
 
 command_policy:
+  # ARC-012 P7-011: the per-iteration config artifact rides --target.
+  config_flag: --target
   allowed_python: [".venv/bin/python", "./.venv/bin/python"]
   allowed_scripts:
     - eval/run.py
@@ -132,6 +134,10 @@ structured_hpo:
 prompt:
   experiment_command: |
     .venv/bin/python eval/run.py --target refactor_target.py --tests tests_target.jsonl
+  # ARC-012 P7-011: what the demo provider executes verbatim (offline static
+  # analysis). Absolute {session_workspace} paths — governed commands run with
+  # cwd = the workspace root, not the session workspace.
+  demo_experiment_command: .venv/bin/python eval/run.py --target {session_workspace}/refactor_target.py --tests {session_workspace}/tests_target.jsonl
   continuation_enabled: true
 
 ui:

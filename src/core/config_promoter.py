@@ -109,6 +109,25 @@ QUALITY_BASELINE_MODE = "development_quality_baseline"
 QUALITY_BASELINE_BLOCKER = "best_metric_below_development_baseline"
 
 
+def _session_skill_manifest(skill_id: str):
+    """The installed skill manifest for a session's skill id, or ``None``.
+
+    ARC-012 P7-014: a session that resolves to an installed skill runs the
+    skill's own contract (declared metric gates, the promotion target's
+    atomic write/rollback) — the ML serving-era evidence checks demote to
+    warnings for it. Unresolvable ids (the legacy trio, unknown skills) keep
+    the incumbent ML behavior.
+    """
+    if not skill_id:
+        return None
+    try:
+        from src.core.skill_registry import default_registry
+
+        return default_registry.get(skill_id)
+    except Exception:
+        return None
+
+
 class ConfigPromoter:
     """Handles preview and confirmation of config promotion to host."""
 
@@ -235,6 +254,11 @@ class ConfigPromoter:
                 "rollback_target": rollback_readiness.get("rollback_target"),
             },
             mode="promotion",
+            # ARC-012 P7-014: serving-era evidence is the ML trio's contract;
+            # an installed skill session promotes on its own declared gates.
+            serving_evidence_required=(
+                _session_skill_manifest(skill_id) is None
+            ),
         )
         best_for_gate = self._best_iteration_with_preflight(
             best,

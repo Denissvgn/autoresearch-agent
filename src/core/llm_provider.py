@@ -915,19 +915,52 @@ class MockProvider:
 
     Replays a deterministic edit-run-keep loop without any network: each
     ``messages_create`` emits one ``bash`` tool call running the skill's eval
-    script, then an ``end_turn`` text on the following turn. ``complete``
-    returns a canned insight summary. Cost is always 0. Clearly labeled via
-    ``name == "mock"`` so production code can refuse it.
+    script, and — ARC-012 P7-011 — when the previous governed eval printed an
+    iteration marker on stdout, the *next* response relays that exact marker
+    line alongside a fresh eval call, exactly like a real agent (the
+    marker-relay contract: a marker is honored only in a turn that itself ran
+    a training command, and only the governed subprocess's verbatim output is
+    trustworthy — the mock invents no metrics). ``complete`` returns a canned
+    insight summary. Cost is always 0. Clearly labeled via ``name == "mock"``
+    so production code can refuse it.
     """
 
     name = "mock"
 
-    def __init__(self, *, eval_command: str = "") -> None:
+    def __init__(
+        self,
+        *,
+        eval_command: str = "",
+        marker_prefix: str = "ITERATION_RESULT:",
+    ) -> None:
         self._eval_command = eval_command or (
             ".venv/bin/python eval/run.py --prompt prompt.yaml "
             "--eval eval_set.jsonl"
         )
+        self._marker_prefix = marker_prefix
         self._turn = 0
+
+    def _last_tool_marker(self, messages: list[Message]) -> str | None:
+        """The freshest iteration marker line in the most recent tool result.
+
+        Only the newest tool-result message is scanned — the relay must be
+        backed by the immediately preceding governed run, not a stale one.
+        """
+        for message in reversed(messages):
+            content = message.content
+            if not isinstance(content, list):
+                continue
+            found: str | None = None
+            has_tool_result = False
+            for block in content:
+                if isinstance(block, ToolResultBlock):
+                    has_tool_result = True
+                    for line in block.content.splitlines():
+                        if line.startswith(self._marker_prefix):
+                            found = line.strip()
+            if has_tool_result:
+                return found
+        return None
 
     async def messages_create(
         self,
@@ -941,6 +974,28 @@ class MockProvider:
         stop_sequences: list[str] | None = None,
     ) -> ProviderResponse:
         self._turn += 1
+        marker = self._last_tool_marker(messages)
+        if marker is not None:
+            # Relay the governed eval's verbatim marker in the same response
+            # that issues the next eval (the relay contract).
+            return ProviderResponse(
+                content=[
+                    TextBlock(
+                        text=(
+                            "Demo eval finished — relaying its exact result.\n"
+                            f"{marker}"
+                        )
+                    ),
+                    ToolUseBlock(
+                        id=f"mock-tool-{self._turn}",
+                        name="bash",
+                        input={"command": self._eval_command},
+                    ),
+                ],
+                stop_reason=StopReason.TOOL_USE,
+                usage=Usage(input_tokens=10, output_tokens=10),
+                raw_model="mock-demo",
+            )
         if self._turn % 2 == 1:
             return ProviderResponse(
                 content=[

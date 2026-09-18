@@ -187,6 +187,12 @@ async def test_session_start_persists_preflight_in_manifest(monkeypatch, tmp_pat
     await store.initialize()
     manager = session_manager_module.SessionManager(store)
 
+    # P7-011: the skill bootstrap runs at start — supply a real eval_set
+    # (prompt-engineering fail-closes without one outside demo mode).
+    eval_set = tmp_path / "eval_set.jsonl"
+    eval_set.write_text(
+        '{"input": "What is 2+2?", "expected": "4"}\n', encoding="utf-8",
+    )
     session = await manager.start_session(
         # ARC-012 P7-010: starts must name an installed skill — the legacy
         # ``model_type``-only shape is refused before preflight now.
@@ -194,6 +200,7 @@ async def test_session_start_persists_preflight_in_manifest(monkeypatch, tmp_pat
         timeframe="production",
         model_type="",
         skill_id="prompt-engineering",
+        skill_params={"eval_set": str(eval_set)},
         subject_id="default",
         variant="production",
         max_iterations=1,

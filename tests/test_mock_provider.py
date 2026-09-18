@@ -41,6 +41,87 @@ async def test_mock_provider_alternates_tool_and_text():
 
 
 @pytest.mark.asyncio
+async def test_mock_provider_relays_governed_eval_marker(monkeypatch):
+    """ARC-012 P7-011: after a governed eval prints its iteration marker, the
+    next mock response relays that exact line alongside a fresh eval call
+    (the marker-relay contract: backed by a run in the same turn, verbatim —
+    the mock invents no metrics)."""
+    from src.core.llm_provider import Message, TextBlock, ToolResultBlock, ToolUseBlock
+
+    marker = (
+        'ITERATION_RESULT: {"status":"completed","primary_metric":0.5,'
+        '"server_nonce":"ab"}'
+    )
+    messages = [
+        Message(role="assistant", content=[
+            ToolUseBlock(id="t1", name="bash", input={"command": "eval"}),
+        ]),
+        Message(role="user", content=[
+            ToolResultBlock(tool_use_id="t1", content=f"noise\n{marker}\n"),
+        ]),
+    ]
+    p = MockProvider(eval_command="the eval command")
+    response = await p.messages_create(
+        model="m", system="s", messages=messages, tools=[], max_tokens=10,
+    )
+    text = next(b for b in response.content if isinstance(b, TextBlock))
+    tool = next(b for b in response.content if isinstance(b, ToolUseBlock))
+    assert marker in text.text, "the marker must be relayed verbatim"
+    assert tool.input["command"] == "the eval command"
+    assert response.stop_reason is StopReason.TOOL_USE
+
+
+@pytest.mark.asyncio
+async def test_mock_provider_relay_only_from_newest_tool_result(monkeypatch):
+    """Only the most recent tool result is scanned — a stale marker from an
+    earlier eval must not be re-relayed after newer tool output."""
+    from src.core.llm_provider import Message, TextBlock, ToolResultBlock, ToolUseBlock
+
+    stale = 'ITERATION_RESULT: {"status":"completed","primary_metric":0.9}'
+    messages = [
+        Message(role="assistant", content=[
+            ToolUseBlock(id="t1", name="bash", input={"command": "eval"}),
+        ]),
+        Message(role="user", content=[ToolResultBlock(tool_use_id="t1", content=stale)]),
+        Message(role="assistant", content=[
+            ToolUseBlock(id="t2", name="bash", input={"command": "cp a b"}),
+        ]),
+        Message(role="user", content=[ToolResultBlock(tool_use_id="t2", content="ok")]),
+    ]
+    p = MockProvider()
+    response = await p.messages_create(
+        model="m", system="s", messages=messages, tools=[], max_tokens=10,
+    )
+    texts = [
+        block for block in response.content if isinstance(block, TextBlock)
+    ]
+    assert all("ITERATION_RESULT" not in t.text for t in texts), (
+        "a stale marker behind newer tool output must not be relayed"
+    )
+
+
+@pytest.mark.asyncio
+async def test_mock_provider_honors_custom_marker_prefix(monkeypatch):
+    from src.core.llm_provider import Message, TextBlock, ToolResultBlock, ToolUseBlock
+
+    marker = 'RESULT-MARKER: {"status":"completed"}'
+    messages = [
+        Message(role="assistant", content=[
+            ToolUseBlock(id="t1", name="bash", input={"command": "eval"}),
+        ]),
+        Message(role="user", content=[
+            ToolResultBlock(tool_use_id="t1", content=marker),
+        ]),
+    ]
+    p = MockProvider(marker_prefix="RESULT-MARKER:")
+    response = await p.messages_create(
+        model="m", system="s", messages=messages, tools=[], max_tokens=10,
+    )
+    text = next(b for b in response.content if isinstance(b, TextBlock))
+    assert marker in text.text
+
+
+@pytest.mark.asyncio
 async def test_mock_provider_complete_and_cost():
     p = MockProvider()
     text = await p.complete(model="m", prompt="hi", max_tokens=10)

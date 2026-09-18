@@ -192,7 +192,13 @@ async def test_workspace_manifest_omits_nonce(monkeypatch, tmp_path):
     _configure(monkeypatch, tmp_path)
     # ARC-012 P7-005/P7-010: a skill session derives its workspace from the
     # skill's session_path_template (runs/<skill>/<subject>/<variant> under
-    # the workspace root) and must name an installed skill.
+    # the workspace root) and must name an installed skill. P7-011: the
+    # bootstrap runs at start — supply a real eval_set (fail-closed without
+    # one outside demo mode).
+    eval_set = tmp_path / "eval_set.jsonl"
+    eval_set.write_text(
+        '{"input": "What is 2+2?", "expected": "4"}\n', encoding="utf-8",
+    )
     manifest_dir = (
         tmp_path / "workspace" / "runs" / "prompt-engineering" / "default"
         / "production"
@@ -219,6 +225,7 @@ async def test_workspace_manifest_omits_nonce(monkeypatch, tmp_path):
             timeframe="production",
             model_type="",
             skill_id="prompt-engineering",
+            skill_params={"eval_set": str(eval_set)},
             subject_id="default",
             variant="production",
             max_iterations=1,

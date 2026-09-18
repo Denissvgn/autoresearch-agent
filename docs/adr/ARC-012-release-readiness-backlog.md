@@ -3,7 +3,9 @@
 Status: **open** — decisions D1-D4 recorded 2026-09-17 (§2, closes P7-001);
 **Wave 1 (P7-002..P7-008) done 2026-09-18** — B1/B3 closed and verified
 through the real start path; **Wave 2 (P7-009/P7-010) done 2026-09-18** —
-B2/S1 closed (crash terminal-state persistence + fail-fast start).
+B2/S1 closed (crash terminal-state persistence + fail-fast start);
+**Wave 3 (P7-011..P7-015) done 2026-09-18** — the non-ML e2e proof exists
+and passes (P7-016 blocked on a clean commit by design).
 Created: 2026-09-16
 Owner: maintainer (manual publish)
 Absorbs: `ARC-011` finding **C4 / P4-016** ("no non-ML session has ever run
@@ -511,28 +513,70 @@ tests` + `mypy src` + `pytest -q` (venv details in §6).
 
 ### Wave 3 — Tests (the missing end-to-end proof)
 
-**P7-011 — API-level non-ML end-to-end test (the test that never existed)**
+**P7-011 — API-level non-ML end-to-end test (the test that never existed) — DONE 2026-09-18**
+- Implementation note: the test exposed that the demo path was DEAD end to
+  end and required six product fixes, not just a test: (1)
+  ``BootstrapRunner`` existed but had no production consumer —
+  ``SessionManager.start_session`` now runs the skill's ``bootstrap.py``
+  after writing the manifest (fail-fast: a failed bootstrap refuses the
+  start; skills without a bootstrap skip; continuations never re-bootstrap);
+  (2) ``MockProvider``'s default eval command was skill-agnostic,
+  relative-path and never relayed the governed eval's marker — skills now
+  declare ``prompt.demo_experiment_command`` (closed placeholder vocabulary
+  incl. ``{session_workspace}``, validated at load), rendered per session
+  and wired as the demo provider in ``orchestrator.run``; the mock relays
+  the freshest ``ITERATION_RESULT`` line from the newest tool result
+  verbatim in the same response that issues the next eval (the relay
+  contract — the mock invents no metrics); (3) the per-iteration config
+  snapshot keyed only on ``--config`` — skills now declare
+  ``command_policy.config_flag`` (``--prompt``/``--target``), used by BOTH
+  the policy's confinement/copyable check and the pre-run snapshot, and the
+  text-marker path attaches the turn's snapshot to relayed markers;
+  (4) ``/results``+``/iterations`` enrichment derived ``skill_id`` from
+  ``model_type`` (empty for non-ML) — the session's native ``skill_id``
+  column now wins; (5) preview/confirm's ``target_kind`` injection had the
+  same model_type blind spot — ``_promoter_for_session`` now returns
+  ``(promoter, skill_id)``; (6) see P7-014 for the consistency-gating fix
+  the confirm path needed. The suite runs the REAL app (lifespan, real
+  SessionManager/store/bootstrap/governed commands) for both target kinds:
+  201 → poll to ``completed`` → iterations populated from the governed
+  eval's nonce-verified marker → /results populated → preview reports
+  ``registry_api`` / ``file_path``. Known behavior note: identical re-runs
+  of the same config are now correctly duplicate-rejected (stable trial
+  identity via the snapshot), recorded as audit rows with
+  ``duplicate_of_iteration`` set.
 - Why: `tests/test_skill_prompt_engineering_e2e.py` uses a `MagicMock`
   orchestrator, seeds the DB directly, and builds `ResearchConfig` by hand — it
   never exercises the API + manifest path a real operator hits. That is exactly
   why B1 shipped unnoticed (ARC-011 review C4).
 - Files: new `tests/test_non_ml_session_e2e.py`.
-- Approach: `TestClient` over the real app with `AUTORESEARCH_DEMO=true` and a
-  temp workspace: POST
-  `/api/v1/research/start` with the canonical `skill_id` shape → assert 201 →
-  poll `/research/{id}` to a terminal state or first iteration → assert
-  `/results` and `/iterations` populate → assert `/promote/preview` returns a
-  skill-appropriate `target_kind`. Run for `prompt-engineering` and
-  `code-refactor` (both target kinds).
 - Acceptance: fails against today's build with the exact manifest 500; passes
   after Wave 1; no network (demo provider + offline eval).
+  **Met** — green after Wave 1 + the fixes above; fully offline (demo
+  provider + each skill's offline evaluator; the workspace venv the command
+  policy expects is symlinked, matching the Docker image's
+  ``/app/workspace/.venv``).
 - Deps: P7-006, P7-007. Size: M. Risk: medium (may expose further gaps).
+  **Confirmed** — it did (six fixes above).
 
-**P7-012 — Manifest + validator unit tests (non-ML)**
+**P7-012 — Manifest + validator unit tests (non-ML) — DONE 2026-09-18**
+- Implementation note: the core AC (v3 build per bundled skill, no ML-only
+  strings, profile-based validation both ways, v1/v2 read-compat) landed with
+  Wave 1 in `tests/test_research_manifest.py`
+  (`test_v3_manifest_builds_for_bundled_skills_without_ml_fabrication`,
+  `test_ml_profile_still_requires_ml_sections`,
+  `test_skill_profile_does_not_require_ml_sections`,
+  `test_v1/v2_manifest_loads_and_normalizes_to_*`). Wave 3 added the new
+  declarative surface's tests: `demo_experiment_command` declared + rendered
+  with absolute session paths, `config_flag` declared, unknown-placeholder
+  and multi-line rejection at load time
+  (`tests/test_skill_prompt_engineering_e2e.py`), and the MockProvider relay
+  contract (`tests/test_mock_provider.py`: verbatim relay, newest-result
+  only, custom marker prefix). No parity change (ML manifest untouched).
 - Files: extend `tests/test_research_manifest.py` (or add one) and
   `tests/parity/` if the ML manifest changes.
 - Acceptance: v3 build per skill; no ML-only strings in non-ML manifests;
-  profile-based validation both ways; v2 read-compat.
+  profile-based validation both ways; v2 read-compat. **Met.**
 - Deps: P7-004. Size: S. Risk: low.
 
 **P7-013 — Failure-path regression tests — DONE 2026-09-18 (absorbed into Wave 2)**
@@ -545,23 +589,54 @@ tests` + `mypy src` + `pytest -q` (venv details in §6).
   `skill_id` → 4xx; legacy model_type-only start → 4xx; no zombie rows.
 - Deps: P7-009, P7-010. Size: S. Risk: low.
 
-**P7-014 — Promotion e2e for both non-ML target kinds**
+**P7-014 — Promotion e2e for both non-ML target kinds — DONE 2026-09-18**
+- Implementation note: drove preview→confirm through the single resolution
+  site (``_promoter_for_session`` → ``promotion_target_from_manifest``) over
+  a real store with seeded gates-passing winners. This exposed (and fixed) a
+  real gap: **non-ML sessions could never be CONFIRMED** — the promotion
+  consistency report hard-blocked on ML serving-era evidence (mlflow artifact
+  refs, inference feature/roster parity, serving rollback target, smoke
+  validation) that generative skills never produce.
+  ``build_consistency_report`` now takes
+  ``serving_evidence_required`` (default ``True`` — legacy behavior
+  byte-identical); ``ConfigPromoter.preview`` computes it from the session's
+  skill resolution (an installed skill manifest ⇒ the skill's own declared
+  gates + the promotion target's atomic write/rollback are the contract).
+  Tests: registry_api confirm delivers to the declared ``register_endpoint``
+  (mock transport, idempotency + verbatim config) and records the durable
+  ``target_descriptor``; file_path confirm writes the declared
+  ``path_template`` under the host-configs root; a fresh-promoter rollback
+  restores the previous content at the recorded path; all pre-existing
+  promotion-safety coverage stays green.
 - Files: extend `tests/test_webhook_promotion.py` and
   `tests/test_release_promotion_safety.py`.
 - Acceptance: a `registry_api` skill preview→confirm delivers to the declared
   endpoint (mock transport) and records `target_descriptor`; a `file_path` skill
   writes to its `path_template`; rollback still restores remotely (existing
-  coverage stays green).
-- Deps: P7-007. Size: S-M. Risk: medium.
+  coverage stays green). **Met.**
+- Deps: P7-007. Size: S-M. Risk: medium — the consistency-gating change is
+  the one deliberate behavior relaxation (ML behavior unchanged, asserted by
+  the unchanged gate-bundle/consistency suites).
 
-**P7-015 — UI flow test for a skill session**
+**P7-015 — UI flow test for a skill session — DONE 2026-09-18**
+- Implementation note: `ui/src/pages/__tests__/NewResearch.test.tsx` pins the
+  start payload's canonical shape — a selected skill sends `skill_id`
+  (+subject/variant), never the legacy model_type/instrument/timeframe trio,
+  and submit stays disabled without a selection. `tsc --noEmit`, vitest (38
+  passed) and `vite build` green.
 - Files: new `ui/src/pages/__tests__/` test (or extend
   `ui/src/components/__tests__/`).
 - Acceptance: `NewResearch` sends `skill_id` (not the legacy trio) for a
-  selected skill; `tsc --noEmit` + `vitest` green.
+  selected skill; `tsc --noEmit` + `vitest` green. **Met.**
 - Deps: P7-006. Size: S. Risk: low.
 
-**P7-016 — Parity fixture provenance refresh (S3)**
+**P7-016 — Parity fixture provenance refresh (S3) — BLOCKED on a clean commit**
+- Status: ready to run, blocked by design. The capture tool refuses on a
+  dirty tree, and the tree carries the uncommitted Wave 1-3 work; committing
+  is the maintainer's call (§7 manual publish checklist). Procedure once
+  committed clean: `python tests/parity/capture.py` (writes `expected` +
+  `source_sha` at HEAD), then `pytest -m parity`; commit the fixture diff
+  with this task id. Do not hand-edit provenance.
 - Why: the promotion fixture was hand-edited; `source_sha` is stale and the
   capture tool refuses to run on a dirty tree.
 - Files: `tests/parity/promotion_preview/development_scope_basic.json`,

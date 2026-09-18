@@ -200,8 +200,13 @@ def _config_snapshot_path_from_command(
     workspace_root: str,
     session_workspace: str,
     base_dir: str | None = None,
+    config_flag: str = "--config",
 ) -> Optional[str]:
-    """Resolve the ``--config <path>`` a command references.
+    """Resolve the config artifact a command references.
+
+    The artifact rides the skill's declared ``config_flag`` (ARC-012 P7-011;
+    ``--config`` for the ML vocabulary, ``--prompt``/``--target``/... for
+    non-ML skills).
 
     ``base_dir`` (P2 per-workdir state) is the directory the command will
     actually run in — a trial directory when the skill opted into parallel
@@ -215,9 +220,9 @@ def _config_snapshot_path_from_command(
         argv = shlex.split(command)
     except ValueError:
         return None
-    if "--config" not in argv:
+    if config_flag not in argv:
         return None
-    index = argv.index("--config") + 1
+    index = argv.index(config_flag) + 1
     if index >= len(argv):
         return None
     raw_path = argv[index]

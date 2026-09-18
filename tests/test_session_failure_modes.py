@@ -518,6 +518,10 @@ async def _make_manager(
     ``test_canonical_start_wiring``)."""
     monkeypatch.setattr(settings, "workspace_root", str(tmp_path / "workspace"))
     monkeypatch.setattr(settings, "host_configs_path", str(tmp_path / "host_configs"))
+    # ARC-012 P7-011: the skill bootstrap now runs at start; demo mode lets it
+    # render its default eval set (these tests script the orchestrator, so
+    # demo mode only affects the bootstrap input here).
+    monkeypatch.setattr(settings, "demo_mode", True)
     fake = _ScriptedOrchestrator(None, mode)
     monkeypatch.setattr(
         session_manager_module,

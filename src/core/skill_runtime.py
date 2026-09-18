@@ -112,6 +112,9 @@ class CommandPolicyExtension(TypedDict, total=False):
     copyable_files: list[str]
     readable_files: list[str]
     script_paths: dict[str, str]
+    #: ARC-012 P7-011: the CLI flag carrying the skill's per-iteration config
+    #: artifact (default ``--config`` when absent).
+    config_flag: str
 
 
 class Phase(TypedDict, total=False):
@@ -210,6 +213,19 @@ class SkillRuntime(Protocol):
 
     def experiment_command(self, config: "ResearchConfig") -> str:
         """Session-resolved suggested experiment command."""
+        ...
+
+    def demo_experiment_command(self, config: "ResearchConfig") -> str:
+        """The command the demo provider (MockProvider) executes verbatim in
+        demo sessions (ARC-012 P7-011). Rendered from the skill's declared
+        ``prompt.demo_experiment_command`` with absolute session-workspace
+        paths; empty when the skill declares none."""
+        ...
+
+    def iteration_marker_prefix(self) -> str:
+        """The ``output_parser.iteration_marker`` prefix (default
+        ``ITERATION_RESULT:``) — how this skill's evaluator announces a
+        result on stdout."""
         ...
 
     # ── Iteration detection ───────────────────────────────────────
@@ -448,6 +464,36 @@ class ManifestSkillRuntime:
                 command += " " + flag + " " + shlex.quote(value)
         return command.strip()
 
+    def demo_experiment_command(self, config: "ResearchConfig") -> str:
+        """Render ``prompt.demo_experiment_command`` for this session
+        (ARC-012 P7-011).
+
+        The template's ``{session_workspace}`` becomes the session's absolute
+        workspace path (governed commands run with cwd = the workspace root,
+        so workspace-relative file arguments would miss); the identity
+        placeholders mirror the D4 path-template vocabulary. A skill that
+        declares no demo command renders "" — the demo provider then keeps
+        its default behaviour (no session-specific eval).
+        """
+        prompt = self._manifest.prompt
+        template = (
+            prompt.demo_experiment_command if prompt is not None else None
+        ) or ""
+        if not template:
+            return ""
+        return template.format(
+            session_workspace=config.workspace_path or "",
+            skill_id=self.skill_id,
+            subject_id=config.subject_id or config.instrument,
+            variant=config.variant or config.timeframe,
+        )
+
+    def iteration_marker_prefix(self) -> str:
+        op = self._manifest.output_parser
+        if op is None:
+            return "ITERATION_RESULT:"
+        return op.iteration_marker or "ITERATION_RESULT:"
+
     def directive_prompt(self, config: "ResearchConfig") -> str:
         """Build the session-directing user prompt from the manifest.
 
@@ -634,6 +680,11 @@ class ManifestSkillRuntime:
             ext["copyable_files"] = sorted(cp.copyable_files)
         if cp.readable_files:
             ext["readable_files"] = sorted(cp.readable_files)
+        # ARC-012 P7-011: the skill's declared config-artifact flag — policy
+        # confinement and the pre-run snapshot both key on it (default
+        # ``--config``).
+        if cp.config_flag:
+            ext["config_flag"] = cp.config_flag
         return ext
 
     # ── Iteration detection ───────────────────────────────────────

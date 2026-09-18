@@ -86,6 +86,9 @@ def evaluate_command_policy(
         {str(k): str(v) for k, v in dict(script_paths_raw).items()}
         if script_paths_raw else None
     )
+    # ARC-012 P7-011: the skill's declared config-artifact flag (confinement
+    # + copyable check + pre-run snapshot key on it; default --config).
+    config_flag = str(ext.get("config_flag") or "--config")
 
     try:
         argv = shlex.split(command, posix=True)
@@ -116,6 +119,7 @@ def evaluate_command_policy(
             allowed_scripts=allowed_scripts,
             copyable_files=copyable_files,
             script_paths=script_paths,
+            config_flag=config_flag,
         )
     if executable == "cp":
         return _evaluate_cp(
@@ -188,6 +192,7 @@ def _evaluate_python(
     allowed_scripts: set[str] | None = None,
     copyable_files: set[str] | None = None,
     script_paths: Mapping[str, str] | None = None,
+    config_flag: str = "--config",
 ) -> CommandDecision:
     scripts = _ALLOWED_SCRIPTS if allowed_scripts is None else allowed_scripts
     if len(argv) < 2:
@@ -217,7 +222,7 @@ def _evaluate_python(
         exec_argv = [argv[0], packaged, *argv[2:]]
     config_error = _validate_prepare_config(
         argv, script, workspace_root, session_workspace,
-        copyable_files=copyable_files,
+        copyable_files=copyable_files, config_flag=config_flag,
     )
     if config_error:
         return _reject(config_error)
@@ -231,18 +236,21 @@ def _validate_prepare_config(
     session_workspace: str | None,
     *,
     copyable_files: set[str] | None = None,
+    config_flag: str = "--config",
 ) -> str | None:
-    """Confine a script's ``--config`` target to the session workspace.
+    """Confine a script's config-artifact argument to the session workspace.
 
-    Applies to any allowed script invocation that passes ``--config`` — the
+    Applies to any allowed script invocation that passes the skill's declared
+    ``config_flag`` (ARC-012 P7-011; the ML vocabulary's ``--config`` by
+    default — non-ML skills declare their own, e.g. ``--prompt``) — the
     config an experiment reads or writes must live in the session workspace
     and be an operator-declared copyable file (default-deny when the skill
     declares none).
     """
     copyable = _COPY_FILENAMES if copyable_files is None else copyable_files
-    if "--config" not in argv:
+    if config_flag not in argv:
         return None
-    index = argv.index("--config")
+    index = argv.index(config_flag)
     if index == len(argv) - 1:
         return "--config requires a path"
     config_path = _resolve_workspace_file(

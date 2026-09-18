@@ -12,7 +12,7 @@ import pytest
 from src.core.config_promoter import ConfigPromoter
 from src.core.promotion_approval import target_identity
 from src.core.promotion_target import WebhookDeliveryError, WebhookPromotionTarget
-from tests.test_webhook_promotion import _patch_mock_transport
+from tests.test_webhook_promotion import _patch_mock_transport, _seed_completed_skill_session
 
 
 @pytest.mark.asyncio
@@ -151,3 +151,61 @@ async def test_failed_delivery_preserves_local_provenance(monkeypatch, tmp_path)
     with pytest.raises(WebhookDeliveryError):
         await target.write(path, "prompt: B")
     assert Path(path).read_text() == "prompt: A"
+
+
+@pytest.mark.asyncio
+async def test_file_path_skill_rollback_restores_promoted_template(
+    monkeypatch, tmp_path,
+):
+    """ARC-012 P7-014: a ``file_path`` skill's rollback restores the previous
+    content at the skill's declared ``path_template`` — the record carries the
+    rendered target path, so a fresh promoter (post-restart shape) needs no
+    in-memory state."""
+    from src.api import promotion as promotion_module
+    from src.config import settings
+    from src.core.results_store import ResultsStore
+    from src.core.skill_registry import SkillRegistry
+
+    monkeypatch.setattr(settings, "workspace_root", str(tmp_path / "ws"))
+    monkeypatch.setattr(settings, "host_configs_path", str(tmp_path / "configs"))
+
+    store = ResultsStore(str(tmp_path / "rollback.sqlite"))
+    await store.initialize()
+    research_id = await _seed_completed_skill_session(
+        store, tmp_path, skill_id="code-refactor",
+        metrics={
+            "primary_metric": 0.72,
+            "metric_name": "composite_refactor_score",
+            "status": "completed",
+            "tests_pass": True,
+            "no_perf_regression": True,
+            "training_gates_passed": True,
+            "config_snapshot": "def target():\n    return 43\n",
+        },
+    )
+    registry = SkillRegistry()
+    registry.discover()
+    monkeypatch.setattr(promotion_module, "_store", store)
+    monkeypatch.setattr(promotion_module, "_registry", registry)
+
+    # Seed a previous config at the template-derived path, then promote over
+    # it — the promotion records previous_yaml + the rendered target path.
+    promoter, _ = await promotion_module._promoter_for_session(research_id)
+    preview = await promoter.preview(research_id, scope="development")
+    Path(preview["target_path"]).parent.mkdir(parents=True, exist_ok=True)
+    Path(preview["target_path"]).write_text(
+        "def target():\n    return 42\n", encoding="utf-8",
+    )
+    await promoter.confirm(research_id, scope="development")
+    promoted = Path(preview["target_path"])
+    assert promoted.read_text(encoding="utf-8") == "def target():\n    return 43\n"
+
+    # A fresh promoter (no shared state) rolls back to the recorded previous
+    # config at the recorded path.
+    restarted = ConfigPromoter(store)
+    result = await restarted.rollback(
+        model_type="", instrument="default", timeframe="production",
+        reason="p7-014 rollback proof",
+    )
+    assert result["rolled_back"] is True
+    assert promoted.read_text(encoding="utf-8") == "def target():\n    return 42\n"

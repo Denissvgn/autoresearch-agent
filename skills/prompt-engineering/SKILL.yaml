@@ -119,6 +119,8 @@ phase_advancement:
 
 # ── 5/8 command_policy ────────────────────────────────────────────────────────
 command_policy:
+  # ARC-012 P7-011: the per-iteration config artifact rides --prompt.
+  config_flag: --prompt
   allowed_python: [".venv/bin/python", "./.venv/bin/python"]
   allowed_scripts:
     - eval/run.py
@@ -190,6 +192,10 @@ insights:
 prompt:
   experiment_command: |
     .venv/bin/python eval/run.py --prompt prompt.yaml --eval eval_set.jsonl --demo false
+  # ARC-012 P7-011: what the demo provider executes verbatim (offline fallback
+  # scorer). Absolute {session_workspace} paths — governed commands run with
+  # cwd = the workspace root, not the session workspace.
+  demo_experiment_command: .venv/bin/python eval/run.py --prompt {session_workspace}/prompt.yaml --eval {session_workspace}/eval_set.jsonl --demo true
   continuation_enabled: true
 
 # ── UI hints ──────────────────────────────────────────────────────────────────

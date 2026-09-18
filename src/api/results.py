@@ -132,7 +132,12 @@ _SECONDARY_METRICS: Dict[str, Dict[str, str]] = {
 }
 
 
-def _enrich_iteration(row: Dict[str, Any], model_type: str) -> Dict[str, Any]:
+def _enrich_iteration(
+    row: Dict[str, Any],
+    model_type: str,
+    *,
+    skill_id: str = "",
+) -> Dict[str, Any]:
     """Add parsed metrics, MLflow link, and secondary metrics to an iteration dict."""
     enriched = dict(row)
 
@@ -299,7 +304,11 @@ def _enrich_iteration(row: Dict[str, Any], model_type: str) -> Dict[str, Any]:
     from src.core.legacy_alias import model_type_to_skill_id
 
     if not enriched.get("skill_id"):
-        enriched["skill_id"] = model_type_to_skill_id(model_type) if model_type else ""
+        # ARC-012 P7-011: the session's native skill_id column (P7-005) wins
+        # — non-ML sessions carry model_type="" and must not enrich to "".
+        enriched["skill_id"] = skill_id or (
+            model_type_to_skill_id(model_type) if model_type else ""
+        )
     if not enriched.get("skill_phase"):
         enriched["skill_phase"] = enriched.get("search_phase")
     if "evidence_keys" not in enriched:
@@ -312,8 +321,12 @@ def _enrich_iteration(row: Dict[str, Any], model_type: str) -> Dict[str, Any]:
     return enriched
 
 
-def _enrich_iterations(rows: List[Dict[str, Any]], model_type: str) -> List[Dict[str, Any]]:
-    return [_enrich_iteration(r, model_type) for r in rows]
+def _enrich_iterations(
+    rows: List[Dict[str, Any]],
+    model_type: str,
+    skill_id: str = "",
+) -> List[Dict[str, Any]]:
+    return [_enrich_iteration(r, model_type, skill_id=skill_id) for r in rows]
 
 
 async def _resolve_result_context(
@@ -421,7 +434,9 @@ async def get_results(research_id: str):
         "research_id": research_id,
         "resolved_research_id": session["id"],
         "session": pipeline or session,
-        "iterations": _enrich_iterations(iterations, model_type),
+        "iterations": _enrich_iterations(
+            iterations, model_type, skill_id=session.get("skill_id") or "",
+        ),
     }
 
 
@@ -449,13 +464,21 @@ async def get_iterations(
         return {"items": [], "limit": limit, "next_cursor": None}
     if limit is None:
         iterations = await _store.get_iterations(session["id"])
-        return _enrich_iterations(iterations, session.get("model_type", ""))
+        return _enrich_iterations(
+            iterations,
+            session.get("model_type", ""),
+            skill_id=session.get("skill_id") or "",
+        )
     decoded = decode_cursor(cursor)
     if decoded is None and cursor:
         logger.warning("malformed /iterations cursor token; serving page 1")
     rows = await _store.get_iterations(session["id"], limit=limit, cursor=decoded)
     page = build_cursor_page(rows, limit, _iteration_cursor_extractor)
-    page["items"] = _enrich_iterations(rows, session.get("model_type", ""))
+    page["items"] = _enrich_iterations(
+        rows,
+        session.get("model_type", ""),
+        skill_id=session.get("skill_id") or "",
+    )
     return page
 
 

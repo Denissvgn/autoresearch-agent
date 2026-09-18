@@ -432,6 +432,14 @@ class SessionManager:
         await self._archive_stale_workspace(workspace_path)
         manifest_path = await self._write_manifest(config, manifest_json)
 
+        # ARC-012 P7-011: render the session workspace via the skill's
+        # bootstrap plugin — the auto-initialization step BootstrapRunner was
+        # built for (P5-005) that nothing invoked until now, so a fresh
+        # session had no prompt.yaml/eval_set for its evaluator to score.
+        # Fail fast (P7-010 rule): a skill whose bootstrap cannot render its
+        # workspace gets no row and no background task.
+        await self._run_skill_bootstrap(config)
+
         # Persist session to DB
         session_dict = await self._store.create_session(
             session_id=research_id,
@@ -546,6 +554,48 @@ class SessionManager:
         from src.core.skill_runtime import materialize_skill_runtime
 
         materialize_skill_runtime(None, config)
+
+    async def _run_skill_bootstrap(self, config: ResearchConfig) -> None:
+        """Render the session workspace with the skill's ``bootstrap.py``
+        (ARC-012 P7-011).
+
+        The ARC-011 §5.4 lifecycle step the BootstrapRunner was built for
+        (P5-005): the skill owns its workspace layout (prompt.yaml, eval
+        sets, target files), so a fresh session has something for its
+        evaluator to score. Skills without a ``bootstrap.py`` skip this step;
+        a bootstrap that runs but fails refuses the start (``SkillConfigError``
+        — nothing persisted, nothing spawned). Continuations do not
+        re-bootstrap: the inherited workspace IS the continuation state.
+        """
+        from src.core.bootstrap_runner import BootstrapRunner
+        from src.core.skill_loader import load_layout
+        from src.core.skill_registry import DEFAULT_SKILLS_ROOT, default_registry
+        from src.core.skill_runtime import SkillConfigError
+
+        skill_dir = DEFAULT_SKILLS_ROOT / config.skill_id
+        layout = load_layout(skill_dir)
+        if not layout.has_bootstrap:
+            return
+        try:
+            manifest = default_registry.get(config.skill_id)
+        except Exception as exc:
+            raise SkillConfigError(
+                f"skill_id {config.skill_id!r} was rejected by the skill "
+                f"registry while bootstrapping: {exc}"
+            ) from exc
+        outcome = await BootstrapRunner().run(
+            skill_dir=skill_dir,
+            layout=layout,
+            manifest=manifest,
+            workspace=Path(config.workspace_path),
+            skill_params=dict(config.skill_params or {}),
+            timeout_s=30.0,
+        )
+        if not outcome.ok:
+            raise SkillConfigError(
+                f"skill {config.skill_id!r} bootstrap failed to render the "
+                f"session workspace: {outcome.error}"
+            )
 
     async def _run_preflight(self, config: ResearchConfig) -> Dict[str, Any]:
         """Run the skill's declared dependency checks and raise before any

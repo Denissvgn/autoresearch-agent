@@ -130,6 +130,10 @@ structured_hpo:
 prompt:
   experiment_command: |
     .venv/bin/python eval/run.py --config db_config.yaml --target-latency-ms 10
+  # ARC-012 P7-011: what the demo provider executes verbatim (simulated
+  # bench). Absolute {session_workspace} paths — governed commands run with
+  # cwd = the workspace root, not the session workspace.
+  demo_experiment_command: .venv/bin/python eval/run.py --config {session_workspace}/db_config.yaml --target-latency-ms 10
   continuation_enabled: true
 
 ui:

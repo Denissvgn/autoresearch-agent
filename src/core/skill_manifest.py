@@ -413,6 +413,13 @@ class CommandPolicy(BaseModel):
     forbidden_tokens: list[str] = Field(default_factory=list)
     forbidden_substrings: list[str] = Field(default_factory=list)
     secret_markers: list[str] = Field(default_factory=list)
+    # ARC-012 P7-011: the CLI flag whose value is this skill's per-iteration
+    # config artifact (``--config`` for the ML vocabulary; non-ML skills name
+    # their own — ``--prompt``, ``--target``). The declared flag gets the
+    # ``--config`` treatment everywhere: session-workspace confinement +
+    # copyable-file check at the policy layer, and the pre-run config
+    # snapshot the promotion path requires. ``None`` keeps ``--config``.
+    config_flag: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -857,6 +864,39 @@ class PromptConfig(BaseModel):
     experiment_command: Optional[str] = None
     continuation_enabled: bool = True
     anti_waste_rules: Optional[str] = None
+    # ARC-012 P7-011: the command the demo provider (MockProvider) drives in
+    # demo sessions. Unlike ``experiment_command`` (rendered into the agent's
+    # directive prompt with workspace-relative paths), this template is
+    # *executed verbatim* by the scripted provider, so it must be runnable
+    # from the governed command's cwd (the workspace root) — skills use the
+    # ``{session_workspace}`` placeholder for absolute session paths and the
+    # skill's own offline/demo evaluator flags. Placeholders are a closed
+    # vocabulary validated here, at skill-load time (the D4 rule: a manifest
+    # must never fail only once someone runs it).
+    demo_experiment_command: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _validate_demo_command(self) -> "PromptConfig":
+        command = self.demo_experiment_command
+        if command is None:
+            return self
+        if not command.strip():
+            raise ValueError("demo_experiment_command must not be blank")
+        if any(char in command for char in ("\n", "\r", "\\")):
+            raise ValueError(
+                "demo_experiment_command must be a single shell-free command "
+                "(no newlines or backslashes)"
+            )
+        allowed = {"session_workspace", "skill_id", "subject_id", "variant"}
+        from src.core.skill_paths import _template_placeholder_tokens
+
+        for token in _template_placeholder_tokens(command):
+            if token not in allowed:
+                raise ValueError(
+                    f"demo_experiment_command placeholder {{{token}}} is not "
+                    f"in the closed vocabulary {sorted(allowed)}"
+                )
+        return self
 
 
 class UIConfig(BaseModel):
