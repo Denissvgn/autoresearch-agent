@@ -1061,7 +1061,7 @@ paths:
           application/json:
             schema:
               anyOf:
-              - $ref: '#/components/schemas/PromotionScopeRequest'
+              - $ref: '#/components/schemas/PromotionPreviewRequest'
               - type: 'null'
               title: Payload
       responses:
@@ -2026,8 +2026,39 @@ components:
           - type: boolean
           - type: 'null'
           title: Approved
+        iteration:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Iteration
+        config_snapshot_sha256:
+          anyOf:
+          - type: string
+            pattern: ^[0-9a-f]{64}$
+          - type: 'null'
+          title: Config Snapshot Sha256
+        target_identity:
+          anyOf:
+          - type: string
+            pattern: ^[0-9a-f]{64}$
+          - type: 'null'
+          title: Target Identity
       type: object
       title: PromotionApproval
+    PromotionPreviewRequest:
+      properties:
+        scope:
+          type: string
+          title: Scope
+          default: development
+        approval:
+          anyOf:
+          - $ref: '#/components/schemas/PromotionApproval'
+          - type: 'null'
+      type: object
+      title: PromotionPreviewRequest
+      description: Unsigned discovery must be possible before an operator can sign a candidate.
     PromotionRollbackRequest:
       properties:
         reason:
@@ -2117,9 +2148,10 @@ components:
           - type: string
           - type: 'null'
           title: Model Type
-          description: Legacy alias for skill_id. Known legacy short names (direction/volatility/rl) map
-            to their canonical skill ids; any other value is used as the skill_id directly. Unknown skills
-            are rejected with 404 skill_not_found.
+          description: 'Legacy alias for skill_id. Known legacy short names (direction/volatility/rl)
+            map to their canonical skill ids; any other value is used as the skill_id directly. Unknown
+            skills are rejected with 404 skill_not_found. In responses this is a derived legacy alias:
+            the trio for ML skills, or "" for skills without one (ARC-012 D1) — never a skill id.'
         skill_id:
           anyOf:
           - type: string

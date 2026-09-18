@@ -253,31 +253,28 @@ def test_promotion_preview_carries_target_kind_from_registry(
     assert response.json()["target_kind"] == kind
 
 
-def test_promotion_preview_non_file_target_returns_structured_422(
+def test_promotion_preview_value_error_surfaces_as_404(
     client: TestClient,
 ):
-    """ARC-011 review C4 (P4-016): a non-ML session (model_type="") hits the
-    file-target path derivation's "Unknown model type" ValueError inside
-    ConfigPromoter.preview — previously surfaced as a misleading 404. The
-    endpoint must answer with the structured unsupported-target response
-    (same vocabulary as the C2-5 auto-promotion skip)."""
+    """ARC-012 P7-008: the string-sniffing branch for the deleted "Unknown
+    model type" message is gone — a genuine ValueError from the promoter
+    surfaces as a plain 404 carrying the real message. No behaviour may
+    depend on a message string that no longer exists anywhere in src/."""
 
-    class _UnknownModelPromoter:
+    class _FailingPromoter:
         async def preview(self, research_id, *, scope="development", approval=None):
-            raise ValueError("Unknown model type: ")
+            raise ValueError("Session res_int0001 has no best iteration")
 
         async def confirm(self, research_id, *, scope="development", approval=None):
-            raise ValueError("Unknown model type: ")
+            raise ValueError("Session res_int0001 has no best iteration")
 
-    promotion_module.init(_UnknownModelPromoter(), _store, skill_registry=None)
+    promotion_module.init(_FailingPromoter(), _store, skill_registry=None)
     response = client.post(
         "/api/v1/research/res_int0001/promote/preview",
         headers=_auth(),
         json={"scope": "development"},
     )
-    assert response.status_code == 422
-    detail = response.json()["detail"]
-    assert isinstance(detail, dict)
-    assert detail["reason"] == "unsupported_promotion_target"
+    assert response.status_code == 404
+    assert "no best iteration" in response.json()["detail"]
     # Restore the default promoter for any test ordering.
     promotion_module.init(_FakePromoter(), _store, skill_registry=None)

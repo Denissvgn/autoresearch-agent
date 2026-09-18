@@ -45,8 +45,8 @@ param_schema:
   type: object
   additionalProperties: false
   properties:
-    eval_set:      { type: string,  description: "path to the labeled eval set (JSONL)" }
-    scorer_url:    { type: string,  description: "endpoint that scores a candidate prompt" }
+    eval_set:      { type: string,  description: "regular JSONL file; absolute or relative to session workspace; nonempty input/expected strings only" }
+    scorer_url:    { type: string,  description: "explicit HTTP(S) scorer endpoint, required for live scoring; no embedded credentials" }
     registry_url:  { type: string,  description: "prompt registry base URL" }
     target_metric: { type: string, enum: [composite_eval_score, precision, f1], default: composite_eval_score }
     cost_ceiling_per_run_usd: { type: number, minimum: 0, default: 0.50 }
@@ -189,7 +189,7 @@ insights:
 # ── Prompt assembly ───────────────────────────────────────────────────────────
 prompt:
   experiment_command: |
-    .venv/bin/python eval/run.py --prompt prompt.yaml --eval eval_set.jsonl
+    .venv/bin/python eval/run.py --prompt prompt.yaml --eval eval_set.jsonl --demo false
   continuation_enabled: true
 
 # ── UI hints ──────────────────────────────────────────────────────────────────

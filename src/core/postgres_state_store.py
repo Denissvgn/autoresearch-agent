@@ -667,23 +667,33 @@ class PostgresStateStore:
         manifest_json: Optional[str] = None,
         manifest_path: Optional[str] = None,
         manifest_hash: Optional[str] = None,
+        skill_id: Optional[str] = None,
+        subject_id: Optional[str] = None,
+        variant: Optional[str] = None,
     ) -> Dict[str, Any]:
         # ARC-011 review C4 (P4-016): canonical non-ML sessions carry
         # model_type="" (no legacy alias) — previously a KeyError; unmapped
         # types pass their own name through (SQLite-parity fix).
-        skill_name = _MODEL_TO_SKILL.get(model_type, model_type or "")
+        # ARC-012 P7-005: skill_id, when given, is the skill_name source of
+        # truth and the canonical columns are persisted natively.
+        skill_name = (
+            skill_id
+            or _MODEL_TO_SKILL.get(model_type, model_type or "")
+        )
         now = datetime.now(timezone.utc).isoformat()
         conn = await self._conn()
         try:
             await conn.execute(
                 """INSERT INTO research_sessions
                    (id, instrument, timeframe, model_type, tag, skill_name,
+                    skill_id, subject_id, variant,
                     status, quick_mode, max_iterations, max_budget_usd,
                     focus_hint, workspace_path, manifest_json, manifest_path,
                     manifest_hash, started_at)
-                   VALUES ($1, $2, $3, $4, $5, $6, 'running', $7, $8, $9,
-                           $10, $11, $12, $13, $14, $15)""",
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'running',
+                           $10, $11, $12, $13, $14, $15, $16, $17, $18)""",
                 session_id, instrument, timeframe, model_type, tag, skill_name,
+                skill_id or "", subject_id or "", variant or "",
                 int(quick_mode), max_iterations, max_budget_usd, focus_hint,
                 workspace_path, manifest_json, manifest_path, manifest_hash, now,
             )

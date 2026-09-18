@@ -267,10 +267,13 @@ def auth_headers() -> dict[str, str]:
 
 
 def start_payload() -> dict[str, object]:
+    # ARC-012 P7-010: the start payload must name an installed skill — the
+    # legacy model_type-only shape is now translated and skill-checked (the
+    # auth behaviour under test is orthogonal to the session semantics).
     return {
-        "instrument": "DOGE_USDT",
-        "timeframe": "15m",
-        "model_type": "direction",
+        "skill_id": "prompt-engineering",
+        "subject_id": "default",
+        "variant": "production",
     }
 
 

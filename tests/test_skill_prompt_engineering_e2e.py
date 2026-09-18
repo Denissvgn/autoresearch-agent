@@ -94,7 +94,7 @@ class TestEvalScorerNonceEcho:
         nonce = "deadbeef" * 8
         result = subprocess.run(
             [sys.executable, str(EVAL_RUN), "--prompt", str(tmp_path / "prompt.yaml"),
-             "--eval", str(tmp_path / "eval_set.jsonl")],
+             "--eval", str(tmp_path / "eval_set.jsonl"), "--demo", "true"],
             capture_output=True, text=True, timeout=10,
             env={**os.environ, "AUTORESEARCH_SESSION_NONCE": nonce},
         )
@@ -181,11 +181,41 @@ class TestCanonicalRequestTranslation:
             skill_id="prompt-engineering", subject_id="default", variant="production",
         )
         conflicts = _translate_canonical_request(req)
-        # Identity alias fallback: a non-legacy skill is its own model_type.
-        assert req.model_type == "prompt-engineering"
+        # ARC-012 P7-006/D1: a non-ML skill has NO legacy alias — model_type
+        # is "" (the closed-vocabulary "no alias" value), never the skill id.
+        assert req.model_type == ""
         assert req.instrument == "default"
         assert req.timeframe == "production"
         assert conflicts == []
+
+    def test_non_ml_skill_subject_defaults_from_skill(self):
+        """A canonical request that omits subject/variant takes the skill's
+        first static entries (P7-006) instead of arriving blank."""
+        from src.api.research import StartResearchRequest, _translate_canonical_request
+
+        req = StartResearchRequest(skill_id="prompt-engineering")
+        _translate_canonical_request(req)
+        assert req.subject_id == "default"
+        assert req.variant == "production"
+        assert req.instrument == "default"
+        assert req.timeframe == "production"
+
+    def test_non_ml_skill_conflicting_legacy_model_type_audited(self):
+        from src.api.research import StartResearchRequest, _translate_canonical_request
+
+        req = StartResearchRequest(
+            skill_id="prompt-engineering",
+            subject_id="default",
+            variant="production",
+            model_type="volatility",
+        )
+        conflicts = _translate_canonical_request(req)
+        # Canonical model_type for a non-ML skill is "" — any non-empty
+        # legacy value differs and is audited (canonical still wins).
+        assert conflicts == [
+            {"field": "model_type", "canonical": "", "legacy": "volatility"}
+        ]
+        assert req.model_type == ""
 
 
 # ============================================================================
@@ -320,6 +350,7 @@ async def test_prompt_engineering_session_end_to_end(monkeypatch, tmp_path):
         kind="bootstrap",
         input_json={
             "workspace": str(session_ws), "mode": "live", "skill_params": {},
+            "demo_mode": True,
         },
         caps=PluginCaps(fs_write="workspace", timeout_s=30.0),
         workspace=session_ws,
@@ -363,7 +394,7 @@ async def test_prompt_engineering_session_end_to_end(monkeypatch, tmp_path):
     eval_command = (
         ".venv/bin/python eval/run.py "
         f"--prompt {session_ws / 'prompt.yaml'} "
-        f"--eval {session_ws / 'eval_set.jsonl'}"
+        f"--eval {session_ws / 'eval_set.jsonl'} --demo true"
     )
     scripted = _ScriptedOpenAIClient(
         eval_command, session_ws, nonce_is="00" * 32,

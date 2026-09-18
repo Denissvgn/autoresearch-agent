@@ -7,7 +7,11 @@ the best-performing variant to the prompt registry.
 ## How iterations work
 
 1. **Write a candidate prompt** to `prompt.yaml` in the session workspace.
-2. **Run the scorer**: `.venv/bin/python eval/run.py --prompt prompt.yaml --eval eval_set.jsonl`
+2. **Run the server-provided experiment command**, which explicitly supplies
+   `--eval eval_set.jsonl --scorer-url <endpoint> --demo false` for live scoring.
+   Do not change these server-owned parameters or the dataset. Only the prompt
+   is an experiment variable. Synthetic scoring is available only when the
+   server enables demo mode (`--demo true`); it is not live evaluation evidence.
 3. The scorer emits an `ITERATION_RESULT:` JSON line carrying:
    - `primary_metric` (composite eval score)
    - `passes_min_precision` (gate)

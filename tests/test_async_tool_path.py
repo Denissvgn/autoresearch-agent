@@ -155,8 +155,6 @@ def test_execute_tool_dispatches_glob(tmp_path: Path):
 
 def test_grep_timeout_returns_marker(tmp_path: Path, monkeypatch):
     """Exercise real deadline enforcement and process cleanup with a short budget."""
-    import sys
-    import time
     import src.core.agent_tools as tools
 
     workspace = _workspace(tmp_path)

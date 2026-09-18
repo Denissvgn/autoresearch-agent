@@ -1103,15 +1103,15 @@ def build_provider(
         return mock
     if provider_id == "anthropic":
         provider: LLMProvider = AnthropicProvider(
-            base_url=settings_obj.anthropic_base_url,
+            base_url=settings_obj.anthropic_base_url or "https://api.anthropic.com",
             api_key=secret_value(settings_obj.anthropic_auth_token) or "",
             timeout_s=settings_obj.anthropic_api_timeout_s,
         )
     elif provider_id == "openai":
         key = getattr(settings_obj, "openai_api_key", None)
         provider = OpenAIProvider(
-            base_url=settings_obj.openai_base_url,
-            api_key=secret_value(key) if key is not None else "",
+            base_url=settings_obj.openai_base_url or "https://api.openai.com/v1",
+            api_key=secret_value(key) or "",
             timeout_s=settings_obj.openai_api_timeout_s,
         )
     else:

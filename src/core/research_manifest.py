@@ -10,16 +10,64 @@ from typing import Any, Dict, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.config import settings
-from src.core.legacy_alias import model_type_to_skill_id
+from src.core.legacy_alias import (
+    is_known_model_type,
+    model_type_to_skill_id,
+    skill_id_to_model_type,
+)
 from src.core.service_preflight import build_not_run_preflight, sanitize_service_url
+from src.core.skill_paths import session_workspace_path
 
-#: Current manifest artifact schema version (ARC-011 P3-019). v2 adds the
-#: canonical ``skill_id``/``subject_id``/``variant`` derived fields alongside
-#: the legacy ``model_type``/``instrument``/``timeframe`` so the persisted
-#: manifest artifact carries the same dual shape as the API responses (§7.7).
-#: v1 manifests are accepted on read and normalized to v2 (forward-compat).
-CURRENT_SCHEMA_VERSION = "research_session_manifest.v2"
-_KNOWN_SCHEMA_VERSIONS = {"research_session_manifest.v1", CURRENT_SCHEMA_VERSION}
+#: Current manifest artifact schema version (ARC-012 P7-002). v3 makes the
+#: canonical ``skill_id`` authoritative and required; the legacy
+#: ``model_type`` becomes an optional, *closed-vocabulary* alias
+#: (``direction``/``volatility``/``rl`` or empty — D1: frozen history,
+#: writable never). v2 added the canonical dual-shape fields; v1 predates
+#: them. Both remain readable and are normalized to v3 on load
+#: (forward-compat).
+CURRENT_SCHEMA_VERSION = "research_session_manifest.v3"
+_KNOWN_SCHEMA_VERSIONS = {
+    "research_session_manifest.v1",
+    "research_session_manifest.v2",
+    CURRENT_SCHEMA_VERSION,
+}
+
+#: Sections every manifest must carry regardless of skill category — the
+#: universal research-session contract (budget, policy, preflight, runtime).
+_SKILL_PROFILE_SECTIONS = (
+    "budget",
+    "promotion_policy",
+    "preflight",
+    "runtime",
+)
+
+#: Additional sections only a legacy-ML (``model_type`` trio) manifest must
+#: carry. A generative/optimization/… skill has no ``roster``/``tsfm`` —
+#: demanding them would force fabricated provenance (ARC-012 P7-004).
+_ML_PROFILE_SECTIONS = _SKILL_PROFILE_SECTIONS + (
+    "data_window",
+    "baseline_config",
+    "roster",
+    "tsfm",
+    "adaptive_features",
+    "split_ids",
+    "cost_model",
+    "gate_bundle",
+    "service_urls",
+)
+
+#: Legacy-ML sections that a skill-driven (v3) manifest leaves ``None``.
+#: Kept as model fields so v1/v2 artifacts round-trip unchanged.
+_ML_ONLY_SECTION_FIELDS = (
+    "data_window",
+    "baseline_config",
+    "roster",
+    "tsfm",
+    "adaptive_features",
+    "split_ids",
+    "cost_model",
+    "gate_bundle",
+)
 
 
 class ResearchSessionManifest(BaseModel):
@@ -34,23 +82,30 @@ class ResearchSessionManifest(BaseModel):
     )
     instrument: str
     timeframe: str
-    model_type: str = Field(pattern="^(direction|volatility|rl)$")
+    #: D1 (ARC-012 §2): closed legacy vocabulary — a known legacy short name
+    #: for ML skills, or ``""`` for every skill without one. Never a skill id,
+    #: never free text; nothing runtime branches on it.
+    model_type: str = Field(default="", pattern=r"^(direction|volatility|rl)$|^$")
     objective: str
     model_family: str
-    data_window: Dict[str, Any]
-    baseline_config: Dict[str, Any]
-    roster: Dict[str, Any]
-    tsfm: Dict[str, Any]
-    adaptive_features: Dict[str, Any]
-    split_ids: Dict[str, Any]
-    cost_model: Dict[str, Any]
-    gate_bundle: Dict[str, Any]
+    # P7-003/P7-004: ML-only sections are Optional so a skill-driven (v3)
+    # manifest can honestly omit them instead of fabricating ML provenance.
+    # Legacy v1/v2 manifests always carry them; the profile validator still
+    # enforces their presence for the legacy-ML profile.
+    data_window: Optional[Dict[str, Any]] = None
+    baseline_config: Optional[Dict[str, Any]] = None
+    roster: Optional[Dict[str, Any]] = None
+    tsfm: Optional[Dict[str, Any]] = None
+    adaptive_features: Optional[Dict[str, Any]] = None
+    split_ids: Optional[Dict[str, Any]] = None
+    cost_model: Optional[Dict[str, Any]] = None
+    gate_bundle: Optional[Dict[str, Any]] = None
     budget: Dict[str, Any]
     max_iterations: int = Field(ge=1)
     timeout_s: int = Field(ge=0)
-    mlflow_experiment: str
+    mlflow_experiment: Optional[str] = None
     promotion_policy: Dict[str, Any]
-    service_urls: Dict[str, str]
+    service_urls: Dict[str, str] = Field(default_factory=dict)
     preflight: Dict[str, Any]
     runtime: Dict[str, Any]
     hpo: Dict[str, Any] = Field(default_factory=dict)
@@ -74,17 +129,23 @@ class ResearchSessionManifest(BaseModel):
     skill_id: Optional[str] = None
     subject_id: Optional[str] = None
     variant: Optional[str] = None
+    # ARC-012 P7-003 (manifest v3): the skill-sourced section — everything the
+    # session manifest claims about *this* skill comes from its SKILL.yaml
+    # (phase ids, primary metric, promotion-target kind, workspace template),
+    # never invented by the builder. Absent on legacy-ML manifests, which keep
+    # their byte-identical v2 shape.
+    skill: Optional[Dict[str, Any]] = None
 
     @field_validator("schema_version", mode="before")
     @classmethod
     def _accept_known_schema_versions(cls, value: Any) -> Any:
-        """Forward-compat read: accept v1 manifests, normalize to v2.
+        """Forward-compat read: accept v1/v2 manifests, normalize to v3.
 
-        Persisted v1 manifests (written before P3-019) carry
-        ``schema_version = "research_session_manifest.v1"``. They are loaded
-        unchanged and re-stamped as v2 on the round-trip so a migrated artifact
-        carries the canonical fields. Unknown prefixes raise a field-located
-        error rather than silently degrading (R3 back-compat).
+        Persisted v1/v2 manifests (written before P7-002) carry their own
+        ``schema_version``. They are loaded unchanged and re-stamped as v3 on
+        the round-trip so a migrated artifact carries the canonical surface.
+        Unknown prefixes raise a field-located error rather than silently
+        degrading (R3 back-compat).
         """
         if value is None:
             return CURRENT_SCHEMA_VERSION
@@ -104,27 +165,21 @@ class ResearchSessionManifest(BaseModel):
 
     @model_validator(mode="after")
     def _require_manifest_sections(self) -> "ResearchSessionManifest":
+        # P7-004: section requirements are profile-based. A v3 manifest that
+        # carries the skill-sourced ``skill`` section validates against the
+        # universal profile (any non-ML category); a legacy-ML manifest (no
+        # skill section, ``model_type`` trio) must still satisfy the full ML
+        # set — including ``roster``/``tsfm`` (regression-asserted).
         required = (
-            "data_window",
-            "baseline_config",
-            "roster",
-            "tsfm",
-            "adaptive_features",
-            "split_ids",
-            "cost_model",
-            "gate_bundle",
-            "budget",
-            "promotion_policy",
-            "service_urls",
-            "preflight",
-            "runtime",
+            _SKILL_PROFILE_SECTIONS if self.skill is not None
+            else _ML_PROFILE_SECTIONS
         )
         missing = [name for name in required if not getattr(self, name)]
         if missing:
             raise ValueError(f"manifest missing required section(s): {missing}")
         # P3-019: back-fill canonical dual-shape fields from the legacy trio so a
         # v1 manifest (which never carried skill_id/subject_id/variant) round-
-        # trips through read → v2 with the canonical surface populated. The
+        # trips through read → v3 with the canonical surface populated. The
         # derivation rules mirror ResearchConfig (P2-017): model_type → skill_id
         # via legacy_alias; instrument → subject_id; timeframe → variant.
         if not self.skill_id:
@@ -135,6 +190,14 @@ class ResearchSessionManifest(BaseModel):
             object.__setattr__(self, "subject_id", self.instrument)
         if not self.variant:
             object.__setattr__(self, "variant", self.timeframe)
+        # P7-002: the canonical skill identity is required — a manifest that
+        # resolves to no skill at all names nothing and cannot run.
+        if not (self.skill_id or "").strip():
+            raise ValueError(
+                "manifest requires a non-blank skill_id (every session must "
+                "name an installed skill; legacy sessions must carry a known "
+                "model_type alias)"
+            )
         return self
 
     def canonical_json(self, *, include_hash: bool = True) -> str:
@@ -156,7 +219,7 @@ def build_research_manifest(
     research_id: str,
     instrument: str,
     timeframe: str,
-    model_type: str,
+    model_type: str = "",
     tag: str,
     quick_mode: bool,
     max_iterations: int,
@@ -164,11 +227,117 @@ def build_research_manifest(
     timeout_s: int,
     focus_hint: Optional[str],
     overrides: Optional[Dict[str, Any]] = None,
+    # ARC-012 P7-005: the canonical skill identity. When given, it is
+    # authoritative and the legacy ``model_type`` alias is derived here —
+    # the single place that knows the translation.
+    skill_id: Optional[str] = None,
 ) -> ResearchSessionManifest:
     """Build and validate a complete manifest from request/server state."""
 
+    model_type, skill_id = _resolve_identity(model_type=model_type, skill_id=skill_id)
+
+    if is_known_model_type(model_type) and _lookup_skill_manifest(skill_id) is None:
+        # Legacy ML trio with no installed skill manifest: keep the incumbent
+        # ML sections byte-identical (parity fixtures depend on them).
+        defaults = _ml_manifest_defaults(
+            research_id=research_id,
+            instrument=instrument,
+            timeframe=timeframe,
+            model_type=model_type,
+            skill_id=skill_id or model_type_to_skill_id(model_type),
+            tag=tag,
+            quick_mode=quick_mode,
+            max_iterations=max_iterations,
+            max_budget_usd=max_budget_usd,
+            timeout_s=timeout_s,
+            focus_hint=focus_hint,
+        )
+    else:
+        skill_manifest = _lookup_skill_manifest(skill_id)
+        if skill_manifest is None:
+            raise ValueError(
+                f"skill_id {skill_id!r} is not registered; a manifest must be "
+                "sourced from an installed skill (add skills/<id>/ and reload) "
+                "or carry a legacy model_type alias"
+            )
+        defaults = _skill_manifest_defaults(
+            research_id=research_id,
+            instrument=instrument,
+            timeframe=timeframe,
+            skill_id=skill_manifest.id,
+            tag=tag,
+            quick_mode=quick_mode,
+            max_iterations=max_iterations,
+            max_budget_usd=max_budget_usd,
+            timeout_s=timeout_s,
+            focus_hint=focus_hint,
+            skill_manifest=skill_manifest,
+        )
+
+    payload = _deep_merge(defaults, overrides or {})
+    if payload.get("research_id") != research_id:
+        raise ValueError("manifest research_id must match server session id")
+    if payload.get("instrument") != instrument:
+        raise ValueError("manifest instrument must match request instrument")
+    if payload.get("timeframe") != timeframe:
+        raise ValueError("manifest timeframe must match request timeframe")
+    if payload.get("model_type") != model_type:
+        raise ValueError("manifest model_type must match request model_type")
+    return ResearchSessionManifest(**payload).with_hash()
+
+
+def _resolve_identity(
+    *, model_type: str, skill_id: Optional[str]
+) -> tuple[str, str]:
+    """Resolve (legacy ``model_type``, canonical ``skill_id``).
+
+    ``skill_id`` wins when both are given (P7-005); the legacy alias — if the
+    skill has one — is derived here. A ``model_type`` that is not a known
+    legacy alias is treated as a canonical skill id (the P3-013 identity
+    fallback) and yields ``model_type=""`` per D1.
+    """
+    if not skill_id:
+        skill_id = model_type_to_skill_id(model_type or "")
+    if not skill_id:
+        raise ValueError(
+            "manifest identity requires an installed skill_id (or a legacy "
+            f"model_type alias); got model_type={model_type!r}, "
+            f"skill_id={skill_id!r}"
+        )
+    legacy = skill_id_to_model_type(skill_id)
+    return (legacy if is_known_model_type(legacy) else "", skill_id)
+
+
+def _lookup_skill_manifest(skill_id: Optional[str]) -> Any:
+    """Resolve a skill id against the registry; ``None`` when unresolvable."""
+    if not skill_id:
+        return None
+    try:
+        from src.core.skill_registry import default_registry
+
+        return default_registry.get(skill_id)
+    except Exception:
+        return None
+
+
+def _ml_manifest_defaults(
+    *,
+    research_id: str,
+    instrument: str,
+    timeframe: str,
+    model_type: str,
+    skill_id: str,
+    tag: str,
+    quick_mode: bool,
+    max_iterations: int,
+    max_budget_usd: float,
+    timeout_s: int,
+    focus_hint: Optional[str],
+) -> Dict[str, Any]:
+    """The incumbent legacy-ML section set — byte-identical to the v2 builder
+    (parity fixtures depend on it; P7-003 keeps this branch untouched)."""
     instrument_under = instrument.replace("-", "_")
-    defaults = {
+    return {
         "research_id": research_id,
         "instrument": instrument,
         "timeframe": timeframe,
@@ -176,7 +345,7 @@ def build_research_manifest(
         # P3-019: canonical dual-shape fields, populated alongside the legacy
         # trio so the persisted manifest artifact is self-describing. The model
         # validator back-fills these if absent (v1 round-trip path).
-        "skill_id": model_type_to_skill_id(model_type),
+        "skill_id": skill_id,
         "subject_id": instrument,
         "variant": timeframe,
         "objective": _default_objective(model_type),
@@ -261,16 +430,109 @@ def build_research_manifest(
         # contract defends against. ``session_nonce`` stays in the schema
         # (always null in new artifacts) so the v2 shape is unchanged.
     }
-    payload = _deep_merge(defaults, overrides or {})
-    if payload.get("research_id") != research_id:
-        raise ValueError("manifest research_id must match server session id")
-    if payload.get("instrument") != instrument:
-        raise ValueError("manifest instrument must match request instrument")
-    if payload.get("timeframe") != timeframe:
-        raise ValueError("manifest timeframe must match request timeframe")
-    if payload.get("model_type") != model_type:
-        raise ValueError("manifest model_type must match request model_type")
-    return ResearchSessionManifest(**payload).with_hash()
+
+
+def _skill_manifest_defaults(
+    *,
+    research_id: str,
+    instrument: str,
+    timeframe: str,
+    skill_id: str,
+    tag: str,
+    quick_mode: bool,
+    max_iterations: int,
+    max_budget_usd: float,
+    timeout_s: int,
+    focus_hint: Optional[str],
+    skill_manifest: Any,
+) -> Dict[str, Any]:
+    """Skill-driven sections (ARC-012 P7-003): everything is sourced from the
+    skill's SKILL.yaml — no invented ML artifacts. A manifest must never
+    claim artefacts the skill does not produce."""
+    workspace_rel = session_workspace_path(
+        skill_manifest,
+        skill_id=skill_id,
+        subject_id=instrument,
+        variant=timeframe,
+    )
+    promotion_scopes = [
+        scope.id
+        for scope in (getattr(skill_manifest.promotion_target, "scopes", None) or [])
+    ]
+    return {
+        "research_id": research_id,
+        "instrument": instrument,
+        "timeframe": timeframe,
+        "model_type": "",  # D1: no legacy alias for skill-driven sessions
+        "skill_id": skill_id,
+        "subject_id": instrument,
+        "variant": timeframe,
+        "objective": _default_objective(skill_id),
+        "model_family": _default_model_family(skill_id),
+        # ``baseline_config`` carries only what is real: the request tag. The
+        # ML branch's ``workspace_config`` train.yaml pointer is intentionally
+        # absent — this skill produces no train.yaml.
+        "baseline_config": {"tag": tag},
+        "budget": {
+            "max_budget_usd": max_budget_usd,
+            "quick_mode": quick_mode,
+        },
+        "max_iterations": max_iterations,
+        "timeout_s": timeout_s,
+        "promotion_policy": {
+            "scope": "development",
+            "live_production_promotion_allowed": False,
+            "auc_only_promotion_allowed": False,
+            "scopes": promotion_scopes,
+        },
+        "preflight": build_not_run_preflight(model_type=skill_id),
+        "runtime": {
+            "environment": settings.environment,
+            "workspace_root": settings.workspace_root,
+            "db_path": settings.db_path,
+            "host_configs_path": settings.host_configs_path,
+            "anthropic_model": settings.anthropic_model,
+            # The session workspace follows the skill's declared template
+            # (P7-005); ``runs_dir`` (an ML-layout setting) is deliberately
+            # not claimed here.
+            "session_workspace": (
+                f"{settings.workspace_root}/{workspace_rel}"
+                if workspace_rel
+                else None
+            ),
+        },
+        "hpo": {
+            "enabled": False,
+            "trials": None,
+            "timesteps": None,
+        },
+        "focus_hint": focus_hint,
+        # P7-003: the skill-sourced section — the manifest's claims about the
+        # skill, read straight from its descriptor.
+        "skill": {
+            "id": skill_manifest.id,
+            "version": getattr(skill_manifest, "version", None),
+            "category": getattr(skill_manifest, "category", None),
+            "session_path_template": getattr(
+                getattr(skill_manifest, "workspace", None),
+                "session_path_template",
+                None,
+            ),
+            "phases": [
+                phase.id for phase in (skill_manifest.phase_plan or [])
+            ],
+            "metric": {
+                "field": skill_manifest.metric_schema.primary.field,
+                "direction": getattr(
+                    skill_manifest.metric_schema.primary, "direction", None
+                ),
+            },
+            "promotion_target": {
+                "kind": skill_manifest.promotion_target.primary.kind,
+                "scopes": promotion_scopes,
+            },
+        },
+    }
 
 
 def manifest_pretty_json(manifest: ResearchSessionManifest) -> str:

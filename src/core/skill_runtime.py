@@ -42,6 +42,7 @@ from typing import (
     Optional,
     Protocol,
     TypedDict,
+    cast,
 )
 
 if TYPE_CHECKING:
@@ -123,6 +124,8 @@ class Phase(TypedDict, total=False):
     next_action: str
     min_iterations: int
     max_iterations: int
+    evidence_keys: tuple[str, ...]
+    stagnation_exempt: bool
 
 
 class AdvancementRule(TypedDict, total=False):
@@ -199,6 +202,14 @@ class SkillRuntime(Protocol):
     def command_policy_extension(self) -> CommandPolicyExtension:
         """Allowed scripts/executables/copyable-files/readable-files that extend
         the orchestrator's base policy."""
+        ...
+
+    def evaluator_command_params(self, config: "ResearchConfig") -> dict[str, str]:
+        """Server-owned evaluator flags for execution-boundary enforcement."""
+        ...
+
+    def experiment_command(self, config: "ResearchConfig") -> str:
+        """Session-resolved suggested experiment command."""
         ...
 
     # ── Iteration detection ───────────────────────────────────────
@@ -397,6 +408,46 @@ class ManifestSkillRuntime:
             },
         }
 
+    def evaluator_command_params(self, config: "ResearchConfig") -> dict[str, str]:
+        """Server-owned argv values; execution must override agent-supplied flags.
+
+        This is also used to render the suggested command, but prompt text alone
+        is NOT enforcement. No provider credential is exposed to the child.
+        """
+        if self.skill_id != "prompt-engineering":
+            return {}
+        from urllib.parse import urlsplit
+
+        from src.config import settings
+
+        params = getattr(config, "skill_params", None) or {}
+        scorer = params.get("scorer_url", "")
+        if not isinstance(scorer, str):
+            raise SkillConfigError("scorer_url must be a string")
+        if scorer:
+            url = urlsplit(scorer)
+            if (url.scheme not in {"http", "https"} or not url.hostname
+                    or url.username or url.password or url.fragment
+                    or any(c.isspace() or ord(c) < 32 for c in scorer)):
+                raise SkillConfigError("scorer_url must be an HTTP(S) endpoint without credentials")
+        demo = settings.demo_mode is True and str(settings.environment).lower() != "production"
+        return {"--eval": "eval_set.jsonl", "--scorer-url": scorer,
+                "--demo": "true" if demo else "false"}
+
+    def experiment_command(self, config: "ResearchConfig") -> str:
+        """Resolve the manifest command with explicit session evaluator wiring."""
+        import shlex
+
+        prompt = self._manifest.prompt
+        command = (prompt.experiment_command if prompt is not None else None) or ""
+        params = self.evaluator_command_params(config)
+        if params:
+            # Fixed packaged entrypoint; never copy or invoke workspace code.
+            command = ".venv/bin/python eval/run.py --prompt prompt.yaml"
+            for flag, value in params.items():
+                command += " " + flag + " " + shlex.quote(value)
+        return command.strip()
+
     def directive_prompt(self, config: "ResearchConfig") -> str:
         """Build the session-directing user prompt from the manifest.
 
@@ -429,7 +480,7 @@ class ManifestSkillRuntime:
                     (
                         f"{len(steps) + 1}. Experiment command "
                         "(run once per iteration):\n"
-                        f"```bash\n{prompt_cfg.experiment_command}\n```"
+                        f"```bash\n{self.experiment_command(config)}\n```"
                     )
                 )
         if steps:
@@ -481,7 +532,7 @@ class ManifestSkillRuntime:
         from src.core.orchestrator import PROMOTION_HANDOFF_INSTRUCTION
 
         parent_id = config.resumed_from
-        parent_insights = (parent or {}).get("insights", "") or ""
+        parent_insights = str((parent or {}).get("insights", "") or "")
         parent_best_iter = (parent or {}).get("best_iteration")
         parent_best_metric = (parent or {}).get("best_metric")
 
@@ -492,7 +543,7 @@ class ManifestSkillRuntime:
             metric_s = f"{pm:.4f}" if pm is not None else "—"
             gates = "✅" if training_gates_passed_from_iteration(it) else "❌"
             decision = it.get("decision", "?")
-            desc = (it.get("description") or "")[:150]
+            desc = str(it.get("description") or "")[:150]
             iter_lines.append(
                 f"  {num}. metric={metric_s} gates={gates} "
                 f"decision={decision} — {desc}"
@@ -513,10 +564,7 @@ class ManifestSkillRuntime:
                 f"\n**Insights from parent session:**\n{parent_insights.strip()}\n"
             )
 
-        prompt_cfg = self._manifest.prompt
-        experiment_cmd = (
-            prompt_cfg.experiment_command if prompt_cfg is not None else None
-        )
+        experiment_cmd = self.experiment_command(config)
         continue_block = ""
         if experiment_cmd:
             continue_block = (
@@ -604,17 +652,23 @@ class ManifestSkillRuntime:
         op = self._manifest.output_parser
         marker = op.iteration_marker or "ITERATION_RESULT:"
         if marker in raw_output:
-            return JSONMarkerParser().parse_iteration(
+            return cast(
+                Optional[dict[str, Any]],
+                JSONMarkerParser().parse_iteration(
+                    raw_output,
+                    session_nonce=session_nonce,
+                    nonce_field=op.nonce_field,
+                    require_signed_metrics=op.require_signed_metrics,
+                ),
+            )
+        return cast(
+            Optional[dict[str, Any]],
+            DelimitedKVParser().parse_iteration(
                 raw_output,
                 session_nonce=session_nonce,
                 nonce_field=op.nonce_field,
                 require_signed_metrics=op.require_signed_metrics,
-            )
-        return DelimitedKVParser().parse_iteration(
-            raw_output,
-            session_nonce=session_nonce,
-            nonce_field=op.nonce_field,
-            require_signed_metrics=op.require_signed_metrics,
+            ),
         )
 
     def marker_file_paths(self, config: "ResearchConfig") -> list[Path]:
@@ -733,53 +787,23 @@ class ManifestSkillRuntime:
         """Build the development-scope ``PromotionTarget`` from the manifest's
         ``promotion_target.primary``.
 
-        ARC-011 review C2 (2026-08-15) + P1-3: the declared ``kind`` must match
-        an implemented target. ``file_path`` → ``FilePathPromotionTarget``;
-        ``webhook`` and ``registry_api`` (with an endpoint) →
-        ``WebhookPromotionTarget`` (idempotent POST delivery + local
-        provenance copy). Every other kind (``artifact_store`` /
-        ``git_branch``), or a ``registry_api`` without an endpoint, raises
-        ``SkillConfigError`` instead of silently downgrading to a file write.
+        ARC-011 review C2 (2026-08-15) + P1-3, centralized by ARC-012
+        P7-007: resolution lives in ONE site —
+        ``promotion_target.promotion_target_from_manifest`` — shared with the
+        API's manual promotion path and the orchestrator's auto-promote path.
+        The declared ``kind`` must match an implemented target (``file_path``
+        with its declared ``path_template`` / ``webhook`` / ``registry_api``
+        with an endpoint); anything else raises ``SkillConfigError`` instead
+        of silently downgrading to a file write.
         """
-        from src.core.promotion_target import (
-            FilePathPromotionTarget,
-            WebhookPromotionTarget,
-        )
+        from src.core.promotion_target import promotion_target_from_manifest
 
-        primary = self._manifest.promotion_target.primary
-        kind = getattr(primary, "kind", None)
-        if kind == "file_path":
-            # FilePathPromotionTarget's path derivation is parameterized by the
-            # manifest's path_template at the runtime boundary (P3 concern);
-            # for Phase 2 the default target reproduces the incumbent paths.
-            return FilePathPromotionTarget()
-        if kind == "webhook":
-            return WebhookPromotionTarget(
-                endpoint=primary.endpoint,
-                auth_env_var=primary.auth_secret or None,
-                timeout_s=getattr(primary, "timeout_s", 10.0),
-                retries=getattr(primary, "retries", 2),
-            )
-        if kind == "registry_api":
-            endpoint = getattr(primary, "endpoint", None)
-            if not endpoint:
-                raise SkillConfigError(
-                    f"skill {self._manifest.id!r} declares "
-                    "promotion_target.kind='registry_api' without an endpoint; "
-                    "refusing to build a webhook promotion with nowhere to "
-                    "deliver"
-                )
-            return WebhookPromotionTarget(
-                endpoint=endpoint,
-                auth_env_var=getattr(primary, "auth_secret", None) or None,
-            )
-        raise SkillConfigError(
-            f"skill {self._manifest.id!r} declares "
-            f"promotion_target.kind={kind!r}, which has no wired "
-            "PromotionTarget implementation (file_path / webhook / "
-            "registry_api are); refusing to silently downgrade to a "
-            "file-path promotion"
-        )
+        try:
+            return promotion_target_from_manifest(self._manifest)
+        except SkillConfigError:
+            raise
+        except ValueError as exc:
+            raise SkillConfigError(str(exc)) from exc
 
     # ── Output parsing ────────────────────────────────────────────
     def output_parser(self) -> "OutputParser":

@@ -190,8 +190,13 @@ async def test_workspace_manifest_omits_nonce(monkeypatch, tmp_path):
     )
 
     _configure(monkeypatch, tmp_path)
-    # runs_dir is a derived property: {workspace_root}/runs/autotuner.
-    runs_dir = tmp_path / "workspace" / "runs" / "autotuner"
+    # ARC-012 P7-005/P7-010: a skill session derives its workspace from the
+    # skill's session_path_template (runs/<skill>/<subject>/<variant> under
+    # the workspace root) and must name an installed skill.
+    manifest_dir = (
+        tmp_path / "workspace" / "runs" / "prompt-engineering" / "default"
+        / "production"
+    )
 
     fake_orchestrator = FakeOrchestrator(None)
     monkeypatch.setattr(
@@ -210,9 +215,12 @@ async def test_workspace_manifest_omits_nonce(monkeypatch, tmp_path):
     manager = session_manager_module.SessionManager(store)
     try:
         await manager.start_session(
-            instrument="DOGE_USDT",
-            timeframe="15m",
-            model_type="direction",
+            instrument="default",
+            timeframe="production",
+            model_type="",
+            skill_id="prompt-engineering",
+            subject_id="default",
+            variant="production",
             max_iterations=1,
         )
         await asyncio.sleep(0)
@@ -223,9 +231,7 @@ async def test_workspace_manifest_omits_nonce(monkeypatch, tmp_path):
     assert cfg is not None
     assert cfg.session_nonce and len(cfg.session_nonce) == 64
 
-    manifest_path = (
-        runs_dir / "DOGE_USDT_15m" / "direction" / "research_manifest.json"
-    )
+    manifest_path = manifest_dir / "research_manifest.json"
     assert manifest_path.is_file(), "workspace manifest must still be written"
     text = manifest_path.read_text(encoding="utf-8")
     assert '"session_nonce": null' in text

@@ -221,6 +221,16 @@ _BASE_TRANSITIONS: Dict[Tuple[SessionState, SessionEvent], _TransitionSpec] = {
         transitional=SessionState.FAILING,
         broadcast_event="research_failed",
     ),
+    # ARC-012 P7-009: the runtime task behind a paused session can die (crash
+    # in the pause poll, killed wrapper) — a ``paused`` row whose task is gone
+    # is unresumable, so FAIL is legal from ``paused`` exactly as from
+    # ``running``. Without this edge the crash left the row ``paused`` forever
+    # (a zombie indistinguishable from a genuinely paused session).
+    (SessionState.PAUSED, SessionEvent.FAIL): _TransitionSpec(
+        terminal=SessionState.FAILED,
+        transitional=SessionState.FAILING,
+        broadcast_event="research_failed",
+    ),
     # startup recovery (the caller selects resumable vs interrupted via
     # ``recovery_target`` and interrupts runtime commands as a side-effect).
     (SessionState.RUNNING, SessionEvent.RESTART_RECOVER): _TransitionSpec(

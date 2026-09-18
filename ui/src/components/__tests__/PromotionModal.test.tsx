@@ -9,12 +9,13 @@
 // synchronously with a canned preview, exercising the render branch without a
 // QueryClient or network.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { PromotionPreview } from '../../api/client';
 
 // Mock the mutation hooks BEFORE importing the component.
 const _previewStore: { current: PromotionPreview | null } = { current: null };
+const _confirmSeen: unknown[] = [];
 vi.mock('../../hooks/useResearch', () => ({
   usePreviewPromotion: () => ({
     mutate: (_args: unknown, opts: { onSuccess?: (d: PromotionPreview) => void }) => {
@@ -26,7 +27,10 @@ vi.mock('../../hooks/useResearch', () => ({
     error: null,
   }),
   useConfirmPromotion: () => ({
-    mutate: (_args: unknown, opts: { onSuccess?: () => void }) => opts.onSuccess?.(),
+    mutate: (args: unknown, opts?: { onSuccess?: () => void }) => {
+      _confirmSeen.push(args);
+      opts?.onSuccess?.();
+    },
     reset: () => {},
     isPending: false,
     isError: false,
@@ -82,6 +86,7 @@ function cannedPreview(overrides: Partial<PromotionPreview> = {}): PromotionPrev
 describe('PromotionModal target_kind branching (P3-026)', () => {
   beforeEach(() => {
     _previewStore.current = null;
+    _confirmSeen.length = 0;
   });
 
   it('shows the registry API target label when target_kind = registry_api', async () => {
@@ -124,5 +129,32 @@ describe('PromotionModal target_kind branching (P3-026)', () => {
     render(<PromotionModal researchId="r1" operations={minimalOperations()} onClose={() => {}} />);
     await user.click(screen.getByText('Preview'));
     expect(screen.getByText('Target')).toBeInTheDocument();
+  });
+
+  it('binds production confirm to the previewed candidate', async () => {
+    const user = userEvent.setup();
+    render(<PromotionModal researchId="r1" operations={minimalOperations()} onClose={() => {}} />);
+    await user.click(screen.getByRole('button', { name: /production/i }));
+    _previewStore.current = cannedPreview({
+      target_kind: 'file_path',
+      scope: 'production',
+      promotion_scope: 'production',
+      iteration: 7,
+      config_snapshot_sha256: 'a'.repeat(64),
+      target_identity: 'b'.repeat(64),
+    });
+    await user.click(screen.getByText('Preview'));
+    expect(await screen.findByText('Approved candidate (signed)')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/approver/i), { target: { value: 'alice' } });
+    fireEvent.change(screen.getByLabelText(/reason/i), { target: { value: 'ship' } });
+    await user.click(screen.getByRole('button', { name: /confirm production promotion/i }));
+    const request = (_confirmSeen[0] as { request: Record<string, Record<string, unknown>> }).request;
+    expect(request.approval).toMatchObject({
+      approved: true,
+      method: 'hmac-sha256-v2',
+      iteration: 7,
+      config_snapshot_sha256: 'a'.repeat(64),
+      target_identity: 'b'.repeat(64),
+    });
   });
 });

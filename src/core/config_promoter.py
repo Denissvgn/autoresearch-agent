@@ -36,6 +36,10 @@ from src.core.development_inference_validation import (
 from src.core.development_signal_health import build_development_signal_health
 from src.core.gate_status import training_gates_passed_from_iteration
 from src.core.legacy_alias import model_type_to_skill_id
+from src.core.promotion_approval import (
+    target_identity,
+    validate_candidate_binding,
+)
 from src.core.promotion_target import (
     FilePathPromotionTarget,
     PromotionTarget,
@@ -124,6 +128,14 @@ class ConfigPromoter:
         # the store and get the default.
         self._target: "PromotionTarget" = target or FilePathPromotionTarget()
 
+    def _target_descriptor(self, path: str) -> Dict[str, Any]:
+        from src.core.promotion_target import WebhookPromotionTarget
+
+        descriptor = {"kind": "file_path", "target_path": path}
+        if isinstance(self._target, WebhookPromotionTarget):
+            descriptor.update(kind="webhook", endpoint=self._target.endpoint)
+        return descriptor
+
     async def preview(
         self,
         research_id: str,
@@ -146,6 +158,10 @@ class ConfigPromoter:
         model_type = session["model_type"]
         instrument = session["instrument"]
         timeframe = session["timeframe"]
+        # ARC-012 P7-007/D1: the canonical identity for path derivation — a
+        # non-ML session has model_type="" and derives its promotion-path
+        # segment from skill_id (never the literal "skill").
+        skill_id = session.get("skill_id") or ""
         phase_state = build_phase_state(
             session=session,
             iterations=await self._promotion_iterations(research_id, best),
@@ -165,7 +181,7 @@ class ConfigPromoter:
         config_snapshot_sha256 = self._sha256_text(best_yaml)
 
         target_path = self._get_target_path(
-            model_type, instrument, timeframe,
+            model_type, instrument, timeframe, skill_id=skill_id,
         )
 
         # Read current config if it exists
@@ -361,6 +377,7 @@ class ConfigPromoter:
             "target_path": target_path,
             "new_config": best_yaml,
             "config_snapshot_sha256": config_snapshot_sha256,
+            "target_identity": target_identity(self._target_descriptor(target_path)),
             "current_config": previous_yaml,
             "best_metric": best["primary_metric"],
             "training_gates_passed": training_gates_passed,
@@ -492,6 +509,13 @@ class ConfigPromoter:
             )
 
         target_path = preview["target_path"]
+        # Persist routing with the promotion, so rollback survives restarts and
+        # manifest endpoint changes. Store only the auth environment variable
+        # name, never its secret value.
+        metadata["target_descriptor"] = self._target_descriptor(target_path)
+        from src.core.promotion_target import WebhookPromotionTarget
+        if isinstance(self._target, WebhookPromotionTarget):
+            metadata["target_auth_env_var"] = self._target.auth_env_var
         model_type = preview["model_type"]
         instrument = preview["instrument"]
         timeframe = preview["timeframe"]
@@ -606,6 +630,10 @@ class ConfigPromoter:
             scope=scope,
             approval=approval,
         )
+        # Bind to the exact preview used below, not an earlier API lookup of
+        # the winner. A later winner cannot silently replace this candidate.
+        if scope == PRODUCTION_PROMOTION_SCOPE:
+            validate_candidate_binding(approval, preview)
         if not preview["training_gates_passed"]:
             raise ValueError(
                 "Cannot promote: best iteration did not pass training gates"
@@ -964,7 +992,36 @@ class ConfigPromoter:
             if os.path.exists(target_path)
             else None
         )
-        await self._write_text_file(target_path, previous_yaml)
+        from src.core.promotion_target import WebhookPromotionTarget
+
+        descriptor = promotion_metadata.get("target_descriptor")
+        if descriptor:
+            # Validate persisted identity before using it for routing.
+            target_identity(descriptor)
+            if descriptor["target_path"] != target_path:
+                raise ValueError("Rollback target does not match promotion provenance")
+            if descriptor["kind"] == "webhook":
+                restore_target = WebhookPromotionTarget(
+                    endpoint=descriptor["endpoint"],
+                    auth_env_var=promotion_metadata.get("target_auth_env_var"),
+                )
+                await restore_target.restore(
+                    target_path, previous_yaml, promotion_id=promotion["id"],
+                )
+            else:
+                await FilePathPromotionTarget().write(target_path, previous_yaml)
+        else:
+            # Legacy records lack durable routing. Only accept a provable file
+            # destination; never claim a local webhook snapshot is a rollback.
+            expected_file_path = FilePathPromotionTarget().target_path(
+                model_type=model_type, instrument=instrument, timeframe=timeframe,
+            )
+            if Path(target_path).resolve() != Path(expected_file_path).resolve():
+                raise ValueError(
+                    "Legacy promotion has no durable rollback target; "
+                    "restore remotely and reconcile manually"
+                )
+            await self._write_text_file(target_path, previous_yaml)
 
         rollback_metadata_path = self._rollback_metadata_sidecar_path(
             target_path, promotion["id"]
@@ -2789,11 +2846,13 @@ class ConfigPromoter:
     def _get_target_path(
         self,
         model_type: str, instrument: str, timeframe: str,
+        skill_id: str = "",
     ) -> str:
         """Determine the host config file path for promotion."""
         return self._target.target_path(
             model_type=model_type,
             instrument=instrument,
             timeframe=timeframe,
+            skill_id=skill_id,
         )
 

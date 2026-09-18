@@ -4,6 +4,7 @@ import type {
   ProductionOperations,
   PromotionApproval,
   PromotionPreview,
+  PromotionPreviewRequest,
   PromotionScope,
   PromotionScopeRequest,
 } from '../api/client';
@@ -24,15 +25,37 @@ interface Props {
 
 const SCOPES: PromotionScope[] = ['development', 'paper', 'canary', 'production'];
 
-function requestFor(scope: PromotionScope, approval: PromotionApproval): PromotionScopeRequest {
+function requestFor(scope: PromotionScope, approval: PromotionApproval): PromotionScopeRequest;
+function requestFor(scope: PromotionScope, approval: PromotionApproval, preview: PromotionPreview | null): PromotionScopeRequest;
+function requestFor(
+  scope: PromotionScope,
+  approval: PromotionApproval,
+  preview: PromotionPreview | null = null,
+): PromotionScopeRequest | PromotionPreviewRequest {
+  // v2: production confirm binds the signature to the exact approved preview —
+  // iteration + config digest + target identity — so a newer winner cannot ride
+  // an older approval. Preview stays unsigned: it is the discovery step an
+  // operator signs from. The modal's generic 'manual' placeholder counts as
+  // unset for production so the default method is the v2 HMAC scheme.
+  const rawMethod = approval.method?.trim();
+  const method = rawMethod && rawMethod !== 'manual'
+    ? rawMethod
+    : scope === 'production' ? 'hmac-sha256-v2' : 'manual';
   const cleanedApproval: PromotionApproval | null = scope === 'development'
     ? null
     : {
         approver: approval.approver?.trim() || undefined,
         reason: approval.reason?.trim() || undefined,
-        method: approval.method?.trim() || 'manual',
+        method,
         signature: approval.signature?.trim() || undefined,
         approved: true,
+        ...(scope === 'production' && preview
+          ? {
+              iteration: preview.iteration,
+              config_snapshot_sha256: preview.config_snapshot_sha256,
+              target_identity: preview.target_identity,
+            }
+          : {}),
       };
   return { scope, approval: cleanedApproval };
 }
@@ -69,7 +92,7 @@ export default function PromotionModal({ researchId, operations, onClose }: Prop
 
   const handleConfirm = () => {
     confirmMut.mutate(
-      { id: researchId, request: requestFor(scope, approval) },
+      { id: researchId, request: requestFor(scope, approval, preview) as PromotionScopeRequest },
       { onSuccess: () => onClose() }
     );
   };
@@ -144,6 +167,21 @@ export default function PromotionModal({ researchId, operations, onClose }: Prop
                 className="mt-1 w-full border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-gray-100 outline-none focus:border-indigo-500"
               />
             </label>
+          </div>
+        )}
+
+        {scope === 'production' && preview && (
+          <div className="border border-gray-800 bg-gray-950 px-3 py-2 text-xs text-gray-300">
+            <div className="font-medium text-gray-200">Approved candidate (signed)</div>
+            <div className="mt-1 font-mono break-all">
+              iteration #{preview.iteration}
+              {preview.config_snapshot_sha256 ? ` · config ${preview.config_snapshot_sha256.slice(0, 12)}…` : ''}
+              {preview.target_identity ? ` · target ${preview.target_identity.slice(0, 12)}…` : ''}
+            </div>
+            <div className="mt-1 text-gray-400">
+              Sign exactly these values with method hmac-sha256-v2. Confirm re-checks them
+              server-side; a changed winner is rejected instead of promoted.
+            </div>
           </div>
         )}
 

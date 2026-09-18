@@ -69,8 +69,15 @@ class PromotionTarget(Protocol):
         model_type: str,
         instrument: str,
         timeframe: str,
+        skill_id: str = "",
     ) -> str:
-        """Derive the host config file path for a promoted config."""
+        """Derive the host config file path for a promoted config.
+
+        ``skill_id`` (ARC-012 D1) is the canonical identity fallback: when the
+        session has no legacy ``model_type`` alias, the path segment derives
+        from the skill id — never the literal ``"skill"`` (which would
+        collide every non-ML skill onto one directory).
+        """
         ...
 
     def metadata_sidecar_path(
@@ -145,7 +152,27 @@ class FilePathPromotionTarget:
     verbatim from the ``ConfigPromoter`` ``@staticmethod`` / module-level
     helpers; behavior is identical. Future targets (e.g. a git-ops target, an
     object-store target) will implement the same protocol.
+
+    ARC-012 P7-007/D4: when constructed with the skill's declared
+    ``path_template``, ``target_path`` renders it (closed placeholder set,
+    sanitized request-supplied segments). A relative template resolves under
+    the host-configs root; an absolute one (the G6 loader resolves
+    ``{settings.host_configs_path}`` before validation) is taken as-is.
+    Without a template the incumbent generic layout applies, with the D1
+    slug rule: the path segment is the legacy ``model_type`` alias when one
+    exists, else the ``skill_id`` — never the literal ``"skill"``.
     """
+
+    def __init__(self, *, path_template: Optional[str] = None) -> None:
+        from src.core.skill_paths import validate_path_template
+
+        if path_template is not None:
+            validate_path_template(path_template)
+        self._path_template = path_template
+
+    @property
+    def path_template(self) -> Optional[str]:
+        return self._path_template
 
     def target_path(
         self,
@@ -153,16 +180,25 @@ class FilePathPromotionTarget:
         model_type: str,
         instrument: str,
         timeframe: str,
+        skill_id: str = "",
     ) -> str:
-        """Determine the host config file path for promotion.
+        """Determine the host config file path for promotion."""
+        if self._path_template:
+            from src.core.skill_paths import render_path_template
 
-        Generic layout: ``<host_configs>/<skill_id>/<subject>_<variant>.yaml``
-        under the host configs root.
-        """
+            rendered = render_path_template(
+                self._path_template,
+                skill_id=skill_id or model_type or "skill",
+                subject_id=instrument,
+                variant=timeframe,
+            )
+            if os.path.isabs(rendered):
+                return rendered
+            return os.path.join(settings.host_configs_path, rendered)
         host_configs = settings.host_configs_path
         return os.path.join(
             host_configs,
-            str(model_type or "skill").replace("/", "-"),
+            str(model_type or skill_id or "skill").replace("/", "-"),
             f"{instrument}_{timeframe}.yaml",
         )
 
@@ -273,10 +309,11 @@ class WebhookPromotionTarget:
         model_type: str,
         instrument: str,
         timeframe: str,
+        skill_id: str = "",
     ) -> str:
         path = os.path.join(
             self.local_root,
-            str(model_type or "skill").replace("/", "-"),
+            str(model_type or skill_id or "skill").replace("/", "-"),
             f"{instrument}_{timeframe}.yaml",
         )
         self._primary_paths.add(path)
@@ -326,14 +363,26 @@ class WebhookPromotionTarget:
         )
 
     async def write(self, path: str, content: str) -> None:
-        """Atomic local write; deliver to the endpoint on the primary path."""
-        await asyncio.to_thread(_atomic_write_text, path, content)
+        """Deliver primary configs before advancing the local provenance copy."""
         if path in self._primary_paths:
             await self.deliver(path, content)
+        await asyncio.to_thread(_atomic_write_text, path, content)
+
+    async def restore(self, path: str, content: str, *, promotion_id: int) -> None:
+        """Explicit remote restore, independent of this instance's path cache.
+
+        A rollback gets its own stable operation key: reusing the original
+        config's promotion key could make an idempotent receiver ignore A
+        when restoring A after B.
+        """
+        await self.deliver(path, content, operation=f"rollback:{promotion_id}")
+        await asyncio.to_thread(_atomic_write_text, path, content)
 
     # ── Webhook delivery ──────────────────────────────────────────────────
 
-    async def deliver(self, path: str, content: str) -> dict[str, Any]:
+    async def deliver(
+        self, path: str, content: str, *, operation: str = "promote",
+    ) -> dict[str, Any]:
         """POST the promoted config to the endpoint (retries, idempotent key).
 
         Raises :class:`WebhookDeliveryError` after the final failed attempt —
@@ -346,7 +395,7 @@ class WebhookPromotionTarget:
         import httpx
 
         idempotency_key = hashlib.sha256(
-            f"{path}:{content}".encode()
+            f"{operation}:{path}:{content}".encode()
         ).hexdigest()[:32]
         headers = {
             "Content-Type": "application/json",
@@ -397,6 +446,64 @@ class WebhookPromotionTarget:
 
 class WebhookDeliveryError(RuntimeError):
     """A webhook promotion delivery failed after all retries (fail-closed)."""
+
+
+def promotion_target_from_manifest(skill_manifest: Any) -> "PromotionTarget":
+    """Build the development-scope ``PromotionTarget`` from a skill manifest's
+    ``promotion_target.primary`` (ARC-012 P7-007).
+
+    THE single resolution site — the API's manual promotion path
+    (``_promoter_for_session``), the orchestrator's auto-promote path, and
+    ``SkillRuntime.promotion_target()`` all come through here, so a declared
+    target kind can never be wired one way on one path and another way on the
+    other. ARC-011 review C2: the declared ``kind`` must match an implemented
+    target — anything else raises ``ValueError`` (wrapped as
+    ``SkillConfigError`` by ``skill_runtime``) instead of silently downgrading
+    to a file write.
+    """
+    primary = getattr(
+        getattr(skill_manifest, "promotion_target", None), "primary", None
+    )
+    if primary is None:
+        raise ValueError(
+            f"skill {getattr(skill_manifest, 'id', '?')!r} declares no "
+            "promotion_target.primary; refusing to guess a promotion target"
+        )
+    kind = getattr(primary, "kind", None)
+    if kind == "file_path":
+        # D4: the skill's declared path_template drives the layout; the
+        # manifest schema already validated it at skill-load time.
+        template = getattr(primary, "path_template", None)
+        return FilePathPromotionTarget(
+            path_template=template if template else None
+        )
+    if kind == "webhook":
+        return WebhookPromotionTarget(
+            endpoint=primary.endpoint,
+            auth_env_var=primary.auth_secret or None,
+            timeout_s=getattr(primary, "timeout_s", 10.0),
+            retries=getattr(primary, "retries", 2),
+        )
+    if kind == "registry_api":
+        endpoint = getattr(primary, "endpoint", None)
+        if not endpoint:
+            raise ValueError(
+                f"skill {getattr(skill_manifest, 'id', '?')!r} declares "
+                "promotion_target.kind='registry_api' without an endpoint; "
+                "refusing to build a webhook promotion with nowhere to "
+                "deliver"
+            )
+        return WebhookPromotionTarget(
+            endpoint=endpoint,
+            auth_env_var=getattr(primary, "auth_secret", None) or None,
+        )
+    raise ValueError(
+        f"skill {getattr(skill_manifest, 'id', '?')!r} declares "
+        f"promotion_target.kind={kind!r}, which has no wired "
+        "PromotionTarget implementation (file_path / webhook / "
+        "registry_api are); refusing to silently downgrade to a "
+        "file-path promotion"
+    )
 
 
 class SkillRegistryPromotionTarget:
@@ -509,4 +616,5 @@ __all__ = [
     "SkillRegistryPromotionTarget",
     "WebhookDeliveryError",
     "WebhookPromotionTarget",
+    "promotion_target_from_manifest",
 ]

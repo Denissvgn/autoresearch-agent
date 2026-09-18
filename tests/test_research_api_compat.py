@@ -44,6 +44,12 @@ class FakeSessionManager:
             "instrument": kwargs.get("instrument", ""),
             "timeframe": kwargs.get("timeframe", ""),
             "model_type": kwargs.get("model_type", ""),
+            # ARC-012 P7-005: the real store now persists the canonical
+            # identity natively — mirror it (a non-ML row carries
+            # model_type="" and its skill_id only here).
+            "skill_id": kwargs.get("skill_id", ""),
+            "subject_id": kwargs.get("subject_id", ""),
+            "variant": kwargs.get("variant", ""),
             "tag": kwargs.get("tag", "test"),
             "status": "running",
             "quick_mode": kwargs.get("quick_mode", False),
@@ -57,7 +63,7 @@ class FakeSessionManager:
             "completed_at": None,
             "error_message": None,
             "resumed_from": None,
-            "skill_name": kwargs.get("model_type", ""),
+            "skill_name": kwargs.get("skill_id", "") or kwargs.get("model_type", ""),
         }
 
     async def start_pipeline(self, **kwargs: Any) -> Dict[str, Any]:
@@ -152,9 +158,17 @@ def auth_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {API_TOKEN}"}
 
 
-# --- GEN-001: legacy request → 201 with dual-shape body ---
+# --- GEN-001: legacy request shape is translated, then skill-checked ---
 
-def test_legacy_start_returns_201_with_dual_shape(client: TestClient):
+def test_legacy_start_of_uninstalled_trio_returns_404_naming_translated_skill(
+    client: TestClient,
+):
+    """ARC-012 P7-010 / D3: a legacy ``{model_type: direction}`` request is
+    translated through the alias map (→ ``ml-direction``) and then faces the
+    same installed-skill check as a canonical request. ``ml-direction`` is
+    not installed → 404 ``skill_not_found`` naming the translated id — never
+    a 201 for a session that would crash on its first tick (blocker B2/S1),
+    and never a special "legacy rejected" error."""
     response = client.post(
         "/api/v1/research/start",
         headers=auth_headers(),
@@ -164,19 +178,41 @@ def test_legacy_start_returns_201_with_dual_shape(client: TestClient):
             "model_type": "direction",
         },
     )
+    assert response.status_code == 404
+    detail = response.json()["detail"]
+    assert detail["error"] == "skill_not_found"
+    assert detail["skill_id"] == "ml-direction"
+    assert "prompt-engineering" in detail["available"]
+
+
+def test_legacy_start_of_installed_skill_returns_201_with_dual_shape(
+    client: TestClient,
+):
+    """The legacy shape still starts a session when it names an installed
+    skill (identity fallback: a non-alias ``model_type`` is its own skill
+    id). Per D1 the non-ML skill has no legacy alias, so the dual-shape
+    response carries ``model_type=""`` — the caller's legacy value lost to
+    the canonical identity, and the conflict is audited."""
+    response = client.post(
+        "/api/v1/research/start",
+        headers=auth_headers(),
+        json={
+            "instrument": "default",
+            "timeframe": "production",
+            "model_type": "prompt-engineering",
+        },
+    )
     assert response.status_code == 201
     body = response.json()
-    # Legacy fields preserved.
-    assert body["instrument"] == "DOGE_USDT"
-    assert body["timeframe"] == "15m"
-    assert body["model_type"] == "direction"
-    # Canonical fields populated (dual-shape).
-    assert body["skill_id"] == "ml-direction"
-    assert body["subject_id"] == "DOGE_USDT"
-    assert body["variant"] == "15m"
-    # Links block.
+    # Canonical fields.
+    assert body["skill_id"] == "prompt-engineering"
+    assert body["subject_id"] == "default"
+    assert body["variant"] == "production"
+    # Legacy fields derived from canonical (dual-shape, P7-006/D1).
+    assert body["model_type"] == ""
+    assert body["instrument"] == "default"
+    assert body["timeframe"] == "production"
     assert "links" in body
-    assert body["links"]["self"] == "/research/res_test0001"
 
 
 # --- Canonical request → 201 with dual-shape body ---
@@ -197,8 +233,9 @@ def test_canonical_start_returns_201_with_dual_shape(client: TestClient):
     assert body["skill_id"] == "prompt-engineering"
     assert body["subject_id"] == "default"
     assert body["variant"] == "production"
-    # Legacy fields derived from canonical (dual-shape).
-    assert body["model_type"] == "prompt-engineering"
+    # Legacy fields derived from canonical (dual-shape). ARC-012 P7-006/D1:
+    # a non-ML skill has no legacy alias — model_type is "", never the id.
+    assert body["model_type"] == ""
     assert body["instrument"] == "default"
     assert body["timeframe"] == "production"
 
@@ -286,8 +323,10 @@ def test_conflicting_shapes_canonical_overrides_legacy(client: TestClient):
     )
     assert response.status_code == 201
     body = response.json()
-    # Canonical values must win over the conflicting legacy ones.
-    assert body["model_type"] == "prompt-engineering", (
+    # Canonical values must win over the conflicting legacy ones. P7-006/D1:
+    # the canonical model_type of a non-ML skill is "" (no legacy alias) —
+    # the conflicting legacy "volatility" must not survive.
+    assert body["model_type"] == "", (
         f"canonical lost to conflicting legacy: model_type={body['model_type']}"
     )
     assert body["instrument"] == "default"
@@ -464,7 +503,8 @@ def test_canonical_fields_forwarded_to_session_manager(client: TestClient):
     assert captured["subject_id"] == "default"
     assert captured["variant"] == "production"
     # The translated legacy shape is still passed alongside (dual shape).
-    assert captured["model_type"] == "prompt-engineering"
+    # P7-006/D1: a non-ML skill translates to model_type="" — never the id.
+    assert captured["model_type"] == ""
     assert captured["instrument"] == "default"
     assert captured["timeframe"] == "production"
 
@@ -498,30 +538,31 @@ def test_canonical_params_recorded_in_start_audit(client: TestClient):
     assert metadata["variant"] == "production"
 
 
-def test_legacy_start_forwards_no_canonical_fields(client: TestClient):
-    """C1 back-compat: a legacy request forwards no canonical fields (None),
-    so legacy sessions keep the transitional runtime and flat HPO knobs."""
+def test_legacy_start_translates_to_canonical_fields(client: TestClient):
+    """ARC-012 P7-010/D3: a legacy request is translated to the canonical
+    shape (alias map, then legacy identity fields) *before* it reaches the
+    session manager — the manager always sees a skill_id, never a
+    model_type-only payload that would 201-then-crash (B2)."""
     response = client.post(
         "/api/v1/research/start",
         headers=auth_headers(),
         json={
-            "instrument": "DOGE_USDT",
-            "timeframe": "15m",
-            "model_type": "direction",
+            "instrument": "default",
+            "timeframe": "production",
+            "model_type": "prompt-engineering",
         },
     )
     assert response.status_code == 201
     captured = _session_manager().captured_kwargs
-    assert captured["skill_id"] is None
-    assert captured["skill_params"] is None
-    assert captured["subject_id"] is None
-    assert captured["variant"] is None
-    # The legacy audit metadata carries no canonical keys (None extras
-    # are dropped by record_api_audit_event).
+    assert captured["skill_id"] == "prompt-engineering"
+    assert captured["subject_id"] == "default"
+    assert captured["variant"] == "production"
+    # Non-ML skills carry no legacy alias (D1): model_type arrives empty.
+    assert captured["model_type"] == ""
+    # The audit metadata records the winning canonical identity.
     start_events = [
         e for e in _test_store.audit_events
         if e.get("action") == "research.start"
     ]
     metadata = start_events[0]["request_metadata"]
-    assert "skill_id" not in metadata
-    assert "skill_params" not in metadata
+    assert metadata["skill_id"] == "prompt-engineering"

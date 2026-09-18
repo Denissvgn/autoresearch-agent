@@ -127,23 +127,27 @@ async def _start_and_capture(
 
 
 async def test_canonical_fields_reach_research_config(monkeypatch, tmp_path):
-    """Canonical skill_params reach ResearchConfig verbatim."""
+    """Canonical skill_params reach ResearchConfig verbatim.
+
+    ARC-012 P7-010: the skill id must be an *installed* skill (validation at
+    start), so the wiring fixture uses the bundled ``prompt-engineering``
+    instead of the uninstalled legacy ``ml-direction``."""
     _configure(monkeypatch, tmp_path)
     session, orch = await _start_and_capture(
         monkeypatch,
         tmp_path,
-        skill_id="ml-direction",
-        skill_params={"eval_set": "eval.jsonl"},
-        subject_id="DOGE_USDT",
-        variant="15m",
+        skill_id="prompt-engineering",
+        skill_params={"eval_set": "eval_set.jsonl"},
+        subject_id="default",
+        variant="production",
     )
     assert orch.run_called
     cfg = orch.captured_config
     assert cfg is not None
-    assert cfg.skill_id == "ml-direction"
-    assert cfg.subject_id == "DOGE_USDT"
-    assert cfg.variant == "15m"
-    assert cfg.skill_params == {"eval_set": "eval.jsonl"}
+    assert cfg.skill_id == "prompt-engineering"
+    assert cfg.subject_id == "default"
+    assert cfg.variant == "production"
+    assert cfg.skill_params == {"eval_set": "eval_set.jsonl"}
 
 
 async def test_skill_params_win_over_legacy_flat_fields(monkeypatch, tmp_path):
@@ -153,20 +157,23 @@ async def test_skill_params_win_over_legacy_flat_fields(monkeypatch, tmp_path):
     _, orch = await _start_and_capture(
         monkeypatch,
         tmp_path,
-        skill_id="ml-direction",
-        skill_params={"enable_hpo": False, "hpo_trials": 5},
+        skill_id="prompt-engineering",
+        skill_params={"eval_set": "eval_set.jsonl"},
     )
     cfg = orch.captured_config
     assert cfg is not None
-    assert cfg.skill_params == {"enable_hpo": False, "hpo_trials": 5}
+    assert cfg.skill_params == {"eval_set": "eval_set.jsonl"}
 
-async def test_legacy_start_keeps_canonical_defaults(monkeypatch, tmp_path):
-    """Back-compat: a legacy-shape start (no canonical fields) leaves
-    skill_id empty and skill_params a plain empty dict."""
+async def test_legacy_start_without_skill_id_is_refused(monkeypatch, tmp_path):
+    """ARC-012 P7-010 (B2): a legacy-shape start (``model_type`` only, no
+    ``skill_id``) can no longer create a session — the runtime is fully
+    manifest-driven, so such a session would 201 and then crash. The refusal
+    happens in ``start_session`` (nothing persisted, nothing spawned); the
+    API layer additionally translates legacy requests through the alias map
+    (D3) before they ever get here."""
+    from src.core.skill_runtime import SkillConfigError
+
     _configure(monkeypatch, tmp_path)
-    _, orch = await _start_and_capture(monkeypatch, tmp_path)
-    cfg = orch.captured_config
-    assert cfg is not None
-    assert cfg.skill_id == ""
-    assert cfg.skill_params == {}
+    with pytest.raises(SkillConfigError, match="no skill_id"):
+        await _start_and_capture(monkeypatch, tmp_path)
 

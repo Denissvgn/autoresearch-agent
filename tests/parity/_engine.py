@@ -34,8 +34,12 @@ if str(SERVICE_ROOT) not in sys.path:
 WORKSPACE_TOKEN = "<workspace>"
 HOST_CONFIGS_TOKEN = "<host_configs>"
 
-# Keys whose values are redacted before comparison (volatile / non-deterministic).
-_REDACT_KEY_RE = re.compile(r"(sha256|_sha\d*$|_at$|^at$|timestamp|run_id$)", re.IGNORECASE)
+# Keys whose values are redacted before comparison (volatile /
+# non-deterministic). ``_identity`` covers the derived target hash.
+_REDACT_KEY_RE = re.compile(
+    r"(sha256|_sha\d*$|_identity$|_at$|^at$|timestamp|run_id$)",
+    re.IGNORECASE,
+)
 
 # Keys dropped entirely before comparison. These are non-deterministic secrets
 # whose mere presence (let alone value) is not part of the behavioral parity

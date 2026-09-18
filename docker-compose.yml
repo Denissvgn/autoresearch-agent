@@ -32,14 +32,13 @@ services:
   autoresearch:
     build: .
     ports:
-      - "8030:8000"
+      - "${AUTORESEARCH_BIND_HOST:-127.0.0.1}:${AUTORESEARCH_PORT:-8030}:8000"
     env_file:
       - .env
     environment:
-      # Default DSN → the bundled Postgres. An explicit value in .env wins
-      # (compose merges env_file first, then this environment block — so
-      # clear it there to opt back into SQLite).
-      AUTORESEARCH_DATABASE_URL: postgresql://autoresearch:autoresearch@postgres:5432/autoresearch
+      # Interpolate from the shell/.env: environment overrides env_file values.
+      # Use '-' (unset only), NOT ':-': an explicit empty DSN selects SQLite.
+      AUTORESEARCH_DATABASE_URL: "${AUTORESEARCH_DATABASE_URL-postgresql://autoresearch:autoresearch@postgres:5432/autoresearch}"
     volumes:
       - workspace-data:/app/workspace
       - host-configs:/host/configs

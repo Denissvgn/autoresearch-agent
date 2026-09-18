@@ -412,7 +412,7 @@ def _consistency_failed(row: Dict[str, Any]) -> bool:
 
 
 def _replay_status(metrics: Dict[str, Any]) -> str:
-    replay = (
+    raw_replay = (
         metrics.get("rl_economic_replay")
         if isinstance(metrics.get("rl_economic_replay"), dict)
         else metrics.get("economic_replay")
@@ -421,9 +421,11 @@ def _replay_status(metrics: Dict[str, Any]) -> str:
         if isinstance(metrics.get("replay"), dict)
         else {}
     )
+    replay: dict[str, Any] = raw_replay if isinstance(raw_replay, dict) else {}
     if not replay:
         return "missing"
-    gates = replay.get("gates") if isinstance(replay.get("gates"), dict) else {}
+    gates_val = replay.get("gates")
+    gates: dict[str, Any] = gates_val if isinstance(gates_val, dict) else {}
     if _truthy_status(gates) or _truthy_status(replay):
         return "passed"
     return "failed"
@@ -900,6 +902,9 @@ class StateStore(Protocol):
         manifest_json: Optional[str] = None,
         manifest_path: Optional[str] = None,
         manifest_hash: Optional[str] = None,
+        skill_id: Optional[str] = None,
+        subject_id: Optional[str] = None,
+        variant: Optional[str] = None,
     ) -> Dict[str, Any]:
         ...
 
@@ -1587,24 +1592,34 @@ class SQLiteStateStore:
         manifest_json: Optional[str] = None,
         manifest_path: Optional[str] = None,
         manifest_hash: Optional[str] = None,
+        skill_id: Optional[str] = None,
+        subject_id: Optional[str] = None,
+        variant: Optional[str] = None,
     ) -> Dict[str, Any]:
         # ARC-011 review C4 (P4-016): canonical non-ML sessions carry
         # model_type="" (the API's translation for skills with no legacy
         # alias) — previously a KeyError; nothing but legacy display reads
         # this column, so unmapped types pass their own name through.
-        skill_name = _MODEL_TO_SKILL.get(model_type, model_type or "")
+        # ARC-012 P7-005: when the canonical skill_id is given it is the
+        # source of truth for skill_name (non-ML sessions have no model_type).
+        skill_name = (
+            skill_id
+            or _MODEL_TO_SKILL.get(model_type, model_type or "")
+        )
         now = datetime.now(timezone.utc).isoformat()
         async with self.connection() as db:
             await db.execute(
                 """INSERT INTO research_sessions
                    (id, instrument, timeframe, model_type, tag, skill_name,
+                    skill_id, subject_id, variant,
                     status, quick_mode, max_iterations, max_budget_usd,
                     focus_hint, workspace_path, manifest_json, manifest_path,
                     manifest_hash, started_at)
-                   VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     session_id, instrument, timeframe, model_type, tag,
-                    skill_name, int(quick_mode), max_iterations,
+                    skill_name, skill_id or "", subject_id or "", variant or "",
+                    int(quick_mode), max_iterations,
                     max_budget_usd, focus_hint, workspace_path,
                     manifest_json, manifest_path, manifest_hash, now,
                 ),
@@ -1619,7 +1634,9 @@ class SQLiteStateStore:
             timeframe=timeframe,
             status="running",
         )
-        return await self.get_session(session_id)
+        session = await self.get_session(session_id)
+        assert session is not None, f"session {session_id} not found after creation"
+        return session
 
     async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         async with self.connection() as db:
@@ -3207,7 +3224,9 @@ class SQLiteStateStore:
             timeframe=timeframe,
             status="running",
         )
-        return await self.get_pipeline(pipeline_id)
+        pipeline = await self.get_pipeline(pipeline_id)
+        assert pipeline is not None, f"pipeline {pipeline_id} not found after creation"
+        return pipeline
 
     async def get_pipeline(self, pipeline_id: str) -> Optional[Dict[str, Any]]:
         async with self.connection() as db:

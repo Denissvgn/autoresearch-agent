@@ -64,6 +64,12 @@ DEFAULT_BOOTSTRAP_INPUT: dict[str, Any] = {
 }
 
 
+def _server_demo_mode() -> bool:
+    from src.config import settings
+
+    return settings.demo_mode is True and str(settings.environment).lower() != "production"
+
+
 @dataclass(frozen=True)
 class BootstrapOutcome:
     """Result of a bootstrap run, including the resolved artifact."""
@@ -268,6 +274,17 @@ class BootstrapRunner:
                 ),
             )
         caps = bootstrap_entry.caps or PluginCaps(fs_write="workspace")
+        # Resolve prompt data paths before switching to the plugin's cwd (or
+        # dry overlay). Never copy executable files from the source directory.
+        skill_params = dict(skill_params or {})
+        if manifest.id == "prompt-engineering" and skill_params.get("eval_set") is not None:
+            source = skill_params["eval_set"]
+            if not isinstance(source, str) or not source or ".." in Path(source).parts:
+                return BootstrapOutcome(ok=False, error="invalid eval_set path", dry=dry)
+            path = Path(source)
+            if not path.is_absolute():
+                path = workspace.absolute() / path
+            skill_params["eval_set"] = str(path)
         if dry:
             return await self._run_dry(
                 skill_dir=skill_dir,
@@ -286,6 +303,7 @@ class BootstrapRunner:
             **DEFAULT_BOOTSTRAP_INPUT,
             "workspace": str(workspace),
             "mode": "live",
+            "demo_mode": _server_demo_mode(),
             "skill_params": skill_params or {},
         }
         result = await self._plugin_runner.run(
@@ -353,6 +371,7 @@ class BootstrapRunner:
                 **DEFAULT_BOOTSTRAP_INPUT,
                 "workspace": str(overlay),
                 "mode": "dry",
+                "demo_mode": _server_demo_mode(),
                 "skill_params": skill_params or {},
             }
             result = await self._plugin_runner.run(

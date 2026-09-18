@@ -638,6 +638,20 @@ class FilePathPromotionTarget(BaseModel):
     rollback_template: Optional[str] = None
     atomic_write: bool = True
 
+    @model_validator(mode="after")
+    def _validate_path_template(self) -> "FilePathPromotionTarget":
+        # ARC-012 D4: templates validate at skill-discovery time — a bad
+        # template must fail the *install*, not the first promotion. Checks:
+        # closed placeholder set and no traversal. Absolute templates are
+        # accepted because the G6 loader resolves ``{settings.*}`` (e.g.
+        # ``{settings.host_configs_path}``) before this validator runs.
+        from src.core.skill_paths import validate_path_template
+
+        validate_path_template(self.path_template)
+        if self.rollback_template:
+            validate_path_template(self.rollback_template)
+        return self
+
 
 class RegistryLookup(BaseModel):
     """``registry_api.lookup`` — how to find the composite to promote (G5)."""

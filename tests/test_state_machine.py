@@ -101,6 +101,9 @@ _LEGAL_CASES: List[Tuple[str, SessionEvent, SessionState, Any, bool]] = [
     ("running", SessionEvent.TIMEOUT, SessionState.TIMED_OUT, "research_timed_out", False),
     ("running", SessionEvent.HARD_TIMEOUT, SessionState.TIMED_OUT, "research_timed_out", False),
     ("running", SessionEvent.FAIL, SessionState.FAILED, "research_failed", False),
+    # ARC-012 P7-009: a paused session whose runtime task died is failed, not
+    # a zombie ``paused`` row (the crash finalizer fires FAIL from paused).
+    ("paused", SessionEvent.FAIL, SessionState.FAILED, "research_failed", False),
     ("running", SessionEvent.RESTART_RECOVER, SessionState.RESUMABLE, None, False),
     ("paused", SessionEvent.RESTART_RECOVER, SessionState.RESUMABLE, None, False),
 ]
@@ -165,7 +168,6 @@ _ILLEGAL_CASES: List[Tuple[str, SessionEvent]] = [
     ("paused", SessionEvent.COMPLETE),
     ("paused", SessionEvent.TIMEOUT),
     ("paused", SessionEvent.HARD_TIMEOUT),
-    ("paused", SessionEvent.FAIL),
     ("pending", SessionEvent.PAUSE),
     ("pending", SessionEvent.COMPLETE),
     ("stopping", SessionEvent.COMPLETE),  # less-severe refused (the W8 guard)

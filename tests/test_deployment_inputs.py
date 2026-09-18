@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+import json
+import os
+import shutil
 import subprocess
 from pathlib import Path
+
+import pytest
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SERVICE_DIR = REPO_ROOT
@@ -121,6 +127,7 @@ def test_autoresearch_dockerfile_matches_standalone_runtime_contract():
     # No vendored platform path dependencies should be copied anymore.
     assert "/app/libs" not in dockerfile
     assert "traid_training_sdk" not in dockerfile
+    assert "skills/ /app/skills/" in dockerfile
     assert '"--workers", "1"' in dockerfile
 
 
@@ -140,3 +147,88 @@ def test_readme_uses_tracked_env_template_without_token_samples():
     assert "package-lock.json" in readme
     assert "ui/node_modules/" in readme
     assert "ui/dist/" in readme
+
+
+def test_settings_initializes_in_demo_mode_without_credentials(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_BASE_URL", raising=False)
+    monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+    from src.config import Settings
+
+    s = Settings(demo_mode=True)
+    assert s.demo_mode is True
+    assert s.anthropic_base_url == ""
+    assert s.anthropic_auth_token is None
+
+
+DEFAULT_POSTGRES_DSN = "postgresql://autoresearch:autoresearch@postgres:5432/autoresearch"
+
+
+def test_compose_uses_unset_only_database_default_and_loopback_binding():
+    compose = yaml.safe_load((REPO_ROOT / "docker-compose.yml").read_text())
+    service = compose["services"]["autoresearch"]
+    assert service["environment"]["AUTORESEARCH_DATABASE_URL"] == (
+        "${AUTORESEARCH_DATABASE_URL-" + DEFAULT_POSTGRES_DSN + "}"
+    )
+    assert service["ports"] == [
+        "${AUTORESEARCH_BIND_HOST:-127.0.0.1}:${AUTORESEARCH_PORT:-8030}:8000"
+    ]
+    assert "ports" not in compose["services"]["postgres"]
+
+
+@pytest.mark.parametrize(
+    ("dotenv_dsn", "shell_dsn", "expected"),
+    [
+        (None, None, DEFAULT_POSTGRES_DSN),
+        ("", None, ""),
+        ("postgresql://custom/db", None, "postgresql://custom/db"),
+        ("postgresql://custom/db", "", ""),
+        ("", "postgresql://shell/db", "postgresql://shell/db"),
+    ],
+)
+def test_compose_resolves_database_overrides(tmp_path, dotenv_dsn, shell_dsn, expected):
+    """Render with Compose itself (no daemon, containers or network required)."""
+    if shutil.which("docker") is None:
+        pytest.skip("Docker Compose is not installed")
+    version = subprocess.run(["docker", "compose", "version"], capture_output=True)
+    if version.returncode:
+        pytest.skip("Docker Compose plugin is not installed")
+    compose_file = tmp_path / "compose.yml"
+    shutil.copyfile(REPO_ROOT / "docker-compose.yml", compose_file)
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "" if dotenv_dsn is None else f"AUTORESEARCH_DATABASE_URL={dotenv_dsn}\n"
+    )
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("AUTORESEARCH_", "COMPOSE_"))
+    }
+    if shell_dsn is not None:
+        env["AUTORESEARCH_DATABASE_URL"] = shell_dsn
+    result = subprocess.run(
+        [
+            "docker", "compose", "--env-file", str(env_file),
+            "-f", str(compose_file), "config", "--format", "json",
+        ],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    service = json.loads(result.stdout)["services"]["autoresearch"]
+    assert service["environment"]["AUTORESEARCH_DATABASE_URL"] == expected
+    assert service["ports"][0]["host_ip"] == "127.0.0.1"
+    assert str(service["ports"][0]["published"]) == "8030"
+
+
+def test_explicit_empty_database_url_selects_sqlite(monkeypatch):
+    from src.config import Settings
+    from src.core.postgres_state_store import is_postgres_dsn
+
+    monkeypatch.setenv("AUTORESEARCH_DATABASE_URL", "")
+    settings = Settings(demo_mode=True, _env_file=None)
+    assert settings.database_url == ""
+    assert not is_postgres_dsn(settings.database_url)
+

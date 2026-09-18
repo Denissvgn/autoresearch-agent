@@ -281,14 +281,15 @@ class DomainClassifier:
         low score) ⇒ ``confidence="low"`` and ``auto_selected=None``.
         """
         skill_ids = self._registry.available()
-        goal_vec = np.asarray(self._backend.embed(goal), dtype=np.float64)
+        goal_vec: np.ndarray = np.asarray(self._backend.embed(goal), dtype=np.float64)
         matches: list[SkillMatch] = []
         for skill_id in skill_ids:
             try:
                 manifest = self._registry.get(skill_id)
             except Exception:
                 continue
-            skill_vec = np.asarray(self._cached_embed(skill_id, manifest), dtype=np.float64)
+            raw_embed = self._cached_embed(skill_id, manifest)
+            skill_vec: np.ndarray = np.asarray(raw_embed, dtype=np.float64)
             score = float(np.dot(goal_vec, skill_vec))
             matches.append(SkillMatch(skill_id=skill_id, score=score, confidence="low"))
         matches.sort(key=lambda m: m.score, reverse=True)

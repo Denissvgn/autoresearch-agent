@@ -4,8 +4,15 @@ version = "0.1.0"
 description = "Universal autonomous research agent powered by skill manifests and LLM sessions"
 authors = ["Autoresearch Agent maintainers"]
 license = "MIT"
-packages = []
-package-mode = false
+readme = "README.md"
+packages = [{include = "src"}]
+# Install alongside src so DEFAULT_SKILLS_ROOT works outside the checkout too.
+# Keep an explicit allowlist: locally generated skills/_drafts must not ship.
+include = [
+    {path = "skills/prompt-engineering", format = ["sdist", "wheel"]},
+    {path = "skills/code-refactor", format = ["sdist", "wheel"]},
+    {path = "skills/db-config-tuning", format = ["sdist", "wheel"]},
+]
 
 # P2 Skill SDK: the operator CLI (new-skill / promote-skill).
 [tool.poetry.scripts]
@@ -39,6 +46,7 @@ black = "^24.1.0"
 isort = "^5.13.0"
 mypy = "^1.8.0"
 ruff = "^0.2.0"
+types-PyYAML = "^6.0.12"
 
 [build-system]
 requires = ["poetry-core"]

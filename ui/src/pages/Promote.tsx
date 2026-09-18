@@ -393,7 +393,9 @@ function Step3({
         <div className="banner banner--amber">
           <Icon name="info" />
           Production scope is fail-closed and delegated. Confirmation triggers a downstream audit
-          gate; rollback target is captured automatically.
+          gate; rollback target is captured automatically. Approval is bound to the previewed
+          candidate — re-preview and re-sign if the winner changed. The wizard sends
+          development-only unsigned previews on this step.
         </div>
       )}
 

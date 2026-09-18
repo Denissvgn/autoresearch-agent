@@ -608,12 +608,19 @@ def _production_scope_metrics() -> dict:
     return metrics
 
 
-def _approval() -> dict:
-    return {
+def _approval(*, preview: dict | None = None) -> dict:
+    approval = {
         "approver": "ops-reviewer",
         "reason": "stage gate approved",
         "approved": True,
     }
+    if preview is not None:
+        approval.update(
+            iteration=preview["iteration"],
+            config_snapshot_sha256=preview["config_snapshot_sha256"],
+            target_identity=preview["target_identity"],
+        )
+    return approval
 
 
 def _promotion_row(scope: str, promotion_id: int = 1) -> dict:
@@ -1525,7 +1532,7 @@ async def test_production_scope_blocks_without_paper_and_canary(
         await ConfigPromoter(store).confirm(
             "research_1",
             scope="production",
-            approval=_approval(),
+            approval=_approval(preview=preview),
         )
 
 
@@ -1566,11 +1573,17 @@ async def test_production_scope_records_full_decision_chain(
             _promotion_row("canary", 3),
         ],
     )
-
-    result = await ConfigPromoter(store).confirm(
+    promoter = ConfigPromoter(store)
+    preview = await promoter.preview(
         "research_1",
         scope="production",
         approval=_approval(),
+    )
+
+    result = await promoter.confirm(
+        "research_1",
+        scope="production",
+        approval=_approval(preview=preview),
     )
 
     assert result["scope"] == "production"

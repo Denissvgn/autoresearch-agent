@@ -38,6 +38,45 @@ jobs:
       - name: Lockfile check
         run: poetry check --lock
 
+      - name: Build release archives
+        run: |
+          # Poison local-only directories so archive checks catch broad includes.
+          trap 'rm -rf skills/_drafts/ci-sentinel skills/ci-unbundled' EXIT
+          mkdir -p skills/_drafts/ci-sentinel skills/ci-unbundled
+          printf 'not a release asset\n' > skills/_drafts/ci-sentinel/SKILL.yaml
+          printf 'not a release asset\n' > skills/ci-unbundled/SKILL.yaml
+          poetry build --output "$RUNNER_TEMP/release-dist"
+
+      - name: Check release archive contents
+        env:
+          AUTORESEARCH_DIST_DIR: ${{ runner.temp }}/release-dist
+        run: poetry run pytest tests/test_packaging.py -q
+
+      - name: Smoke test installed wheel outside checkout
+        env:
+          AUTORESEARCH_DEMO: "true"
+        run: |
+          python -m venv "$RUNNER_TEMP/wheel-smoke-venv"
+          "$RUNNER_TEMP/wheel-smoke-venv/bin/python" -m pip install "$RUNNER_TEMP"/release-dist/*.whl
+          mkdir -p "$RUNNER_TEMP/wheel-smoke-cwd"
+          cd "$RUNNER_TEMP/wheel-smoke-cwd"
+          "$RUNNER_TEMP/wheel-smoke-venv/bin/python" -I - <<'PY'
+          import sysconfig
+          from pathlib import Path
+          from src.core.skill_registry import DEFAULT_SKILLS_ROOT, SkillRegistry
+
+          site_packages = Path(sysconfig.get_path("purelib")).resolve()
+          assert DEFAULT_SKILLS_ROOT == site_packages / "skills", DEFAULT_SKILLS_ROOT
+          registry = SkillRegistry()
+          expected = {"code-refactor", "db-config-tuning", "prompt-engineering"}
+          assert set(registry.discover()) == expected
+          for skill_id in expected:
+              assert registry.get(skill_id).id == skill_id
+              for asset in ("SKILL.yaml", "SKILL.md", "bootstrap.py", "eval/run.py"):
+                  assert (DEFAULT_SKILLS_ROOT / skill_id / asset).is_file()
+          print("Installed wheel discovers and loads all bundled skills")
+          PY
+
       - name: Domain-coupling guard
         run: python scripts/check_domain_coupling.py
 
@@ -118,6 +157,19 @@ jobs:
       - name: Install dependencies
         working-directory: ui
         run: npm ci --ignore-scripts
+
+      - name: Typecheck
+        working-directory: ui
+        env:
+          NODE_OPTIONS: --max-old-space-size=2048
+        # Include matcher types: vitest.setup.ts is outside tsconfig's src include.
+        run: npx --no-install tsc --noEmit --types vitest/globals,@testing-library/jest-dom
+
+      - name: Vitest
+        working-directory: ui
+        env:
+          NODE_OPTIONS: --max-old-space-size=2048
+        run: npm run test:unit -- --pool=forks --maxWorkers=1 --minWorkers=1 --no-file-parallelism
 
       - name: Build
         working-directory: ui

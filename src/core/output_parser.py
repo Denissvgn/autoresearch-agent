@@ -55,7 +55,7 @@ import hmac
 import json
 import logging
 import re
-from typing import Any, Optional, Protocol, TypedDict
+from typing import Any, Optional, Protocol, TypedDict, cast
 
 from src.core.artifact_reference import (
     ARTIFACT_REFERENCE_KEYS,
@@ -100,6 +100,7 @@ class IterationResult(TypedDict, total=False):
     training_gates_passed: bool
     all_gates_passed: bool
     training_time_s: Optional[float]
+    metrics_verification: Optional[str]
     # ``extra`` keys are splatted to the top level by IterationMetrics.to_dict()
     # (e.g. gate_failures, calibration, *_json, artifact refs). TypedDict cannot
     # express "arbitrary additional keys" statically; callers use .get().
@@ -363,7 +364,7 @@ def _parse_delimited_block(stdout: str) -> IterationResult:
     }
     # Splatted extras land at the top level, exactly as
     # IterationMetrics.to_dict() does.
-    result.update(extra)
+    cast(dict[str, Any], result).update(extra)
     return result
 
 

@@ -357,7 +357,10 @@ def _tool_read_file(input_data: Dict[str, Any], workspace: str) -> str:
         with open(path, encoding="utf-8", errors="replace") as source:
             content = source.read(100_001)
         if len(content) > 100_000:
-            content = content[:100_000] + "\n...(truncated: showing first 100000 characters; use grep to narrow)...\n"
+            content = content[:100_000] + (
+                "\n...(truncated: showing first 100000 characters; "
+                "use grep to narrow)...\n"
+            )
         return content
     except FileNotFoundError:
         return f"File not found: {input_data['path']}"

@@ -94,13 +94,19 @@ def test_production_scope_rejects_partial_approval() -> None:
 
 
 def test_production_scope_accepts_full_approval() -> None:
+    candidate = {
+        "iteration": 3,
+        "config_snapshot_sha256": "a" * 64,
+        "target_identity": "b" * 64,
+    }
     req = PromotionScopeRequest(
         scope="production",
         approval=PromotionApproval(
             approved=True,
             approver="alice",
             signature="sig",
-            method="hsm",
+            method="hmac-sha256-v2",
+            **candidate,
         ),
     )
     assert req.scope == "production"

@@ -1,31 +1,21 @@
 #!/usr/bin/env python3
-"""Prompt-engineering eval scorer (ARC-011 P4-014).
+"""Fail-closed prompt scoring with an explicit remote endpoint or demo mode.
 
-Scores a candidate prompt against a labeled eval set and emits an
-``ITERATION_RESULT:`` JSON marker carrying the W11 anti-forgery nonce
-(``server_nonce``, read from ``AUTORESEARCH_SESSION_NONCE``).
-
-The scorer is deliberately deterministic: it derives a composite score from a
-hash of the prompt text so the e2e test (P4-016) gets reproducible metrics
-without an external LLM scorer. A real deployment would replace the scoring
-body with a call to ``--scorer-url``; the marker contract (nonce + fields) stays
-the same.
-
-Usage::
-
-    .venv/bin/python eval/run.py --prompt prompt.yaml --eval eval_set.jsonl [--scorer-url URL]
-
-Scorer chain (first hit wins): --scorer-url POST -> OPENAI_API_KEY judge ->
-deterministic offline fallback (scorer=fallback).
+The server must force --eval, --scorer-url and --demo at execution time.
+Ambient provider credentials and scorer URLs are deliberately ignored.
+Remote errors never fall through to synthetic success, even in demo mode.
 """
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
+import math
 import os
-import re
 import sys
+from urllib.parse import urlsplit
+
+from dataset import load_examples
 
 
 def _fallback_score(prompt_text: str, eval_examples: list[dict]) -> dict:
@@ -62,10 +52,13 @@ def _fallback_score(prompt_text: str, eval_examples: list[dict]) -> dict:
 
 
 def _try_remote_scorer(prompt_text, eval_examples, scorer_url, timeout_s=15.0):
-    """POST candidate to external scorer; None on any failure (fail-open)."""
+    """POST to the explicit endpoint; None means failure, never fallback."""
     try:
         import urllib.request
 
+        url = urlsplit(scorer_url)
+        if url.scheme not in {"http", "https"} or not url.hostname or url.username or url.password or url.fragment:
+            raise ValueError("invalid scorer URL")
         payload = json.dumps(
             {"prompt": prompt_text, "examples": eval_examples}
         ).encode("utf-8")
@@ -75,10 +68,23 @@ def _try_remote_scorer(prompt_text, eval_examples, scorer_url, timeout_s=15.0):
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-        composite = float(body.get("composite_eval_score", body.get("score", 0.0)))
-        precision = float(body.get("precision", composite))
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                raise ValueError("scorer redirects are not allowed")
+
+        opener = urllib.request.build_opener(NoRedirect)
+        with opener.open(req, timeout=timeout_s) as resp:
+            raw = resp.read(1024 * 1024 + 1)
+            if resp.status != 200 or len(raw) > 1024 * 1024:
+                raise ValueError("invalid scorer response")
+            body = json.loads(raw.decode("utf-8"))
+        if not isinstance(body, dict) or body.get("status", "completed") != "completed":
+            raise ValueError("scorer did not complete")
+        composite = body.get("composite_eval_score", body.get("score"))
+        precision = body.get("precision", composite)
+        for value in (composite, precision):
+            if type(value) not in (int, float) or not math.isfinite(value) or not 0 <= value <= 1:
+                raise ValueError("scorer metrics must be finite numbers in [0, 1]")
         n = len(eval_examples)
         mean_cost_usd = round(0.01 * n, 4)
         passes = precision >= 0.6
@@ -100,124 +106,52 @@ def _try_remote_scorer(prompt_text, eval_examples, scorer_url, timeout_s=15.0):
         return None
 
 
-def _try_openai_judge(prompt_text, eval_examples, model=None):
-    """Score via OpenAI judge; None if unavailable (fail-open to fallback)."""
-    base_url = os.environ.get(
-        "OPENAI_BASE_URL", "https://api.openai.com/v1"
-    ).rstrip("/")
-    api_key = os.environ.get("OPENAI_API_KEY", "")
-    if not api_key or not eval_examples:
-        return None
-    model = model or os.environ.get("OPENAI_JUDGE_MODEL", "gpt-4o-mini")
-    try:
-        import urllib.request
-
-        scores = []
-        for ex in eval_examples[:50]:  # cap judge cost per run
-            user_msg = (
-                "Candidate system prompt:\n---\n" + prompt_text[:4000] + "\n---\n"
-                f"User input: {ex.get('input', '')}\n"
-                f"Expected: {ex.get('expected', '')}\n"
-                "Rate 0..1 how likely the prompt elicits the expected answer. "
-                "Reply with ONLY a number."
-            )
-            body = json.dumps(
-                {
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": "Strict judge. Reply only 0..1."},
-                        {"role": "user", "content": user_msg},
-                    ],
-                    "max_tokens": 16,
-                    "temperature": 0,
-                }
-            ).encode("utf-8")
-            req = urllib.request.Request(
-                base_url + "/chat/completions",
-                data=body,
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": "Bearer " + api_key,
-                },
-                method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                raw = json.loads(resp.read().decode("utf-8"))
-            text = raw["choices"][0]["message"]["content"].strip()
-            m = re.search(r"0?\.\d+|[01](?:\.0+)?", text)
-            scores.append(max(0.0, min(1.0, float(m.group(0)) if m else 0.5)))
-        composite = sum(scores) / len(scores)
-        precision = sum(1 for s in scores if s >= 0.7) / len(scores)
-        n = len(eval_examples)
-        mean_cost_usd = round(0.002 * min(n, 50) + 0.001 * n, 4)
-        passes = precision >= 0.6
-        within = mean_cost_usd <= 0.50
-        return {
-            "status": "completed",
-            "primary_metric": round(composite, 6),
-            "metric_name": "composite_eval_score",
-            "precision": round(precision, 6),
-            "passes_min_precision": passes,
-            "within_cost_budget": within,
-            "mean_cost_usd": mean_cost_usd,
-            "n_eval_examples": n,
-            "composite_eval_score": round(composite, 6),
-            "training_gates_passed": passes and within,
-            "scorer": "openai-judge:" + model,
-        }
-    except Exception:
-        return None
-
-
-def _score_prompt(prompt_text, eval_examples, scorer_url=None):
-    """Real chain: remote scorer -> OpenAI judge -> offline fallback."""
+def _score_prompt(prompt_text, eval_examples, scorer_url=None, *, demo=False):
     if scorer_url:
         remote = _try_remote_scorer(prompt_text, eval_examples, scorer_url)
         if remote is not None:
             return remote
-    judge = _try_openai_judge(prompt_text, eval_examples)
-    if judge is not None:
-        return judge
-    return _fallback_score(prompt_text, eval_examples)
+        return _error("remote scorer failed", len(eval_examples))
+    if demo is True:
+        return _fallback_score(prompt_text, eval_examples)
+    return _error("live evaluation requires --scorer-url", len(eval_examples))
+
+
+def _error(message, n=0):
+    return {
+        "status": "eval_error", "error": message, "primary_metric": None,
+        "n_eval_examples": n, "training_gates_passed": False,
+        "passes_min_precision": False, "within_cost_budget": False,
+    }
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Score a candidate prompt")
+    parser = argparse.ArgumentParser(description="Score a candidate prompt", allow_abbrev=False)
     parser.add_argument("--prompt", required=True, help="Path to the prompt file")
     parser.add_argument("--eval", required=True, help="Path to the eval set (JSONL)")
     parser.add_argument("--scorer-url", default=None, help="External scorer endpoint")
-    parser.add_argument("--judge-model", default=None, help="OpenAI judge model")
+    parser.add_argument("--demo", choices=("true", "false"), default="false",
+                        help="Server-controlled synthetic demo scoring (default false)")
     args = parser.parse_args()
 
     # Read the prompt.
     try:
         with open(args.prompt, encoding="utf-8") as f:
             prompt_text = f.read()
-    except OSError as exc:
-        print(f"eval_error: cannot read prompt: {exc}", file=sys.stderr)
-        _emit(status="eval_error", error=str(exc))
+    except (OSError, UnicodeError):
+        _emit(**_error("cannot read prompt"))
         return 1
 
-    # Read the eval set (JSONL — one JSON object per line).
-    eval_examples: list[dict] = []
     try:
-        with open(args.eval, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    eval_examples.append(json.loads(line))
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"eval_error: cannot read eval set: {exc}", file=sys.stderr)
-        _emit(status="eval_error", error=str(exc))
+        eval_examples = load_examples(args.eval)
+    except (OSError, ValueError, UnicodeError):
+        _emit(**_error("invalid eval set"))
         return 1
 
-    # Score (chain: --scorer-url or SCORER_URL env -> OpenAI judge -> fallback).
-    scorer_url = args.scorer_url or os.environ.get("SCORER_URL")
-    if args.judge_model:
-        os.environ["OPENAI_JUDGE_MODEL"] = args.judge_model
-    metrics = _score_prompt(prompt_text, eval_examples, scorer_url=scorer_url)
+    metrics = _score_prompt(prompt_text, eval_examples,
+                            scorer_url=args.scorer_url, demo=args.demo == "true")
     _emit(**metrics)
-    return 0
+    return 0 if metrics["status"] == "completed" else 1
 
 
 def _emit(**fields: object) -> None:

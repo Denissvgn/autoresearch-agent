@@ -24,6 +24,8 @@ import json
 import sys
 from pathlib import Path
 
+from eval.dataset import load_examples
+
 
 _DEFAULT_PROMPT = """# Candidate prompt — iterate on this template.
 You are a helpful assistant. Answer the user's question accurately.
@@ -44,29 +46,59 @@ def main() -> int:
         json.dump({"error": f"invalid stdin JSON: {exc}"}, sys.stdout)
         return 2
 
-    workspace = Path(payload.get("workspace") or "")
-    mode = payload.get("mode", "live")
-    if not str(workspace):
+    if not isinstance(payload, dict) or not isinstance(payload.get("workspace"), str) or not payload["workspace"]:
         json.dump({"error": "workspace is required"}, sys.stdout)
+        return 2
+    workspace = Path(payload["workspace"])
+    mode = payload.get("mode", "live")
+    if not workspace.is_absolute() or not isinstance(mode, str) or mode not in {"live", "dry"}:
+        json.dump({"error": "absolute workspace and live/dry mode required"}, sys.stdout)
+        return 2
+    params = payload.get("skill_params", {})
+    try:
+        if not isinstance(params, dict):
+            raise ValueError("skill_params must be an object")
+        source = params.get("eval_set")
+        if source is None and payload.get("demo_mode") is True:
+            examples = _DEFAULT_EVAL_SET
+        else:
+            if not isinstance(source, str) or not source:
+                raise ValueError("eval_set is required outside explicit demo")
+            source_path = Path(source)
+            if not source_path.is_absolute():
+                source_path = workspace / source_path
+            examples = load_examples(source_path)
+        if any(part.is_symlink() for part in (workspace, *workspace.parents)):
+            raise ValueError("workspace must not use symlinks")
+        for name in _RENDERED:
+            target = workspace / name
+            if target.is_symlink() or (target.exists() and not target.is_file()):
+                raise ValueError("bootstrap destinations must be regular files")
+        dataset_text = "".join(json.dumps(example) + "\n" for example in examples)
+        target = workspace / "eval_set.jsonl"
+        if target.exists() and load_examples(target) != examples:
+            raise ValueError("existing eval_set differs; refusing to overwrite")
+    except (OSError, ValueError, UnicodeError):
+        json.dump({"error": "invalid dataset or unsafe workspace; no files written"}, sys.stdout)
         return 2
 
     if mode == "dry":
         json.dump({"rendered": _RENDERED, "mode": "dry",
-                   "note": "no files written in dry mode"}, sys.stdout)
+                   "note": "validated; no files written in dry mode"}, sys.stdout)
         return 0
 
     workspace.mkdir(parents=True, exist_ok=True)
-
-    # Write the initial prompt template.
-    (workspace / "prompt.yaml").write_text(_DEFAULT_PROMPT, encoding="utf-8")
-
-    # Write a minimal eval set (JSONL — one JSON object per line).
-    with open(workspace / "eval_set.jsonl", "w", encoding="utf-8") as f:
-        for example in _DEFAULT_EVAL_SET:
-            f.write(json.dumps(example) + "\n")
-
-    # Write a best_prompt.yaml placeholder (the agent writes the winner here).
-    (workspace / "best_prompt.yaml").write_text(_DEFAULT_PROMPT, encoding="utf-8")
+    # Create data only, preserving prompt edits on re-bootstrap. Exclusive
+    # creation also rejects a destination symlink introduced after validation.
+    for name in ("prompt.yaml", "best_prompt.yaml"):
+        try:
+            with (workspace / name).open("x", encoding="utf-8") as stream:
+                stream.write(_DEFAULT_PROMPT)
+        except FileExistsError:
+            pass
+    if not target.exists():
+        with target.open("x", encoding="utf-8") as stream:
+            stream.write(dataset_text)
 
     json.dump({"rendered": _RENDERED, "mode": "live",
                "workspace": str(workspace)}, sys.stdout)

@@ -73,8 +73,14 @@ Development promotion writes the winning config to the skill's declared
 file-path target (under `AUTORESEARCH_HOST_CONFIGS_PATH` by default). Paper
 and canary promotion scopes record local audit decisions. Production-scope
 promotion is fail-closed: it requires an HMAC-signed approval keyed by
-`AUTORESEARCH_PRODUCTION_APPROVAL_VERIFIER` (signature = hex HMAC-SHA256 of
-`"{research_id}:{scope}:{approver}"`). Promotion targets the local machinery
+`AUTORESEARCH_PRODUCTION_APPROVAL_VERIFIER` under method `hmac-sha256-v2`
+(`production-approval.v2`). The signature covers stable JSON with the approved
+candidate — `iteration`, `config_snapshot_sha256`, and `target_identity` from
+the unsigned `promote/preview` response — plus `research_id`, canonical
+`scope`, `approver`, `method`, `reason`, and `approved=true`. Confirm re-checks
+that candidate against its own fresh preview and rejects a changed winner
+instead of promoting it. Legacy `{research_id}:{scope}:{approver}` signatures
+are rejected. Promotion targets the local machinery
 cannot execute (e.g. `registry_api`) skip loudly with an audit trail.
 
 ## Health

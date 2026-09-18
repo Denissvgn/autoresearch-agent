@@ -29,7 +29,9 @@ from src.core.pagination import (
     compute_next_cursor,
     decode_cursor,
 )
+from src.core.skill_manifest import ManifestValidationError
 from src.core.skill_registry import SkillNotRegisteredError, default_registry
+from src.core.skill_runtime import SkillConfigError
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +164,67 @@ def _dual_shape_session(session: Dict[str, Any]) -> Dict[str, Any]:
     return augmented
 
 
+def _translate_legacy_request(req: "StartResearchRequest") -> None:
+    """D3 translation shim (ARC-012 P7-010): translate a legacy
+    ``model_type``-only request to the canonical ``skill_id`` shape.
+
+    Mutates ``req`` in place. ``model_type`` goes through the alias map
+    (``direction → ml-direction``; any other non-empty value is already a
+    skill id per the identity fallback) and the legacy identity fields seed
+    the canonical ``subject_id``/``variant`` when the caller did not send
+    them explicitly. The translated request then faces the *same*
+    installed-skill check as any canonical request in
+    ``_translate_canonical_request`` — a legacy alias whose skill is not
+    installed fails as 404 ``skill_not_found`` naming the translated id
+    (e.g. ``ml-direction``), never a special "legacy rejected" error. If an
+    ML skill is ever reinstalled, legacy callers work again unchanged.
+    """
+    req.skill_id = model_type_to_skill_id(req.model_type or "")
+    if not req.subject_id:
+        req.subject_id = req.instrument
+    if not req.variant:
+        req.variant = req.timeframe
+
+
+def _skill_config_http_error(skill_id: str, exc: SkillConfigError) -> HTTPException:
+    """Map a start-time ``SkillConfigError`` to a structured 4xx (P7-010).
+
+    The API layer's translation already 404s unknown skills before the
+    session manager runs; this maps the manager's defense-in-depth
+    ``SkillConfigError`` (unresolvable skill id, no skill id at all, or a
+    manifest that fails to load) so a guaranteed-fatal start is a 4xx with
+    the skill id — not a 201 for a session that crashes on its first tick,
+    and not a 500.
+    """
+    if not skill_id:
+        return HTTPException(
+            status_code=422,
+            detail={
+                "error": "skill_id_required",
+                "message": str(exc),
+            },
+        )
+    available = default_registry.available()
+    if skill_id not in available:
+        return HTTPException(
+            status_code=404,
+            detail={
+                "error": "skill_not_found",
+                "skill_id": skill_id,
+                "available": available,
+                "hint": "Install the skill under skills/<id>/ and reload.",
+            },
+        )
+    return HTTPException(
+        status_code=422,
+        detail={
+            "error": "skill_config_invalid",
+            "skill_id": skill_id,
+            "message": str(exc),
+        },
+    )
+
+
 def _translate_canonical_request(
     req: "StartResearchRequest",
 ) -> list[dict[str, Any]]:
@@ -180,7 +243,9 @@ def _translate_canonical_request(
     conflicts: list[dict[str, Any]] = []
     if not req.skill_id:
         return conflicts
-    # Validate skill_id exists in the registry (404 with hint).
+    # Validate skill_id exists in the registry (404 with hint). A registered
+    # id whose manifest fails to load is a 422 (P7-010: the manifest load is
+    # part of start validation, not a deferred runtime concern).
     try:
         default_registry.get(req.skill_id)
     except SkillNotRegisteredError as exc:
@@ -193,20 +258,32 @@ def _translate_canonical_request(
                 "hint": "Install the skill under skills/<id>/ and reload.",
             },
         ) from exc
+    except ManifestValidationError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "skill_config_invalid",
+                "skill_id": req.skill_id,
+                "message": str(exc),
+            },
+        ) from exc
 
     # Canonical → legacy translation. Canonical wins unconditionally — the
     # legacy field is always overwritten from the canonical value so a
     # conflicting legacy value can never silently win (P3-013 risk).
+    #
+    # ARC-012 P7-006/D1: the discriminator is "is this a known legacy ML
+    # alias?", NOT the truthiness of the identity-fallback translation.
+    # ``skill_id_to_model_type`` pass-through returns the skill id itself for
+    # non-ML skills; those have no legacy alias and must carry
+    # ``model_type=""`` (the closed-vocabulary "no alias" value), never the
+    # skill id (which the manifest pattern would reject — blocker B1).
     mt = skill_id_to_model_type(req.skill_id)
-    if not mt:
-        # Phase-4 prep (non-ML skills): today every installed skill has a
-        # legacy model_type alias, so this branch is unreachable. When a
-        # non-ML skill ships (no alias entry), set model_type to "" so the
-        # session-start path routes to the manifest-driven session builder
-        # instead of the legacy ML trio. instrument/timeframe are derived
-        # from subject_id/variant so the dual-shape response still carries
-        # the legacy fields. P3-013 keeps the unknown-skill 404 above as
-        # the only rejection path.
+    if not is_known_model_type(mt):
+        if req.model_type and req.model_type != mt:
+            conflicts.append(
+                {"field": "model_type", "canonical": "", "legacy": req.model_type}
+            )
         req.model_type = ""
     else:
         if req.model_type and req.model_type != mt:
@@ -214,6 +291,47 @@ def _translate_canonical_request(
                 {"field": "model_type", "canonical": mt, "legacy": req.model_type}
             )
         req.model_type = mt
+
+    # Subject/variant defaulting (ARC-012 P7-006): the skill enumerates its
+    # own subjects/variants; a canonical request that omits them takes the
+    # skill's first static entry rather than arriving downstream blank
+    # (blank instrument/timeframe would fail the manifest's non-blank rule).
+    if not req.subject_id or not req.variant:
+        try:
+            skill_manifest = default_registry.get(req.skill_id)
+        except SkillNotRegisteredError:  # pragma: no cover — 404 raised above
+            skill_manifest = None
+        if not req.subject_id:
+            static_subjects = getattr(
+                getattr(skill_manifest, "subjects", None), "static", None
+            ) or []
+            req.subject_id = (
+                static_subjects[0].id if static_subjects else "default"
+            )
+        if not req.variant:
+            static_variants = getattr(
+                getattr(skill_manifest, "variants", None), "static", None
+            ) or []
+            req.variant = static_variants[0] if static_variants else "default"
+
+    # Path-safety: subject_id/variant become workspace path segments for
+    # skill sessions (session_path_template) — reject separators at the
+    # boundary instead of failing mid-start.
+    from src.core.skill_paths import sanitize_path_segment
+
+    for field_name in ("subject_id", "variant"):
+        value = getattr(req, field_name) or ""
+        try:
+            sanitize_path_segment(value, field=field_name)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "invalid_subject_or_variant",
+                    "field": field_name,
+                    "message": str(exc),
+                },
+            ) from exc
 
     canonical_instrument = req.subject_id or ""
     if req.instrument and req.instrument != canonical_instrument:
@@ -410,7 +528,9 @@ class StartResearchRequest(BaseModel):
             "Legacy alias for skill_id. Known legacy short names "
             "(direction/volatility/rl) map to their canonical skill ids; any "
             "other value is used as the skill_id directly. Unknown skills are "
-            "rejected with 404 skill_not_found."
+            "rejected with 404 skill_not_found. In responses this is a derived "
+            "legacy alias: the trio for ML skills, or \"\" for skills without "
+            "one (ARC-012 D1) — never a skill id."
         ),
     )
     # Canonical shape (ARC-011 §7.7 / P3-013).
@@ -513,6 +633,11 @@ async def estimate_research_cost(req: EstimateCostRequest):
 
 @router.post("/research/start", status_code=201)
 async def start_research(request: Request, req: StartResearchRequest):
+    # ARC-012 P7-010 / D3: a legacy model_type-only request is translated to
+    # the canonical skill_id shape FIRST (pure alias translation, not policy),
+    # then takes the same installed-skill check as a canonical request below.
+    if not req.skill_id and req.model_type:
+        _translate_legacy_request(req)
     # P3-013: translate canonical {skill_id, subject_id, variant} → legacy
     # {model_type, instrument, timeframe} the session_manager expects.
     if req.skill_id:
@@ -560,6 +685,17 @@ async def start_research(request: Request, req: StartResearchRequest):
             metadata=metadata,
         )
         return _dual_shape_session(session)
+    except SkillConfigError as e:
+        # ARC-012 P7-010: a session that cannot materialize its skill runtime
+        # never started — 4xx, no row, no background task.
+        await _audit(
+            request,
+            action="research.start",
+            outcome="failure",
+            metadata=metadata,
+            error_message=str(e),
+        )
+        raise _skill_config_http_error(req.skill_id or "", e) from e
     except RuntimeError as e:
         await _audit(
             request,
@@ -822,6 +958,18 @@ async def continue_research(
             metadata={**metadata, "continued_research_id": session.get("id")},
         )
         return session
+    except SkillConfigError as e:
+        # ARC-012 P7-010: the parent's skill cannot run (e.g. a pre-skill-era
+        # legacy row) — refuse before any row or task exists.
+        await _audit(
+            request,
+            action="research.continue",
+            outcome="failure",
+            research_id=research_id,
+            metadata=metadata,
+            error_message=str(e),
+        )
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except RuntimeError as e:
         await _audit(
             request,
@@ -867,6 +1015,18 @@ async def runtime_resume_research(
             metadata={**metadata, "continued_research_id": session.get("id")},
         )
         return session
+    except SkillConfigError as e:
+        # ARC-012 P7-010: same fail-fast rule as continue — the parent's
+        # skill cannot run, so no row or task is created.
+        await _audit(
+            request,
+            action="research.runtime_resume",
+            outcome="failure",
+            research_id=research_id,
+            metadata=metadata,
+            error_message=str(e),
+        )
+        raise HTTPException(status_code=409, detail=str(e)) from e
     except RuntimeError as e:
         await _audit(
             request,

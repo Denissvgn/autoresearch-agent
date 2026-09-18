@@ -122,11 +122,11 @@ class Settings(BaseSettings):
 
     # --- Anthropic ---
     anthropic_base_url: str = Field(
-        ...,
+        default="",
         description="Anthropic API base URL (e.g. https://api.anthropic.com)",
     )
-    anthropic_auth_token: SecretStr = Field(
-        ...,
+    anthropic_auth_token: SecretStr | None = Field(
+        default=None,
         repr=False,
         description="Anthropic API authentication token",
     )

@@ -57,8 +57,11 @@ class PreflightCheck(Protocol):
     checks ignore it (they open their own socket) — see ``TCPConnectCheck``.
     """
 
-    name: str
-    required: bool
+    @property
+    def name(self) -> str: ...
+
+    @property
+    def required(self) -> bool: ...
 
     async def check(self, client: httpx.AsyncClient | None) -> dict[str, Any]:
         """Run the health check, returning a result dict shaped like

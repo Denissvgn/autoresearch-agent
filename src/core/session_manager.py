@@ -32,6 +32,43 @@ from src.ws.events import broadcaster
 
 logger = logging.getLogger(__name__)
 
+
+def _derive_workspace_path(
+    *,
+    skill_id: str,
+    instrument: str,
+    timeframe: str,
+    model_type: str,
+) -> str:
+    """Session workspace path (ARC-012 P7-005 / D1).
+
+    A session whose skill declares ``workspace.session_path_template`` gets
+    its workspace from the template (rendered under ``workspace_root``) — the
+    skill directory owns the layout. Sessions without a resolvable skill
+    (the legacy ML path) keep the incumbent ``runs/autotuner`` derivation
+    byte-identically.
+    """
+    from src.core.skill_paths import session_workspace_path
+
+    if skill_id:
+        try:
+            from src.core.skill_registry import default_registry
+
+            skill_manifest = default_registry.get(skill_id)
+        except Exception:
+            skill_manifest = None
+        if skill_manifest is not None:
+            rendered = session_workspace_path(
+                skill_manifest,
+                skill_id=skill_id,
+                subject_id=instrument,
+                variant=timeframe,
+            )
+            if rendered:
+                return f"{settings.workspace_root}/{rendered}"
+    return f"{settings.runs_dir}/{instrument}_{timeframe}/{model_type}"
+
+
 def _hard_timeout_grace_s(soft_timeout_s: int) -> int:
     """Bound hard-timeout grace to 5% of the soft timeout, 3-10 minutes."""
 
@@ -63,6 +100,10 @@ class SessionManager:
         self._orchestrator = AgentOrchestrator(store, state_machine=self._sm)
         self._active: Dict[str, ActiveSession] = {}
         self._active_pipelines: Dict[str, asyncio.Task] = {}
+        # ARC-012 P7-009: strong references to fire-and-forget crash
+        # finalizer tasks (asyncio only keeps weak refs — an unreferenced
+        # task can be GC'd mid-write).
+        self._crash_finalizers: set[asyncio.Task] = set()
         self._session_spawn_lock = asyncio.Lock()
         self._pipeline_spawn_lock = asyncio.Lock()
 
@@ -84,7 +125,8 @@ class SessionManager:
         research_id: Optional[str] = None,
         pipeline_id: Optional[str] = None,
     ) -> None:
-        """Log + broadcast any uncaught exception escaping a background task.
+        """Log + persist + broadcast any uncaught exception escaping a
+        background task.
 
         The orchestrator's main ``run()`` catches and records exceptions
         inside its own try/except, so this callback is a safety net for
@@ -93,6 +135,14 @@ class SessionManager:
         handler. Without this, such failures became silent
         ``Task exception was never retrieved`` warnings at GC time with no
         operator-visible signal.
+
+        ARC-012 P7-009 (blocker B2): a research task that dies with the
+        session still ``running``/``paused`` used to leave a zombie row —
+        ``status="running"``, ``error_message=null`` — forever. The callback
+        now schedules ``_finalize_crashed_session`` so the row reaches a
+        terminal ``failed`` state within one event-loop turn (never
+        overwriting a status the orchestrator already set). Pipeline tasks
+        have no session row and keep the log+broadcast-only behaviour.
         """
 
         def _on_done(t: asyncio.Task) -> None:
@@ -117,12 +167,82 @@ class SessionManager:
                 # Best-effort broadcast; we are inside a sync callback so
                 # we schedule the coroutine on the running loop.
                 loop = asyncio.get_running_loop()
+                if research_id is not None:
+                    finalizer = loop.create_task(
+                        self._finalize_crashed_session(research_id, exc),
+                        name=f"crash-finalize-{research_id}",
+                    )
+                    self._crash_finalizers.add(finalizer)
+                    finalizer.add_done_callback(self._crash_finalizers.discard)
+                    return  # the finalizer owns the failed-path broadcast
                 loop.create_task(broadcaster.broadcast(event))
             except RuntimeError:
                 # No running loop (interpreter shutdown) — drop silently.
                 pass
 
         task.add_done_callback(_on_done)
+
+    async def _finalize_crashed_session(
+        self, research_id: str, exc: BaseException,
+    ) -> None:
+        """Persist a terminal ``failed`` state for a crashed background task.
+
+        Routed through the state machine (the sole status writer) so the
+        write carries the audit row and lifecycle broadcast. Terminal
+        finality makes this a no-op when the orchestrator already set a
+        status — the first writer owns it — and severity resolution lets
+        ``fail`` legitimately win over an in-flight ``stopping``/
+        ``completing`` intent (the task died; the session did not stop or
+        complete). ``LookupError``/``IllegalTransitionError`` (no row /
+        refused edge) and store failures fall back to the manual broadcast
+        so clients still observe the crash.
+        """
+        error_text = str(exc)[:2000]
+        try:
+            result = await self._sm.transition(
+                research_id,
+                SessionEvent.FAIL,
+                status_fields={
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "error_message": error_text,
+                    "terminal_reason": (
+                        f"background_task_crashed:{type(exc).__name__}"
+                    ),
+                },
+                broadcast_fields={
+                    "error": str(exc)[:500],
+                    "source": "task_done_callback",
+                },
+            )
+            if not result.changed:
+                logger.info(
+                    "Crashed task for research %s: status already %s — "
+                    "not overwritten",
+                    research_id, result.new_state.value,
+                )
+        except (IllegalTransitionError, LookupError) as tie:
+            logger.warning(
+                "Crashed task for research %s could not finalize via the "
+                "state machine (%s); broadcasting only",
+                research_id, tie,
+            )
+            await broadcaster.broadcast({
+                "event": "research_failed",
+                "research_id": research_id,
+                "error": str(exc)[:500],
+                "source": "task_done_callback",
+            })
+        except Exception:
+            logger.exception(
+                "Failed to persist terminal state for crashed research %s",
+                research_id,
+            )
+            await broadcaster.broadcast({
+                "event": "research_failed",
+                "research_id": research_id,
+                "error": str(exc)[:500],
+                "source": "task_done_callback",
+            })
 
     async def recover_orphaned_sessions(self) -> Dict[str, int]:
         """Classify sessions left active by a previous service process."""
@@ -249,23 +369,30 @@ class SessionManager:
                 f"Max concurrent sessions ({settings.max_concurrent_sessions}) reached"
             )
 
-        # Block duplicate model+instrument if already running
+        # Block duplicate skill+subject+variant if already running. The
+        # comparison key is the skill identity — for non-ML sessions
+        # ``model_type`` is "" for every skill (D1), so comparing it directly
+        # would falsely collide two different skills on the same subject.
+        duplicate_key = skill_id or model_type
         for session in self._active.values():
             c = session.config
             if (
                 c.instrument == instrument
                 and c.timeframe == timeframe
-                and c.model_type == model_type
+                and (c.skill_id or c.model_type) == duplicate_key
             ):
                 raise RuntimeError(
-                    f"A {model_type} session for {instrument} {timeframe} "
+                    f"A {duplicate_key} session for {instrument} {timeframe} "
                     f"is already running (id={session.research_id})"
                 )
 
         research_id = f"res_{uuid.uuid4().hex[:12]}"
         effective_tag = tag or f"run-{research_id[-8:]}"
-        workspace_path = (
-            f"{settings.runs_dir}/{instrument}_{timeframe}/{model_type}"
+        workspace_path = _derive_workspace_path(
+            skill_id=skill_id or "",
+            instrument=instrument,
+            timeframe=timeframe,
+            model_type=model_type,
         )
 
         config = ResearchConfig(
@@ -285,6 +412,10 @@ class SessionManager:
             subject_id=subject_id or "",
             variant=variant or "",
         )
+
+        # ARC-012 P7-010: fail fast — a session whose skill runtime cannot
+        # materialize must not get a row or a background task (201-then-crash).
+        self._validate_session_skill(config)
 
         preflight = await self._run_preflight(config)
         manifest_overrides = dict(manifest or {})
@@ -316,6 +447,12 @@ class SessionManager:
             manifest_json=manifest_json,
             manifest_path=manifest_path,
             manifest_hash=manifest_hash,
+            # ARC-012 P7-005: persist the canonical identity natively so the
+            # dual-shape surface (and promotion target resolution) reads it
+            # from the row instead of reconstructing it from ``model_type``.
+            skill_id=skill_id or "",
+            subject_id=subject_id or "",
+            variant=variant or "",
         )
         # Spawn background task
         task = asyncio.create_task(
@@ -393,6 +530,22 @@ class SessionManager:
                 )
         finally:
             self._active.pop(research_id, None)
+
+    @staticmethod
+    def _validate_session_skill(config: ResearchConfig) -> None:
+        """Validate the session's skill runtime before anything is persisted.
+
+        ARC-012 P7-010 (blocker B2 / S1): the orchestrator materializes the
+        skill runtime on its first tick — outside its own exception handler —
+        so an unresolvable skill used to 201 at the API and then crash the
+        background task, leaving a zombie ``running`` row. Materializing here
+        (registry lookup + manifest load — cheap, side-effect-free) makes the
+        same ``SkillConfigError`` fire during ``start_session`` instead: no
+        row, no workspace, no spawned task for a session that cannot run.
+        """
+        from src.core.skill_runtime import materialize_skill_runtime
+
+        materialize_skill_runtime(None, config)
 
     async def _run_preflight(self, config: ResearchConfig) -> Dict[str, Any]:
         """Run the skill's declared dependency checks and raise before any
@@ -514,7 +667,11 @@ class SessionManager:
             research_id=config.id,
             instrument=config.instrument,
             timeframe=config.timeframe,
+            # ARC-012 P7-005: pass the canonical skill identity — the builder
+            # derives the legacy ``model_type`` alias in one place instead of
+            # each call site guessing (the two callers previously disagreed).
             model_type=config.model_type,
+            skill_id=config.skill_id or None,
             tag=config.tag,
             quick_mode=config.quick_mode,
             max_iterations=config.max_iterations,
@@ -598,6 +755,12 @@ class SessionManager:
         instrument = parent["instrument"]
         timeframe = parent["timeframe"]
         model_type = parent["model_type"]
+        # P7-005: a continuation keeps the parent's canonical identity — a
+        # non-ML parent carries skill_id (model_type is "") and the continued
+        # session must still name its skill to materialize a runtime.
+        parent_skill_id = parent.get("skill_id") or ""
+        parent_subject_id = parent.get("subject_id") or ""
+        parent_variant = parent.get("variant") or ""
 
         if self.active_count >= settings.max_concurrent_sessions:
             raise RuntimeError(
@@ -605,15 +768,16 @@ class SessionManager:
             )
 
         # Block duplicate if already running
+        duplicate_key = parent_skill_id or model_type
         for session in self._active.values():
             c = session.config
             if (
                 c.instrument == instrument
                 and c.timeframe == timeframe
-                and c.model_type == model_type
+                and (c.skill_id or c.model_type) == duplicate_key
             ):
                 raise RuntimeError(
-                    f"A {model_type} session for {instrument} {timeframe} "
+                    f"A {duplicate_key} session for {instrument} {timeframe} "
                     f"is already running (id={session.research_id})"
                 )
 
@@ -640,7 +804,15 @@ class SessionManager:
             focus_hint=focus_hint or parent.get("focus_hint"),
             workspace_path=workspace_path,
             resumed_from=parent_id,
+            skill_id=parent_skill_id,
+            subject_id=parent_subject_id,
+            variant=parent_variant,
         )
+
+        # ARC-012 P7-010: same fail-fast rule as a fresh start — a parent
+        # without a resolvable skill (a pre-skill-era legacy row) cannot run,
+        # so it must not be continued into a new zombie.
+        self._validate_session_skill(config)
 
         preflight = await self._run_preflight(config)
         manifest_overrides = {
@@ -670,6 +842,9 @@ class SessionManager:
             manifest_json=manifest_json,
             manifest_path=manifest_path,
             manifest_hash=manifest_hash,
+            skill_id=parent_skill_id,
+            subject_id=parent_subject_id,
+            variant=parent_variant,
         )
         # Set resumed_from (not in create_session signature)
         await self._store.update_session(research_id, resumed_from=parent_id)
@@ -833,10 +1008,20 @@ class SessionManager:
     def _workspace_path_from_kwargs(kwargs: Dict[str, Any]) -> Optional[str]:
         instrument = kwargs.get("instrument")
         timeframe = kwargs.get("timeframe")
-        model_type = kwargs.get("model_type")
-        if not instrument or not timeframe or not model_type:
+        model_type = kwargs.get("model_type") or ""
+        if not instrument or not timeframe:
             return None
-        return f"{settings.runs_dir}/{instrument}_{timeframe}/{model_type}"
+        # Mirror _start_session_unlocked's derivation (including the
+        # skill-template path for non-ML sessions) so failed-start cleanup
+        # targets the workspace that would have been created.
+        if not model_type and not kwargs.get("skill_id"):
+            return None
+        return _derive_workspace_path(
+            skill_id=kwargs.get("skill_id") or "",
+            instrument=instrument,
+            timeframe=timeframe,
+            model_type=model_type,
+        )
 
     async def _cleanup_failed_start_workspace(self, workspace_path: str) -> None:
         path = Path(workspace_path)

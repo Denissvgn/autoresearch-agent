@@ -107,6 +107,9 @@ COPY --from=ui-builder /app/ui/dist /app/ui/dist
 # Copy server source code
 COPY --chown=appuser:appuser src/ /app/src/
 
+# Copy bundled skill packages (prompt-engineering, code-refactor, db-config-tuning)
+COPY --chown=appuser:appuser skills/ /app/skills/
+
 # Create runtime directories
 RUN mkdir -p /app/workspace/runs /app/workspace/db && \
     chown -R appuser:appuser /app/workspace/runs /app/workspace/db

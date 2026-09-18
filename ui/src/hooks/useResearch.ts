@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { api, PromotionScopeRequest, StartResearchRequest, PaginatedResponse, ResearchSession } from '../api/client';
+import { api, PromotionPreviewRequest, PromotionScopeRequest, StartResearchRequest, PaginatedResponse, ResearchSession } from '../api/client';
 import { useWebSocket } from './useWebSocket';
 
 /**
@@ -276,7 +276,7 @@ export function useDeleteSession() {
 
 export function usePreviewPromotion() {
   return useMutation({
-    mutationFn: ({ id, request }: { id: string; request?: PromotionScopeRequest }) =>
+    mutationFn: ({ id, request }: { id: string; request?: PromotionPreviewRequest }) =>
       api.previewPromotion(id, request),
   });
 }

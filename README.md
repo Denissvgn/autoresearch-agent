@@ -213,8 +213,11 @@ After a session completes (or is stopped), if it has a best iteration:
 
 Development-scope promotion writes the winning config to the skill's declared
 target path. Paper and canary scopes record auditable local decisions.
-Production-scope promotion requires an HMAC-signed approval
-(`AUTORESEARCH_PRODUCTION_APPROVAL_VERIFIER`); promotion targets the skill
+Production-scope promotion requires a candidate-bound HMAC-signed approval
+(`AUTORESEARCH_PRODUCTION_APPROVAL_VERIFIER`, method `hmac-sha256-v2`): preview
+first, then sign the returned `iteration`, `config_snapshot_sha256`, and
+`target_identity` alongside the approver identity; confirm rejects a changed
+winner. Promotion targets the skill
 declares that the local machinery cannot execute (e.g. `registry_api`)
 **skip loudly** with an audit trail instead of pretending.
 

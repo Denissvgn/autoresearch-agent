@@ -18,6 +18,7 @@ __pycache__/
 *.egg-info/
 .eggs/
 build/
+dist/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
@@ -53,5 +54,6 @@ logs/
 # --- Editors / OS ---
 .idea/
 .vscode/
+.zcode/
 *.swp
 .DS_Store

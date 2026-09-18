@@ -188,9 +188,14 @@ async def test_session_start_persists_preflight_in_manifest(monkeypatch, tmp_pat
     manager = session_manager_module.SessionManager(store)
 
     session = await manager.start_session(
-        instrument="DOGE_USDT",
-        timeframe="15m",
-        model_type="direction",
+        # ARC-012 P7-010: starts must name an installed skill — the legacy
+        # ``model_type``-only shape is refused before preflight now.
+        instrument="default",
+        timeframe="production",
+        model_type="",
+        skill_id="prompt-engineering",
+        subject_id="default",
+        variant="production",
         max_iterations=1,
     )
     await asyncio.sleep(0)
@@ -261,9 +266,13 @@ async def test_session_start_preflight_failure_skips_llm_call(monkeypatch, tmp_p
 
     with pytest.raises(RuntimeError, match="Service preflight failed"):
         await manager.start_session(
-            instrument="DOGE_USDT",
-            timeframe="15m",
-            model_type="direction",
+            # ARC-012 P7-010: installed skill — preflight is what fails here.
+            instrument="default",
+            timeframe="production",
+            model_type="",
+            skill_id="prompt-engineering",
+            subject_id="default",
+            variant="production",
         )
 
     assert fake_orchestrator.run_called is False

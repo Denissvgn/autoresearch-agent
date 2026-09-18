@@ -130,6 +130,15 @@ export interface PromotionApproval {
   method?: string;
   signature?: string;
   approved?: boolean;
+  /** v2 candidate binding: the exact preview the signature covers. */
+  iteration?: number;
+  config_snapshot_sha256?: string;
+  target_identity?: string;
+}
+
+export interface PromotionPreviewRequest {
+  scope: PromotionScope;
+  approval?: PromotionApproval | null;
 }
 
 export interface PromotionScopeRequest {
@@ -155,6 +164,9 @@ export interface PromotionPreview {
   target_path: string;
   new_config: string;
   current_config: string | null;
+  /** v2 approval candidate: sign these exact values for production confirm. */
+  config_snapshot_sha256?: string;
+  target_identity?: string;
   best_metric?: number | null;
   training_gates_passed?: boolean;
   gates_passed?: boolean;
@@ -703,7 +715,7 @@ export const api = {
     ),
 
   // Promotions
-  previewPromotion: (id: string, body?: PromotionScopeRequest) =>
+  previewPromotion: (id: string, body?: PromotionPreviewRequest) =>
     request<PromotionPreview>(`/research/${id}/promote/preview`, {
       method: 'POST',
       body: body ? JSON.stringify(body) : undefined,

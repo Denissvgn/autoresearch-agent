@@ -170,17 +170,17 @@ class SkillRegistry:
             manifest = self._load(candidate)
             self._cache[skill_id] = (manifest, candidate, candidate.stat().st_mtime)
             return manifest
-        manifest, path, mtime_loaded = entry
+        cached_manifest, path, mtime_loaded = entry
         # Hot-reload: re-read if the file changed on disk.
         if path.exists() and path.stat().st_mtime != mtime_loaded:
-            manifest = self._load(path)
-            self._cache[skill_id] = (manifest, path, path.stat().st_mtime)
-            return manifest
-        if manifest is None:  # registered via register_path, never loaded
-            manifest = self._load(path)
-            self._cache[skill_id] = (manifest, path, path.stat().st_mtime)
-            return manifest
-        return manifest
+            reloaded = self._load(path)
+            self._cache[skill_id] = (reloaded, path, path.stat().st_mtime)
+            return reloaded
+        if cached_manifest is None:  # registered via register_path, never loaded
+            loaded = self._load(path)
+            self._cache[skill_id] = (loaded, path, path.stat().st_mtime)
+            return loaded
+        return cached_manifest
 
     def _load(self, path: Path) -> ResearchSkillManifest:
         logger.debug("loading skill manifest %s", path)

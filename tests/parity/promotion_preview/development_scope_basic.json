@@ -23,6 +23,7 @@
     "target_path": "<host_configs>/direction/DOGE_USDT_15m.yaml",
     "new_config": "agent_strategy: BALA\ndirection_pct_threshold: 0.023\ntabular_sweep_variant: v4\n",
     "config_snapshot_sha256": "<redacted>",
+    "target_identity": "<redacted>",
     "current_config": null,
     "best_metric": 0.6394,
     "training_gates_passed": true,
@@ -880,5 +881,5 @@
     ]
   },
   "source_sha": "f2300939d6fb3252f2dd2f714dce0c4efcd0ec3e",
-  "recapture": "ARC-011 P3-019: promotion preview now carries the additive canonical skill_id/subject_id/variant fields (P3-017 enrichment, sourced from the manifest's canonical fields which the v2 manifest model back-fills from model_type/instrument/timeframe). Re-captured under the append-only-with-linked-task rule (§1.5). All other fields unchanged."
+  "recapture": "ARC-011 P3-019: promotion preview now carries the additive canonical skill_id/subject_id/variant fields (P3-017 enrichment, sourced from the manifest's canonical fields which the v2 manifest model back-fills from model_type/instrument/timeframe). Re-captured under the append-only-with-linked-task rule (\u00a71.5). All other fields unchanged."
 }

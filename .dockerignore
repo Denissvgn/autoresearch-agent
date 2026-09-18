@@ -1,6 +1,7 @@
 # Keep the Docker build context small; none of this belongs in the image.
 .git
 .github/workflows
+.zcode
 .venv
 venv
 **/__pycache__

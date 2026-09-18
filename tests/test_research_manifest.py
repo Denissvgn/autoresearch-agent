@@ -38,7 +38,7 @@ def test_build_research_manifest_has_required_runtime_sections():
     )
     payload = json.loads(manifest_pretty_json(manifest))
 
-    assert payload["schema_version"] == "research_session_manifest.v2"
+    assert payload["schema_version"] == "research_session_manifest.v3"
     assert payload["manifest_hash"]
     assert payload["research_id"] == "res_manifest"
     assert payload["data_window"]["instrument"] == "DOGE_USDT"
@@ -49,6 +49,146 @@ def test_build_research_manifest_has_required_runtime_sections():
     assert payload["preflight"]["status"] == "not_run"
     assert payload["runtime"]["runs_dir"].endswith("/runs/autotuner")
     assert payload["runtime"]["db_path"].endswith("/db/experiments.db")
+
+
+# ---------------------------------------------------------------------------
+# ARC-012 Wave 1 (P7-002/003/004): manifest v3 — skill identity authoritative,
+# skill-driven sections, profile-based validation.
+# ---------------------------------------------------------------------------
+
+_BUNDLED_SKILL_IDS = ["prompt-engineering", "code-refactor", "db-config-tuning"]
+
+#: Strings a skill-driven manifest must never contain — each one is an ML
+#: artifact this skill does not produce (P7-003 acceptance). The
+#: ``mlflow_experiment`` *key* may appear (with ``null``); the value is
+#: asserted separately.
+_FABRICATED_ML_STRINGS = (
+    "direction-tuning",
+    "experiment_matrix_v1",
+    "runs/autotuner",
+)
+
+
+@pytest.mark.parametrize("skill_id", _BUNDLED_SKILL_IDS)
+def test_v3_manifest_builds_for_bundled_skills_without_ml_fabrication(skill_id):
+    """P7-002/P7-003 AC: every bundled (non-ML) skill builds a v3 manifest
+    with model_type="", a populated skill section, and no invented ML
+    provenance."""
+    manifest = build_research_manifest(
+        research_id="res_v3",
+        instrument="subject",
+        timeframe="variant",
+        model_type="",
+        skill_id=skill_id,
+        tag="t1",
+        quick_mode=False,
+        max_iterations=3,
+        max_budget_usd=1.0,
+        timeout_s=60,
+        focus_hint=None,
+    )
+    assert manifest.schema_version == "research_session_manifest.v3"
+    assert manifest.skill_id == skill_id
+    assert manifest.model_type == ""
+    assert manifest.subject_id == "subject"
+    assert manifest.variant == "variant"
+    # Skill-sourced section present and honest.
+    assert manifest.skill is not None
+    assert manifest.skill["id"] == skill_id
+    assert manifest.skill["phases"], "phase ids must come from SKILL.yaml"
+    assert manifest.skill["promotion_target"]["kind"]
+    # ML-only sections are absent (None), not fabricated.
+    for section in ("data_window", "roster", "tsfm", "adaptive_features",
+                    "split_ids", "cost_model", "gate_bundle"):
+        assert getattr(manifest, section) is None, section
+    assert manifest.mlflow_experiment is None
+    # No ML artifact strings anywhere in the serialized manifest.
+    blob = manifest_pretty_json(manifest)
+    for fabricated in _FABRICATED_ML_STRINGS:
+        assert fabricated not in blob, fabricated
+
+
+def test_v3_manifest_model_type_alias_accepted_for_legacy_trio():
+    """P7-002 AC: ``build_research_manifest(model_type=...)`` with a legacy
+    alias still builds (and a non-alias value is normalized per D1 rather
+    than crashing the pattern)."""
+    manifest = _build_manifest()
+    assert manifest.model_type == "direction"
+    assert manifest.skill_id == "ml-direction"
+
+
+@pytest.mark.parametrize(
+    "model_type", ["direction", "volatility", "rl", ""],
+)
+def test_v3_model_type_closed_vocabulary(model_type):
+    payload = _build_manifest().model_dump(mode="json")
+    payload["model_type"] = model_type
+    loaded = ResearchSessionManifest.model_validate(payload)
+    assert loaded.model_type == model_type
+
+
+def test_v3_model_type_rejects_free_text():
+    """D1: the legacy field is a closed vocabulary — a skill id or typo must
+    not accrete in it."""
+    payload = _build_manifest().model_dump(mode="json")
+    payload["model_type"] = "prompt-engineering"
+    with pytest.raises(Exception, match="direction|volatility|rl"):
+        ResearchSessionManifest.model_validate(payload)
+
+
+def test_v3_unknown_skill_rejected_without_fabrication():
+    """A skill id the registry cannot resolve raises instead of fabricating
+    ML sections (the pre-P7-003 behaviour)."""
+    with pytest.raises(ValueError, match="not registered"):
+        build_research_manifest(
+            research_id="res_unknown",
+            instrument="subject",
+            timeframe="variant",
+            model_type="not-a-real-skill",
+            tag="t1",
+            quick_mode=False,
+            max_iterations=3,
+            max_budget_usd=1.0,
+            timeout_s=60,
+            focus_hint=None,
+        )
+
+
+def test_ml_profile_still_requires_ml_sections():
+    """P7-004 regression: a legacy-ML manifest missing ``roster`` fails."""
+    manifest = _build_manifest()
+    payload = manifest.model_dump(mode="json")
+    payload["roster"] = None
+    with pytest.raises(Exception, match="manifest missing required section"):
+        ResearchSessionManifest.model_validate(payload)
+
+
+def test_skill_profile_does_not_require_ml_sections():
+    """P7-004: a skill-driven manifest validates without the ML-only
+    sections — but still demands the universal four."""
+    manifest = build_research_manifest(
+        research_id="res_v3b",
+        instrument="subject",
+        timeframe="variant",
+        skill_id="prompt-engineering",
+        tag="t1",
+        quick_mode=False,
+        max_iterations=3,
+        max_budget_usd=1.0,
+        timeout_s=60,
+        focus_hint=None,
+    )
+    payload = manifest.model_dump(mode="json")
+    loaded = ResearchSessionManifest.model_validate(payload)
+    assert loaded.skill is not None
+
+    # Each universal section is individually required: emptying any one of
+    # them must fail the profile validation.
+    for section in ("budget", "promotion_policy", "preflight", "runtime"):
+        payload_missing = json.loads(json.dumps(payload))
+        payload_missing[section] = {}
+        with pytest.raises(Exception, match="manifest missing required section"):
+            ResearchSessionManifest.model_validate(payload_missing)
 
 
 def test_build_research_manifest_emits_per_session_nonce():
@@ -102,11 +242,11 @@ def test_manifest_identity_overrides_must_match_request():
 # ---------------------------------------------------------------------------
 
 
-def test_new_manifest_emits_v2():
-    """Newly built manifests carry the current schema version (P3-019)."""
+def test_new_manifest_emits_v3():
+    """Newly built manifests carry the current schema version (P7-002)."""
     manifest = _build_manifest()
     assert manifest.schema_version == CURRENT_SCHEMA_VERSION
-    assert manifest.schema_version == "research_session_manifest.v2"
+    assert manifest.schema_version == "research_session_manifest.v3"
 
 
 @pytest.mark.parametrize(
@@ -141,22 +281,22 @@ def test_manifest_carries_canonical_dual_shape_fields(model_type, expected_skill
     assert manifest.timeframe == "1h"
 
 
-def test_v1_manifest_loads_and_normalizes_to_v2():
+def test_v1_manifest_loads_and_normalizes_to_current():
     """Forward-compat: a v1 manifest persisted before P3-019 loads under the
-    v2 model and is re-stamped as v2 with canonical fields back-filled."""
+    current model and is re-stamped with canonical fields back-filled."""
     # Serialize a current manifest, then regress its schema_version to v1 to
     # simulate a row written before the bump.
-    v2 = _build_manifest()
-    v1_payload = v2.model_dump(mode="json")
+    current = _build_manifest()
+    v1_payload = current.model_dump(mode="json")
     v1_payload["schema_version"] = "research_session_manifest.v1"
     # Strip the canonical fields — a real v1 artifact never carried them.
-    for field in ("skill_id", "subject_id", "variant"):
+    for field in ("skill_id", "subject_id", "variant", "skill"):
         v1_payload.pop(field, None)
 
     loaded = ResearchSessionManifest.model_validate(v1_payload)
 
-    # Forward-compat: version normalized to v2 on read.
-    assert loaded.schema_version == "research_session_manifest.v2"
+    # Forward-compat: version normalized to the current version on read.
+    assert loaded.schema_version == CURRENT_SCHEMA_VERSION
     # Canonical fields back-filled from the legacy trio (validator path).
     assert loaded.skill_id == "ml-direction"
     assert loaded.subject_id == "DOGE_USDT"
@@ -164,6 +304,17 @@ def test_v1_manifest_loads_and_normalizes_to_v2():
     # Legacy trio preserved.
     assert loaded.model_type == "direction"
     assert loaded.instrument == "DOGE_USDT"
+
+
+def test_v2_manifest_loads_and_normalizes_to_v3():
+    """P7-002: persisted v2 artifacts (written before the bump) load
+    unchanged and re-stamp as v3."""
+    v2_payload = _build_manifest().model_dump(mode="json")
+    v2_payload["schema_version"] = "research_session_manifest.v2"
+    loaded = ResearchSessionManifest.model_validate(v2_payload)
+    assert loaded.schema_version == "research_session_manifest.v3"
+    assert loaded.model_type == "direction"
+    assert loaded.skill_id == "ml-direction"
 
 
 def test_unknown_schema_version_rejected_with_clear_error():

@@ -43,9 +43,14 @@ async def _create_session(
 ) -> None:
     await store.create_session(
         session_id=session_id,
-        instrument="DOGE_USDT",
-        timeframe="15m",
-        model_type="direction",
+        instrument="default",
+        timeframe="production",
+        # ARC-012 P7-010: a resumable/continuable row must name an installed
+        # skill — the legacy model_type-only shape is refused at continue.
+        model_type="",
+        skill_id="prompt-engineering",
+        subject_id="default",
+        variant="production",
         tag=session_id,
         quick_mode=True,
         max_iterations=3,

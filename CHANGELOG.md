@@ -2,6 +2,56 @@
 
 ## Unreleased
 
+- **Pre-publish hardening (7 release blockers).** Addresses findings from the
+  publish-readiness review; the promotion-approval change is **BREAKING** for
+  existing production approvers (see RUNBOOK → Promotion Scopes).
+  1. **Production approval alias bypass — closed.** `promote/confirm` and
+     `promote/preview` normalize `scope` through the promoter's canonical
+     resolver before the gate, so `prod`/`live`/whitespace/padded values now
+     require the signed approval instead of skipping the HMAC check.
+  2. **Approval bound to the approved candidate (v2).** New pure module
+     `src/core/promotion_approval.py`: `canonical_approval_message` (stable
+     JSON, `hmac-sha256-v2`, schema `production-approval.v2`) covers
+     `research_id`, canonical `scope`, `approved`, `approver`, `method`,
+     `reason` **plus** `iteration` + `config_snapshot_sha256` +
+     `target_identity`. `ConfigPromoter.confirm` re-binds the supplied
+     candidate to its own fresh preview and fails closed on mismatch, so a
+     signature for candidate A can no longer authorize candidate B. Legacy
+     `"{research_id}:{scope}:{approver}"` signatures are rejected. Preview
+     exposes `target_identity`; confirm persists `target_descriptor`
+     (endpoint/path, auth env-var *name* only) for durable rollback.
+  3. **Webhook rollback now restores the remote system.** `rollback()` rebuilds
+     the destination from the recorded `target_descriptor` instead of using the
+     singleton file target, and `WebhookPromotionTarget.restore()` delivers
+     with an operation-scoped idempotency key (so restoring A after B is not
+     deduplicated as the original A). Delivery failure leaves the local
+     provenance copy untouched and raises instead of reporting success.
+     `write()` delivers before advancing the local copy.
+  4. **Prompt evaluator fails closed on real scoring.** Hash-derived fallback
+     scores are now explicit demo-only (`--demo true`); live runs with no
+     scorer, or any remote/scorer failure, emit `eval_error` with a null metric
+     and `training_gates_passed=false` (exit 1). The selected `eval_set` is
+     honored (validated for size/format/symlinks/traversal), the chosen scorer
+     URL is wired through the manifest command, and the governed child env is
+     threaded from server settings rather than ambient credentials.
+  5. **Bundled skills ship in release artifacts.** `pyproject.toml` declares an
+     explicit allowlist of the three bundled skills for sdist+wheel (so
+     `skills/_drafts` and unbundled dirs never ship); `Dockerfile` copies
+     `skills/` to `/app/skills/`. CI builds archives, asserts their contents,
+     and smoke-tests an installed wheel from outside the checkout.
+  6. **Compose env overrides match the docs.** `AUTORESEARCH_DATABASE_URL` uses
+     `${VAR-default}` (unset-only) so an explicit empty value selects SQLite,
+     and the published port defaults to loopback
+     (`${AUTORESEARCH_BIND_HOST:-127.0.0.1}`). Postgres keeps no host port.
+  7. **Output capture is memory-bounded.** Child stdout/stderr stream to
+     quota-limited per-session logs with fixed head/tail buffers (including
+     newline-free data), `grep` drains pipes incrementally with a real
+     deadline, and `read_file` no longer materializes whole large files.
+  Also: `Settings` no longer requires Anthropic credentials in demo mode;
+  provider base URLs default sensibly; mypy/ruff cleanups in
+  `skill_registry`/`domain_classifier`/`output_parser`/`preflight`; the X-002
+  promotion parity fixture redacts the derived `target_identity`.
+
 - **P0+P1 useful-area push — real skills, demo mode, leaderboard, webhook
   promotion, and the first orchestrator split.**
   - **P0-1 real scorer chain (prompt-engineering).** The eval scorer is no
