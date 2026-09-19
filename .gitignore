@@ -57,3 +57,7 @@ logs/
 .zcode/
 *.swp
 .DS_Store
+
+# --- Internal planning / process archive (kept locally, not shipped) ---
+/docs/adr/ARC-012-release-readiness-backlog.md
+/docs/history/

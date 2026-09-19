@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Nothing yet.
+
+## 0.1.0 (2026-09-19)
+
 - **Non-ML sessions are real.** Every bundled skill can
   start, run to iterations, and promote through the public API and UI —
   proven by an API-level end-to-end suite (`tests/test_non_ml_session_e2e.py`)
@@ -20,6 +24,15 @@
     installed** in this release — historical rows still read correctly, and
     reinstalling an ML skill re-enables legacy callers with zero code
     changes.
+  - *Executable skills in this release:* the three bundled skills start,
+    run, and promote through the public API and UI. `code-refactor` and
+    `db-config-tuning` are fully offline (deterministic evaluators, no
+    external services). `prompt-engineering` runs its offline fallback
+    scorer in demo mode; live scoring requires an operator-provided
+    `skill_params.scorer_url` (or the demo fallback) — without one it fails
+    closed rather than fabricating a metric. All three are
+    development-scope promotable; production scope requires the signed
+    approval above.
   - **Manifest v3** (`research_session_manifest.v3`): `skill_id` is
     authoritative and required; `model_type` is a derived, write-dead legacy
     alias with a closed vocabulary (`^(direction|volatility|rl)?$`, empty =
@@ -231,7 +244,8 @@
     direct write (metadata sidecar first).
   - The UI drops the trading controls; skill pickers, manifest-driven form
     fields, metric schemas, and Subject/variant vocabulary throughout.
-  - Historical review documents moved to `docs/history/`. A
+  - Internal review and planning documents are archived outside the
+    repository rather than shipped. A
     domain-coupling guard (`scripts/check_domain_coupling.py`) runs in CI.
 
 - **Cross-worker
