@@ -5,7 +5,12 @@ Status: **open** — decisions D1-D4 recorded 2026-09-17 (§2, closes P7-001);
 through the real start path; **Wave 2 (P7-009/P7-010) done 2026-09-18** —
 B2/S1 closed (crash terminal-state persistence + fail-fast start);
 **Wave 3 (P7-011..P7-015) done 2026-09-18** — the non-ML e2e proof exists
-and passes (P7-016 blocked on a clean commit by design).
+and passes (P7-016 blocked on a clean commit by design);
+**Wave 4 (P7-017..P7-022) done 2026-09-18** — docs tell the truth, CI
+gates the e2e + Docker smoke, `poetry check` warning-free; **post-plan pass
+2026-09-19** — shipped docs de-internalized (see §3 addendum) and two drift
+guards added. Remaining: P7-023/P7-024 (tag + publish, gated on a
+clean-commit §6 run).
 Created: 2026-09-16
 Owner: maintainer (manual publish)
 Absorbs: `ARC-011` finding **C4 / P4-016** ("no non-ML session has ever run
@@ -650,55 +655,157 @@ tests` + `mypy src` + `pytest -q` (venv details in §6).
 
 ### Wave 4 — Release hygiene
 
-**P7-017 — Documentation truth pass**
+**P7-017 — Documentation truth pass — DONE 2026-09-18**
+- Implementation note: README — the demo section is now a copy-pasteable
+  end-to-end flow (build → run → `/health/ready` → `/skills` → start a
+  `prompt-engineering` demo session → poll → iterations → teardown), the
+  exact flow `scripts/smoke_docker.sh` executes (and which was executed
+  against the built image this session); the manifest claim moved to v3 with
+  skill-identity authority; the "registry_api skips loudly" claim is
+  replaced by the wired delivery semantics; `bootstrap.py`'s role at session
+  start is documented; the API surface notes the P7-010 fail-fast contract.
+  RUNBOOK — Promotion Scopes states the `registry_api`/`webhook` delivery +
+  `target_descriptor` rollback truth; API Paths documents fail-fast starts,
+  the legacy translation, and the crash-terminal semantics; Docker section
+  references `scripts/smoke_docker.sh`. `CLAUDE.md` step 1 now says the
+  workspace is server-bootstrapped (true since P7-011). New per-skill
+  READMEs for `code-refactor` and `db-config-tuning` (session flow, config
+  artifact flag, gates, promotion target).
 - Why: README's headline claim ("Adding a domain means adding a directory") and
   the demo flow are only true once Wave 1 lands; RUNBOOK needs the real flow.
 - Files: `README.md`, `RUNBOOK.md`, `skills/*/README.md`, `CLAUDE.md` if it
   describes session start.
 - Acceptance: a documented copy-pasteable `curl`/UI flow actually works against
   the built image for at least `prompt-engineering`; no claim exceeds reality.
+  **Met** — the documented curl flow exercises the same steps
+  `scripts/smoke_docker.sh` ran green against the built image (differing only
+  in host port and container name).
 - Deps: P7-011. Size: S. Risk: low.
 
-**P7-018 — Fix the 9 missing doc references (S2)**
+**P7-018 — Fix the 9 missing doc references (S2) — DONE 2026-09-18**
+- Implementation note: every site rephrased to point at the surviving record
+  (module docstrings, task ids, or the retained spike drafts under
+  `docs/adr/skill-manifest-drafts/`) instead of naming a nonexistent file —
+  no docs were fabricated to satisfy the scan. The optional guard landed:
+  `scripts/check_doc_references.py` fails CI when code/tests/scripts/
+  workflows reference a `docs/**.md` path absent on disk (verified by
+  planting a violation and watching it fail).
 - Files: restore the referenced ADRs, or rewrite the references to point at the
   surviving docs (e.g. `docs/history/ARC-011_IMPLEMENTATION_REVIEW_2026-08-15.md`).
   Optionally add a guard so a code comment cannot reference a nonexistent doc.
 - Acceptance: the referenced-doc scan (§6) returns empty; optional CI check.
+  **Met** — scan empty; the guard is a required CI step (P7-021).
 - Deps: none. Size: S. Risk: low.
 
-**P7-019 — CHANGELOG for the release**
+**P7-019 — CHANGELOG for the release — DONE 2026-09-18**
+- Implementation note: the `Unreleased` entry now leads with the ARC-012
+  Waves 1-3 work and calls out BOTH breaking changes explicitly (the
+  candidate-bound `hmac-sha256-v2` approval scheme — already drafted from the
+  hardening — and the new start-API 4xx contract), states that the ML trio is
+  not installed (with the D3 re-enable path), and covers manifest v3, the
+  wired non-ML promotion (both target kinds + skill-proportional consistency
+  checks), failure semantics, and the now-real demo flow.
 - Files: `CHANGELOG.md`.
 - Acceptance: one entry covering Wave 1/2 behaviour changes, the breaking
-  approval v2 change (already drafted), and the new e2e gate.
+  approval v2 change (already drafted), and the new e2e gate. **Met** —
+  extended to the full Wave 1-3 scope and both gates.
 - Deps: P7-011. Size: S. Risk: low.
 
-**P7-020 — Poetry metadata modernization (S4, optional)**
+**P7-020 — Poetry metadata modernization (S4, optional) — DONE 2026-09-18**
+- Implementation note: identity moved to PEP 621 `[project]` (name, version,
+  description, authors, license, readme, requires-python, `[project.scripts]`
+  for the CLI); `[tool.poetry]` keeps only Poetry-specific tables
+  (packages, the bundled-skills include allowlist, dependency groups with
+  `dynamic = ["dependencies"]`). `poetry check` is now **warning-free**
+  (was 7 warnings); `poetry check --lock` clean; lock refreshed (diff is
+  the metadata hash line only); `poetry build` + `tests/test_packaging.py`
+  (6 passed) unaffected.
 - Files: `pyproject.toml`.
 - Approach: move `authors`/`scripts`/`readme` to `[project.*]` per the warnings;
   keep `[tool.poetry]` for poetry-specific tables. Re-verify `poetry check` and
   `poetry build`.
 - Acceptance: `poetry check` warning-free; build + wheel smoke unaffected.
+  **Met.**
 - Deps: none. Size: S. Risk: low. Deferrable post-release.
 
-**P7-021 — CI gates for the new guarantees (S6)**
+**P7-021 — CI gates for the new guarantees (S6) — DONE 2026-09-18**
+- Implementation note: the `test` job gained a distinct **"Non-ML session
+  e2e"** step (visible check for branch protection; the suite also runs
+  inside the full pytest step) and the new **"Referenced-doc integrity
+  guard"** step (step name later shortened from
+  "Non-ML session e2e (P7-011)" by the de-internalization pass — the name to
+  require in branch protection is the current one); a new **`smoke` job** runs
+  `scripts/smoke_docker.sh` against every push/PR (the Docker smoke gate D2
+  requires for the tag). The `distributed` job's invocation was verified
+  correct by running the exact CI command locally against a disposable
+  Postgres 15: **25 passed** (`pytest -m "postgres or distributed"` with
+  `AUTORESEARCH_DATABASE_URL` set — closes S6's "never executed here").
+  The UI `vitest` flags (`--pool=forks --maxWorkers=1`) are documented
+  in-place as a GitHub-runner memory constraint (semantics identical to the
+  local `npm run test:unit -- --run`, which runs the same suite green);
+  the local UI run also exercised `tsc --noEmit` + build. Post-review
+  addenda (2026-09-19): a **"Legacy-vocabulary branching guard"** step
+  (`scripts/check_legacy_vocab_branching.py`) closes the D1
+  convention-enforcement gap below, and
+  `tests/test_openapi_contract.py::test_static_openapi_yaml_matches_app_schema`
+  pins the committed `openapi.yaml` to the live app schema (drift guard).
 - Files: `.github/workflows/ci.yml`.
 - Approach: ensure P7-011 runs in the default `test` job; confirm the
   `distributed` job actually executes against Postgres; decide whether the UI
   `vitest` step keeps `--pool=forks --maxWorkers=1` (memory) and that it runs
   the same command locally.
 - Acceptance: CI green on a branch; the non-ML e2e is a required check.
+  **Met locally** (every new step executed in this environment); the
+  branch-push CI run is the maintainer's push.
 - Deps: P7-011. Size: S. Risk: low.
 
-**P7-022 — Scripted Docker smoke test**
+**P7-022 — Scripted Docker smoke test — DONE 2026-09-18**
+- Implementation note: `scripts/smoke_docker.sh` (bash, no deps beyond
+  docker+curl): builds the image (or reuses with `SKIP_BUILD=1`), runs
+  detached in demo mode on SQLite, polls `/health` + `/health/ready`,
+  asserts `/api/v1/skills` lists all three bundled skills, starts a REAL
+  `prompt-engineering` demo session through the public API, asserts an
+  iteration records (`primary_metric` present) and the session reaches
+  `completed`/`stopped` (failing on `failed`/`timed_out` with the row's
+  JSON echoed), then tears down; non-zero exit at any step. Executed green
+  against the built image this session (also validating the P7-017 README
+  flow). Runs as the CI `smoke` job (P7-021).
 - Why: the image smoke test I ran by hand is not repeatable.
 - Files: `scripts/smoke_docker.sh` (new) + a CI step or RUNBOOK entry.
 - Approach: build, run detached, poll `/health` + `/health/ready`, assert
   `/api/v1/skills` lists the 3 skills, start a `prompt-engineering` demo session,
   assert it reaches an iteration, tear down. Non-zero exit on any failure.
 - Acceptance: `scripts/smoke_docker.sh` passes locally and in CI.
+  **Met locally**; the CI `smoke` job runs it on every push.
 - Deps: P7-011. Size: S-M. Risk: low.
 
 ### Wave 5 — Verify and ship
+
+**Post-plan pass — public-surface de-internalization (2026-09-19, outside
+the P7 numbering)**
+- Review finding: shipped documentation carried the internal development
+  process — task/review/hazard IDs (272 lines in `CHANGELOG.md` alone),
+  phase/wave names, section references to nonexistent ADR files, and the
+  previous platform's codenames.
+- Cleaned to a zero-match scan: `CHANGELOG.md` (every entry rewritten in
+  behavioral terms — safe because no version was ever tagged), the
+  endpoint docstrings that generate `openapi.yaml` **plus the committed
+  spec itself** (regeneration cannot re-leak), CI step comments,
+  `scripts/{smoke_docker,check_doc_references,migrate_sqlite_to_postgres}.py`
+  docstrings, and `.env.example`. `src/` inline comments stay per the
+  code-comment convention (verified none sit in spec-surfacing positions).
+  `scripts/check_domain_coupling.py` keeps the platform codenames by design
+  (they are its denylist).
+- Renamed `docs/adr/arc-011-manifest-spike/` →
+  `docs/adr/skill-manifest-drafts/` (an internal project code shipped in a
+  path); references updated in README, `skill_manifest.py`,
+  `test_skill_loader.py`, the PE SKILL.yaml header, and this ADR.
+- Follow-up hardening from the consistency review: the openapi drift test
+  and the legacy-vocabulary branching guard (recorded under P7-021 and §5
+  above), the step-name/"byte-for-byte" corrections in P7-017/P7-021, and
+  this checklist's refresh.
+- Left for the maintainer: `docs/history/*` (internal review archive, no
+  doc references it anymore) and this ADR's own publish fate (see §7).
 
 **P7-023 — Version + release notes (D2)**
 - Files: `pyproject.toml`, `openapi.yaml`, `src/main.py`, `CHANGELOG.md`, tag.
@@ -767,6 +874,8 @@ Wave 5                         P7-023 --> P7-024 --> publish (manual)
 | Start API contract change (4xx instead of 201) breaks a client | Medium | D3 decision; document in CHANGELOG (P7-019) |
 | Empty `model_type` collapses every non-ML skill onto `<root>/skill/…` (cross-skill overwrite) | High | D1 rule: fall back to `skill_id`, never the literal `"skill"` (`promotion_target.py:165`/`:279`); P7-014 asserts both `file_path` skills promote to distinct paths |
 | A declared `path_template` aims a promotion write outside the host-configs root | High | D4 confinement (P7-007): unknown placeholders + `..` traversal rejected at skill load; relative templates rooted under `settings.host_configs_path`; rendered `subject_id`/`variant` sanitized (absolute templates allowed only via the G6 `{settings.*}` resolution — operator-controlled) |
+| New code re-introduces legacy `model_type` branching (D1 erodes silently) | Medium | Was convention-enforced only; now CI-enforced by `scripts/check_legacy_vocab_branching.py` (frozen surfaces allowlisted with reasons; extending the allowlist is a recorded design decision) |
+| The committed `openapi.yaml` drifts from the app schema between releases | Medium | `test_openapi_contract.py::test_static_openapi_yaml_matches_app_schema` pins the committed file to `main.app.openapi()` structurally; regenerate at P7-023 |
 
 ---
 
@@ -781,6 +890,8 @@ PY=/home/mike/.cache/pypoetry/virtualenvs/autoresearch-agent-w707adH2-py3.12/bin
 $PY -m ruff check --config pyproject.toml src tests
 $PY -m mypy src --no-error-summary
 $PY scripts/check_domain_coupling.py
+$PY scripts/check_doc_references.py
+$PY scripts/check_legacy_vocab_branching.py
 
 # 2. Full suite - run in BACKGROUND: it takes ~45s and the shell tool
 #    times out at 30s (a plain foreground run WILL be killed mid-suite).
@@ -819,9 +930,8 @@ curl -s -X POST http://127.0.0.1:18030/api/v1/research/start \
 # BEFORE Wave 1: 500 (manifest model_type).  AFTER Wave 1: 201 + running session.
 docker rm -f ar-verify
 
-# 8. Referenced-doc integrity (P7-018)
-grep -rhoE 'docs/[A-Za-z0-9_./-]+\.md' src/ tests/ scripts/ .github/ | sort -u \
-  | while read -r f; do [ -f "$f" ] || echo "MISSING: $f"; done
+# 8. Referenced-doc integrity (P7-018 — the CI guard, supersedes the grep)
+$PY scripts/check_doc_references.py
 ```
 
 **Environment gotchas learned this session:**
@@ -835,13 +945,20 @@ grep -rhoE 'docs/[A-Za-z0-9_./-]+\.md' src/ tests/ scripts/ .github/ | sort -u \
 ## 7. Manual publish checklist
 
 - [ ] All §6 gates green on a **clean** checkout (no uncommitted edits).
-- [ ] `git add` the untracked files (none of these exist in history yet):
-      `src/core/promotion_approval.py`,
-      `skills/prompt-engineering/eval/dataset.py`,
-      `skills/prompt-engineering/README.md`,
-      `tests/test_release_promotion_safety.py`,
-      `tests/test_prompt_evaluator.py`, `tests/test_packaging.py`,
-      `docs/adr/ARC-012-release-readiness-backlog.md`, plus new Wave-3 tests.
+- [ ] `git add` the untracked files (verified 2026-09-19; the Wave-1-era
+      untracked set — `promotion_approval.py`, `test_packaging.py`,
+      `test_prompt_evaluator.py`, `dataset.py`, the PE README, the
+      promotion-safety tests, the Wave-3 tests — already landed in
+      `41863ef`/`1e57077`):
+      `scripts/smoke_docker.sh`,
+      `scripts/check_doc_references.py`,
+      `scripts/check_legacy_vocab_branching.py`,
+      `skills/code-refactor/README.md`,
+      `skills/db-config-tuning/README.md`.
+      Decide the fate of `docs/adr/ARC-012-release-readiness-backlog.md`
+      (this file) before the release commit: engineering ADR to keep, or
+      exclude from the publish — it is the only copy of the internal
+      backlog.
 - [x] Resolve the staged deletion
       `D .zcode/plans/plan-sess_78a4055d…md` — **resolved 2026-09-18**
       (commit `0439d36`): finalized the deletion. The file had entered
@@ -849,7 +966,10 @@ grep -rhoE 'docs/[A-Za-z0-9_./-]+\.md' src/ tests/ scripts/ .github/ | sort -u \
       (line 57); HEAD now matches the ignore rule and the path no longer
       appears in status snapshots (it broke a `git add`-based commit flow:
       "pathspec did not match any files").
-- [ ] `poetry.lock` committed (it carries the `types-PyYAML` addition).
+- [ ] `poetry.lock` committed. It currently carries the `types-PyYAML`
+      addition (landed) plus the P7-020 metadata-hash refresh from the
+      PEP 621 migration (still uncommitted — commit it together with
+      `pyproject.toml` and re-run `poetry check --lock` on the clean tree).
 - [ ] Version consistent across `pyproject.toml`, `openapi.yaml`,
       `src/main.py`, `CHANGELOG.md`; tag matches.
 - [ ] `AUTORESEARCH_PRODUCTION_APPROVAL_VERIFIER` set in any real deployment

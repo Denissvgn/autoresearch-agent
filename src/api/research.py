@@ -530,7 +530,7 @@ class StartResearchRequest(BaseModel):
             "other value is used as the skill_id directly. Unknown skills are "
             "rejected with 404 skill_not_found. In responses this is a derived "
             "legacy alias: the trio for ML skills, or \"\" for skills without "
-            "one (ARC-012 D1) — never a skill id."
+            "one — never a skill id."
         ),
     )
     # Canonical shape (ARC-011 §7.7 / P3-013).
@@ -718,7 +718,7 @@ async def list_research(
 ):
     """Paginated session listing.
 
-    Opaque cursor pagination (ARC-011 P0-016) is the primary mode: pass the
+    Opaque cursor pagination is the primary mode: pass the
     ``next_cursor`` from a prior response to fetch the next page — the response
     is then ``{items, limit, next_cursor}`` (no ``total``). The legacy
     ``offset`` parameter is deprecated; omitting ``cursor`` preserves the
@@ -892,7 +892,7 @@ async def resume_research(request: Request, research_id: str):
 
 
 class ContinueResearchRequest(BaseModel):
-    """ML-62: Request body for continuing a timed-out/completed session."""
+    """Request body for continuing a timed-out/completed session."""
     max_iterations: Optional[int] = Field(default=None, ge=1, le=500)
     max_budget_usd: Optional[float] = Field(default=None, ge=0.1, le=500.0)
     timeout_minutes: Optional[int] = Field(
@@ -927,7 +927,7 @@ async def continue_research(
     req: ContinueResearchRequest = None,
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
-    """ML-62: Continue a timed-out or completed session as a new chained session.
+    """Continue a timed-out or completed session as a new chained session.
 
     Creates a new session that inherits all settings from the parent and
     picks up where it left off — workspace is preserved, no setup/baseline

@@ -3,7 +3,7 @@
 Provides the cursor contract shared by the list endpoints on
 ``ResultsStore`` (sessions / iterations / pipelines) and the API layer.
 
-Design: see ``docs/adr/ARC-011-cursor-pagination.md``. The cursor is an opaque
+Design: ARC-011 P0-016 (recorded in this module's docstring). The cursor is an opaque
 base64url token wrapping a versioned JSON tuple ``(sort_key, tiebreak)``. The
 ``sort_key`` is a value that sorts the same way lexicographically / numerically
 as the column indexed by the keyset (an ISO-8601 UTC timestamp ``started_at``

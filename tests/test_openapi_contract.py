@@ -1,14 +1,40 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import yaml
 
 from src import main as main_module
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 
 def _schema() -> dict:
     return main_module.app.openapi()
+
+
+def test_static_openapi_yaml_matches_app_schema() -> None:
+    """The committed openapi.yaml must stay in sync with the app's schema.
+
+    The spec is regenerated only at release time, so hand edits and docstring
+    changes drift it silently. This pins the committed file to the live
+    schema structurally — formatting is free, content is not. Regenerate:
+
+        python -c "import yaml; from src.main import app; \\
+            print(yaml.safe_dump(app.openapi(), sort_keys=False, \\
+            allow_unicode=True, width=100), end='')" > openapi.yaml
+    """
+    static = yaml.safe_load(
+        (REPO_ROOT / "openapi.yaml").read_text(encoding="utf-8"),
+    )
+    # json round-trip normalizes the live schema to plain JSON-safe types so
+    # enum/tuple artifacts never fabricate a diff.
+    live = json.loads(json.dumps(main_module.app.openapi()))
+    assert static == live, (
+        "openapi.yaml is out of sync with main.app.openapi() — regenerate it "
+        "(see this test's docstring)"
+    )
 
 
 def test_openapi_prefers_api_v1_and_hides_legacy_api_prefix() -> None:

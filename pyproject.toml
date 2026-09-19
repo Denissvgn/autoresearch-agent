@@ -1,10 +1,22 @@
-[tool.poetry]
+# PEP 621 metadata (ARC-012 P7-020): the canonical project identity lives
+# in [project]; [tool.poetry] below keeps only Poetry-specific tables
+# (packages, bundled-skills include allowlist, dependency specs).
+[project]
 name = "autoresearch-agent"
 version = "0.1.0"
 description = "Universal autonomous research agent powered by skill manifests and LLM sessions"
-authors = ["Autoresearch Agent maintainers"]
-license = "MIT"
+authors = [{name = "Autoresearch Agent maintainers"}]
+license = {text = "MIT"}
 readme = "README.md"
+requires-python = ">=3.12,<4.0"
+# Dependency specs stay in [tool.poetry.dependencies] (Poetry group syntax).
+dynamic = ["dependencies"]
+
+# P2 Skill SDK: the operator CLI (new-skill / promote-skill).
+[project.scripts]
+autoresearch = "src.cli:main"
+
+[tool.poetry]
 packages = [{include = "src"}]
 # Install alongside src so DEFAULT_SKILLS_ROOT works outside the checkout too.
 # Keep an explicit allowlist: locally generated skills/_drafts must not ship.
@@ -13,10 +25,6 @@ include = [
     {path = "skills/code-refactor", format = ["sdist", "wheel"]},
     {path = "skills/db-config-tuning", format = ["sdist", "wheel"]},
 ]
-
-# P2 Skill SDK: the operator CLI (new-skill / promote-skill).
-[tool.poetry.scripts]
-autoresearch = "src.cli:main"
 
 [tool.poetry.dependencies]
 python = "^3.12"

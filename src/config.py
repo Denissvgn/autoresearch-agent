@@ -133,7 +133,7 @@ class Settings(BaseSettings):
     # NOTE (ARC-011 P0-023): SecretStr fields here are NOT inherited by governed
     # experiment subprocesses. See src.core.command_runner._CHILD_ENV_ALLOWLIST /
     # _FORBIDDEN_CHILD_ENV for the agent-path env contract
-    # (docs/adr/ARC-011-security-spike.md §4.3). New server control-plane
+    # (ARC-011 security spike §4.3). New server control-plane
     # secrets added below should also be added to _FORBIDDEN_CHILD_ENV there.
     anthropic_model: str = Field(
         default="claude-sonnet-4-20250514",

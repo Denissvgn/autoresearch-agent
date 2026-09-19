@@ -46,8 +46,10 @@ attempt records an immutable snapshot (command, config hash, artifact
 provenance); sessions persist phase state, consistency reports, and
 reconstructable operational summaries.
 
-Each session starts from an immutable `research_session_manifest.v2` written
-to the run workspace and persisted in SQLite.
+Each session starts from an immutable `research_session_manifest.v3`
+written to the run workspace and persisted in SQLite. The session's
+**`skill_id` is authoritative**; the legacy `model_type` field is a derived,
+write-dead alias (empty for non-ML skills).
 
 ## Quick Start
 
@@ -123,17 +125,41 @@ Navigate to **http://localhost:8030** in your browser.
 ### Try it with no API keys (demo mode)
 
 ```bash
-docker run --rm -p 8030:8000 \
+docker build -t autoresearch-agent .
+docker run -d --name autoresearch-demo -p 127.0.0.1:8030:8000 \
   -e AUTORESEARCH_DEMO=true \
   -e AUTORESEARCH_API_TOKEN=demo-token \
+  -e AUTORESEARCH_DATABASE_URL= \
   autoresearch-agent
+
+# Wait for readiness, then check the installed skills:
+curl -s http://127.0.0.1:8030/health/ready
+curl -s -H "Authorization: Bearer demo-token" \
+  http://127.0.0.1:8030/api/v1/skills
+
+# Start a prompt-engineering demo session (reaches iterations, ~seconds):
+curl -s -X POST http://127.0.0.1:8030/api/v1/research/start \
+  -H "Authorization: Bearer demo-token" -H "Content-Type: application/json" \
+  -d '{"skill_id":"prompt-engineering","max_iterations":1}'
+
+# Poll the session (use the id from the response above), then inspect it:
+curl -s -H "Authorization: Bearer demo-token" \
+  http://127.0.0.1:8030/api/v1/research/<id>
+curl -s -H "Authorization: Bearer demo-token" \
+  http://127.0.0.1:8030/api/v1/research/<id>/iterations
+
+# Clean up:
+docker rm -f autoresearch-demo
 ```
 
 `AUTORESEARCH_DEMO=true` routes every LLM call to the zero-credential
-`MockProvider` (a scripted edit-run-keep loop, $0 cost) so the whole flow —
-session start, governed commands, `ITERATION_RESULT` parsing, iterations,
-charts, leaderboard, promotion preview — runs with no LLM keys. The provider
-router refuses the mock in production (fail-closed).
+`MockProvider` ($0 cost). The provider drives the skill's declared
+`demo_experiment_command` (offline evaluator) and relays the governed eval's
+`ITERATION_RESULT` marker verbatim, so the whole flow — session start, the
+skill's bootstrap, governed commands, marker parsing, iterations, charts,
+leaderboard, promotion preview — runs with no LLM keys. The provider router
+refuses the mock in production (fail-closed). The same flow is scripted in
+`scripts/smoke_docker.sh` (CI runs it against every built image).
 
 ### Installed skills
 
@@ -145,7 +171,9 @@ router refuses the mock in production (fail-closed).
 
 A skill is a directory under `skills/` (`SKILL.yaml` + `SKILL.md` +
 `bootstrap.py` + eval CLI); add one and `POST /api/v1/skills/reload` — no
-orchestrator or UI code changes. The **Leaderboard** page ranks every scored
+orchestrator or UI code changes. At session start the service runs the
+skill's `bootstrap.py` to render the session workspace (the evaluator's
+inputs); a failed bootstrap refuses the start. The **Leaderboard** page ranks every scored
 session per skill by the skill's declared metric direction
 (`GET /api/v1/skills/{id}/leaderboard`).
 
@@ -218,8 +246,11 @@ Production-scope promotion requires a candidate-bound HMAC-signed approval
 first, then sign the returned `iteration`, `config_snapshot_sha256`, and
 `target_identity` alongside the approver identity; confirm rejects a changed
 winner. Promotion targets the skill
-declares that the local machinery cannot execute (e.g. `registry_api`)
-**skip loudly** with an audit trail instead of pretending.
+declares that the local machinery cannot execute (e.g.
+`artifact_store`, `git_branch`) **skip loudly** with an audit trail instead
+of pretending. `registry_api` / `webhook` targets deliver to the skill's
+declared endpoint with an idempotency key and retries (fail-closed), and
+record a durable `target_descriptor` so rollback survives restarts.
 
 ### History
 
@@ -244,7 +275,7 @@ skills/<skill-id>/
 ```
 
 The manifest schema is `research_skill.v1` (see
-`docs/adr/arc-011-manifest-spike/` for drafted examples of several domains).
+`docs/adr/skill-manifest-drafts/` for drafted examples of several domains).
 Highlights:
 
 - `llm` — provider (`anthropic`/`openai`), models, primer file
@@ -254,7 +285,13 @@ Highlights:
 - `command_policy` — allowed scripts/executables/copyable files (the base policy is default-deny)
 - `output_parser` — `delimited_kv` or `json_marker`, with optional anti-forgery nonce enforcement
 - `preflight` — dependency checks (`local_file`, `http_health`, `tcp`) run before a session starts
-- `promotion_target` — `file_path` (wired) or `registry_api` (loud skip until a target implementation is registered)
+- `promotion_target` — `file_path` (writes the declared `path_template`)
+  or `registry_api`/`webhook` (delivers to the declared endpoint)
+- `prompt.demo_experiment_command` — the offline command the demo provider
+  drives (`{session_workspace}` placeholders; validated at load)
+- `command_policy.config_flag` — the CLI flag carrying the skill's
+  per-iteration config artifact (`--config`/`--prompt`/`--target`); policy
+  confinement and the pre-run snapshot both key on it
 
 `POST /api/v1/skills/reload` re-discovers installed skills (non-production
 environments); a new skill appears with no orchestrator or UI code changes.
@@ -320,7 +357,10 @@ The documented API prefix is `/api/v1`. The legacy `/api` prefix remains
 available for backward compatibility but is not the UI default. Requests may
 use the canonical shape (`skill_id`/`subject_id`/`variant`/`skill_params`) or
 the legacy aliases (`model_type`/`instrument`/`timeframe`); responses carry
-both.
+both. Starts fail fast: an unknown `skill_id` is a 404 `skill_not_found`
+naming the available skills, and a legacy `model_type`-only request is first
+translated through the alias map (`direction` → `ml-direction`) and then
+faces the same installed-skill check — no 201-then-crash sessions.
 
 | Method | Path | Description |
 |--------|------|-------------|

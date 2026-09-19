@@ -2,7 +2,7 @@
 (ARC-011 P1-001 / P1-002).
 
 This module adopts the X-005 LLM-provider normalization spike §4 *verbatim*
-(``docs/adr/ARC-011-llm-provider-spike.md``) as the canonical contract every
+(ARC-011 spike §4; this module's protocol docstrings are the record) as the canonical contract every
 provider implementation must satisfy: ``messages_create`` (main agentic path),
 ``complete`` (one-shot insights/Haiku path), an optional ``stream``,
 ``estimate_cost`` (→ P1-003), ``capabilities`` (→ P4-009 / router P4-010), and

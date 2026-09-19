@@ -44,7 +44,7 @@ from src.core.skill_registry import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SPIKE_DIR = REPO_ROOT / "docs" / "adr" / "arc-011-manifest-spike"
+SPIKE_DIR = REPO_ROOT / "docs" / "adr" / "skill-manifest-drafts"
 
 
 # ---------------------------------------------------------------------------

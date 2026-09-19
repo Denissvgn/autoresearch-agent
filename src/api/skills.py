@@ -4,7 +4,7 @@ A new research domain is added by dropping a ``skills/<id>/`` directory and
 reloading — **zero orchestrator or UI code changes** (ARC-011 §7.14). This
 module exposes the installed skill manifests to the UI and API clients so the
 *same* NewResearch form, MetricsChart, IterationsTable, and PromotionModal can
-render any skill from descriptor data alone (GEN-003, §8.3).
+render any skill from descriptor data alone.
 
 Endpoint family (all under ``/api/v1``):
 
@@ -119,7 +119,7 @@ def _skill_descriptor(manifest: ResearchSkillManifest) -> Dict[str, Any]:
 
 
 def _form_fields(manifest: ResearchSkillManifest) -> List[Dict[str, Any]]:
-    """UI form-field definitions for ``GET /skills/{id}/form-fields`` (P3-004).
+    """UI form-field definitions for ``GET /skills/{id}/form-fields``.
 
     Priority: the manifest's ``ui.form_fields`` list (author-curated) is used
     verbatim when present. Otherwise the fields are synthesized from
@@ -204,7 +204,7 @@ def _get_or_404(skill_id: str) -> ResearchSkillManifest:
 async def list_skills(
     category: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    """List installed skill summaries (GEN-003).
+    """List installed skill summaries.
 
     Optional ``category`` filter (e.g. ``optimization``, ``analysis``).
     """
@@ -222,21 +222,21 @@ async def get_skill(skill_id: str):
 
 @router.get("/skills/{skill_id}/param-schema")
 async def get_skill_param_schema(skill_id: str):
-    """The ``param_schema`` JSON Schema for ``skill_params`` validation (P3-003)."""
+    """The ``param_schema`` JSON Schema for ``skill_params`` validation."""
     manifest = _get_or_404(skill_id)
     return manifest.param_schema.model_dump(exclude_none=True, mode="json")
 
 
 @router.get("/skills/{skill_id}/form-fields")
 async def get_skill_form_fields(skill_id: str):
-    """UI form-field definitions for the dynamic form renderer (P3-004, P3-022)."""
+    """UI form-field definitions for the dynamic form renderer."""
     manifest = _get_or_404(skill_id)
     return {"skill_id": skill_id, "form_fields": _form_fields(manifest)}
 
 
 @router.get("/skills/{skill_id}/metric-schema")
 async def get_skill_metric_schema(skill_id: str):
-    """The ``metric_schema`` — primary metric, gates, chart series, table columns (P3-005)."""
+    """The ``metric_schema`` — primary metric, gates, chart series, table columns."""
     manifest = _get_or_404(skill_id)
     return manifest.metric_schema.model_dump(exclude_none=True, mode="json")
 
@@ -246,7 +246,7 @@ async def get_skill_leaderboard(
     skill_id: str,
     limit: int = Query(default=20, ge=1, le=100, title="Limit"),
 ):
-    """Cross-session leaderboard for one skill (P0-4).
+    """Cross-session leaderboard for one skill.
 
     Aggregates every session recorded for the skill (by ``skill_id`` and its
     legacy ``model_type`` alias) that produced a best metric, sorted by the
@@ -314,7 +314,7 @@ async def get_skill_leaderboard(
 
 @router.get("/skills/{skill_id}/versions")
 async def get_skill_versions(skill_id: str):
-    """Declared skill versions (P3-006) + best-effort git-tag history (P2).
+    """Declared skill versions + best-effort git-tag history.
 
     The declared block is the manifest's own version (the source of truth).
     The ``tags`` list surfaces ``skill/<id>/<version>`` git tags recorded by
@@ -360,7 +360,7 @@ def _skill_git_tags(skill_id: str) -> List[str]:
 
 @router.get("/skills/{skill_id}/changelog")
 async def get_skill_changelog(skill_id: str):
-    """The skill's ``CHANGELOG.md`` content (P3-007).
+    """The skill's ``CHANGELOG.md`` content.
 
     Capped at ``_MAX_CHANGELOG_BYTES`` to keep the response bounded — a skill
     whose changelog has outgrown that ceiling returns 413 with a structured
@@ -391,7 +391,7 @@ async def get_skill_changelog(skill_id: str):
 
 @router.post("/skills/reload")
 async def reload_skills(request: Request):
-    """Auth-gated hot reload of all skill manifests (dev convenience, P3-008).
+    """Auth-gated hot reload of all skill manifests (dev convenience).
 
     Re-reads every cached manifest from disk so a skill author can edit YAML
     and pick up the change without a server restart.
@@ -399,7 +399,7 @@ async def reload_skills(request: Request):
     Disabled outside development/staging environments: hot-reloading manifests
     on a production server can swap the validated command policy / promotion
     target out from under in-flight sessions. The router already requires a
-    valid API token; this guard adds the dev-only constraint (P3-008 AC).
+    valid API token; this guard adds the dev-only constraint.
     """
     if settings.environment == "production":
         await _audit(

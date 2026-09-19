@@ -1,7 +1,8 @@
 """Tests for the autoresearch-agent hardening backlog (phases 1–5).
 
 These tests target the focused behaviors changed in the hardening pass
-documented in ``docs/ml/autoresearch_agent_hardening_backlog.md``. Each
+documented in the ARC hardening backlog phases 1-5 (backlog doc not
+retained — these tests are the record). Each
 test exercises the surface that changed; full integration smoke tests
 of the agent loop are out of scope for this file.
 """

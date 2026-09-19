@@ -6,7 +6,7 @@ SQL level (``?`` → ``$N``, ``AUTOINCREMENT`` → ``BIGSERIAL``, ``INSERT OR
 REPLACE`` → ``ON CONFLICT … DO UPDATE``) so the X-002 parity suite and the
 dual-backend sweep (P6-002b) verify behavior is byte-identical.
 
-Design input: ``docs/adr/ARC-011-postgres-state-store.md`` (P6-001). Key points:
+Design input: ARC-011 P6-001 (recorded in this module's docstring). Key points:
 
 * **Raw asyncpg, not SQLAlchemy** (D-driver): mirrors SQLiteStateStore's
   hand-written-SQL shape for parity; ``pg_advisory_xact_lock`` is first-class.
@@ -57,7 +57,7 @@ _MODEL_TO_SKILL = {
 # Canonical Postgres DDL — one consolidated schema (current latest shape), no
 # v1..v6 incrementals. SQLite's migration steps existed only because SQLite has
 # no real migration framework; a fresh Postgres DB never needs them
-# (D-migration, ARC-011-postgres-state-store.md §2). ``pg_schema_version`` keeps
+# (D-migration, ARC-011 P6-001 §2). ``pg_schema_version`` keeps
 # the same forward-compat gate the protocol requires (``get_schema_version``).
 _SCHEMA_SQL_PG = """
 CREATE TABLE IF NOT EXISTS pg_schema_version (
@@ -344,7 +344,7 @@ class PostgresStateStore:
     by transaction-scoped advisory locks (via :meth:`session_lock`) and atomic
     ``ON CONFLICT`` upserts, instead of SQLite's single-writer serialization.
 
-    See ``docs/adr/ARC-011-postgres-state-store.md`` (P6-001) for the lock /
+    See ARC-011 P6-001 (recorded in this module's docstring) for the lock /
     fencing / connection-sharing design consumed here.
     """
 

@@ -1,0 +1,176 @@
+# -*- yaml -*-
+# ARC-011 manifest spike (X-003) — DRAFT, not a live skill.
+#
+# id: db-config-tuning  (category: optimization)
+#
+# Structurally closest to ML tuning but contains no ML. Exercises file_path
+# promotion with {settings.*} interpolation for the production config-manager
+# delegation (G6), delimited_kv parser reuse, and a memory/WAL/planner/
+# parallelism phase plan.
+#
+# Section presence (X-003 AC): all eight required sections populated:
+#   param_schema | metric_schema | decision_vocabulary | phase_plan
+#   command_policy | output_parser | preflight | promotion_target
+
+schema_version: research_skill.v1
+id: db-config-tuning
+version: 0.2.0
+category: optimization
+display_name: "Database Configuration Tuning"
+description: "Tune a database engine for a workload via pgbench/sysbench and promote the winning config."
+
+llm:
+  provider: anthropic
+  primary_model: claude-sonnet-4-20250514
+  insight_model: claude-haiku-4-20250514
+  max_output_tokens: 8192
+  system_prompt: SKILL.md
+
+workspace:
+  session_path_template: "runs/{skill_id}/{subject_id}/{variant}"
+
+# G12: subject = engine (postgres16); variant = workload (tpcb / oltp_read_only).
+subjects:
+  static: [postgres16, postgres15]
+variants:
+  static: [tpcb, oltp_read_only, oltp_write_only]
+
+# ── 1/8 param_schema ──────────────────────────────────────────────────────────
+param_schema:
+  type: object
+  additionalProperties: false
+  properties:
+    dsn:                  { type: string, description: "connection string to the tuning instance" }
+    target_latency_ms:    { type: integer, minimum: 1, default: 10 }
+    bench_duration_s:     { type: integer, minimum: 1, maximum: 3600, default: 60 }
+    config_manager_url:   { type: string, description: "production config manager (production-scope delegation)" }
+  required: [dsn]
+
+# ── 2/8 metric_schema ─────────────────────────────────────────────────────────
+metric_schema:
+  primary:
+    field: primary_metric
+    label: "TPS @ target latency"
+    direction: higher_is_better
+    format: ".1f"
+    primary_metric_jsonpath: ["tps"]
+  gates:
+    - { field: p99_within_slo,   label: "p99 SLO", kind: boolean_badge }
+    - { field: no_regression,    label: "No Regr", kind: boolean_badge }
+  chart_series:
+    - { field: tps,            label: "TPS" }
+    - { field: p99_latency_ms, label: "p99 ms", axis: right }
+  iteration_table_columns:
+    - { field: primary_metric,    label: "TPS" }
+    - { field: p99_within_slo,    label: "SLO",  kind: icon }
+    - { field: no_regression,     label: "Regr", kind: icon }
+    - { field: bench_duration_s,  label: "Dur" }
+  goal: optimize
+
+# ── 3/8 decision_vocabulary ───────────────────────────────────────────────────
+decision_vocabulary:
+  base:           [keep, discard, improve, unknown]
+  extensions:     []
+  success_values: [keep, improve]
+
+# ── 4/8 phase_plan ────────────────────────────────────────────────────────────
+phase_plan:
+  - { id: baseline_capture,   min_iterations: 1, max_iterations: 2, evidence_keys: [baseline_tps] }
+  - { id: memory_tuning,      min_iterations: 3, max_iterations: 12, evidence_keys: [memory_knob_swept],
+      next_action: "Sweep shared_buffers, work_mem, effective_cache_size." }
+  - { id: wal_checkpoint,     min_iterations: 2, max_iterations: 8,  evidence_keys: [wal_knob_swept],
+      next_action: "Sweep wal_buffers, checkpoint_completion, max_wal_size." }
+  - { id: planner_costing,    min_iterations: 2, max_iterations: 8,  evidence_keys: [planner_knob_swept],
+      next_action: "Sweep random_page_cost, parallel setups." }
+  - { id: parallelism,        min_iterations: 2, max_iterations: 8,  evidence_keys: [parallel_knob_swept] }
+  - { id: validation,         min_iterations: 1, max_iterations: 3,  evidence_keys: [soak_test_passed] }
+  - { id: promotion_proposal, min_iterations: 1, max_iterations: 2,  evidence_keys: [promotion_proposal] }
+phase_advancement:
+  mode: declarative
+
+# ── 5/8 command_policy ────────────────────────────────────────────────────────
+command_policy:
+  allowed_python: [".venv/bin/python"]
+  allowed_scripts:
+    - bench/run_pgbench.sh
+    - bench/apply_config.sh
+  allowed_executables: [cp, cat]
+  copyable_files: [db_config.yaml, best_db_config.yaml]
+  readable_files: [db_config.yaml, best_db_config.yaml, bench_result.txt]
+  forbidden_tokens: ["|", "||", "&&", ";", "&"]
+  forbidden_substrings: ["`", "$", ">", "<", "\n", "\r"]
+  secret_markers: [.env, /proc/, /run/secrets, authorization, bearer, credential, id_rsa, password, secret, token]
+
+# ── 6/8 output_parser (delimited_kv — reuse the ml-direction parser shape) ─────
+output_parser:
+  format: delimited_kv
+  block_delimiter: "---"
+  iteration_marker: "ITERATION_RESULT:"
+  nonce_field: server_nonce
+  required_fields: [status, primary_metric, metric_name, p99_within_slo]
+  field_types:
+    primary_metric: float
+    tps: float
+    p99_latency_ms: float
+    p99_within_slo: bool
+  failure_statuses: [crash, timeout, failed, error, bench_failed]
+  fallback:
+    read_marker_file: bench_result.txt
+    marker_dir_template: "{workspace}/"
+
+# ── 7/8 preflight ─────────────────────────────────────────────────────────────
+preflight:
+  - { name: db,             kind: http_health, url: "{skill_params.dsn}",      required: true }
+  - { name: config-manager, kind: http_health, url: "{skill_params.config_manager_url}", required: false }
+
+# ── 8/8 promotion_target (file_path + G6 settings interpolation) ──────────────
+promotion_target:
+  primary:
+    kind: file_path
+    path_template: "configs/db/{subject_id}_{variant}.yaml"
+    sidecar_extensions: [".{scope}-promotion.iter-{iteration}.json"]
+    atomic_write: true
+  scopes:
+    - { id: development, approval_required: false }
+    - { id: canary,      approval_required: true,  prior_scopes: [development] }
+    - id: production
+      approval_required: true
+      prior_scopes: [development, canary]
+      # G6: production delegates to a deployment-specific config manager.
+      delegate:
+        kind: webhook
+        endpoint: "{skill_params.config_manager_url}/api/v1/apply"
+        auth_secret: DB_CONFIG_MANAGER_AUTH_TOKEN
+
+blocker_classification:
+  actionable_blockers: [p99_slo_missed, tps_regression, checkpoint_stall, planner_misestimate]
+  phase_evidence_keys:
+    memory_tuning:   [memory_knob_swept]
+    wal_checkpoint:  [wal_knob_swept]
+    planner_costing: [planner_knob_swept]
+    parallelism:     [parallel_knob_swept]
+    validation:      [soak_test_passed]
+
+trial_identity:
+  hash_fields: [skill_id, subject_id, variant, db_config_hash, dsn_hash]
+  resolve: { mode: declarative }
+
+structured_hpo:
+  enabled: false
+
+insights:
+  prompt_template: insights.md
+  model: claude-haiku-4-20250514
+  max_chars: 500
+
+prompt:
+  experiment_command: |
+    .venv/bin/python bench/apply_config.sh {workspace}/db_config.yaml && .venv/bin/python bench/run_pgbench.sh --dsn {skill_params.dsn} --duration {skill_params.bench_duration_s}
+  continuation_enabled: true
+
+ui:
+  form_fields:
+    - { name: dsn,               type: string,  required: true }
+    - { name: target_latency_ms, type: integer, default: 10 }
+    - { name: bench_duration_s,  type: integer, default: 60, min: 1, max: 3600 }
+    - { name: config_manager_url, type: string, group: "Advanced" }

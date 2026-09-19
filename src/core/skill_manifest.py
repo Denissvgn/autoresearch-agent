@@ -7,7 +7,7 @@ orchestrator used to hardcode behind ``if config.model_type == ...`` branches
 ML skills (``ml-direction`` / ``ml-volatility`` / ``ml-rl``) are authored
 against it in Phase 2 (P2-005 / P2-009 / P2-013).
 
-Requirements input: ``docs/adr/ARC-011-manifest-spike.md`` §7 (schema
+Requirements input: ``docs/adr/skill-manifest-drafts/`` (schema
 punch-list, gaps G1–G13) and §4 (section-name canonicalization). The GO verdict
 of that spike greenlights this schema; the gap list below maps each resolved
 gap to the field that addresses it.

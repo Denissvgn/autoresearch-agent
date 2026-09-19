@@ -16,7 +16,8 @@ clearing the pause & stop flags, auto-promotion, interrupting runtime commands
 — stay with the caller and are signalled via ``TransitionResult``. Routing the
 existing direct ``status=`` writers through ``transition()`` is P0-003 / P0-004;
 the end-to-end W8 race replay is P0-005. See
-``docs/adr/ARC-011-session-state-machine.md`` §3-§7 for the design consumed here.
+ARC-011 P0-002 §3-§7 for the design consumed here (the full diagram and
+transition tables are recorded in this module).
 """
 
 from __future__ import annotations

@@ -94,7 +94,7 @@ paths:
       description: 'Paginated session listing.
 
 
-        Opaque cursor pagination (ARC-011 P0-016) is the primary mode: pass the
+        Opaque cursor pagination is the primary mode: pass the
 
         ``next_cursor`` from a prior response to fetch the next page — the response
 
@@ -431,7 +431,7 @@ paths:
       tags:
       - research
       summary: Continue Research
-      description: 'ML-62: Continue a timed-out or completed session as a new chained session.
+      description: 'Continue a timed-out or completed session as a new chained session.
 
 
         Creates a new session that inherits all settings from the parent and
@@ -645,7 +645,7 @@ paths:
       description: 'Iterations with metrics and config snapshots.
 
 
-        Pagination is opt-in (ARC-011 P0-017): omit ``limit`` to receive the full
+        Pagination is opt-in: omit ``limit`` to receive the full
 
         bare list (today''s behavior). Pass ``limit`` to receive a cursor-paginated
 
@@ -845,7 +845,7 @@ paths:
       tags:
       - results
       summary: Get Hpo Studies
-      description: HPO study results for a research session (ML-59).
+      description: HPO study results for a research session.
       operationId: get_hpo_studies_api_v1_research__research_id__hpo_studies_get
       security:
       - HTTPBearer: []
@@ -1215,7 +1215,7 @@ paths:
       tags:
       - skills
       summary: List Skills
-      description: 'List installed skill summaries (GEN-003).
+      description: 'List installed skill summaries.
 
 
         Optional ``category`` filter (e.g. ``optimization``, ``analysis``).'
@@ -1301,7 +1301,7 @@ paths:
       tags:
       - skills
       summary: Get Skill Param Schema
-      description: The ``param_schema`` JSON Schema for ``skill_params`` validation (P3-003).
+      description: The ``param_schema`` JSON Schema for ``skill_params`` validation.
       operationId: get_skill_param_schema_api_v1_skills__skill_id__param_schema_get
       security:
       - HTTPBearer: []
@@ -1339,7 +1339,7 @@ paths:
       tags:
       - skills
       summary: Get Skill Form Fields
-      description: UI form-field definitions for the dynamic form renderer (P3-004, P3-022).
+      description: UI form-field definitions for the dynamic form renderer.
       operationId: get_skill_form_fields_api_v1_skills__skill_id__form_fields_get
       security:
       - HTTPBearer: []
@@ -1377,7 +1377,7 @@ paths:
       tags:
       - skills
       summary: Get Skill Metric Schema
-      description: The ``metric_schema`` — primary metric, gates, chart series, table columns (P3-005).
+      description: The ``metric_schema`` — primary metric, gates, chart series, table columns.
       operationId: get_skill_metric_schema_api_v1_skills__skill_id__metric_schema_get
       security:
       - HTTPBearer: []
@@ -1415,7 +1415,7 @@ paths:
       tags:
       - skills
       summary: Get Skill Leaderboard
-      description: 'Cross-session leaderboard for one skill (P0-4).
+      description: 'Cross-session leaderboard for one skill.
 
 
         Aggregates every session recorded for the skill (by ``skill_id`` and its
@@ -1471,7 +1471,7 @@ paths:
       tags:
       - skills
       summary: Get Skill Versions
-      description: 'Declared skill versions (P3-006) + best-effort git-tag history (P2).
+      description: 'Declared skill versions + best-effort git-tag history.
 
 
         The declared block is the manifest''s own version (the source of truth).
@@ -1518,7 +1518,7 @@ paths:
       tags:
       - skills
       summary: Get Skill Changelog
-      description: 'The skill''s ``CHANGELOG.md`` content (P3-007).
+      description: 'The skill''s ``CHANGELOG.md`` content.
 
 
         Capped at ``_MAX_CHANGELOG_BYTES`` to keep the response bounded — a skill
@@ -1565,7 +1565,7 @@ paths:
       tags:
       - skills
       summary: Reload Skills
-      description: 'Auth-gated hot reload of all skill manifests (dev convenience, P3-008).
+      description: 'Auth-gated hot reload of all skill manifests (dev convenience).
 
 
         Re-reads every cached manifest from disk so a skill author can edit YAML
@@ -1579,7 +1579,7 @@ paths:
 
         target out from under in-flight sessions. The router already requires a
 
-        valid API token; this guard adds the dev-only constraint (P3-008 AC).'
+        valid API token; this guard adds the dev-only constraint.'
       operationId: reload_skills_api_v1_skills_reload_post
       security:
       - HTTPBearer: []
@@ -1662,7 +1662,7 @@ paths:
       tags:
       - subjects
       summary: List Subjects
-      description: List subjects for a skill (P3-009).
+      description: List subjects for a skill.
       operationId: list_subjects_api_v1_subjects_get
       security:
       - HTTPBearer: []
@@ -1705,7 +1705,7 @@ paths:
       tags:
       - subjects
       summary: List Subject Variants
-      description: List variants for a subject under a skill (P3-010).
+      description: List variants for a subject under a skill.
       operationId: list_subject_variants_api_v1_subjects__subject_id__variants_get
       security:
       - HTTPBearer: []
@@ -1934,7 +1934,7 @@ components:
           description: Optional hint for what to focus on in the continuation
       type: object
       title: ContinueResearchRequest
-      description: 'ML-62: Request body for continuing a timed-out/completed session.'
+      description: 'Request body for continuing a timed-out/completed session.'
     EstimateCostRequest:
       properties:
         max_iterations:
@@ -2151,7 +2151,7 @@ components:
           description: 'Legacy alias for skill_id. Known legacy short names (direction/volatility/rl)
             map to their canonical skill ids; any other value is used as the skill_id directly. Unknown
             skills are rejected with 404 skill_not_found. In responses this is a derived legacy alias:
-            the trio for ML skills, or "" for skills without one (ARC-012 D1) — never a skill id.'
+            the trio for ML skills, or "" for skills without one — never a skill id.'
         skill_id:
           anyOf:
           - type: string

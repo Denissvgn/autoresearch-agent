@@ -65,7 +65,15 @@ docs URL, health URL, WebSocket path, and preferred API prefix.
 
 Requests may use the canonical skill shape (`skill_id`, `subject_id`,
 `variant`, `skill_params`) or the legacy aliases (`model_type`,
-`instrument`, `timeframe`); responses carry both.
+`instrument`, `timeframe`); responses carry both. Session starts fail fast:
+an unknown skill is a 404 `skill_not_found` naming the available skills, a
+legacy `model_type`-only request is translated through the alias map
+(`direction` → `ml-direction`) and then skill-checked, and a skill whose
+bootstrap cannot render the workspace refuses the start — a session row only
+exists for sessions that actually started. A crashed background task is
+persisted as `failed` with `error_message` and
+`terminal_reason=background_task_crashed:<type>` within one event-loop turn
+(never a zombie `running` row).
 
 ## Promotion Scopes
 
@@ -80,8 +88,11 @@ the unsigned `promote/preview` response — plus `research_id`, canonical
 `scope`, `approver`, `method`, `reason`, and `approved=true`. Confirm re-checks
 that candidate against its own fresh preview and rejects a changed winner
 instead of promoting it. Legacy `{research_id}:{scope}:{approver}` signatures
-are rejected. Promotion targets the local machinery
-cannot execute (e.g. `registry_api`) skip loudly with an audit trail.
+are rejected. `registry_api`/`webhook` promotion targets deliver the winner
+to the skill's declared endpoint (idempotency key, retries, fail-closed) and
+record a durable `target_descriptor` so rollback survives restarts; target
+kinds the local machinery cannot execute (`artifact_store`, `git_branch`)
+skip loudly with an audit trail.
 
 ## Health
 
@@ -107,6 +118,16 @@ docker run --rm -p 8030:8000 --env-file .env autoresearch-agent
 The image copies the committed `poetry.lock`, the `src/` backend package,
 the built UI, and a generic workspace venv. The runtime command is
 `uvicorn src.main:app --loop uvloop`.
+
+Smoke-test a built image end to end (health, skills list, a real demo
+session reaching an iteration):
+
+```bash
+scripts/smoke_docker.sh          # builds, runs, asserts, tears down
+```
+
+The same script runs in CI against every built image. It is the check that
+would have caught the "no non-ML session has ever run" release blocker.
 
 ## Clean-start reset
 

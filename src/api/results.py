@@ -448,7 +448,7 @@ async def get_iterations(
 ):
     """Iterations with metrics and config snapshots.
 
-    Pagination is opt-in (ARC-011 P0-017): omit ``limit`` to receive the full
+    Pagination is opt-in: omit ``limit`` to receive the full
     bare list (today's behavior). Pass ``limit`` to receive a cursor-paginated
     envelope ``{items, limit, next_cursor}``.
     """
@@ -552,7 +552,7 @@ async def get_agent_log(
 
 @router.get("/research/{research_id}/hpo-studies")
 async def get_hpo_studies(research_id: str):
-    """HPO study results for a research session (ML-59)."""
+    """HPO study results for a research session."""
     _, session, _ = await _resolve_result_context(research_id)
     if not session:
         raise HTTPException(status_code=404, detail="Phase session not found yet")

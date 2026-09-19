@@ -27,7 +27,7 @@ You have a LIMITED number of tool calls. **Do not waste them** on `ls`, `find`, 
 
 ## Exact Experiment Loop
 
-**Step 1** — Run the setup/bootstrap command supplied by the server for this session (1 tool call). Fresh sessions use a server-prepared clean workspace; continuation sessions reuse the existing workspace and do not reset it.
+**Step 1** — If the session prompt supplies a setup command, run it (1 tool call). Fresh sessions arrive with a **server-bootstrapped** workspace (the skill's `bootstrap.py` ran before your session started); continuation sessions reuse the existing workspace and do not reset it.
 
 **Step 2** — Read the skill's reference docs (SKILL.md, knowledge/) and the current config/candidate file (1 tool call). If the workspace already contains tuned state from prior sessions, treat it as part of the baseline. Do not overwrite it with generic defaults before you have reproduced the baseline once.
 

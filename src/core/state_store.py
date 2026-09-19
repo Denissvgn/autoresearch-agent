@@ -37,7 +37,8 @@ the house-style of P1-002's ``D-retry`` CHANGELOG callout):
   ``get_iterations``. The protocol uses the real names.
 
 Exception policy (ARC-011 P0-008): the full try/except inventory with rationale
-lives in ``docs/adr/ARC-011-results-store-exception-inventory.md``. Summary —
+lives in the ARC-011 exception inventory (not retained; the summary below is
+the record). Summary —
 every ``except`` here is either a narrow read-degrade
 ``(json.JSONDecodeError, TypeError)`` or, in two cases, a deliberate broad
 catch: ``initialize()`` ``except Exception:`` re-raises after closing the
@@ -719,7 +720,7 @@ async def _migrate_to_v5(db: aiosqlite.Connection) -> None:
     not indexable in the target SQLite build ("no such column: rowid"), and
     for ``iterations`` ``id`` is the INTEGER PK ≡ rowid. ``CREATE INDEX IF NOT
     EXISTS`` is idempotent, so this is safe on both fresh and legacy DBs. See
-    ``docs/adr/ARC-011-cursor-pagination.md`` §4.
+    ARC-011 P0-016 §4 (design: ``src/core/pagination.py`` docstring).
     """
     for statement in (
         "CREATE INDEX IF NOT EXISTS "

@@ -1,7 +1,7 @@
 """P0-020 / P0-021 — Mandatory signed production approval bound to a candidate (W18 v2).
 
 Exercises the four acceptance criteria from the ARC-011 backlog
-(`docs/adr/ARC-011-backlog.md` §P0-020/P0-021) plus the v2 candidate binding:
+(ARC-011 P0-020/P0-021) plus the v2 candidate binding:
 
   AC #1  ``POST /promote/confirm`` with ``scope=production`` and missing /
          ``false`` ``approval.approved`` → 4xx.

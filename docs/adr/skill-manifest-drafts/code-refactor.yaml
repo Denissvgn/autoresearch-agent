@@ -1,0 +1,172 @@
+# -*- yaml -*-
+# ARC-011 manifest spike (X-003) — DRAFT, not a live skill.
+#
+# id: code-refactor  (category: generative)
+#
+# Promoted artifact is source code. Exercises the git_branch promotion target
+# and a non-trivial blocker_classification set (G3). Flags a git-executable
+# policy concern for X-004 (plugin security sandbox).
+#
+# Section presence (X-003 AC): all eight required sections populated:
+#   param_schema | metric_schema | decision_vocabulary | phase_plan
+#   command_policy | output_parser | preflight | promotion_target
+
+schema_version: research_skill.v1
+id: code-refactor
+version: 0.2.0
+category: generative
+display_name: "Code Refactor Research"
+description: "Iterate refactors against the test suite, benchmarks, and linters; promote the winner as a branch/PR."
+
+llm:
+  provider: router
+  primary_model: claude-sonnet-4-20250514
+  insight_model: claude-haiku-4-20250514
+  max_output_tokens: 8192
+  system_prompt: SKILL.md
+
+workspace:
+  session_path_template: "runs/{skill_id}/{subject_id}/{variant}"
+
+# G12: subject = repo path; variant = module path (script-enumerated).
+subjects:
+  enumerator: scripts/list_repos.py
+  cache_ttl_s: 3600
+variants:
+  enumerator: scripts/list_modules.py
+
+# ── 1/8 param_schema ──────────────────────────────────────────────────────────
+param_schema:
+  type: object
+  additionalProperties: false
+  properties:
+    repo:                 { type: string, description: "git remote or local checkout path" }
+    base_branch:          { type: string, default: main }
+    perf_regression_pct:  { type: number, minimum: 0, maximum: 100, default: 5.0 }
+    target_complexity_drop_pct: { type: number, minimum: 0, maximum: 100, default: 10.0 }
+  required: [repo]
+
+# ── 2/8 metric_schema ─────────────────────────────────────────────────────────
+metric_schema:
+  primary:
+    field: primary_metric
+    label: "Composite Refactor Score"
+    direction: higher_is_better
+    format: ".4f"
+  gates:
+    - { field: tests_pass,          label: "Tests", kind: boolean_badge }
+    - { field: no_perf_regression,  label: "Perf",  kind: boolean_badge }
+  chart_series:
+    - { field: composite_refactor_score, label: "Score" }
+    - { field: test_pass_rate,           label: "Pass %" }
+    - { field: perf_delta_pct,           label: "ΔPerf %", axis: right }
+    - { field: complexity_drop_pct,      label: "ΔCplx %", axis: right }
+  iteration_table_columns:
+    - { field: primary_metric,        label: "Score" }
+    - { field: tests_pass,            label: "Tests", kind: icon }
+    - { field: no_perf_regression,    label: "Perf",  kind: icon }
+    - { field: complexity_drop_pct,   label: "ΔCplx" }
+  goal: optimize
+
+# ── 3/8 decision_vocabulary ───────────────────────────────────────────────────
+decision_vocabulary:
+  base:           [keep, discard, improve, unknown]
+  extensions:     []
+  success_values: [keep, improve]
+
+# ── 4/8 phase_plan ────────────────────────────────────────────────────────────
+phase_plan:
+  - { id: baseline_capture,     min_iterations: 1, max_iterations: 2,  evidence_keys: [baseline_metrics] }
+  - { id: mechanical_refactors, min_iterations: 3, max_iterations: 15, evidence_keys: [refactor_applied],
+      next_action: "Apply low-risk mechanical refactors (rename, extract, dead-code) one at a time." }
+  - { id: design_refactors,     min_iterations: 2, max_iterations: 10, evidence_keys: [design_change],
+      next_action: "Restructure modules/interfaces; keep tests green." }
+  - { id: validation,           min_iterations: 1, max_iterations: 4,  evidence_keys: [full_validation] }
+  - { id: promotion_proposal,   min_iterations: 1, max_iterations: 2,  evidence_keys: [promotion_proposal] }
+phase_advancement:
+  mode: declarative
+
+# ── 5/8 command_policy ────────────────────────────────────────────────────────
+# NOTE for X-004: allowing `git` is a wider trust surface than ml-direction's
+# policy. The runner must confine git to read-only + branch operations on the
+# session checkout only — no push to protected branches, no operations outside
+# the workspace. This is a sandbox-design input, not something this manifest can
+# enforce on its own.
+command_policy:
+  allowed_python: [".venv/bin/python"]
+  allowed_scripts:
+    - eval/run_tests.sh
+    - eval/run_benchmarks.sh
+    - eval/lint.sh
+  allowed_executables: [git, cp, cat, jq]    # git: read-only + branch ops, confined
+  copyable_files: []
+  readable_files: []
+  forbidden_tokens: ["|", "||", "&&", ";", "&"]
+  forbidden_substrings: ["`", "$", ">", "<", "\n", "\r"]
+  secret_markers: [.env, /proc/, /run/secrets, authorization, bearer, credential, id_rsa, password, secret, token]
+
+# ── 6/8 output_parser ─────────────────────────────────────────────────────────
+output_parser:
+  format: json_marker
+  iteration_marker: "ITERATION_RESULT:"
+  nonce_field: server_nonce
+  required_fields: [status, primary_metric, metric_name, test_pass_rate]
+  failure_statuses: [eval_error, timeout, build_failed]
+  fallback:
+    read_results_file: eval_result.json
+    marker_dir_template: "{workspace}/"
+
+# ── 7/8 preflight ─────────────────────────────────────────────────────────────
+preflight:
+  - { name: repo-checkout, kind: local_file,  path: "{skill_params.repo}/.git/HEAD", required: true }
+  - { name: test-runner,   kind: local_file,  path: "{workspace}/eval/run_tests.sh", required: true }
+
+# ── 8/8 promotion_target (git_branch) ─────────────────────────────────────────
+promotion_target:
+  primary:
+    kind: git_branch
+    repository: "{skill_params.repo}"
+    base_branch: "{skill_params.base_branch}"
+    proposed_branch_template: "research/{research_id}"
+    pr_template:
+      title: "Research refactor {research_id}"
+      body: "Auto-generated by autoresearch-agent code-refactor skill."
+  scopes:
+    - { id: development, approval_required: false }
+    - { id: production,  approval_required: true, prior_scopes: [development] }
+
+# ── G3: blocker_classification (non-trivial; distinguishes actionable vs not) ─
+blocker_classification:
+  actionable_blockers:
+    [tests_failing, perf_regression, lint_errors, type_errors, import_cycle]
+  # NOT actionable by the agent: resolved server-side / by an operator.
+  #   coverage_drop             — informational; not a blocker
+  #   protected_branch_blocked  — promotion-time only
+  #   benchmark_flaky           — infra; rerun, do not "fix"
+  phase_evidence_keys:
+    mechanical_refactors: [refactor_applied]
+    design_refactors:     [design_change]
+    validation:           [full_validation]
+    promotion_proposal:   [promotion_proposal]
+
+trial_identity:
+  hash_fields: [skill_id, subject_id, variant, patch_hash, test_suite_hash]
+  resolve: { mode: declarative }
+
+structured_hpo:
+  enabled: false
+
+insights:
+  prompt_template: insights.md
+  model: claude-haiku-4-20250514
+  max_chars: 500
+
+prompt:
+  experiment_command: |
+    .venv/bin/python eval/run_tests.sh --repo {workspace}/checkout --branch {workspace}/candidate
+  continuation_enabled: true
+
+ui:
+  form_fields:
+    - { name: repo,        type: string, required: true }
+    - { name: base_branch, type: string, default: main }

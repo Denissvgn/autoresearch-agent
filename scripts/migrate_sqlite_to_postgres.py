@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""ARC-011 P6-005 — SQLite → Postgres data migration.
+"""SQLite → Postgres data migration.
 
 Idempotent, re-runnable mover for an existing ``experiments.db`` SQLite file
 into a Postgres database that ``PostgresStateStore`` will manage. The target
 DB's canonical schema (``_SCHEMA_SQL_PG``) is created by
 ``PostgresStateStore.initialize()``; this script only moves ROWS.
 
-Design (per ARC-011-postgres-state-store.md §2 D-migration):
+Design notes:
 
 * **Batched:** each table is read in ``rowid``-ordered batches from SQLite and
   batch-INSERTed into Postgres within a per-table transaction.
@@ -76,7 +76,7 @@ _COERCION_NOTES = {
     ),
     "research_sessions": (
         "terminate_request_received is INTEGER DEFAULT 0 (SQLite) → "
-        "INTEGER DEFAULT 0 (Postgres). The Phase-6 lock_epoch column is "
+        "INTEGER DEFAULT 0 (Postgres). The lock_epoch column is "
         "Postgres-only and defaults to 0 for migrated rows."
     ),
 }

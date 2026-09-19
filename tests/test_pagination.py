@@ -12,7 +12,7 @@ Covers:
   * API-layer envelope selection (cursor path vs legacy offset path) via
     direct handler calls.
 
-Design reference: ``docs/adr/ARC-011-cursor-pagination.md``.
+Design reference: ``src/core/pagination.py`` module docstring (ARC-011 P0-016).
 """
 
 from __future__ import annotations

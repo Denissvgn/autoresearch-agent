@@ -1,4 +1,4 @@
-"""Subject & variant enumeration endpoints (ARC-011 P3-009, P3-010, P3-011).
+"""Subject & variant enumeration endpoints.
 
 A *subject* is the entity a research session tunes (an instrument for ML skills,
 a database for db-config-tuning, a code repo for code-refactor). A *variant* is
@@ -101,14 +101,14 @@ def _enumerate_variants(manifest: ResearchSkillManifest, subject_id: str) -> Lis
 
 @router.get("/subjects")
 async def list_subjects(skill_id: str) -> List[Dict[str, Any]]:
-    """List subjects for a skill (P3-009)."""
+    """List subjects for a skill."""
     manifest = _get_manifest_or_404(skill_id)
     return _enumerate_subjects(manifest)
 
 
 @router.get("/subjects/{subject_id}/variants")
 async def list_subject_variants(subject_id: str, skill_id: str) -> Dict[str, Any]:
-    """List variants for a subject under a skill (P3-010)."""
+    """List variants for a subject under a skill."""
     manifest = _get_manifest_or_404(skill_id)
     variants = _enumerate_variants(manifest, subject_id)
     return {"skill_id": skill_id, "subject_id": subject_id, "variants": variants}

@@ -1,7 +1,7 @@
 # ARC-011 P4-012 — the live `prompt-engineering` skill descriptor.
 #
 # The first non-ML skill (category: generative). Lifted from
-# docs/adr/arc-011-manifest-spike/prompt-engineering.yaml (X-003 draft) and
+# docs/adr/skill-manifest-drafts/prompt-engineering.yaml (the original draft) and
 # reconciled to the canonical research_skill.v1 schema (P2-001).
 #
 # Key Phase-4 properties:

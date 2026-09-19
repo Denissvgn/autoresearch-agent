@@ -330,8 +330,8 @@ async def promote_preview(
         return _inject_target_kind(result, skill_id=skill_id)
     except ValueError as e:
         # P7-008: the former string-sniffing branch for the deleted
-        # "Unknown model type" message is gone — that string no longer exists
-        # anywhere in src/ and the branch could only mask real errors. A
+        # unknown-model-type error message is gone — that message no longer
+        # exists anywhere in src/ and the branch could only mask real errors. A
         # genuine ValueError here is a not-found/validation failure from the
         # promoter; the session's target kind is surfaced separately by
         # ``_inject_target_kind`` on success.

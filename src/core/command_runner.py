@@ -159,7 +159,7 @@ _BEARER_RE = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+")
 # --- Governed-subprocess environment (ARC-011 P0-023) -----------------------
 # The child of a governed command is built from this allow-list (default-deny):
 # anything not enumerated below is dropped from the inherited environment.
-# See docs/adr/ARC-011-security-spike.md §4.3 (agent-path env contract).
+# See ARC-011 security spike §4.3 (agent-path env contract).
 _CHILD_ENV_ALLOWLIST: frozenset[str] = frozenset(
     {
         # Shell / locale / runtime
@@ -212,7 +212,7 @@ def _build_child_env(
     Default-deny: only names in ``_CHILD_ENV_ALLOWLIST`` or matching
     ``_CHILD_ENV_PREFIXES`` are kept, then ``_FORBIDDEN_CHILD_ENV`` is
     subtracted. Closes the secret-inheritance gap documented in
-    docs/adr/ARC-011-security-spike.md §4.1 while preserving the experiment-
+    the ARC-011 security spike §4.1 while preserving the experiment-
     legitimate vars the six ``_ALLOWED_SCRIPTS`` entries (and their known
     training children) read.
     """

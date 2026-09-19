@@ -1,7 +1,7 @@
 """Governed subprocess runner for skill-supplied plugins (ARC-011 X-004 / P5-005).
 
 This module implements the **plugin execution contract** recorded in the X-004
-security spike (``docs/adr/ARC-011-security-spike.md`` §6). Every skill-supplied
+security spike (§6; design recorded in this module's docstring). Every skill-supplied
 Python file — ``bootstrap.py``, ``parser.py``, ``preflight.py``,
 ``resolve_identity.py`` — runs in its own confined subprocess via this runner,
 never ``import``-ed into the server process (X-004 D2).

@@ -80,17 +80,52 @@ jobs:
       - name: Domain-coupling guard
         run: python scripts/check_domain_coupling.py
 
+      - name: Referenced-doc integrity guard
+        # A code comment referencing a docs/*.md path that does not exist
+        # fails the build, so deleted/renamed docs cannot leave stale
+        # references behind.
+        run: python scripts/check_doc_references.py
+
+      - name: Legacy-vocabulary branching guard
+        # New code must key on the skill manifest, not the frozen legacy
+        # model_type vocabulary; branching on it is allowlisted to the
+        # frozen legacy surfaces.
+        run: python scripts/check_legacy_vocab_branching.py
+
       - name: Ruff
         run: poetry run ruff check --config pyproject.toml src tests --output-format=github
 
       - name: Mypy
         run: poetry run mypy src --no-error-summary
 
+      # The non-ML end-to-end proof as a DISTINCT check, so branch
+      # protection can require it by name (it also runs inside the full
+      # suite below — this step exists for visibility and a fast signal).
+      - name: Non-ML session e2e
+        env:
+          ANTHROPIC_BASE_URL: http://anthropic.invalid
+          ANTHROPIC_AUTH_TOKEN: test-token
+        run: poetry run pytest tests/test_non_ml_session_e2e.py -q
+
       - name: Pytest
         env:
           ANTHROPIC_BASE_URL: http://anthropic.invalid
           ANTHROPIC_AUTH_TOKEN: test-token
         run: poetry run pytest tests -q
+
+  smoke:
+    # The scripted Docker smoke — build the real image and prove readiness,
+    # the installed skills, and a real prompt-engineering demo session
+    # reaching an iteration.
+    name: Docker Smoke
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Smoke test the built image
+        run: scripts/smoke_docker.sh
 
   distributed:
     # Runs the postgres/distributed-marked tests against a real Postgres
@@ -169,6 +204,9 @@ jobs:
         working-directory: ui
         env:
           NODE_OPTIONS: --max-old-space-size=2048
+        # The pool/worker flags are a GitHub-runner memory constraint only —
+        # they do not change test semantics. Locally `npm run test:unit -- --run`
+        # (default pool) runs the same suite.
         run: npm run test:unit -- --pool=forks --maxWorkers=1 --minWorkers=1 --no-file-parallelism
 
       - name: Build
