@@ -1,6 +1,6 @@
 # SkillRuntime
 
-**Location:** `src/core/skill_runtime.py:174`
+**Location:** `src/core/skill_runtime.py:178`
 **Kind:** Class
 **Bases:** `Protocol`
 **Module:** [skill_runtime](../modules/skill_runtime.md)

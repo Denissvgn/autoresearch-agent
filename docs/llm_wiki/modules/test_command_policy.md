@@ -19,6 +19,7 @@ _Auto-generated from `tests/test_command_policy.py`._
 | `src.core.command_policy` | `evaluate_command_policy` |
 | `src.core.command_runner` | `_CHILD_ENV_ALLOWLIST`, `GovernedCommandRunner`, `redact_sensitive_text` |
 | `src.core.orchestrator` | `_execute_tool` |
+| `src.core.tool_access` | `build_tool_access_context` |
 | `sys` | `sys` |
 | `time` | `time` |
 | `types` | `types` |
@@ -31,16 +32,21 @@ flowchart LR
     n0["src/core/command_policy.py"]
     n1["src/core/command_runner.py"]
     n2["src/core/orchestrator.py"]
-    n3["tests/test_command_policy.py"]
+    n3["src/core/tool_access.py"]
+    n4["tests/test_command_policy.py"]
+    n0 --> n3
     n1 --> n0
+    n1 --> n3
     n2 --> n1
-    n3 --> n0
-    n3 --> n1
-    n3 --> n2
+    n4 --> n0
+    n4 --> n1
+    n4 --> n2
+    n4 --> n3
     click n0 "../modules/command_policy.md"
     click n1 "../modules/command_runner.md"
     click n2 "../modules/orchestrator.md"
-    click n3 "../modules/test_command_policy.md"
+    click n3 "../modules/tool_access.md"
+    click n4 "../modules/test_command_policy.md"
 ```
 
 ### Internal neighbors
@@ -50,6 +56,7 @@ flowchart LR
 | Outbound | [command_policy](../modules/command_policy.md) |
 | Outbound | [command_runner](../modules/command_runner.md) |
 | Outbound | [orchestrator](../modules/orchestrator.md) |
+| Outbound | [tool_access](../modules/tool_access.md) |
 
 ### External packages
 

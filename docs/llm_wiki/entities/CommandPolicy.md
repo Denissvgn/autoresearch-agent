@@ -27,6 +27,7 @@ Allowed scripts / executables / files for the skill (ARC-011 §9
 | `allowed_executables` | `list[str]` | `allowed_executables` | No | No | factory: `list` | — | — | — |
 | `copyable_files` | `list[str]` | `copyable_files` | No | No | factory: `list` | — | — | — |
 | `readable_files` | `list[str]` | `readable_files` | No | No | factory: `list` | — | — | — |
+| `write_protected_files` | `list[str]` | `write_protected_files` | No | No | factory: `list` | — | — | — |
 | `forbidden_tokens` | `list[str]` | `forbidden_tokens` | No | No | factory: `list` | — | — | — |
 | `forbidden_substrings` | `list[str]` | `forbidden_substrings` | No | No | factory: `list` | — | — | — |
 | `secret_markers` | `list[str]` | `secret_markers` | No | No | factory: `list` | — | — | — |
@@ -51,7 +52,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [skill_manifest](../modules/skill_manifest.md) | 0 | `allowed_executables`, `allowed_python`, `allowed_scripts`, `config_flag`, `copyable_files`, `forbidden_substrings`, `forbidden_tokens`, `readable_files`, `secret_markers` |
+| [skill_manifest](../modules/skill_manifest.md) | 0 | `allowed_executables`, `allowed_python`, `allowed_scripts`, `config_flag`, `copyable_files`, `forbidden_substrings`, `forbidden_tokens`, `readable_files`, `secret_markers`, `write_protected_files` |
 
 ### Structure
 

@@ -1,6 +1,6 @@
 # ManifestSkillRuntime
 
-**Location:** `src/core/skill_runtime.py:346`
+**Location:** `src/core/skill_runtime.py:350`
 **Kind:** Class
 **Bases:** —
 **Module:** [skill_runtime](../modules/skill_runtime.md)
@@ -123,4 +123,4 @@ flowchart LR
 | `TestManifestSkillRuntimeNonceValidation.runtime` | call | [test_skill_prompt_engineering_e2e](../modules/test_skill_prompt_engineering_e2e.md) | 1 |
 | `TestPromptEngineeringSkillManifest.test_demo_experiment_command_declared_and_renders` | call | [test_skill_prompt_engineering_e2e](../modules/test_skill_prompt_engineering_e2e.md) | 1 |
 
-> References: showing 12 of 14 logical references; 2 omitted by the 12-row generated summary limit.
+> References: showing 12 of 15 logical references; 3 omitted by the 12-row generated summary limit.

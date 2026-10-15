@@ -1,6 +1,6 @@
 # OutputParserConfig
 
-**Location:** `src/core/skill_manifest.py:552`
+**Location:** `src/core/skill_manifest.py:556`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)

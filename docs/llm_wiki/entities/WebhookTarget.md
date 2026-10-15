@@ -1,6 +1,6 @@
 # WebhookTarget
 
-**Location:** `src/core/skill_manifest.py:726`
+**Location:** `src/core/skill_manifest.py:730`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)

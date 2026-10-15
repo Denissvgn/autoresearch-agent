@@ -33,7 +33,8 @@ Design contract (X-004 §6, verbatim where load-bearing):
   propagates to the server process** (the single-instance W14 guarantee).
 * **Path confinement (D4):** the plugin's CWD is the session workspace;
   ``skills/`` is reachable read-only; writes are confined to the workspace when
-  ``caps.fs_write == "workspace"``. Reuses ``command_policy._is_within``.
+  ``caps.fs_write == "workspace"``. Path confinement uses ``relative_to``
+  checks against the declared roots.
 
 The ``BootstrapRunner`` (P5-005, ``bootstrap_runner.py``) is the first
 consumer; ``parser`` / ``preflight`` / ``resolve_identity`` plugins follow the
@@ -68,7 +69,6 @@ Design decisions (P1-007 house style):
 | `os` | `os` |
 | `pathlib` | `Path` |
 | `psutil` | `psutil` |
-| `src.core.command_policy` | `_is_within` |
 | `src.core.command_runner` | `_terminate_process_group_without_communicate` |
 | `src.core.skill_manifest` | `PluginCaps`, `PluginKind` |
 | `subprocess` | `subprocess` |
@@ -85,35 +85,31 @@ Design decisions (P1-007 house style):
 flowchart LR
     n0["src/cli.py"]
     n1["src/core/bootstrap_runner.py"]
-    n2["src/core/command_policy.py"]
-    n3["src/core/command_runner.py"]
-    n4["src/core/plugin_runner.py"]
-    n5["src/core/skill_manifest.py"]
-    n6["tests/test_plugin_runner.py"]
-    n7["tests/test_prompt_evaluator.py"]
-    n8["tests/test_skill_prompt_engineering_e2e.py"]
+    n2["src/core/command_runner.py"]
+    n3["src/core/plugin_runner.py"]
+    n4["src/core/skill_manifest.py"]
+    n5["tests/test_plugin_runner.py"]
+    n6["tests/test_prompt_evaluator.py"]
+    n7["tests/test_skill_prompt_engineering_e2e.py"]
+    n0 --> n3
     n0 --> n4
-    n0 --> n5
+    n1 --> n3
     n1 --> n4
-    n1 --> n5
     n3 --> n2
-    n4 --> n2
-    n4 --> n3
-    n4 --> n5
-    n6 --> n4
-    n6 --> n5
-    n7 --> n1
-    n7 --> n4
-    n8 --> n4
+    n3 --> n4
+    n5 --> n3
+    n5 --> n4
+    n6 --> n1
+    n6 --> n3
+    n7 --> n3
     click n0 "../modules/cli.md"
     click n1 "../modules/bootstrap_runner.md"
-    click n2 "../modules/command_policy.md"
-    click n3 "../modules/command_runner.md"
-    click n4 "../modules/plugin_runner.md"
-    click n5 "../modules/skill_manifest.md"
-    click n6 "../modules/test_plugin_runner.md"
-    click n7 "../modules/test_prompt_evaluator.md"
-    click n8 "../modules/test_skill_prompt_engineering_e2e.md"
+    click n2 "../modules/command_runner.md"
+    click n3 "../modules/plugin_runner.md"
+    click n4 "../modules/skill_manifest.md"
+    click n5 "../modules/test_plugin_runner.md"
+    click n6 "../modules/test_prompt_evaluator.md"
+    click n7 "../modules/test_skill_prompt_engineering_e2e.md"
 ```
 
 ### Internal neighbors
@@ -125,7 +121,6 @@ flowchart LR
 | Inbound | [test_plugin_runner](../modules/test_plugin_runner.md) |
 | Inbound | [test_prompt_evaluator](../modules/test_prompt_evaluator.md) |
 | Inbound | [test_skill_prompt_engineering_e2e](../modules/test_skill_prompt_engineering_e2e.md) |
-| Outbound | [command_policy](../modules/command_policy.md) |
 | Outbound | [command_runner](../modules/command_runner.md) |
 | Outbound | [skill_manifest](../modules/skill_manifest.md) |
 

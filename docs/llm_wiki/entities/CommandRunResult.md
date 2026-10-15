@@ -1,6 +1,6 @@
 # CommandRunResult
 
-**Location:** `src/core/command_runner.py:236`
+**Location:** `src/core/command_runner.py:237`
 **Kind:** Class
 **Bases:** —
 **Module:** [command_runner](../modules/command_runner.md)

@@ -1,6 +1,6 @@
 # CommandDecision
 
-**Location:** `src/core/command_policy.py:52`
+**Location:** `src/core/command_policy.py:54`
 **Kind:** Class
 **Bases:** —
 **Module:** [command_policy](../modules/command_policy.md)

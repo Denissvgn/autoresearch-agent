@@ -1,6 +1,6 @@
 # Phase
 
-**Location:** `src/core/skill_runtime.py:120`
+**Location:** `src/core/skill_runtime.py:124`
 **Kind:** Class
 **Bases:** `TypedDict`
 **Module:** [skill_runtime](../modules/skill_runtime.md)

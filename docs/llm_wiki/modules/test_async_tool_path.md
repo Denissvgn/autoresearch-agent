@@ -39,6 +39,7 @@ this file covers the grep / glob tools specifically.
 | `src.core.agent_tools` | `tools`, `tools`, `tools` |
 | `src.core.command_runner` | `_build_child_env` |
 | `src.core.orchestrator` | `_execute_tool`, `_tool_glob`, `_tool_grep` |
+| `src.core.tool_access` | `ToolAccessContext`, `build_tool_access_context` |
 | `subprocess` | `subprocess` |
 | `sys` | `sys` |
 | `time` | `time` |
@@ -51,17 +52,22 @@ flowchart LR
     n0["src/core/agent_tools.py"]
     n1["src/core/command_runner.py"]
     n2["src/core/orchestrator.py"]
-    n3["tests/test_async_tool_path.py"]
+    n3["src/core/tool_access.py"]
+    n4["tests/test_async_tool_path.py"]
     n0 --> n1
+    n0 --> n3
+    n1 --> n3
     n2 --> n0
     n2 --> n1
-    n3 --> n0
-    n3 --> n1
-    n3 --> n2
+    n4 --> n0
+    n4 --> n1
+    n4 --> n2
+    n4 --> n3
     click n0 "../modules/agent_tools.md"
     click n1 "../modules/command_runner.md"
     click n2 "../modules/orchestrator.md"
-    click n3 "../modules/test_async_tool_path.md"
+    click n3 "../modules/tool_access.md"
+    click n4 "../modules/test_async_tool_path.md"
 ```
 
 ### Internal neighbors
@@ -71,6 +77,7 @@ flowchart LR
 | Outbound | [agent_tools](../modules/agent_tools.md) |
 | Outbound | [command_runner](../modules/command_runner.md) |
 | Outbound | [orchestrator](../modules/orchestrator.md) |
+| Outbound | [tool_access](../modules/tool_access.md) |
 
 ### External packages
 
@@ -83,6 +90,7 @@ flowchart LR
 | Function | Signature | Decorators | Description |
 |----------|-----------|------------|-------------|
 | `_workspace` | `(tmp_path: Path) -> str` | — | — |
+| `_access` | `(workspace: str) -> ToolAccessContext` | — | — |
 | `test_execute_tool_is_sync_function` | `()` | — | ``_execute_tool`` is a plain synchronous function. The agent loop wraps |
 | `test_tool_grep_is_sync_function` | `()` | — | ``_tool_grep`` is a plain synchronous function (uses ``subprocess.run`` |
 | `test_tool_glob_is_sync_function` | `()` | — | ``_tool_glob`` is synchronous (pure-Python, non-blocking). |

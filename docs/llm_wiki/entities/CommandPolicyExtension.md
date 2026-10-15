@@ -29,6 +29,7 @@ session workspace is deliberately NOT used — it is agent-writable).
 | `allowed_executables` | `list[str]` | *optional* | — |
 | `copyable_files` | `list[str]` | *optional* | — |
 | `readable_files` | `list[str]` | *optional* | — |
+| `write_protected_files` | `list[str]` | *optional* | — |
 | `script_paths` | `dict[str, str]` | *optional* | — |
 | `config_flag` | `str` | *optional* | — |
 
@@ -57,7 +58,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [skill_runtime](../modules/skill_runtime.md) | 0 | `allowed_executables`, `allowed_scripts`, `config_flag`, `copyable_files`, `readable_files`, `script_paths` |
+| [skill_runtime](../modules/skill_runtime.md) | 0 | `allowed_executables`, `allowed_scripts`, `config_flag`, `copyable_files`, `readable_files`, `script_paths`, `write_protected_files` |
 
 ### Structure
 

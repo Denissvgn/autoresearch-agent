@@ -18,7 +18,7 @@ _Auto-generated from `PromotionApproval` in `src/api/promotion.py`._
 | `method` | `str \| None` | `method` | No | Yes | `None` | — | — | — |
 | `signature` | `str \| None` | `signature` | No | Yes | `None` | — | — | — |
 | `approved` | `bool \| None` | `approved` | No | Yes | `None` | — | — | — |
-| `iteration` | `int \| None` | `iteration` | No | Yes | `None` | ge=0; strict=True | — | — |
+| `iteration` | `int \| None` | `iteration` | No | Yes | `None` | strict=True; ge=0 | — | — |
 | `config_snapshot_sha256` | `str \| None` | `config_snapshot_sha256` | No | Yes | `None` | pattern='^[0-9a-f]{64}$' | — | — |
 | `target_identity` | `str \| None` | `target_identity` | No | Yes | `None` | pattern='^[0-9a-f]{64}$' | — | — |
 

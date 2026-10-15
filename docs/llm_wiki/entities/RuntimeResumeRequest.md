@@ -13,7 +13,7 @@ Explicit operator action for resuming a restart-recovered session.
 
 | Name | Type | Wire name | Required | Nullable | Default | Constraints | Examples | Description |
 |------|------|-----------|----------|----------|---------|-------------|-------------|----------|
-| `reason` | `str` | `reason` | Yes | No | — | max_length=1000; min_length=3 | — | Operator reason for resuming the interrupted session. |
+| `reason` | `str` | `reason` | Yes | No | — | min_length=3; max_length=1000 | — | Operator reason for resuming the interrupted session. |
 | `allow_interrupted` | `bool` | `allow_interrupted` | No | No | `False` | — | — | Allow resume from interrupted state when evidence is incomplete. |
 
 ## Methods

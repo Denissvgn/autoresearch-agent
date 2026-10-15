@@ -1,6 +1,6 @@
 # _CapturingRunner
 
-**Location:** `tests/test_trial_workspace.py:178`
+**Location:** `tests/test_trial_workspace.py:183`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_trial_workspace](../modules/test_trial_workspace.md)

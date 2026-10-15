@@ -6,8 +6,8 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 
 | Surface | Count | Start here |
 |---|---:|---|
-| Entities | 425 | [Open section](#entities) |
-| Modules | 243 | [Open section](#modules) |
+| Entities | 426 | [Open section](#entities) |
+| Modules | 245 | [Open section](#modules) |
 | Workflows | 13 | [Open section](#workflows) |
 | Guides | 0 | No pages |
 | Entry-point flows | 111 | [Open section](#entry-point-flows) |
@@ -353,6 +353,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [TestVerdict](entities/TestVerdict.md)
 - [TextBlock](entities/TextBlock.md)
 - [ThemeName](entities/ThemeName.md)
+- [ToolAccessContext](entities/ToolAccessContext.md)
 - [ToolDef](entities/ToolDef.md)
 - [ToolExecutionResult](entities/ToolExecutionResult.md)
 - [ToolResultBlock](entities/ToolResultBlock.md)
@@ -676,10 +677,12 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [test_state_machine](modules/test_state_machine.md) - Unit tests for ``SessionStateMachine`` (ARC-011 P0-002).
 - [test_state_store](modules/test_state_store.md) - Structural / contract tests for the ``StateStore`` protocol (ARC-011 P1-006) and the ``SQLiteStateStore`` implementation (P1-007).
 - [test_terminal_phase_contract](modules/test_terminal_phase_contract.md) - Fix D/G: terminal-phase contract.
+- [test_tool_access](modules/test_tool_access.md) - Tool-dispatch authorization regressions for the shared file-tool context.
 - [test_trial_workspace](modules/test_trial_workspace.md) - Per-workdir trial state tests (P2 — ``execution.concurrency`` prerequisite).
 - [test_webhook_promotion](modules/test_webhook_promotion.md) - Webhook promotion target tests (P1-3).
 - [test_ws_event_enrichment](modules/test_ws_event_enrichment.md) - P3-018 — WebSocket event payload enrichment tests (ARC-011 C-stream).
 - [tests_conftest](modules/tests_conftest.md) - `tests/conftest.py`
+- [tool_access](modules/tool_access.md) - Shared file-tool authorization: one context for every file operation.
 - [trial_workspace](modules/trial_workspace.md) - Per-workdir trial state (P2 — the ``execution.concurrency`` prerequisite).
 - [types](modules/types.md) - `ui/src/skill-plugins/types.ts`
 - [ui_src_main](modules/ui_src_main.md) - `ui/src/main.tsx`

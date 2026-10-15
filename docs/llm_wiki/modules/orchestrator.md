@@ -23,7 +23,7 @@ Agent orchestrator — drives Claude via the Anthropic SDK with tool use.
 | `re` | `re` |
 | `shlex` | `shlex` |
 | `src.config` | `secret_value`, `settings` |
-| `src.core.agent_tools` | `AGENT_TOOLS`, `ToolExecutionResult`, `_config_snapshot_path_from_command`, `_execute_tool`, `_load_packaged_skill_md`, `_nonce_env_for_command`, `_normalize_command_for_plan`, `_safe_path`, `_safe_write_path`, `_tool_bash`, `_tool_glob`, `_tool_grep`, `_tool_read_file`, `_tool_write_file` |
+| `src.core.agent_tools` | `AGENT_TOOLS`, `ToolAccessContext`, `ToolExecutionResult`, `_config_snapshot_path_from_command`, `_execute_tool`, `_load_packaged_skill_md`, `_nonce_env_for_command`, `_normalize_command_for_plan`, `_tool_bash`, `_tool_glob`, `_tool_grep`, `_tool_read_file`, `_tool_write_file`, `build_tool_access_context` |
 | `src.core.artifact_reference` | `normalize_artifact_references_in_mapping` |
 | `src.core.command_runner` | `CommandProcessRegistry`, `GovernedCommandRunner`, `OutputCallback`, `_build_child_env`, `redact_sensitive_text` |
 | `src.core.consistency_validator` | `ACCEPTED_ADAPTIVE_NOOP_REASONS`, `build_consistency_report`, `check_adaptive_feature_sweep`, `consistency_report_json` |

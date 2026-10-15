@@ -1,6 +1,6 @@
 # RegistryApiTarget
 
-**Location:** `src/core/skill_manifest.py:674`
+**Location:** `src/core/skill_manifest.py:678`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)

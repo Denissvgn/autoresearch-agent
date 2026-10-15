@@ -1,6 +1,6 @@
 # SubjectDescriptor
 
-**Location:** `src/core/skill_runtime.py:151`
+**Location:** `src/core/skill_runtime.py:155`
 **Kind:** Class
 **Bases:** `TypedDict`
 **Module:** [skill_runtime](../modules/skill_runtime.md)

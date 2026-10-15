@@ -1,8 +1,8 @@
 {
   "artifact_hashes": {
-    "evaluated_envelope_hash": "sha256:accaf612840b087566c907d0b3dd9495d46bbb4f448b7e90b5ff55683966e265",
-    "knowledge_index_hash": "sha256:4100ce3fe5df9c7c0559d63ac60bc2c0bca45c92353d3da587b1f623e4fa8736",
-    "surface_index_hash": "sha256:4a1b1964cd0649f1004c28de28765ba3fde297e6b5ffae34f883f9a3ad551a47"
+    "evaluated_envelope_hash": "sha256:a5e4111be66215ba2dad5f71ee77090b7a6b0382257ffffd0df69f57d8271947",
+    "knowledge_index_hash": "sha256:d11f870e480d605597646a29b9ce8f5566011944b6ee5494765fa3ef2f88e730",
+    "surface_index_hash": "sha256:4156ec7bf0c7aab09559c8daf6e95680b15f8db153b2ba452470f4e5c912c74e"
   },
   "evidence_baselines": {
     "entities/AccentName.md": {
@@ -30,7 +30,7 @@
         "concept_observation_hash": "sha256:9834c6cb604012b5107fa60bcf8d8fcaa089ceed34e10ccf840cb2d243fabbff",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -40,7 +40,7 @@
         "concept_observation_hash": "sha256:8f53e5fbec0c9dff4823499f1c36270ffb40db18b8b48acc14076b563e3756a2",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:756220735d3856092ae37fa87fb86d63b8a934fa9aaa1fc46eb611b82824327e",
+        "source_content_hash": "sha256:1e21331e341b99d6878aba77e7c720bf3dec534d5e5aa188add94d898c72919a",
         "source_path": "src/core/skill_runtime.py"
       },
       "state": "known"
@@ -80,7 +80,7 @@
         "concept_observation_hash": "sha256:bf4ed2f83b31f44e1da88577319db943dde7f7870186736e8d0d416eb2ed2e4c",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:8fd434af093eec17144efd3d23fb1081e27ef2bcb47e2b3c6f0ec2a73e28f473",
+        "source_content_hash": "sha256:67520456699eb4d4a5edef2e7c1e57d1dfcbd629869f205b915e165b8d774bbe",
         "source_path": "src/core/orchestrator.py"
       },
       "state": "known"
@@ -110,7 +110,7 @@
         "concept_observation_hash": "sha256:2813eaafd7a178a52b50307a1e64f0f440f6e8f213aa40df3173933f07555aec",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -150,7 +150,7 @@
         "concept_observation_hash": "sha256:7e38a4ddcdb91203062773827746538afadd4aab1ba89b28bc5a53c8e09190a1",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -250,7 +250,7 @@
         "concept_observation_hash": "sha256:99c063fd7b7d6c3b55cb2f5016575fc985ec87074d715b37f22a8e0d89f1f3c7",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -280,27 +280,27 @@
         "concept_observation_hash": "sha256:c6990ed933ee72452fd381f9384d9e163952d9d498f447a1923ab6df5b3b6662",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:3d9e1e5b8f64881d3ad4940b5d94ee4862a81cccbd1560c6125ca15b2ec895ba",
+        "source_content_hash": "sha256:1d91621795373ea15afdf15254fb025220447fd104d12ba1f59d3f41db4f9712",
         "source_path": "src/core/command_policy.py"
       },
       "state": "known"
     },
     "entities/CommandPolicy.md": {
       "basis": {
-        "concept_observation_hash": "sha256:6e507a30ccce84417af21fc9031dcc94ff6938eec67249ab4679afdb863cb1aa",
+        "concept_observation_hash": "sha256:42721a5fbf4f1f771911b18212c026e84508ce311553300bffcbee1934eb34ce",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
     },
     "entities/CommandPolicyExtension.md": {
       "basis": {
-        "concept_observation_hash": "sha256:6ab416dfb96932f733e08c8227d9c8f032483d5d570045d079ae9bee0f212471",
+        "concept_observation_hash": "sha256:1174114c20b130c03871519408a564a58290de856fac6bf9a1ce05b248a071e1",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:756220735d3856092ae37fa87fb86d63b8a934fa9aaa1fc46eb611b82824327e",
+        "source_content_hash": "sha256:1e21331e341b99d6878aba77e7c720bf3dec534d5e5aa188add94d898c72919a",
         "source_path": "src/core/skill_runtime.py"
       },
       "state": "known"
@@ -320,7 +320,7 @@
         "concept_observation_hash": "sha256:0dbd50fc51c9e62ca0556c889984f3cb60d6d91b90f4ec974780bff8c1bb39ad",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:d85ed835a83713e114152c8406ac8a8acba9e0a126431b996f9e7c38fe47be24",
+        "source_content_hash": "sha256:906529ca510c3d8e06663161265ad66556b3192209325dfd79f8e21ff7775d03",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -330,7 +330,7 @@
         "concept_observation_hash": "sha256:2c4fc7340886f4d1ea5be496137a6c594ede7c7b578c6726f333d1ed76b9a7a1",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:d85ed835a83713e114152c8406ac8a8acba9e0a126431b996f9e7c38fe47be24",
+        "source_content_hash": "sha256:906529ca510c3d8e06663161265ad66556b3192209325dfd79f8e21ff7775d03",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -430,7 +430,7 @@
         "concept_observation_hash": "sha256:86fb627bdd327585613f73a68cb692a64154b6efae873636ad2f810d0a751954",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -550,7 +550,7 @@
         "concept_observation_hash": "sha256:65b81bb8885235069188720d4b349925aeed5edcc87e9efa29a4eac5b086f5da",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -670,7 +670,7 @@
         "concept_observation_hash": "sha256:392632251cf5662324dc5364f72362e822ac7aa9fdbcb9908520b8affa652c0f",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -690,7 +690,7 @@
         "concept_observation_hash": "sha256:71dfbe17506c95586ca495c06ba8c2ac78f3052db5d2e988f2db96d854d1d4d3",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -740,17 +740,17 @@
         "concept_observation_hash": "sha256:7616d37761bfebeae84d0f97c4fcdd35473018f3177f95c6b1277f29388b4a80",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
     },
     "entities/GovernedCommandRunner.md": {
       "basis": {
-        "concept_observation_hash": "sha256:7f6c5e726968dc8fb15be979822b3bd41f2120af8d22b1015c2a4c55ba6f69a4",
+        "concept_observation_hash": "sha256:a9713151cad4370b6a487badbc1113a1cf27221eb50ad633a2eaa2e81e29b481",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:d85ed835a83713e114152c8406ac8a8acba9e0a126431b996f9e7c38fe47be24",
+        "source_content_hash": "sha256:906529ca510c3d8e06663161265ad66556b3192209325dfd79f8e21ff7775d03",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -790,7 +790,7 @@
         "concept_observation_hash": "sha256:a198573250d9e2accccdb70c149ae0d40ebc0321b0b9650027dd4642cefda038",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:d85ed835a83713e114152c8406ac8a8acba9e0a126431b996f9e7c38fe47be24",
+        "source_content_hash": "sha256:906529ca510c3d8e06663161265ad66556b3192209325dfd79f8e21ff7775d03",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -860,7 +860,7 @@
         "concept_observation_hash": "sha256:61f51e3394bf67a88d0bd3453c0716abb145fe250fbd2d1b146ffc267822d6bf",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -870,7 +870,7 @@
         "concept_observation_hash": "sha256:bd40f0ba7cf84ac8893937f0a72671c03365bd4ace2492bf7d80744d668d0c1b",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -910,7 +910,7 @@
         "concept_observation_hash": "sha256:78a733a91516d385e7a5b58ad1ffb71369a33560b363b3baa259e3c7b3e49e9d",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -960,7 +960,7 @@
         "concept_observation_hash": "sha256:bed0c4c3851d26bd859bfc4ab0775ef10a333835998218c8aeb99cefa4917cce",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:756220735d3856092ae37fa87fb86d63b8a934fa9aaa1fc46eb611b82824327e",
+        "source_content_hash": "sha256:1e21331e341b99d6878aba77e7c720bf3dec534d5e5aa188add94d898c72919a",
         "source_path": "src/core/skill_runtime.py"
       },
       "state": "known"
@@ -1000,7 +1000,7 @@
         "concept_observation_hash": "sha256:69fc57ff8c8751fb8cfc660df11d1474d14cb9c850542f260475183d182f6c08",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1080,7 +1080,7 @@
         "concept_observation_hash": "sha256:cf32daebf7cf77358a8b3f9147a9923a53e933652d2cd39b095382ce65f687aa",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:756220735d3856092ae37fa87fb86d63b8a934fa9aaa1fc46eb611b82824327e",
+        "source_content_hash": "sha256:1e21331e341b99d6878aba77e7c720bf3dec534d5e5aa188add94d898c72919a",
         "source_path": "src/core/skill_runtime.py"
       },
       "state": "known"
@@ -1090,7 +1090,7 @@
         "concept_observation_hash": "sha256:ba9b265e8d800b63f29e95383863070ef13245ba8d61b20bb983180e9d83b83a",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1100,7 +1100,7 @@
         "concept_observation_hash": "sha256:ff004a5dff8378714157ee7f48677cf9ee6c651f57c7b28553627fae6132fd63",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1160,7 +1160,7 @@
         "concept_observation_hash": "sha256:1a74dd0062727e2f76ff60817ecc9919c0a6172f7480ca8783b26d16d25131a7",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1300,7 +1300,7 @@
         "concept_observation_hash": "sha256:8a7b62ee9480ecdc54f64dee9c7150d3b57b710989c31ed158c0da87e527c6ff",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:d85ed835a83713e114152c8406ac8a8acba9e0a126431b996f9e7c38fe47be24",
+        "source_content_hash": "sha256:906529ca510c3d8e06663161265ad66556b3192209325dfd79f8e21ff7775d03",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -1320,7 +1320,7 @@
         "concept_observation_hash": "sha256:5a82a007c9ef5ede78eb58458d4a499c484ee0cc900642ca5eb210ba8d4e1c75",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1330,7 +1330,7 @@
         "concept_observation_hash": "sha256:8632a02f7a4b8f98c766ba370a6db0ed386b993089cbe81ae7db9b109a0c5795",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1340,7 +1340,7 @@
         "concept_observation_hash": "sha256:b6887e98ea87434a72b3f6f1114a89cb14bcb9c8542fd8be7f3491aecf50fc1d",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:d85ed835a83713e114152c8406ac8a8acba9e0a126431b996f9e7c38fe47be24",
+        "source_content_hash": "sha256:906529ca510c3d8e06663161265ad66556b3192209325dfd79f8e21ff7775d03",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -1360,7 +1360,7 @@
         "concept_observation_hash": "sha256:190fe5b061a7d18440d7a307d97a84f4111bd040f4daa90435bd9ec6680182df",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1370,7 +1370,7 @@
         "concept_observation_hash": "sha256:6a498f6e8f1989eda820eda5827b9eac2e6ad61d9f365f20b75298321c5043a2",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1380,7 +1380,7 @@
         "concept_observation_hash": "sha256:a544b93d6c0c9f096b00dcbf5e53336b5ffea3a0523c0dbde93ae9bde28d54e1",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1390,7 +1390,7 @@
         "concept_observation_hash": "sha256:0e893a76429cc899f1ab73fae1332479a1e6e057688f9acb8b9492dcec4a858c",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:8fd434af093eec17144efd3d23fb1081e27ef2bcb47e2b3c6f0ec2a73e28f473",
+        "source_content_hash": "sha256:67520456699eb4d4a5edef2e7c1e57d1dfcbd629869f205b915e165b8d774bbe",
         "source_path": "src/core/orchestrator.py"
       },
       "state": "known"
@@ -1400,7 +1400,7 @@
         "concept_observation_hash": "sha256:96641b7140a28d056abc10cc6fdde409dee662ea1657054f568cb33e2d251d27",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1410,7 +1410,7 @@
         "concept_observation_hash": "sha256:c991f562132bb22a678af091db0d9abae67b72243f97a06465f46db51951c223",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1440,7 +1440,7 @@
         "concept_observation_hash": "sha256:ada8d3b7512470c7dbae15b6debd87df10d8f8e0e8a89c1b525247b82fc2f38b",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1450,7 +1450,7 @@
         "concept_observation_hash": "sha256:2aa4db4791d9b616dfe8de55d75320faf4ec0e8dda3814dfa9b3128f853f4cb5",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1460,7 +1460,7 @@
         "concept_observation_hash": "sha256:ae6a22d5af12dcc477028f227ec3c8625c706ca54da844ce29c4d8cb82ea5281",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1470,7 +1470,7 @@
         "concept_observation_hash": "sha256:6aaa55107444f821747938022e44ec71a9a19e89fbf2cef880aac00e2a897032",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:2d2573cdc6324b003b867807d2c27f9aed9bba81862c96b52798d47229ff1ef2",
+        "source_content_hash": "sha256:ca182f5830a5d15603333e28e3aa94b2813ab6ff6d8474df7554a1cf6bf853d8",
         "source_path": "src/core/plugin_runner.py"
       },
       "state": "known"
@@ -1480,7 +1480,7 @@
         "concept_observation_hash": "sha256:70bc803d7294fbaec813a393eb533755cbc925a0040a395cce485c6196bdbe8f",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:2d2573cdc6324b003b867807d2c27f9aed9bba81862c96b52798d47229ff1ef2",
+        "source_content_hash": "sha256:ca182f5830a5d15603333e28e3aa94b2813ab6ff6d8474df7554a1cf6bf853d8",
         "source_path": "src/core/plugin_runner.py"
       },
       "state": "known"
@@ -1490,7 +1490,7 @@
         "concept_observation_hash": "sha256:767c5af9eba5974c4f7df69e4c07d6f991bec17f699244da157252312870322d",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:2d2573cdc6324b003b867807d2c27f9aed9bba81862c96b52798d47229ff1ef2",
+        "source_content_hash": "sha256:ca182f5830a5d15603333e28e3aa94b2813ab6ff6d8474df7554a1cf6bf853d8",
         "source_path": "src/core/plugin_runner.py"
       },
       "state": "known"
@@ -1500,7 +1500,7 @@
         "concept_observation_hash": "sha256:aba3bef066f90c71424ad2f218fef84345588a0c60ec4eabf0e03a0cb7629f5c",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1540,7 +1540,7 @@
         "concept_observation_hash": "sha256:c0e220868fd7a0c2fcb3416d4062e1b81e004fd7a93805c48d5791f5ecbdcb59",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1550,7 +1550,7 @@
         "concept_observation_hash": "sha256:ddada3b4c87cd3f6f79eb1b4ed30c6ab96e7e419d95dd9174ae7eba5fb35b00e",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1560,7 +1560,7 @@
         "concept_observation_hash": "sha256:56f8bec8fe5c539912f0a5cccd2d110a3f7864895162d6d0407fc95895bf00b7",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1680,7 +1680,7 @@
         "concept_observation_hash": "sha256:40fc83ab124d7f633c054a02996c2596eb6a00eaf66129d873a0bbccbd7eda4d",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1750,7 +1750,7 @@
         "concept_observation_hash": "sha256:97535a1d554870e7928a69c504fec25ef275b78dfaa1cd527d76b4b2782e2d9a",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1760,7 +1760,7 @@
         "concept_observation_hash": "sha256:8e95054c7b1b6b2a50db8b34a753b1160d994917e5463f813d175a625ed27321",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1830,7 +1830,7 @@
         "concept_observation_hash": "sha256:a7fe21fbd8acbce25160c5ee9bae94e8fece64bf5e291c4b25d28c338e0a0bbf",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1840,7 +1840,7 @@
         "concept_observation_hash": "sha256:e978d85f3fe6450c9faf57d6abf20b25aaa3fc0f518be270853eb214e2b56f37",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1890,7 +1890,7 @@
         "concept_observation_hash": "sha256:266de332bcf9101e31e17959e339e01fcc0dad96e3574ec51bb8754860d2bfda",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:8fd434af093eec17144efd3d23fb1081e27ef2bcb47e2b3c6f0ec2a73e28f473",
+        "source_content_hash": "sha256:67520456699eb4d4a5edef2e7c1e57d1dfcbd629869f205b915e165b8d774bbe",
         "source_path": "src/core/orchestrator.py"
       },
       "state": "known"
@@ -1920,7 +1920,7 @@
         "concept_observation_hash": "sha256:3a4c7ce0d2169c129801fddfdd2a74f24276b86a8a6196b561839de64b6a44f7",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -1990,7 +1990,7 @@
         "concept_observation_hash": "sha256:ddd13b498a6b607f89d8f7e65491086fd4c277e674ee53fc3fa981843694fc64",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:2d2573cdc6324b003b867807d2c27f9aed9bba81862c96b52798d47229ff1ef2",
+        "source_content_hash": "sha256:ca182f5830a5d15603333e28e3aa94b2813ab6ff6d8474df7554a1cf6bf853d8",
         "source_path": "src/core/plugin_runner.py"
       },
       "state": "known"
@@ -2250,7 +2250,7 @@
         "concept_observation_hash": "sha256:213352ff5b4781bc17751f3e7aef56d85e1f068639c3b353e869258023cd4319",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:d85ed835a83713e114152c8406ac8a8acba9e0a126431b996f9e7c38fe47be24",
+        "source_content_hash": "sha256:906529ca510c3d8e06663161265ad66556b3192209325dfd79f8e21ff7775d03",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -2260,7 +2260,7 @@
         "concept_observation_hash": "sha256:f8bdcdb408178015a060421672c62ddd6247bf7697375121c41d7082a4d644f6",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:756220735d3856092ae37fa87fb86d63b8a934fa9aaa1fc46eb611b82824327e",
+        "source_content_hash": "sha256:1e21331e341b99d6878aba77e7c720bf3dec534d5e5aa188add94d898c72919a",
         "source_path": "src/core/skill_runtime.py"
       },
       "state": "known"
@@ -2300,7 +2300,7 @@
         "concept_observation_hash": "sha256:005e45e90275da4614392cf13416025df7b47e6e5bcdd6e5bd9f41507137a4c6",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -2310,7 +2310,7 @@
         "concept_observation_hash": "sha256:c99e9ead63d73283a42fd1f6393b26cb7e2d36ded9a352d8caedcdabc8ed3ebb",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:756220735d3856092ae37fa87fb86d63b8a934fa9aaa1fc46eb611b82824327e",
+        "source_content_hash": "sha256:1e21331e341b99d6878aba77e7c720bf3dec534d5e5aa188add94d898c72919a",
         "source_path": "src/core/skill_runtime.py"
       },
       "state": "known"
@@ -2500,7 +2500,7 @@
         "concept_observation_hash": "sha256:9589e2e022ffd039ccd887480f4230e6e2f501935099379fb94820d84f2b910e",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:756220735d3856092ae37fa87fb86d63b8a934fa9aaa1fc46eb611b82824327e",
+        "source_content_hash": "sha256:1e21331e341b99d6878aba77e7c720bf3dec534d5e5aa188add94d898c72919a",
         "source_path": "src/core/skill_runtime.py"
       },
       "state": "known"
@@ -2600,7 +2600,7 @@
         "concept_observation_hash": "sha256:7c9a450339cf8dca4942016a2964211c4cece3bead967ffd19fee82fca0f00e3",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -2610,7 +2610,7 @@
         "concept_observation_hash": "sha256:6bbf9ee687a8369c35f4e13cd02153d0b82a58756d9b54764948bc255d168fa7",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:756220735d3856092ae37fa87fb86d63b8a934fa9aaa1fc46eb611b82824327e",
+        "source_content_hash": "sha256:1e21331e341b99d6878aba77e7c720bf3dec534d5e5aa188add94d898c72919a",
         "source_path": "src/core/skill_runtime.py"
       },
       "state": "known"
@@ -2660,7 +2660,7 @@
         "concept_observation_hash": "sha256:2584e9fef069cf4361b06c9a0dc1c180c04209d48f2af0b991c93ccd862cfd33",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:756220735d3856092ae37fa87fb86d63b8a934fa9aaa1fc46eb611b82824327e",
+        "source_content_hash": "sha256:1e21331e341b99d6878aba77e7c720bf3dec534d5e5aa188add94d898c72919a",
         "source_path": "src/core/skill_runtime.py"
       },
       "state": "known"
@@ -2670,7 +2670,7 @@
         "concept_observation_hash": "sha256:73c2cb569d6fd0de704fdd51d8d8a201066bec2baec9ecef14fad5742153a119",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -2690,7 +2690,7 @@
         "concept_observation_hash": "sha256:0265a0bf684943f89f51a34280df81e5525eb82c219560a25dfb29f76a485a0f",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -3355,6 +3355,16 @@
       },
       "state": "known"
     },
+    "entities/ToolAccessContext.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:38130913bd5e82ab66b4870570ebc6136ab14b2921a64eec6768e68c449f7298",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:beb76de655650abe2fa9062d98dab8c7f38f43a950995d29b909e1bcc581cc7f",
+        "source_path": "src/core/tool_access.py"
+      },
+      "state": "known"
+    },
     "entities/ToolDef.md": {
       "basis": {
         "concept_observation_hash": "sha256:84c005e56a07cc9458da30ff971f4f6ea1b06083c3eed6b68e9c192d0e1500bf",
@@ -3370,7 +3380,7 @@
         "concept_observation_hash": "sha256:0cb9ae70f7da2292ab87a6aea2d7e4e2a3eee4530b5fabdb24c922876cccf149",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:4f3a66f6053b3a272d8773ae5bea12447e29b17d49b5ca4505fd88fac4250a53",
+        "source_content_hash": "sha256:e9bfe25453004dac1616aad2490f018705f44f671dbc2276ecc3f3a5eb5f29b9",
         "source_path": "src/core/agent_tools.py"
       },
       "state": "known"
@@ -3440,7 +3450,7 @@
         "concept_observation_hash": "sha256:f6a2f5055df1519d51600ec35d41ccfde31983002a1220eba07016f8681a32b8",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -3450,7 +3460,7 @@
         "concept_observation_hash": "sha256:cab1b7a430045d06f1dc65c838a3639b0ff2372d737be242ae1fd9a328e9dd92",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:8fd434af093eec17144efd3d23fb1081e27ef2bcb47e2b3c6f0ec2a73e28f473",
+        "source_content_hash": "sha256:67520456699eb4d4a5edef2e7c1e57d1dfcbd629869f205b915e165b8d774bbe",
         "source_path": "src/core/orchestrator.py"
       },
       "state": "known"
@@ -3460,7 +3470,7 @@
         "concept_observation_hash": "sha256:dae8594d0c52d5b7c19dfdeb0d8a56c17575123da085d6168da4b0e8c23fcc06",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -3490,7 +3500,7 @@
         "concept_observation_hash": "sha256:98d9e6a9948ba715a03af68af9a802e16087829ce92a1e40e4f2c857bea4b351",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:756220735d3856092ae37fa87fb86d63b8a934fa9aaa1fc46eb611b82824327e",
+        "source_content_hash": "sha256:1e21331e341b99d6878aba77e7c720bf3dec534d5e5aa188add94d898c72919a",
         "source_path": "src/core/skill_runtime.py"
       },
       "state": "known"
@@ -3500,7 +3510,7 @@
         "concept_observation_hash": "sha256:dc15747f3387916c1652da9a40cba6f2df08fa2c5a84f12ff40e2be60299e210",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -3570,7 +3580,7 @@
         "concept_observation_hash": "sha256:7a5d050c8025f83f37c24cc0927dedebf1351cbad8971f39ff0fee3ec875987f",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -3590,7 +3600,7 @@
         "concept_observation_hash": "sha256:5c4843d2bb1449a415f257435e852c77898de74a27ff3b9eec6df25fe2af8f86",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -3740,7 +3750,7 @@
         "concept_observation_hash": "sha256:0ebe616e00f07a52cbbb6bfe036ccd8bfb13dbb99791caf738e865387b438ea0",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -3750,7 +3760,7 @@
         "concept_observation_hash": "sha256:f5c7643bf472bf82dfe697cc76b1b30c350d2778d3a0029f4c7f4cd3e36e6882",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -3760,7 +3770,7 @@
         "concept_observation_hash": "sha256:09b51abd468ee6a325affd18c5a1acf542df2fafa158e2c29e82837a7d1458a0",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -3770,7 +3780,7 @@
         "concept_observation_hash": "sha256:b3517f5bc249bf574d67a6fb2eb878576e6415c085def4a00eacf0d34b5c98a7",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -3780,7 +3790,7 @@
         "concept_observation_hash": "sha256:00e2ce1ff825a4f8b3dbc36d1ea0a155b715bbc7f08ea1556e2c98dfd7458327",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -3790,7 +3800,7 @@
         "concept_observation_hash": "sha256:f66e3f350e9a63cbf25f496f34f385625eb53cba8253cb02993226208513c612",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -3800,7 +3810,7 @@
         "concept_observation_hash": "sha256:b6a75675a975f7d4b4a8c695019985ffb6e8ce8d363af835a39864cb30143f55",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:756220735d3856092ae37fa87fb86d63b8a934fa9aaa1fc46eb611b82824327e",
+        "source_content_hash": "sha256:1e21331e341b99d6878aba77e7c720bf3dec534d5e5aa188add94d898c72919a",
         "source_path": "src/core/skill_runtime.py"
       },
       "state": "known"
@@ -3930,7 +3940,7 @@
         "concept_observation_hash": "sha256:801f2981ca45180bd69462e322f4d398dc81da52545809d661b8c9625942c29e",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:06d68b746f61db242558b2550c214f3dec9584b618c88ff45be61cdf0cd74e61",
+        "source_content_hash": "sha256:e707aa381ff246fee7c58f339d16700ee72f8e376109bc7505874edf7bf7ab7e",
         "source_path": "tests/test_command_policy.py"
       },
       "state": "known"
@@ -3940,7 +3950,7 @@
         "concept_observation_hash": "sha256:68ed3de4c5b3abfa5979a6e61f711ca2b0e7a496f8fc92ad36de1d2e1eab7444",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:06d68b746f61db242558b2550c214f3dec9584b618c88ff45be61cdf0cd74e61",
+        "source_content_hash": "sha256:e707aa381ff246fee7c58f339d16700ee72f8e376109bc7505874edf7bf7ab7e",
         "source_path": "tests/test_command_policy.py"
       },
       "state": "known"
@@ -4050,7 +4060,7 @@
         "concept_observation_hash": "sha256:720e13f09569eaa90d95253b1815f45624e6df2e8d971c053d630eb41dd7d84b",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:ed4ee316ff1102463e83fa5e26cddfbafea1a847eff9f26585221adacf671ffd",
+        "source_content_hash": "sha256:bda4b4207d0be1bea9e25b22ea8a22bff69f6f9ffda5bbbe5915b3ce52480af8",
         "source_path": "tests/test_orchestrator_timeout.py"
       },
       "state": "known"
@@ -4250,7 +4260,7 @@
         "concept_observation_hash": "sha256:202417fc65e574f1c05fd949f4f843f9a180c596e8ba5b61bec3c113a658660d",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:9593d888289853c9597a639af316a29a0d188a23716a4d0d2167dd5967fdda00",
+        "source_content_hash": "sha256:595c39b462eab2321926272462dd247d28bec3f7f36e7617bafd25517377a12e",
         "source_path": "tests/test_trial_workspace.py"
       },
       "state": "known"
@@ -4517,10 +4527,10 @@
     },
     "modules/agent_tools.md": {
       "basis": {
-        "concept_observation_hash": "sha256:1562ab8ce605caa2d69bd95ca6b36be69507039c5673f4f6a9bf0dee74bc1be7",
+        "concept_observation_hash": "sha256:9f1f0ae675af13242865b950ef66cf81dd828cf7c9342e715dc3ae34cdd658e8",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:4f3a66f6053b3a272d8773ae5bea12447e29b17d49b5ca4505fd88fac4250a53",
+        "source_content_hash": "sha256:e9bfe25453004dac1616aad2490f018705f44f671dbc2276ecc3f3a5eb5f29b9",
         "source_path": "src/core/agent_tools.py"
       },
       "state": "known"
@@ -4667,20 +4677,20 @@
     },
     "modules/command_policy.md": {
       "basis": {
-        "concept_observation_hash": "sha256:9d6aefd7328be70d9e48a245d67465abe8627f06780aeac4acb6023c3388e591",
+        "concept_observation_hash": "sha256:7f2e08d02631cc4d9f98e878eda8673bcfcfddca632aa4e0b1fdf44ee6dcf9ac",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:3d9e1e5b8f64881d3ad4940b5d94ee4862a81cccbd1560c6125ca15b2ec895ba",
+        "source_content_hash": "sha256:1d91621795373ea15afdf15254fb025220447fd104d12ba1f59d3f41db4f9712",
         "source_path": "src/core/command_policy.py"
       },
       "state": "known"
     },
     "modules/command_runner.md": {
       "basis": {
-        "concept_observation_hash": "sha256:aa23bb7c15dd569f5ae3faeebb461a980b6cda2e0bfcf7af3d661ab937c40d40",
+        "concept_observation_hash": "sha256:12aad5a3c7ff188072ff2536ccd62749e8484aa4d3356eb2675046e2992184d6",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:d85ed835a83713e114152c8406ac8a8acba9e0a126431b996f9e7c38fe47be24",
+        "source_content_hash": "sha256:906529ca510c3d8e06663161265ad66556b3192209325dfd79f8e21ff7775d03",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -4967,10 +4977,10 @@
     },
     "modules/orchestrator.md": {
       "basis": {
-        "concept_observation_hash": "sha256:e973dc17aa53de0c92338fcd61c2a9ea4f28732ad598bc45cdcd4486b8c468a3",
+        "concept_observation_hash": "sha256:927693bad4fe889e7dbad0a976566927a8fe8efb9ff6cb905e6d8bed4833b509",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:8fd434af093eec17144efd3d23fb1081e27ef2bcb47e2b3c6f0ec2a73e28f473",
+        "source_content_hash": "sha256:67520456699eb4d4a5edef2e7c1e57d1dfcbd629869f205b915e165b8d774bbe",
         "source_path": "src/core/orchestrator.py"
       },
       "state": "known"
@@ -5017,10 +5027,10 @@
     },
     "modules/plugin_runner.md": {
       "basis": {
-        "concept_observation_hash": "sha256:cbe4ff3bbe5b647cef56b4d1be64b7ec533dee9c55d73fdee92ba8f772800415",
+        "concept_observation_hash": "sha256:39410240034dd0b1c43d7572ca0a37cb81c9fdb2b1a551dea0e2a7dee587f34c",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:2d2573cdc6324b003b867807d2c27f9aed9bba81862c96b52798d47229ff1ef2",
+        "source_content_hash": "sha256:ca182f5830a5d15603333e28e3aa94b2813ab6ff6d8474df7554a1cf6bf853d8",
         "source_path": "src/core/plugin_runner.py"
       },
       "state": "known"
@@ -5280,7 +5290,7 @@
         "concept_observation_hash": "sha256:0428470dd4b6274bc80a5c1bbd6159cfac3ac2e080ae8d2d585cf82cd9923818",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+        "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
       },
       "state": "known"
@@ -5310,7 +5320,7 @@
         "concept_observation_hash": "sha256:824ba985298e30067ee844954529becd03878016345e06089c9c78bf13500fd1",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:756220735d3856092ae37fa87fb86d63b8a934fa9aaa1fc46eb611b82824327e",
+        "source_content_hash": "sha256:1e21331e341b99d6878aba77e7c720bf3dec534d5e5aa188add94d898c72919a",
         "source_path": "src/core/skill_runtime.py"
       },
       "state": "known"
@@ -5407,10 +5417,10 @@
     },
     "modules/test_async_tool_path.md": {
       "basis": {
-        "concept_observation_hash": "sha256:f833ec86cf869153d5533cfc970b278f012f5a6a4f3d60df79d7fe5c90ccd0be",
+        "concept_observation_hash": "sha256:dcc7f195d3541b67118e7fd83616ea9305957b7de1e45234750d505958452f75",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:a2b9f2d4df3cf81260c5ae2cdc513a995de2bf73ceaf39d5c87ab23cea3bb354",
+        "source_content_hash": "sha256:5268a5b9c014036ff500fc75185535021ce61b70e154fae36846267877d0738b",
         "source_path": "tests/test_async_tool_path.py"
       },
       "state": "known"
@@ -5487,10 +5497,10 @@
     },
     "modules/test_command_policy.md": {
       "basis": {
-        "concept_observation_hash": "sha256:6c47ffd2ba82dffcf941d8ee1c0e5fb59c92e9b0f9ee35cfa55f98e2e41f1a9d",
+        "concept_observation_hash": "sha256:041f2e350f9f0bf532588df34267024d1dc8df55dc2890d5904e380c149c021d",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:06d68b746f61db242558b2550c214f3dec9584b618c88ff45be61cdf0cd74e61",
+        "source_content_hash": "sha256:e707aa381ff246fee7c58f339d16700ee72f8e376109bc7505874edf7bf7ab7e",
         "source_path": "tests/test_command_policy.py"
       },
       "state": "known"
@@ -6097,10 +6107,10 @@
     },
     "modules/test_orchestrator_timeout.md": {
       "basis": {
-        "concept_observation_hash": "sha256:5bf9d814c1e4572a293d7b8a13cc662263b1f0c85f20d70b263cbcf514596261",
+        "concept_observation_hash": "sha256:424638f84962643ed811fbd03f2af9758a48cfb9ce318a65635bf795b56e8320",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:ed4ee316ff1102463e83fa5e26cddfbafea1a847eff9f26585221adacf671ffd",
+        "source_content_hash": "sha256:bda4b4207d0be1bea9e25b22ea8a22bff69f6f9ffda5bbbe5915b3ce52480af8",
         "source_path": "tests/test_orchestrator_timeout.py"
       },
       "state": "known"
@@ -6555,12 +6565,22 @@
       },
       "state": "known"
     },
-    "modules/test_trial_workspace.md": {
+    "modules/test_tool_access.md": {
       "basis": {
-        "concept_observation_hash": "sha256:48b375d793d28761cd7eddaf9bce55f25d063be3f5d92cb53c524450f923a174",
+        "concept_observation_hash": "sha256:75f9289f26290a10b6c153b7cd7531b9ebbe0c42321d00d4dc0a24e07c4ae36b",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:9593d888289853c9597a639af316a29a0d188a23716a4d0d2167dd5967fdda00",
+        "source_content_hash": "sha256:59119ddbf499b33bcbdfa1719a1a102c81e63043d1c46f8027b2e0a51d902b27",
+        "source_path": "tests/test_tool_access.py"
+      },
+      "state": "known"
+    },
+    "modules/test_trial_workspace.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:b464f6e0c09687d9816ad2418b7fa11523d8c289249f5ace10065f00e52588b6",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "module",
+        "source_content_hash": "sha256:595c39b462eab2321926272462dd247d28bec3f7f36e7617bafd25517377a12e",
         "source_path": "tests/test_trial_workspace.py"
       },
       "state": "known"
@@ -6592,6 +6612,16 @@
         "scope": "module",
         "source_content_hash": "sha256:f1d16452b38f1ef6876bd79733fe425449efec9d565f55c13d7c86b17421ded3",
         "source_path": "tests/conftest.py"
+      },
+      "state": "known"
+    },
+    "modules/tool_access.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:8a103f4f81cdaf09c07dbf6070c1e42d607f2c61c30f69cb3b9e2302baf1da10",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "module",
+        "source_content_hash": "sha256:beb76de655650abe2fa9062d98dab8c7f38f43a950995d29b909e1bcc581cc7f",
+        "source_path": "src/core/tool_access.py"
       },
       "state": "known"
     },
@@ -6728,7 +6758,7 @@
           {
             "path": "skills/code-refactor/SKILL.yaml",
             "reason": "unrecognized-yaml",
-            "source_content_hash": "sha256:d1d2f459c7918c5d30a70e7904785f5a226e16848d01a69d476ba0734a3c6fef"
+            "source_content_hash": "sha256:9a20dc56c241512e6f927bc6b6d2b8771b19eef9a1fde3e252c744140de2ab10"
           },
           {
             "path": "skills/db-config-tuning/SKILL.yaml",
@@ -6738,7 +6768,7 @@
           {
             "path": "skills/prompt-engineering/SKILL.yaml",
             "reason": "unrecognized-yaml",
-            "source_content_hash": "sha256:bbcb8f1f5aa2410748378e83478ddf6742367ed784b88735bf47fa3aae13cb8b"
+            "source_content_hash": "sha256:2c07203219e66e232b38887a472444e6ec7b978be9342ee84bf59b2f46866758"
           }
         ],
         "unsupported_yaml_count": 8
@@ -8808,6 +8838,12 @@
       "scope": "entity",
       "source_path": "ui/src/components/hifi/Topbar.tsx"
     },
+    "entities/ToolAccessContext.md": {
+      "entity_name": "ToolAccessContext",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/tool_access.py"
+    },
     "entities/ToolDef.md": {
       "entity_name": "ToolDef",
       "occurrence": 1,
@@ -10268,6 +10304,10 @@
       "scope": "module",
       "source_path": "tests/test_terminal_phase_contract.py"
     },
+    "modules/test_tool_access.md": {
+      "scope": "module",
+      "source_path": "tests/test_tool_access.py"
+    },
     "modules/test_trial_workspace.md": {
       "scope": "module",
       "source_path": "tests/test_trial_workspace.py"
@@ -10283,6 +10323,10 @@
     "modules/tests_conftest.md": {
       "scope": "module",
       "source_path": "tests/conftest.py"
+    },
+    "modules/tool_access.md": {
+      "scope": "module",
+      "source_path": "src/core/tool_access.py"
     },
     "modules/trial_workspace.md": {
       "scope": "module",
@@ -11294,15 +11338,13 @@
           "classes": {
             "ToolExecutionResult": "—"
           },
-          "description": "Agent tool surface — the 5 sandboxed tools + path safety (P1-1 split).\n\nExtracted verbatim from ``orchestrator.py`` (behavior-identical): the\n``ToolExecutionResult`` value type, the ``AGENT_TOOLS`` definitions handed to\nthe LLM provider, the workspace path-safety helpers, the five tool\nimplementations (``bash`` / ``read_file`` / ``write_file`` / ``glob`` /\n``grep``), the packaged-skill primer loader, and the W11 nonce-env narrowing\nhelper. ``orchestrator.py`` re-exports all of these for back-compat; new code\nshould import from here.",
+          "description": "Agent tool surface — the 5 sandboxed tools + path safety (P1-1 split).\n\nExtracted from ``orchestrator.py``: the ``ToolExecutionResult`` value type,\nthe ``AGENT_TOOLS`` definitions handed to the LLM provider, the shared\n``ToolAccessContext`` path authorization (one context for every file\noperation), the five tool implementations (``bash`` / ``read_file`` /\n``write_file`` / ``glob`` / ``grep``), the packaged-skill primer loader, and\nthe W11 nonce-env narrowing helper. ``orchestrator.py`` re-exports all of\nthese for back-compat; new code should import from here.",
           "functions": {
             "_config_snapshot_path_from_command": "Resolve the config artifact a command references.",
             "_execute_tool": "Execute a tool call and return the text result.",
             "_load_packaged_skill_md": "Read the packaged ``skills/<skill_id>/<primer>`` domain primer (C2-2).",
             "_nonce_env_for_command": "Narrow the W11 nonce env delivery to the skill's declared scripts (C3).",
             "_normalize_command_for_plan": "—",
-            "_safe_path": "Resolve a path and ensure it stays within the workspace.",
-            "_safe_write_path": "Resolve a writable path and ensure existing parents stay in workspace.",
             "_tool_bash": "—",
             "_tool_glob": "—",
             "_tool_grep": "Incremental grep capture, excluding its own active log.",
@@ -11311,10 +11353,10 @@
           }
         }
       },
-      "hash": "sha256:4f3a66f6053b3a272d8773ae5bea12447e29b17d49b5ca4505fd88fac4250a53",
+      "hash": "sha256:e9bfe25453004dac1616aad2490f018705f44f671dbc2276ecc3f3a5eb5f29b9",
       "language": "python",
       "module_page": "agent_tools",
-      "semantic_hash": "sha256:1c1bbd118f882102d13c8a4dd122ac45608d186721b76ff82855ff7584ded263"
+      "semantic_hash": "sha256:e8b133dcdc560b15e09567a2e5a1f6d2e60aa8f8dbd0d678473da4cbd6337bac"
     },
     "src/core/artifact_reference.py": {
       "entities": [],
@@ -11492,7 +11534,6 @@
             "_evaluate_cp": "—",
             "_evaluate_python": "—",
             "_is_allowed_python": "—",
-            "_is_within": "—",
             "_reject": "—",
             "_resolve_workspace_file": "—",
             "_secret_reference": "—",
@@ -11504,10 +11545,10 @@
           }
         }
       },
-      "hash": "sha256:3d9e1e5b8f64881d3ad4940b5d94ee4862a81cccbd1560c6125ca15b2ec895ba",
+      "hash": "sha256:1d91621795373ea15afdf15254fb025220447fd104d12ba1f59d3f41db4f9712",
       "language": "python",
       "module_page": "command_policy",
-      "semantic_hash": "sha256:08771948f712cce52a4b6b1190f5e6bf8e4c81e5df80aac23136a98206e8f470"
+      "semantic_hash": "sha256:5e453b0b2ea0bb7150c0bafe57c10b78e21c091e543d97a765e158649e2dcb45"
     },
     "src/core/command_runner.py": {
       "entities": [
@@ -11652,10 +11693,10 @@
           }
         }
       },
-      "hash": "sha256:d85ed835a83713e114152c8406ac8a8acba9e0a126431b996f9e7c38fe47be24",
+      "hash": "sha256:906529ca510c3d8e06663161265ad66556b3192209325dfd79f8e21ff7775d03",
       "language": "python",
       "module_page": "command_runner",
-      "semantic_hash": "sha256:0ceec18032fde86701d4c312fa9a374266fe8d933f25c737b2797f971d4d6427"
+      "semantic_hash": "sha256:30f19dcfebe3ffb954d0321ab37fb4872bca05f64eb5d41284e96c9fc6a1dd98"
     },
     "src/core/config_promoter.py": {
       "entities": [
@@ -13737,10 +13778,10 @@
           "functions": {}
         }
       },
-      "hash": "sha256:8fd434af093eec17144efd3d23fb1081e27ef2bcb47e2b3c6f0ec2a73e28f473",
+      "hash": "sha256:67520456699eb4d4a5edef2e7c1e57d1dfcbd629869f205b915e165b8d774bbe",
       "language": "python",
       "module_page": "orchestrator",
-      "semantic_hash": "sha256:18b7c12c39cfd5dff10e736ade895a398cd90028f1a59c2d1a552daf67846f05"
+      "semantic_hash": "sha256:3252c8dc201e13c5b377e5b7b794b2c736ee529f94b123a7542ed96d23d6d5db"
     },
     "src/core/output_digest.py": {
       "entities": [],
@@ -13996,17 +14037,17 @@
             "_PluginRunBody": "Inputs bundled for the worker-thread sync body.",
             "_ResourceWatcher": "Polls a live plugin subprocess's RSS / CPU and flags cap breaches (D6)."
           },
-          "description": "Governed subprocess runner for skill-supplied plugins (ARC-011 X-004 / P5-005).\n\nThis module implements the **plugin execution contract** recorded in the X-004\nsecurity spike (§6; design recorded in this module's docstring). Every skill-supplied\nPython file — ``bootstrap.py``, ``parser.py``, ``preflight.py``,\n``resolve_identity.py`` — runs in its own confined subprocess via this runner,\nnever ``import``-ed into the server process (X-004 D2).\n\nDesign contract (X-004 §6, verbatim where load-bearing):\n\n* **Invocation:** ``PluginRunner.run(skill_dir, plugin, kind, input_json, *,\n  caps, timeout_s) -> PluginResult``.\n* **Subprocess:** ``sys.executable <plugin>``, no shell, ``start_new_session=True``\n  (process-group for tree-kill). Mirrors ``GovernedCommandRunner``'s spawn shape.\n* **ABI:** JSON on stdin, JSON on stdout, exit 0/non-zero. The plugin module\n  exposes a pure function; the runner does the marshalling.\n* **Capability block (default-deny):** ``caps.fs_write`` / ``network_egress`` /\n  ``env`` / ``timeout_s`` / ``max_rss_mb`` / ``max_cpu_s``. Default per-kind\n  caps come from ``skill_loader._DEFAULT_CAPS_BY_KIND`` (X-004 §6).\n* **Env (X-004 §4.2 — strict):** ``PATH`` / ``LANG`` / ``HOME`` /\n  ``PYTHONUNBUFFERED`` / venv ``PYTHONPATH`` + only manifest-declared ``env``\n  keys. **No secrets, no ``AWS_*``, no service tokens.** This is strictly\n  narrower than ``command_runner._CHILD_ENV_ALLOWLIST`` (the agent path), by\n  design — plugins have no legitimate need for any of those.\n* **Failure semantics (fail-closed):** crash / timeout / invalid-JSON /\n  non-zero-exit ⇒ ``PluginResult(ok=False)`` + audit; **the exception never\n  propagates to the server process** (the single-instance W14 guarantee).\n* **Path confinement (D4):** the plugin's CWD is the session workspace;\n  ``skills/`` is reachable read-only; writes are confined to the workspace when\n  ``caps.fs_write == \"workspace\"``. Reuses ``command_policy._is_within``.\n\nThe ``BootstrapRunner`` (P5-005, ``bootstrap_runner.py``) is the first\nconsumer; ``parser`` / ``preflight`` / ``resolve_identity`` plugins follow the\nsame contract.\n\nDesign decisions (P1-007 house style):\n\n* **Sync subprocess + thread offload.** Like ``GovernedCommandRunner.run``,\n  the blocking ``Popen`` poll loop lives on a worker thread; the public\n  ``run()`` is ``async`` and wraps the body in ``asyncio.to_thread`` so a hard\n  timeout / cancel can reap the tree via ``_terminate_process_group_without_communicate``.\n* **No env inheritance.** The plugin child env is built fresh from the X-004\n  §4.2 strict allow-list — it does NOT call ``command_runner._build_child_env``\n  (that one is the agent path and carries experiment-legitimate creds plugins\n  must never see).\n* **Resource monitoring.** A psutil watcher thread enforces ``max_rss_mb`` /\n  ``max_cpu_s``; on breach the tree is killed and the result is fail-closed.\n* **Auditing is the caller's job.** ``PluginRunner`` returns a ``PluginResult``\n  with ``error``/``returncode``/``timed_out``; the caller (``BootstrapRunner``\n  / orchestrator) writes the ``audit_events`` row. Keeps the runner free of the\n  DB handle (X-004 D3 — plugins' execution context gets no server internals).",
+          "description": "Governed subprocess runner for skill-supplied plugins (ARC-011 X-004 / P5-005).\n\nThis module implements the **plugin execution contract** recorded in the X-004\nsecurity spike (§6; design recorded in this module's docstring). Every skill-supplied\nPython file — ``bootstrap.py``, ``parser.py``, ``preflight.py``,\n``resolve_identity.py`` — runs in its own confined subprocess via this runner,\nnever ``import``-ed into the server process (X-004 D2).\n\nDesign contract (X-004 §6, verbatim where load-bearing):\n\n* **Invocation:** ``PluginRunner.run(skill_dir, plugin, kind, input_json, *,\n  caps, timeout_s) -> PluginResult``.\n* **Subprocess:** ``sys.executable <plugin>``, no shell, ``start_new_session=True``\n  (process-group for tree-kill). Mirrors ``GovernedCommandRunner``'s spawn shape.\n* **ABI:** JSON on stdin, JSON on stdout, exit 0/non-zero. The plugin module\n  exposes a pure function; the runner does the marshalling.\n* **Capability block (default-deny):** ``caps.fs_write`` / ``network_egress`` /\n  ``env`` / ``timeout_s`` / ``max_rss_mb`` / ``max_cpu_s``. Default per-kind\n  caps come from ``skill_loader._DEFAULT_CAPS_BY_KIND`` (X-004 §6).\n* **Env (X-004 §4.2 — strict):** ``PATH`` / ``LANG`` / ``HOME`` /\n  ``PYTHONUNBUFFERED`` / venv ``PYTHONPATH`` + only manifest-declared ``env``\n  keys. **No secrets, no ``AWS_*``, no service tokens.** This is strictly\n  narrower than ``command_runner._CHILD_ENV_ALLOWLIST`` (the agent path), by\n  design — plugins have no legitimate need for any of those.\n* **Failure semantics (fail-closed):** crash / timeout / invalid-JSON /\n  non-zero-exit ⇒ ``PluginResult(ok=False)`` + audit; **the exception never\n  propagates to the server process** (the single-instance W14 guarantee).\n* **Path confinement (D4):** the plugin's CWD is the session workspace;\n  ``skills/`` is reachable read-only; writes are confined to the workspace when\n  ``caps.fs_write == \"workspace\"``. Path confinement uses ``relative_to``\n  checks against the declared roots.\n\nThe ``BootstrapRunner`` (P5-005, ``bootstrap_runner.py``) is the first\nconsumer; ``parser`` / ``preflight`` / ``resolve_identity`` plugins follow the\nsame contract.\n\nDesign decisions (P1-007 house style):\n\n* **Sync subprocess + thread offload.** Like ``GovernedCommandRunner.run``,\n  the blocking ``Popen`` poll loop lives on a worker thread; the public\n  ``run()`` is ``async`` and wraps the body in ``asyncio.to_thread`` so a hard\n  timeout / cancel can reap the tree via ``_terminate_process_group_without_communicate``.\n* **No env inheritance.** The plugin child env is built fresh from the X-004\n  §4.2 strict allow-list — it does NOT call ``command_runner._build_child_env``\n  (that one is the agent path and carries experiment-legitimate creds plugins\n  must never see).\n* **Resource monitoring.** A psutil watcher thread enforces ``max_rss_mb`` /\n  ``max_cpu_s``; on breach the tree is killed and the result is fail-closed.\n* **Auditing is the caller's job.** ``PluginRunner`` returns a ``PluginResult``\n  with ``error``/``returncode``/``timed_out``; the caller (``BootstrapRunner``\n  / orchestrator) writes the ``audit_events`` row. Keeps the runner free of the\n  DB handle (X-004 D3 — plugins' execution context gets no server internals).",
           "functions": {
             "_build_plugin_env": "Build the env dict for a plugin subprocess (X-004 §4.2, strict).",
             "_tail": "Return the trailing slice of ``text`` for error context."
           }
         }
       },
-      "hash": "sha256:2d2573cdc6324b003b867807d2c27f9aed9bba81862c96b52798d47229ff1ef2",
+      "hash": "sha256:ca182f5830a5d15603333e28e3aa94b2813ab6ff6d8474df7554a1cf6bf853d8",
       "language": "python",
       "module_page": "plugin_runner",
-      "semantic_hash": "sha256:8bea41a2933fa993bd87a67dbc89641553f39a63285ba9865f2ec06c0966cf62"
+      "semantic_hash": "sha256:5f7ea55f5424efce802579803863a205bab43dda7cb446c3046a178169e9429c"
     },
     "src/core/postgres_state_store.py": {
       "entities": [
@@ -15471,7 +15512,8 @@
               "forbidden_substrings": "—",
               "forbidden_tokens": "—",
               "readable_files": "—",
-              "secret_markers": "—"
+              "secret_markers": "—",
+              "write_protected_files": "—"
             },
             "description": "Allowed scripts / executables / files for the skill (ARC-011 §9\n``command_policy``). The orchestrator's domain-neutral base policy\n(``_ALLOWED_PYTHON``, ``_DISALLOWED_EXECUTABLES``, ``_FORBIDDEN_*``,\n``_SECRET_MARKERS``) is merged with this per-skill extension.",
             "methods": {}
@@ -16004,10 +16046,10 @@
           "functions": {}
         }
       },
-      "hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
+      "hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
       "language": "python",
       "module_page": "skill_manifest",
-      "semantic_hash": "sha256:df9ba2765e3efb1cf881e974702b371fa8635296292edfa3ce19c54ffb697667"
+      "semantic_hash": "sha256:0bc96b8df74291627b2ce7aeebe1dbd666029e5b13f9316bc658e7e3ce4fe025"
     },
     "src/core/skill_paths.py": {
       "entities": [],
@@ -16193,7 +16235,8 @@
               "config_flag": "—",
               "copyable_files": "—",
               "readable_files": "—",
-              "script_paths": "—"
+              "script_paths": "—",
+              "write_protected_files": "—"
             },
             "description": "Per-skill extension to the orchestrator's base command policy.\n\nToday the orchestrator has one global ``_ALLOWED_SCRIPTS`` allow-list\n(``command_policy.py``); the manifest-driven future (P2-023) lets each skill\ndeclare its own allowed scripts/executables/copyable-files/readable-files.\nThe transitional runtimes (P1-024..026) return the model-type-relevant\nsubset of the current global allow-list.\n\n``script_paths`` (ARC-011 review C4): declared-name → absolute packaged-\npath resolution. Skill manifests declare scripts workspace-relative\n(``eval/run.py``); the runtime resolves each to the read-only packaged\n``skills/<id>/`` tree so the governed command can execute it (the\nsession workspace is deliberately NOT used — it is agent-writable).",
             "methods": {}
@@ -16347,10 +16390,10 @@
           }
         }
       },
-      "hash": "sha256:756220735d3856092ae37fa87fb86d63b8a934fa9aaa1fc46eb611b82824327e",
+      "hash": "sha256:1e21331e341b99d6878aba77e7c720bf3dec534d5e5aa188add94d898c72919a",
       "language": "python",
       "module_page": "skill_runtime",
-      "semantic_hash": "sha256:f5450e3dbf2441d9c84ef2f128156c5b0ed181135395896d0fb7480ca23c7eb4"
+      "semantic_hash": "sha256:afce80568a171fd8fda863a0f703bcd10cf522c8f744df271bb9e0e81ad455db"
     },
     "src/core/state_machine.py": {
       "entities": [
@@ -16692,6 +16735,62 @@
       "language": "python",
       "module_page": "state_store",
       "semantic_hash": "sha256:c98fbd8045fe08cce962be2fa40cb53cb00d08bdd144a21b8a073681761a4257"
+    },
+    "src/core/tool_access.py": {
+      "entities": [
+        "ToolAccessContext"
+      ],
+      "entity_page_occurrences": [
+        {
+          "name": "ToolAccessContext",
+          "occurrence": 1,
+          "page": "ToolAccessContext"
+        }
+      ],
+      "entity_pages": {
+        "ToolAccessContext": "ToolAccessContext"
+      },
+      "generated_semantics": {
+        "entities": {
+          "ToolAccessContext": {
+            "attributes": {
+              "protected_names": "—",
+              "protected_paths": "—",
+              "readable_roots": "—",
+              "session_workspace": "—",
+              "workspace_root": "—",
+              "writable_roots": "—"
+            },
+            "description": "Server-derived file authorization for one run/attempt's tool calls.\n\nBuilt once per run from the owning session workspace and the skill's\ndeclarations; tool arguments never construct or extend it.",
+            "methods": {
+              "_select": "Return ``(denial_reason, resolved)`` for one tool-supplied path.",
+              "authorize_read": "Resolve ``raw`` and require it to land inside a readable root.",
+              "authorize_write": "Resolve ``raw`` and require an authorized, unprotected target.",
+              "filter_readable": "Keep only candidates that resolve inside a readable root.",
+              "is_write_protected": "Whether a resolved path is server-owned/evaluation state.",
+              "resolve": "Resolve ``raw`` to the authorized target path.",
+              "resolve_candidates": "Resolve a tool-supplied path to its authorized candidates.",
+              "with_extra_protected": "Return a copy with additional protected names merged in."
+            }
+          }
+        },
+        "module": {
+          "classes": {
+            "ToolAccessContext": "Server-derived file authorization for one run/attempt's tool calls."
+          },
+          "description": "Shared file-tool authorization: one context for every file operation.\n\nEvery path a tool call exposes — read, write, glob, grep, copy, and any\npath-bearing tool argument — resolves through the same authorization\ncontext. The context is derived server-side from run/attempt ownership\n(the run's session workspace) plus skill declarations; tool-supplied paths,\ncandidate files, and workspace instructions never grant additional access.\n\nAuthorization model:\n\n* ``readable_roots`` / ``writable_roots`` are explicit roots. A resolved\n  path outside every root of the requested kind is rejected — sibling\n  sessions, evaluator packages, interpreter environments, control-plane\n  storage, and shared evaluation assets are excluded by construction\n  because they live outside the owning session's workspace.\n* ``protected_paths`` / ``protected_names`` carve server-owned state out of\n  the writable roots: private evidence, command logs, trial staging, the\n  bootstrap and session manifests, and skill-declared evaluation data are\n  never candidate-writable even though they live inside the workspace.\n* Relative tool paths resolve against the session workspace; the legacy\n  shared-root path style is still accepted when it lands inside the\n  authorized roots. Absolute paths are accepted only when they land inside\n  an authorized root.\n\nThe shared workspace root is carried for command-policy plumbing (the\ngoverned interpreter and legacy ``cd`` normalization live there); it is\nnever an authorization root for file access.",
+          "functions": {
+            "_resolved": "—",
+            "build_tool_access_context": "Derive the file authorization for one run/attempt, server-side.",
+            "matches_protected_name": "Whether a workspace-relative path matches a protected name/pattern.",
+            "path_within_roots": "Whether ``path`` resolves inside one of ``roots``."
+          }
+        }
+      },
+      "hash": "sha256:beb76de655650abe2fa9062d98dab8c7f38f43a950995d29b909e1bcc581cc7f",
+      "language": "python",
+      "module_page": "tool_access",
+      "semantic_hash": "sha256:9455422400b3dfe2c34d06721f931089f4910aa541fd1e4366bbeefe735fb372"
     },
     "src/core/trial_workspace.py": {
       "entities": [
@@ -17168,6 +17267,7 @@
           "classes": {},
           "description": "Tests for the sync tool-dispatch path (ARC-011 P1-029 / P1-030).\n\nHistory note: P1-029 originally proposed migrating ``grep`` from a synchronous\n``subprocess.run`` (run inside ``asyncio.to_thread``) to\n``asyncio.create_subprocess_exec``, and making ``_execute_tool`` itself\n``async``. That migration was **reverted** in favor of the existing\n``asyncio.to_thread`` wrapping (orchestrator.py:648) — keeping every tool call\nsite uniform. These tests pin the **current** sync contract:\n\n* the dispatch shape (``_execute_tool`` / ``_tool_grep`` are sync functions;\n  ``_tool_glob`` is sync pure-Python);\n* the grep happy-path output + the 60k-char truncation + the no-match marker;\n* the ``subprocess.run(timeout=30)`` path returns the timeout marker on\n  timeout (the standard-library reaper handles child cleanup; there is no\n  in-process reap to test);\n* the P1-029 security delta: the grep child runs with ``_build_child_env()``,\n  so server control-plane secrets are stripped (same P0-023 invariant, applied\n  to the previously-ungoverned grep path).\n\nThe behavioral gate for the bash tool path stays in ``test_command_policy.py``;\nthis file covers the grep / glob tools specifically.",
           "functions": {
+            "_access": "—",
             "_workspace": "—",
             "test_execute_tool_dispatches_glob": "``glob`` routes through ``_tool_glob`` via ``_execute_tool``.",
             "test_execute_tool_dispatches_grep": "``_execute_tool(\"grep\", ...)`` routes through ``_tool_grep`` and returns",
@@ -17184,10 +17284,10 @@
           }
         }
       },
-      "hash": "sha256:a2b9f2d4df3cf81260c5ae2cdc513a995de2bf73ceaf39d5c87ab23cea3bb354",
+      "hash": "sha256:5268a5b9c014036ff500fc75185535021ce61b70e154fae36846267877d0738b",
       "language": "python",
       "module_page": "test_async_tool_path",
-      "semantic_hash": "sha256:b1a9cabd441d11d71cf8b09dd4c778cce1b9ea468ea62c3e1ed7182c67b18440"
+      "semantic_hash": "sha256:695715cf2e1de91b61e593ff7ae2584bbf78609fd259b96a493b8f122380c54e"
     },
     "tests/test_auto_phase_evidence.py": {
       "entities": [
@@ -17734,10 +17834,10 @@
           }
         }
       },
-      "hash": "sha256:06d68b746f61db242558b2550c214f3dec9584b618c88ff45be61cdf0cd74e61",
+      "hash": "sha256:e707aa381ff246fee7c58f339d16700ee72f8e376109bc7505874edf7bf7ab7e",
       "language": "python",
       "module_page": "test_command_policy",
-      "semantic_hash": "sha256:1c06168df526576b20294fbfb534e7b6f214a7936505600c7db8bd871ca7d4e5"
+      "semantic_hash": "sha256:13bf4866677aa8d8c4e11fa09b9e41f65e9702e8ec7002d4c24399d84fee0831"
     },
     "tests/test_config_promoter_atomic.py": {
       "entities": [],
@@ -20325,6 +20425,7 @@
             "_make_hanging_workspace": "A workspace with ``.venv/bin/python`` symlink + a hanging autotuner script.",
             "_process_exists": "—",
             "_seed_session": "—",
+            "_ws_access": "—",
             "test_capped_command_is_reaped_and_session_times_out": "—",
             "test_command_timeout_cap_respects_floor_then_budget": "Ample budget → the 900s floor holds; tight budget → the cap wins below it.",
             "test_registry_kill_all_reaps_in_flight_subprocess": "—",
@@ -20332,10 +20433,10 @@
           }
         }
       },
-      "hash": "sha256:ed4ee316ff1102463e83fa5e26cddfbafea1a847eff9f26585221adacf671ffd",
+      "hash": "sha256:bda4b4207d0be1bea9e25b22ea8a22bff69f6f9ffda5bbbe5915b3ce52480af8",
       "language": "python",
       "module_page": "test_orchestrator_timeout",
-      "semantic_hash": "sha256:1e90b61660857ec683f8e53d4494a78403f42d07863287a7fa92518e6914bcfc"
+      "semantic_hash": "sha256:caf49e7393aa735ac361268d86f87c961c52160fac15a448ac1a5b7374a47599"
     },
     "tests/test_output_digest.py": {
       "entities": [],
@@ -22843,6 +22944,47 @@
       "module_page": "test_terminal_phase_contract",
       "semantic_hash": "sha256:7df213d5e0d8dab5790bcbc20fde132e63a0af94e347de0aa338f0cb4161764d"
     },
+    "tests/test_tool_access.py": {
+      "entities": [],
+      "entity_page_occurrences": [],
+      "entity_pages": {},
+      "generated_semantics": {
+        "entities": {},
+        "module": {
+          "classes": {},
+          "description": "Tool-dispatch authorization regressions for the shared file-tool context.\n\nEvery file operation (read, write, glob, grep, copy, and path-bearing tool\narguments) must resolve through one server-derived authorization context:\na run may only reach its own session workspace, never sibling sessions,\ncontrol-plane storage, interpreter environments, or evaluator assets, while\nallowed candidate edits keep working. Server-owned evidence and skill-\ndeclared evaluation data are not candidate-writable.",
+          "functions": {
+            "_access": "—",
+            "_setup": "—",
+            "_skill_extension": "—",
+            "test_allowed_candidate_edits_still_work": "—",
+            "test_config_flag_path_faces_shared_authorization": "—",
+            "test_context_protects_server_owned_state": "—",
+            "test_context_roots_come_from_run_ownership": "—",
+            "test_control_plane_files_never_reachable": "—",
+            "test_cp_and_cat_reject_sibling_and_outside_paths": "—",
+            "test_cp_destination_faces_write_protection": "—",
+            "test_glob_expansion_cannot_escape_the_roots": "—",
+            "test_grep_rejects_outside_search_paths_and_finds_own_files": "—",
+            "test_interpreter_environment_and_evaluator_code_unreachable": "—",
+            "test_legacy_style_workspace_paths_still_authorize": "—",
+            "test_read_file_cannot_inspect_sibling_session": "—",
+            "test_read_file_rejects_paths_outside_any_root": "—",
+            "test_read_file_sibling_style_path_never_returns_content": "—",
+            "test_server_owned_state_is_not_candidate_writable": "—",
+            "test_skill_declared_evaluation_data_is_write_protected": "—",
+            "test_skill_manifest_evaluation_data_declaration_is_enforced": "—",
+            "test_write_file_cannot_modify_sibling_candidate": "—",
+            "test_write_file_rejects_symlink_leaves": "—",
+            "test_write_file_rejects_traversal_and_shared_root_targets": "—"
+          }
+        }
+      },
+      "hash": "sha256:59119ddbf499b33bcbdfa1719a1a102c81e63043d1c46f8027b2e0a51d902b27",
+      "language": "python",
+      "module_page": "test_tool_access",
+      "semantic_hash": "sha256:297cbc73ecfb2eedb94b3987a9386c3718a17c24153cfd6ff3015902bd8f3d72"
+    },
     "tests/test_trial_workspace.py": {
       "entities": [
         "_CapturingRunner"
@@ -22876,6 +23018,7 @@
           },
           "description": "Per-workdir trial state tests (P2 — ``execution.concurrency`` prerequisite).\n\nCovers the :mod:`src.core.trial_workspace` module (context, allocation,\nstaging with the server-dir ignore list, fail-open staging, trial-first\nmarker candidates, eligibility predicate), the ``cwd`` seam through\n``_tool_bash`` into the governed runner, and the ``--config`` snapshot\nresolution against a trial base dir.",
           "functions": {
+            "_ws_access": "—",
             "test_allocate_trial_dir_creates_and_is_idempotent": "—",
             "test_build_trial_context_bookkeeping_command_not_trialed": "—",
             "test_build_trial_context_default_concurrency_never_allocates": "—",
@@ -22892,10 +23035,10 @@
           }
         }
       },
-      "hash": "sha256:9593d888289853c9597a639af316a29a0d188a23716a4d0d2167dd5967fdda00",
+      "hash": "sha256:595c39b462eab2321926272462dd247d28bec3f7f36e7617bafd25517377a12e",
       "language": "python",
       "module_page": "test_trial_workspace",
-      "semantic_hash": "sha256:dfe6b2fa0ef2f4fe6fbfbb35a306f09eb61da1f91cfe70801ddae933565d0f7d"
+      "semantic_hash": "sha256:75afef338df57c0708d35dc636da93c425c88c85f1f99d3cf8b042808c3a9da1"
     },
     "tests/test_webhook_promotion.py": {
       "entities": [],

@@ -1,6 +1,6 @@
 # IdentityResolve
 
-**Location:** `src/core/skill_manifest.py:782`
+**Location:** `src/core/skill_manifest.py:786`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)

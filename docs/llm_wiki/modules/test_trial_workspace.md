@@ -21,6 +21,7 @@ resolution against a trial base dir.
 | `pathlib` | `Path` |
 | `src.core.agent_tools` | `_config_snapshot_path_from_command`, `_tool_bash` |
 | `src.core.command_runner` | `CommandRunResult` |
+| `src.core.tool_access` | `build_tool_access_context` |
 | `src.core.trial_workspace` | `TRIALS_DIRNAME`, `TrialContext`, `allocate_trial_dir`, `build_trial_context`, `is_trial_eligible_command`, `stage_trial_or_none`, `stage_trial_workspace`, `trial_marker_candidates`, `tw` |
 | `unittest.mock` | `MagicMock`, `patch` |
 
@@ -31,16 +32,21 @@ resolution against a trial base dir.
 flowchart LR
     n0["src/core/agent_tools.py"]
     n1["src/core/command_runner.py"]
-    n2["src/core/trial_workspace.py"]
-    n3["tests/test_trial_workspace.py"]
+    n2["src/core/tool_access.py"]
+    n3["src/core/trial_workspace.py"]
+    n4["tests/test_trial_workspace.py"]
     n0 --> n1
-    n3 --> n0
-    n3 --> n1
-    n3 --> n2
+    n0 --> n2
+    n1 --> n2
+    n4 --> n0
+    n4 --> n1
+    n4 --> n2
+    n4 --> n3
     click n0 "../modules/agent_tools.md"
     click n1 "../modules/command_runner.md"
-    click n2 "../modules/trial_workspace.md"
-    click n3 "../modules/test_trial_workspace.md"
+    click n2 "../modules/tool_access.md"
+    click n3 "../modules/trial_workspace.md"
+    click n4 "../modules/test_trial_workspace.md"
 ```
 
 ### Internal neighbors
@@ -49,13 +55,14 @@ flowchart LR
 |---|---|
 | Outbound | [agent_tools](../modules/agent_tools.md) |
 | Outbound | [command_runner](../modules/command_runner.md) |
+| Outbound | [tool_access](../modules/tool_access.md) |
 | Outbound | [trial_workspace](../modules/trial_workspace.md) |
 
 ## Classes
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [_CapturingRunner](../entities/test_trial_workspace_CapturingRunner.md) | 178 | — | — |
+| [_CapturingRunner](../entities/test_trial_workspace_CapturingRunner.md) | 183 | — | — |
 
 ## Functions
 
@@ -71,6 +78,7 @@ flowchart LR
 | `test_build_trial_context_default_concurrency_never_allocates` | `(tmp_path)` | — | — |
 | `test_build_trial_context_eligible_command_allocates_and_stages` | `(tmp_path)` | — | — |
 | `test_build_trial_context_bookkeeping_command_not_trialed` | `(tmp_path)` | — | — |
+| `_ws_access` | `()` | — | — |
 | `test_tool_bash_threads_cwd_to_governed_runner` | `()` | — | — |
 | `test_config_snapshot_resolves_against_base_dir` | `(tmp_path)` | — | — |
 | `test_config_snapshot_base_dir_outside_session_returns_none` | `(tmp_path)` | — | — |

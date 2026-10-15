@@ -38,6 +38,7 @@ the ``Popen`` handle.
 | `src.core.orchestrator` | `AgentOrchestrator`, `ResearchConfig`, `_tool_bash` |
 | `src.core.results_store` | `ResultsStore` |
 | `src.core.skill_runtime` | `ManifestSkillRuntime` |
+| `src.core.tool_access` | `ToolAccessContext`, `build_tool_access_context` |
 | `sys` | `sys` |
 | `time` | `time` |
 | `types` | `types` |
@@ -53,22 +54,26 @@ flowchart LR
     n2["src/core/orchestrator.py"]
     n3["src/core/results_store.py"]
     n4["src/core/skill_runtime.py"]
-    n5["tests/test_orchestrator_timeout.py"]
+    n5["src/core/tool_access.py"]
+    n6["tests/test_orchestrator_timeout.py"]
+    n0 --> n5
     n2 --> n0
     n2 --> n1
     n2 --> n4
     n4 --> n2
-    n5 --> n0
-    n5 --> n1
-    n5 --> n2
-    n5 --> n3
-    n5 --> n4
+    n6 --> n0
+    n6 --> n1
+    n6 --> n2
+    n6 --> n3
+    n6 --> n4
+    n6 --> n5
     click n0 "../modules/command_runner.md"
     click n1 "../modules/llm_provider.md"
     click n2 "../modules/orchestrator.md"
     click n3 "../modules/results_store.md"
     click n4 "../modules/skill_runtime.md"
-    click n5 "../modules/test_orchestrator_timeout.md"
+    click n5 "../modules/tool_access.md"
+    click n6 "../modules/test_orchestrator_timeout.md"
 ```
 
 ### Internal neighbors
@@ -80,6 +85,7 @@ flowchart LR
 | Outbound | [orchestrator](../modules/orchestrator.md) |
 | Outbound | [results_store](../modules/results_store.md) |
 | Outbound | [skill_runtime](../modules/skill_runtime.md) |
+| Outbound | [tool_access](../modules/tool_access.md) |
 
 ### External packages
 
@@ -91,7 +97,7 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [_CapturingRunner](../entities/test_orchestrator_timeout_CapturingRunner.md) | 272 | — | Stand-in for GovernedCommandRunner that records the resolved timeout_s. |
+| [_CapturingRunner](../entities/test_orchestrator_timeout_CapturingRunner.md) | 277 | — | Stand-in for GovernedCommandRunner that records the resolved timeout_s. |
 
 ## Functions
 
@@ -104,5 +110,6 @@ flowchart LR
 | `_make_hanging_workspace` | `(tmp_path: Path) -> tuple[Path, Path]` | — | A workspace with ``.venv/bin/python`` symlink + a hanging autotuner script. |
 | `test_capped_command_is_reaped_and_session_times_out` | *(async)* `(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None` | `@pytest.mark.asyncio` | — |
 | `test_registry_kill_all_reaps_in_flight_subprocess` | *(async)* `(tmp_path: Path) -> None` | `@pytest.mark.asyncio` | — |
+| `_ws_access` | `() -> ToolAccessContext` | — | — |
 | `test_command_timeout_cap_respects_floor_then_budget` | `() -> None` | — | Ample budget → the 900s floor holds; tight budget → the cap wins below it. |
 | `test_registry_register_unregister_and_membership` | `() -> None` | — | — |

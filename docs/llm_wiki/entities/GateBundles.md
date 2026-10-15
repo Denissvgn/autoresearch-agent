@@ -1,6 +1,6 @@
 # GateBundles
 
-**Location:** `src/core/skill_manifest.py:613`
+**Location:** `src/core/skill_manifest.py:617`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)

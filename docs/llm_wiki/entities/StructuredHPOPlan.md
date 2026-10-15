@@ -1,6 +1,6 @@
 # StructuredHPOPlan
 
-**Location:** `src/core/skill_runtime.py:143`
+**Location:** `src/core/skill_runtime.py:147`
 **Kind:** Class
 **Bases:** `TypedDict`
 **Module:** [skill_runtime](../modules/skill_runtime.md)

@@ -21,6 +21,7 @@ Governed subprocess runner for autoresearch agent commands.
 | `selectors` | `selectors` |
 | `signal` | `signal` |
 | `src.core.command_policy` | `CommandDecision`, `evaluate_command_policy` |
+| `src.core.tool_access` | `ToolAccessContext` |
 | `stat` | `stat` |
 | `subprocess` | `subprocess` |
 | `threading` | `threading` |
@@ -39,35 +40,43 @@ flowchart LR
     n2["src/core/command_runner.py"]
     n3["src/core/orchestrator.py"]
     n4["src/core/plugin_runner.py"]
-    n5["tests/test_async_tool_path.py"]
-    n6["tests/test_command_policy.py"]
-    n7["tests/test_orchestrator_timeout.py"]
-    n8["tests/test_trial_workspace.py"]
+    n5["src/core/tool_access.py"]
+    n6["tests/test_async_tool_path.py"]
+    n7["tests/test_command_policy.py"]
+    n8["tests/test_orchestrator_timeout.py"]
+    n9["tests/test_trial_workspace.py"]
     n0 --> n2
+    n0 --> n5
+    n1 --> n5
     n2 --> n1
+    n2 --> n5
     n3 --> n0
     n3 --> n2
-    n4 --> n1
     n4 --> n2
-    n5 --> n0
-    n5 --> n2
-    n5 --> n3
-    n6 --> n1
+    n6 --> n0
     n6 --> n2
     n6 --> n3
+    n6 --> n5
+    n7 --> n1
     n7 --> n2
     n7 --> n3
-    n8 --> n0
+    n7 --> n5
     n8 --> n2
+    n8 --> n3
+    n8 --> n5
+    n9 --> n0
+    n9 --> n2
+    n9 --> n5
     click n0 "../modules/agent_tools.md"
     click n1 "../modules/command_policy.md"
     click n2 "../modules/command_runner.md"
     click n3 "../modules/orchestrator.md"
     click n4 "../modules/plugin_runner.md"
-    click n5 "../modules/test_async_tool_path.md"
-    click n6 "../modules/test_command_policy.md"
-    click n7 "../modules/test_orchestrator_timeout.md"
-    click n8 "../modules/test_trial_workspace.md"
+    click n5 "../modules/tool_access.md"
+    click n6 "../modules/test_async_tool_path.md"
+    click n7 "../modules/test_command_policy.md"
+    click n8 "../modules/test_orchestrator_timeout.md"
+    click n9 "../modules/test_trial_workspace.md"
 ```
 
 ### Internal neighbors
@@ -82,6 +91,7 @@ flowchart LR
 | Inbound | [test_orchestrator_timeout](../modules/test_orchestrator_timeout.md) |
 | Inbound | [test_trial_workspace](../modules/test_trial_workspace.md) |
 | Outbound | [command_policy](../modules/command_policy.md) |
+| Outbound | [tool_access](../modules/tool_access.md) |
 
 ### External packages
 
@@ -93,13 +103,13 @@ flowchart LR
 
 | Class | Kind | Line | Bases / Target | Description |
 |-------|------|------|----------------|-------------|
-| [_HeadTailBuffer](../entities/HeadTailBuffer.md) | Class | 35 | — | Retain a fixed-size head and rolling tail, including for newline-free data. |
-| [_SessionOutputLog](../entities/SessionOutputLog.md) | Class | 69 | — | Append child output under a shared session logs byte quota. |
-| [OutputStream](../entities/OutputStream.md) | Type alias | 231 | `Literal['stdout', 'stderr']` | — |
-| [OutputCallback](../entities/OutputCallback.md) | Type alias | 232 | `Callable[[OutputStream, str], None]` | — |
-| [CommandRunResult](../entities/CommandRunResult.md) | Class | 236 | — | — |
-| [CommandProcessRegistry](../entities/CommandProcessRegistry.md) | Class | 249 | — | Thread-safe registry of in-flight governed subprocesses, keyed by session. |
-| [GovernedCommandRunner](../entities/GovernedCommandRunner.md) | Class | 305 | — | Validate and execute one approved command without invoking a shell. |
+| [_HeadTailBuffer](../entities/HeadTailBuffer.md) | Class | 36 | — | Retain a fixed-size head and rolling tail, including for newline-free data. |
+| [_SessionOutputLog](../entities/SessionOutputLog.md) | Class | 70 | — | Append child output under a shared session logs byte quota. |
+| [OutputStream](../entities/OutputStream.md) | Type alias | 232 | `Literal['stdout', 'stderr']` | — |
+| [OutputCallback](../entities/OutputCallback.md) | Type alias | 233 | `Callable[[OutputStream, str], None]` | — |
+| [CommandRunResult](../entities/CommandRunResult.md) | Class | 237 | — | — |
+| [CommandProcessRegistry](../entities/CommandProcessRegistry.md) | Class | 250 | — | Thread-safe registry of in-flight governed subprocesses, keyed by session. |
+| [GovernedCommandRunner](../entities/GovernedCommandRunner.md) | Class | 306 | — | Validate and execute one approved command without invoking a shell. |
 
 ## Functions
 

@@ -73,10 +73,10 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Inbound | `src` (2) |
-| Inbound | `tests` (9) |
+| Inbound | `tests` (10) |
 | Outbound | `src` (6) |
 
-> All 16 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 17 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
@@ -86,13 +86,13 @@ flowchart LR
 | [SessionRecord](../entities/SessionRecord.md) | 75 | `TypedDict` | Alias over the session dict ``StateStore.get_session`` returns. Keys |
 | [IterationRecord](../entities/IterationRecord.md) | 88 | `TypedDict` | Alias over the iteration dict ``StateStore.get_iteration`` returns |
 | [CommandPolicyExtension](../entities/CommandPolicyExtension.md) | 94 | `TypedDict` | Per-skill extension to the orchestrator's base command policy. |
-| [Phase](../entities/skill_runtime_Phase.md) | 120 | `TypedDict` | Alias over the phase dict shape in ``research_phase_plan.py`` |
-| [AdvancementRule](../entities/AdvancementRule.md) | 134 | `TypedDict` | Phase advancement evidence rule. Today advancement keys live in the |
-| [StructuredHPOPlan](../entities/StructuredHPOPlan.md) | 143 | `TypedDict` | Alias over the HPO plan dict ``structured_hpo.build_structured_hpo_plan`` |
-| [SubjectDescriptor](../entities/SubjectDescriptor.md) | 151 | `TypedDict` | A research subject a skill can enumerate (e.g. an instrument, a model |
-| [VariantDescriptor](../entities/VariantDescriptor.md) | 160 | `TypedDict` | A variant under a subject (e.g. a timeframe, a parameterization). |
-| [SkillRuntime](../entities/SkillRuntime.md) | 174 | `Protocol` | Contract every research skill implements (ARC-011 P1-023, §7.5). |
-| [ManifestSkillRuntime](../entities/ManifestSkillRuntime.md) | 346 | — | A ``SkillRuntime`` driven entirely by a ``ResearchSkillManifest`` (P2-007). |
+| [Phase](../entities/skill_runtime_Phase.md) | 124 | `TypedDict` | Alias over the phase dict shape in ``research_phase_plan.py`` |
+| [AdvancementRule](../entities/AdvancementRule.md) | 138 | `TypedDict` | Phase advancement evidence rule. Today advancement keys live in the |
+| [StructuredHPOPlan](../entities/StructuredHPOPlan.md) | 147 | `TypedDict` | Alias over the HPO plan dict ``structured_hpo.build_structured_hpo_plan`` |
+| [SubjectDescriptor](../entities/SubjectDescriptor.md) | 155 | `TypedDict` | A research subject a skill can enumerate (e.g. an instrument, a model |
+| [VariantDescriptor](../entities/VariantDescriptor.md) | 164 | `TypedDict` | A variant under a subject (e.g. a timeframe, a parameterization). |
+| [SkillRuntime](../entities/SkillRuntime.md) | 178 | `Protocol` | Contract every research skill implements (ARC-011 P1-023, §7.5). |
+| [ManifestSkillRuntime](../entities/ManifestSkillRuntime.md) | 350 | — | A ``SkillRuntime`` driven entirely by a ``ResearchSkillManifest`` (P2-007). |
 
 ## Functions
 

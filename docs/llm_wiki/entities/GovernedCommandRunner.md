@@ -1,6 +1,6 @@
 # GovernedCommandRunner
 
-**Location:** `src/core/command_runner.py:305`
+**Location:** `src/core/command_runner.py:306`
 **Kind:** Class
 **Bases:** —
 **Module:** [command_runner](../modules/command_runner.md)
@@ -17,7 +17,7 @@ Validate and execute one approved command without invoking a shell.
 
 | Method | Signature | Decorators | Description |
 |--------|-----------|------------|-------------|
-| `__init__` | `(*, workspace_root: str, session_workspace: str \| None = None, policy_extension: Mapping[str, Any] \| None = None) -> None` | — | — |
+| `__init__` | `(*, workspace_root: str, session_workspace: str \| None = None, policy_extension: Mapping[str, Any] \| None = None, access: ToolAccessContext \| None = None) -> None` | — | — |
 | `run` | `(command: str, *, timeout_s: int, output_callback: OutputCallback \| None = None, proc_registry: CommandProcessRegistry \| None = None, research_id: str \| None = None, extra_env: Mapping[str, str] \| None = None, cwd: str \| None = None) -> CommandRunResult` | — | Validate and execute one approved command without invoking a shell. |
 
 ## Relationships
