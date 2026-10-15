@@ -5,11 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import shutil
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Mapping, MutableMapping, Optional
 
+from src.core import fs_safety
 from src.core.artifact_reference import (
     ARTIFACT_REFERENCE_KEYS,
     normalize_artifact_references_in_mapping,
@@ -121,12 +121,23 @@ def enrich_marker_from_result_artifact(
         return None
 
     workspace_path = Path(workspace).expanduser().resolve(strict=False)
-    source = _resolve_source_path(raw_path, workspace_path)
-    if source is None:
+    raw_source = _resolve_source_path(raw_path, workspace_path)
+    if raw_source is None:
         _log_debug(logger, "Ignoring invalid results_json_path %r", raw_path)
         marker.pop("results_json_path", None)
         return None
-    source = source.resolve(strict=False)
+    # Lexical containment first: the import below never follows links, so the
+    # copy-in path must already be inside the workspace without traversal.
+    normalized = Path(os.path.normpath(raw_source))
+    try:
+        source_rel = normalized.relative_to(workspace_path)
+    except ValueError:
+        source_rel = None
+    if source_rel is None or ".." in source_rel.parts:
+        _log_debug(logger, "Ignoring results_json_path outside workspace: %s", raw_source)
+        marker.pop("results_json_path", None)
+        return None
+    source = normalized.resolve(strict=False)
     if not _is_allowed_source(source, workspace_path):
         _log_debug(logger, "Ignoring results_json_path outside workspace: %s", source)
         marker.pop("results_json_path", None)
@@ -138,12 +149,24 @@ def enrich_marker_from_result_artifact(
 
     target = workspace_path / "server_snapshots" / f"iteration_{iteration:04d}_results.json"
     try:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source, target)
-        digest = _sha256_file(target)
-        with target.open(encoding="utf-8") as handle:
-            payload = json.load(handle)
-    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        # Strict import: regular, single-link, opened no-follow — a planted
+        # link must not alias a shared file into the snapshot. The snapshot
+        # target is replaced descriptor-relative, never through a link.
+        data = fs_safety.read_regular_file(str(workspace_path), source_rel.as_posix())
+        fs_safety.safe_write_bytes(
+            str(workspace_path),
+            f"server_snapshots/iteration_{iteration:04d}_results.json",
+            data,
+        )
+        digest = hashlib.sha256(data).hexdigest()
+        payload = json.loads(data)
+    except (
+        fs_safety.FilesystemSafetyError,
+        OSError,
+        json.JSONDecodeError,
+        TypeError,
+        ValueError,
+    ) as exc:
         _log_debug(logger, "Failed to preserve result artifact %s: %s", source, exc)
         return None
 
@@ -356,14 +379,6 @@ def _first_present(*values: Any) -> Any:
         if value is not None:
             return value
     return None
-
-
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _log_debug(logger: Any, message: str, *args: Any) -> None:

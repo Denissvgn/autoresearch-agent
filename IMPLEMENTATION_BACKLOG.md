@@ -439,9 +439,9 @@ Autonomy: Target the qualified Linux descriptor-relative operations first. Deny
 ambiguous links/imports unless a safe behavior has a regression; do not trade race
 resistance for cross-platform compatibility.
 
-- [ ] Reject dangling leaf symlinks independently of target existence and define allowed link behavior for reads and staged inputs.
-- [ ] Use descriptor-relative no-follow operations for sensitive writes, parent creation, and replacement rather than resolve-then-open checks.
-- [ ] Apply equivalent protection to candidate staging and result collection; reject hardlink/import patterns that could expose writable shared files.
+- [x] Reject dangling leaf symlinks independently of target existence and define allowed link behavior for reads and staged inputs.
+- [x] Use descriptor-relative no-follow operations for sensitive writes, parent creation, and replacement rather than resolve-then-open checks.
+- [x] Apply equivalent protection to candidate staging and result collection; reject hardlink/import patterns that could expose writable shared files.
 
 Acceptance: dangling links, linked parents, and path swaps cannot create or
 overwrite data outside authorized roots. Errors identify the denied operation.

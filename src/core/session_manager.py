@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from src.config import settings
+from src.core import fs_safety
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig
 from src.core.research_manifest import build_research_manifest, manifest_pretty_json
 from src.core.service_preflight import (
@@ -758,9 +759,11 @@ class SessionManager:
             else f"research_manifest_{config.id}.json"
         )
         path = Path(config.workspace_path) / filename
-        await asyncio.to_thread(path.parent.mkdir, parents=True, exist_ok=True)
         await asyncio.to_thread(
-            path.write_text, manifest_json, encoding="utf-8",
+            fs_safety.safe_write_text,
+            config.workspace_path,
+            filename,
+            manifest_json,
         )
         return str(path)
 

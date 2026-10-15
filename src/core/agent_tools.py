@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Mapping, Optional
 
+from src.core import fs_safety
 from src.core.command_runner import (
     CommandProcessRegistry,
     GovernedCommandRunner,
@@ -357,8 +358,8 @@ def _tool_read_file(input_data: Dict[str, Any], access: ToolAccessContext) -> st
 
 def _tool_write_file(input_data: Dict[str, Any], access: ToolAccessContext) -> str:
     path = access.authorize_write(input_data["path"])
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    Path(path).write_text(input_data["content"], encoding="utf-8")
+    root, relative = access.writable_root_and_relative(path)
+    fs_safety.safe_write_text(root, relative, input_data["content"])
     return f"Wrote {len(input_data['content'])} bytes to {input_data['path']}"
 
 

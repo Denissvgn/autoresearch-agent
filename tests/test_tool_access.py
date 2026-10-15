@@ -9,6 +9,7 @@ declared evaluation data are not candidate-writable.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -407,7 +408,43 @@ def test_write_file_rejects_symlink_leaves(tmp_path: Path) -> None:
             "write_file", {"path": name, "content": "tampered"}, access
         )
         assert "symlink" in result.content
+        assert "writ" in result.content  # the denial names the operation
     assert outside.read_text(encoding="utf-8") == "outside"
+    # The original defect: a dangling leaf link created its outside target.
+    assert not (tmp_path / "missing.txt").exists()
+
+
+def test_write_file_rejects_hardlinked_alias(tmp_path: Path) -> None:
+    shared, session_a, _ = _setup(tmp_path)
+    access = _access(shared, session_a)
+    shared_file = Path(shared) / "db" / "experiments.db"
+    os.link(shared_file, Path(session_a) / "alias.db")
+
+    result = _execute_tool(
+        "write_file", {"path": "alias.db", "content": "tampered"}, access
+    )
+    assert "hard links" in result.content
+    assert shared_file.read_text(encoding="utf-8") == "CONTROL-PLANE-SECRET"
+
+
+def test_cp_source_must_not_be_a_link_or_alias(tmp_path: Path) -> None:
+    shared, session_a, _ = _setup(tmp_path)
+    access = _access(shared, session_a)
+    (Path(session_a) / "real.yaml").write_text("x: 1", encoding="utf-8")
+    os.unlink(Path(session_a) / "prompt.yaml")
+    (Path(session_a) / "prompt.yaml").symlink_to(Path(session_a) / "real.yaml")
+
+    decision = evaluate_command_policy(
+        "cp prompt.yaml best.yaml",
+        workspace_root=shared,
+        session_workspace=session_a,
+        policy_extension={
+            "copyable_files": {"prompt.yaml", "best.yaml"},
+        },
+        access=access,
+    )
+    assert not decision.allowed
+    assert "symlink" in decision.reason or "import denied" in decision.reason
 
 
 # ── skill declarations reach the enforcement layer ─────────────────────────

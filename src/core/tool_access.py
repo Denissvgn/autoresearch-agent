@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import fnmatch
 import os
+import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Optional, Sequence
@@ -84,6 +85,22 @@ def matches_protected_name(relative: str, patterns: Sequence[str]) -> bool:
         fnmatch.fnmatch(name, pattern) or fnmatch.fnmatch(relative, pattern)
         for pattern in patterns
     )
+
+
+def _multi_link_reason(path: str) -> Optional[str]:
+    """Reason a leaf is an ambiguous shared-file alias, or ``None``.
+
+    A regular file with more than one hard link may expose a shared (for
+    example control-plane or sibling-session) file through an in-root name;
+    directories are excluded because their link count is always >= 2.
+    """
+    try:
+        st = os.stat(path, follow_symlinks=False)
+    except OSError:
+        return None
+    if stat.S_ISREG(st.st_mode) and st.st_nlink > 1:
+        return "has multiple hard links (ambiguous alias for a shared file)"
+    return None
 
 
 @dataclass(frozen=True)
@@ -143,6 +160,7 @@ class ToolAccessContext:
 
     def _select(self, raw: str, *, write: bool) -> tuple[Optional[str], str]:
         """Return ``(denial_reason, resolved)`` for one tool-supplied path."""
+        operation = "write" if write else "read"
         roots = self.writable_roots if write else self.readable_roots
         in_root = [
             candidate
@@ -151,22 +169,39 @@ class ToolAccessContext:
         ]
         if not in_root:
             kind = "writable candidate roots" if write else "readable roots"
-            return f"Path {raw!r} resolves outside the {kind}", ""
+            return (
+                f"{operation} denied: Path {raw!r} resolves outside the {kind}",
+                "",
+            )
         existing = [candidate for candidate in in_root if os.path.lexists(candidate)]
         chosen = existing[0] if existing else in_root[0]
         if write:
             if self.is_write_protected(chosen):
                 return (
-                    f"Path {raw!r} is protected server-owned or evaluation "
-                    "state and cannot be written by candidate tools",
+                    f"write denied: Path {raw!r} is protected server-owned or "
+                    "evaluation state and cannot be written by candidate tools",
                     "",
                 )
             if os.path.islink(chosen):
-                return f"Path {raw!r} is a symlink and cannot be overwritten", ""
+                return (
+                    f"write denied: Path {raw!r} is a symlink and cannot be overwritten",
+                    "",
+                )
+        # An ambiguous alias (multiple hard links) may expose a shared file
+        # through an in-root name; deny it for every operation.
+        ambiguous = _multi_link_reason(chosen)
+        if ambiguous:
+            return f"{operation} denied: Path {raw!r} {ambiguous}", ""
         return None, chosen
 
     def authorize_read(self, raw: str) -> str:
-        """Resolve ``raw`` and require it to land inside a readable root."""
+        """Resolve ``raw`` and require it to land inside a readable root.
+
+        Allowed link behavior for reads: links are followed only when the
+        resolved target stays inside the readable roots; a dangling link
+        reads as missing; a multi-link (hardlinked) leaf is denied as an
+        ambiguous alias for a shared file.
+        """
         reason, resolved = self._select(raw, write=False)
         if reason:
             raise ValueError(reason)
@@ -183,6 +218,50 @@ class ToolAccessContext:
         if reason:
             raise ValueError(reason)
         return resolved
+
+    def authorize_import(self, raw: str) -> str:
+        """Resolve ``raw`` as a copy-in source with strict leaf rules.
+
+        Imports (cp sources, staged inputs) must not alias a shared file:
+        containment is checked like a read, but a symlink leaf or a
+        multi-link (hardlinked) leaf is denied even when its content would
+        resolve inside the roots.
+        """
+        roots = self.readable_roots
+        in_root = [
+            candidate
+            for candidate in self.resolve_candidates(raw, write=True)
+            if path_within_roots(candidate, roots, follow_leaf=False)
+        ]
+        if not in_root:
+            raise ValueError(
+                f"import denied: Path {raw!r} resolves outside the readable roots"
+            )
+        existing = [candidate for candidate in in_root if os.path.lexists(candidate)]
+        chosen = existing[0] if existing else in_root[0]
+        if os.path.islink(chosen):
+            raise ValueError(
+                f"import denied: Path {raw!r} is a symlink (imports never follow links)"
+            )
+        ambiguous = _multi_link_reason(chosen)
+        if ambiguous:
+            raise ValueError(f"import denied: Path {raw!r} {ambiguous}")
+        return chosen
+
+    def writable_root_and_relative(self, resolved: str) -> tuple[str, str]:
+        """Split an authorized write target into ``(root, relative_path)``.
+
+        The pair anchors the descriptor-relative no-follow writer
+        (``fs_safety``) at the owning writable root.
+        """
+        candidate = Path(resolved)
+        for root in self.writable_roots:
+            try:
+                relative = candidate.relative_to(root)
+            except ValueError:
+                continue
+            return root, relative.as_posix()
+        raise ValueError(f"Path {resolved!r} resolves outside the writable candidate roots")
 
     def is_write_protected(self, resolved: str) -> bool:
         """Whether a resolved path is server-owned/evaluation state."""

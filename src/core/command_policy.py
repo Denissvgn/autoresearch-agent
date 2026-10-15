@@ -324,9 +324,10 @@ def _evaluate_cp(
     resolved: list[str] = []
     for index, arg in enumerate(args):
         try:
-            # Source is a read; the destination is a candidate write and
+            # Source is a strict import (never through a link, never a
+            # multi-link alias); the destination is a candidate write and
             # faces the same protection rules as the write tool.
-            path = access.authorize_read(arg) if index == 0 else access.authorize_write(arg)
+            path = access.authorize_import(arg) if index == 0 else access.authorize_write(arg)
         except ValueError as exc:
             return _reject(f"cp may only operate inside the session workspace: {exc}")
         if os.path.basename(path) not in copyable:

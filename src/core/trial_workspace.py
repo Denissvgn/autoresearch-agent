@@ -26,10 +26,11 @@ applies unchanged — and are retained as operator-inspectable provenance.
 from __future__ import annotations
 
 import logging
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Mapping, Optional
+
+from src.core import fs_safety
 
 logger = logging.getLogger(__name__)
 
@@ -107,31 +108,26 @@ def stage_trial_workspace(session_workspace: str, trial_dir: str) -> int:
     """Copy the session-workspace state into the trial directory.
 
     Returns the number of staged top-level entries. Server-owned directories
-    (logs, snapshots, the trials tree itself) and caches are excluded.
-    Per-entry copy errors are logged and skipped; a wholesale failure
-    propagates so :func:`stage_trial_or_none` can fail open.
+    (logs, snapshots, the trials tree itself) and caches are excluded, and
+    no link is ever followed: symlinked, hardlinked, and special entries are
+    skipped with a warning instead of materializing content that could come
+    from (or alias) a shared file. Per-entry copy errors are logged and
+    skipped; a wholesale failure propagates so :func:`stage_trial_or_none`
+    can fail open.
     """
     src = Path(session_workspace)
     dst = Path(trial_dir)
     dst.mkdir(parents=True, exist_ok=True)
-    staged = 0
-    for entry in sorted(src.iterdir()):
-        if entry.name in _STAGE_IGNORE:
-            continue
-        try:
-            if entry.is_dir():
-                shutil.copytree(entry, dst / entry.name, dirs_exist_ok=True)
-            elif entry.is_file():
-                shutil.copy2(entry, dst / entry.name)
-            else:  # pragma: no cover - broken symlink / special file
-                continue
-            staged += 1
-        except OSError as exc:
-            logger.warning(
-                "Trial staging skipped %s (%s); the trial may miss this state",
-                entry, exc,
-            )
-    return staged
+
+    def _on_skip(name: str, reason: str) -> None:
+        logger.warning(
+            "Trial staging skipped %s (%s); the trial may miss this state",
+            name, reason,
+        )
+
+    return fs_safety.copy_tree_regular_files(
+        str(src), str(dst), ignore=_STAGE_IGNORE, on_skip=_on_skip
+    )
 
 
 def stage_trial_or_none(session_workspace: str, trial_dir: str) -> Optional[str]:
@@ -143,7 +139,7 @@ def stage_trial_or_none(session_workspace: str, trial_dir: str) -> Optional[str]
     try:
         stage_trial_workspace(session_workspace, trial_dir)
         return trial_dir
-    except OSError as exc:
+    except (OSError, fs_safety.FilesystemSafetyError) as exc:
         logger.warning(
             "Trial staging failed for %s (%s); falling back to the session "
             "workspace for this command",

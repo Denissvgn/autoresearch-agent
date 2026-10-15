@@ -20,6 +20,7 @@ from typing import Any, AsyncGenerator, Dict, Iterable, List, Mapping, Optional
 import yaml
 
 from src.config import secret_value, settings
+from src.core import fs_safety
 
 # P1-1 split: the tool surface lives in src/core/agent_tools.py; re-exported
 # here for every existing importer (tests import _execute_tool/_tool_* /
@@ -848,10 +849,9 @@ class AgentOrchestrator:
         ):
             _full_log_rel = None
             try:
-                _log_dir = Path(workspace) / "command_logs"
-                _log_dir.mkdir(parents=True, exist_ok=True)
-                _log_file = _log_dir / f"turn_{turn:03d}_{block.id[-8:]}.log"
-                _log_file.write_text(tool_result, encoding="utf-8")
+                _log_file_rel = f"command_logs/turn_{turn:03d}_{block.id[-8:]}.log"
+                fs_safety.safe_write_text(workspace, _log_file_rel, tool_result)
+                _log_file = Path(workspace) / _log_file_rel
                 _full_log_rel = str(
                     _log_file.relative_to(settings.workspace_root)
                 ) if str(_log_file).startswith(
@@ -4094,12 +4094,13 @@ class AgentOrchestrator:
                 marker=marker,
             )
             attempt_snapshot_hash = attempt_snapshot.get("snapshot_hash")
+            attempt_snapshot_path = None
             try:
                 attempt_snapshot_path = write_iteration_attempt_snapshot(
                     workspace=workspace,
                     snapshot=attempt_snapshot,
                 )
-            except OSError as exc:
+            except (OSError, fs_safety.FilesystemSafetyError) as exc:
                 logger.warning(
                     "Research %s iteration %d: could not write attempt "
                     "snapshot: %s",

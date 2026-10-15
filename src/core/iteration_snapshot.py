@@ -13,6 +13,7 @@ from typing import Any, Dict, Mapping, Optional
 
 import yaml
 
+from src.core import fs_safety
 from src.core.artifact_reference import normalize_optional_artifact_ref
 
 TRIAL_IDENTITY_SCHEMA_VERSION = "autoresearch_trial_identity.v1"
@@ -226,15 +227,13 @@ def write_iteration_attempt_snapshot(
 ) -> str:
     """Persist an attempt snapshot JSON file under the session workspace."""
 
-    path = Path(workspace) / "server_snapshots" / (
-        f"iteration_{snapshot['iteration']:04d}_attempt.json"
-    )
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
+    relative = f"server_snapshots/iteration_{snapshot['iteration']:04d}_attempt.json"
+    fs_safety.safe_write_text(
+        workspace,
+        relative,
         json.dumps(snapshot, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
     )
-    return str(path)
+    return str(Path(workspace) / relative)
 
 
 def _environment_metadata() -> Dict[str, Any]:
