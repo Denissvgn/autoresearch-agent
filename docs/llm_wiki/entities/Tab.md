@@ -1,0 +1,29 @@
+# Tab
+
+**Location:** `ui/src/pages/ResearchDetail.tsx:29`
+**Kind:** Type alias
+**Bases:** —
+**Module:** [ResearchDetail](../modules/ResearchDetail.md)
+
+## Description
+
+_Auto-generated from `Tab` in `ui/src/pages/ResearchDetail.tsx`._
+
+## Attributes
+
+*No annotated attributes found.*
+
+## Methods
+
+*No public methods. Inherits from base classes.*
+
+## Relationships
+
+<!-- Auto-generated relationship summary. Do not edit by hand. -->
+*No generated relationships detected.*
+
+### Summary
+
+| Module | Methods | Attributes |
+|---|---:|---|
+| [ResearchDetail](../modules/ResearchDetail.md) | 0 | — |
