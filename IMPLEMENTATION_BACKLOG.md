@@ -363,9 +363,9 @@ Autonomy: Create the run/card/decision/prerequisite/gate ledgers, resolve the
 completion target, and inventory all external needs now. Use the actual checkout and
 CI as the baseline; keep historical review results separately attributed.
 
-- [ ] Map each manifest field and claimed capability to a runtime consumer and test; distinguish implemented, rejected, and silently ignored behavior.
-- [ ] Turn disposable review reproductions into reusable fixture designs; bind baseline results to the current commit and record drift from the reviewed commit.
-- [ ] Initialize the autonomous execution ledgers and their validator, completion target, capability/authority inventory, and named qualification gates; record exact baseline recipes and prerequisites for unrun checks.
+- [x] Map each manifest field and claimed capability to a runtime consumer and test; distinguish implemented, rejected, and silently ignored behavior.
+- [x] Turn disposable review reproductions into reusable fixture designs; bind baseline results to the current commit and record drift from the reviewed commit.
+- [x] Initialize the autonomous execution ledgers and their validator, completion target, capability/authority inventory, and named qualification gates; record exact baseline recipes and prerequisites for unrun checks.
 
 Acceptance: all 12 findings have a reproducible trigger or a clearly identified
 code-path hypothesis, agent owner, and closure test. Every card has an initial
