@@ -1,8 +1,8 @@
 {
   "artifact_hashes": {
-    "evaluated_envelope_hash": "sha256:e88453dca1e14da39872e4bfce094d986a1f26c81104c2da789759d8f6a7c5e2",
-    "knowledge_index_hash": "sha256:dcaba86b2b21493da9990b9e52c3da0854e0362ce94335378aef2649a38e0fb7",
-    "surface_index_hash": "sha256:84df6851950c557835d95fc0326456df602dc9d7858f0c4f44b165e7f5fd2cef"
+    "evaluated_envelope_hash": "sha256:accaf612840b087566c907d0b3dd9495d46bbb4f448b7e90b5ff55683966e265",
+    "knowledge_index_hash": "sha256:4100ce3fe5df9c7c0559d63ac60bc2c0bca45c92353d3da587b1f623e4fa8736",
+    "surface_index_hash": "sha256:4a1b1964cd0649f1004c28de28765ba3fde297e6b5ffae34f883f9a3ad551a47"
   },
   "evidence_baselines": {
     "entities/AccentName.md": {
@@ -95,6 +95,16 @@
       },
       "state": "known"
     },
+    "entities/ArtifactRef.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:11d5a1c423acc0d4e4881632299f5505ac88d81a8c4a6abf57fc58b0e5654422",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
     "entities/ArtifactStoreTarget.md": {
       "basis": {
         "concept_observation_hash": "sha256:2813eaafd7a178a52b50307a1e64f0f440f6e8f213aa40df3173933f07555aec",
@@ -182,6 +192,46 @@
         "scope": "entity",
         "source_content_hash": "sha256:b25973ed83e8db9a64ee4bcec2f1c6b5d9cc99ad21801c9699d0c220a49f093a",
         "source_path": "src/core/bootstrap_runner.py"
+      },
+      "state": "known"
+    },
+    "entities/BudgetDimensions.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:bd2ccfb9b4a4a7fc27e86cf325ff4c8dccf17d89ac7cbb3d0cac534c399441f1",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
+    "entities/CandidateData.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:182137f4d71cc6084558407dd745c887836ef980ac3817f8485cae87eab0b928",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
+    "entities/CandidateIdentity.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:1032635c7c4e4dedcbc1dcdb2278cdc105237052c5fa3c5394a13f9226312abe",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
+    "entities/CapabilityDescriptor.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:c6c01b274304567b376243169a0ffdbcb6ae318279dba20f113f33d5eca93508",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
       },
       "state": "known"
     },
@@ -335,6 +385,26 @@
       },
       "state": "known"
     },
+    "entities/ContractError.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:ac1d2458c7f9614019251adc3a9d2081b5a66d770d489734e321e137ae307429",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
+    "entities/ContractMigrationError.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:e35052fb1f181a58a9328a1ce30a48cc4ddd00da797a45dc58f9b2ed1f5cd209",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
     "entities/ControlFakeOrchestrator.md": {
       "basis": {
         "concept_observation_hash": "sha256:d1fbfe859e5db7e5a457da0b4753d48dc79cf598045a654cfde17fb6af1df6a6",
@@ -435,6 +505,16 @@
       },
       "state": "known"
     },
+    "entities/EnvironmentIdentity.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:28fc3aa90b4a18459fd3022b0666d1a2ec80d6942625f6b2d3d2ec3085c72214",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
     "entities/ErrorClass.md": {
       "basis": {
         "concept_observation_hash": "sha256:dba96adc8224b9f98a28c8a987393a851b67dd9b8c07b9718e7a802eb63e4953",
@@ -472,6 +552,26 @@
         "scope": "entity",
         "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
         "source_path": "src/core/skill_manifest.py"
+      },
+      "state": "known"
+    },
+    "entities/ExecutionRequest.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:5e15f469b68755f8cb8540d7c1abe224667f39c127369738c157f0a52564e159",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
+    "entities/FailureRecord.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:5f15c43b15e8d01bd39ee27fca3fa37d48697415abf654ed696c10577244edf0",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
       },
       "state": "known"
     },
@@ -665,6 +765,26 @@
       },
       "state": "known"
     },
+    "entities/HarnessConfig.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:2563b982a08c6aba2f76e7351e0868a4308c07a36747779f9e41d43c1665c356",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
+    "entities/HarnessPreferences.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:8787713417c308fa4c0aa2882d747ffa21f314176acd5ff5177d940559749a12",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
     "entities/HeadTailBuffer.md": {
       "basis": {
         "concept_observation_hash": "sha256:a198573250d9e2accccdb70c149ae0d40ebc0321b0b9650027dd4642cefda038",
@@ -795,6 +915,26 @@
       },
       "state": "known"
     },
+    "entities/IntegrationDirection.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:e03467459947581e866c1935ee29bce971d8acd36524013cd574c3b6249a1878",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
+    "entities/IsolationBoundary.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:4eeeb5804878d18512844c5450fe03a057433e5f1f5c8f25647f73d4c19f1aea",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
     "entities/Iteration.md": {
       "basis": {
         "concept_observation_hash": "sha256:a688aeb563f1967ca41e4d72b122a8eeec365d47f97f4ccdb2564d481acf9c13",
@@ -885,6 +1025,36 @@
       },
       "state": "known"
     },
+    "entities/LedgerError.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:4b83c1995c8468d4f6f0e552736656a73ef7c04837db81eb010932144793e196",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:4b1ca53c719450ef74ac1620dc58aa7ffccb11fbcc9a86707db1200f97b4e24f",
+        "source_path": "scripts/check_execution_ledger.py"
+      },
+      "state": "known"
+    },
+    "entities/LegacyFieldCompat.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:e7001e84a0ba05522d9e7e549269be31ca103c70d0ba12911567dd149fc22954",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
+    "entities/LegacyRunInputs.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:002eaff004435d866d9abc8b4ca670f7abd75f5a856460c743ef0aa68a5af1af",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
     "entities/LexicalEmbeddingBackend.md": {
       "basis": {
         "concept_observation_hash": "sha256:dd698716218bf35f8200b95c6d52f13bc2272d330862fdf7774f9da32f9a61b2",
@@ -952,6 +1122,16 @@
         "scope": "entity",
         "source_content_hash": "sha256:9e5ad39b1d5325dffc3c01cd8e2eec535004d5bce782d777de734cf156aa81ae",
         "source_path": "ui/src/components/hifi/primitives.tsx"
+      },
+      "state": "known"
+    },
+    "entities/MetricConstraint.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:746c5dacfdc0466dfcb205c3baa10944a3d2d6f36c7877ab3233211fe2bffd97",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
       },
       "state": "known"
     },
@@ -1025,6 +1205,56 @@
       },
       "state": "known"
     },
+    "entities/NetworkPolicy.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:f5e2bb75c34095b4eadea0ac90656feec233de121426c55cefc1e6822a178895",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
+    "entities/ObjectiveDirection.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:2c4be5f4b8834f9f1c5f731322b5e61a1df54f9c820d0f3b864d5affa81ced49",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
+    "entities/ObjectiveGoal.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:d72044c7d6d5358949ba8ccacc3ccca0f2a78609c516f57349da4222df3e9f57",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
+    "entities/ObjectivePolicy.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:d80582a4a1aa44a356112616e688ebaa356f12795bef7df4cc4db257b6982ee1",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
+    "entities/ObservationIdentity.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:ca7aa38689e29ee7b30aa743c7fac9b7267f9f13d4c1b80d926aa041603714b7",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
     "entities/OosProvenanceSummary.md": {
       "basis": {
         "concept_observation_hash": "sha256:b8e629d2e433f645eee540677d7bbd9f78ddbf30a50c55d045cc803af2638037",
@@ -1042,6 +1272,16 @@
         "scope": "entity",
         "source_content_hash": "sha256:80bacf41610113d3a6fac8273b80ce19e44593b7dd4c14f29ba8c30841556778",
         "source_path": "src/core/llm_provider.py"
+      },
+      "state": "known"
+    },
+    "entities/OperatorConstraints.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:28a236c905387e1d466d6ca66583736094ddb6890915952e9d7e5b3a4ed2f321",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
       },
       "state": "known"
     },
@@ -1715,6 +1955,36 @@
       },
       "state": "known"
     },
+    "entities/ResolutionRecord.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:cc0dca248c0f25ed07e642ea0ed0fa4311efbb411c389486fbcd07525d938cb7",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
+    "entities/ResolvedRunInputs.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:ebfc5f47898228165396a6a17ffe29bde9869d257b2e661c8b79d85801983c6d",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
+    "entities/ResourceLimits.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:2fadfe5d3ba7ad749703526bded0874d9854b43c762433f6f6757158459bede5",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
     "entities/ResourceWatcher.md": {
       "basis": {
         "concept_observation_hash": "sha256:ddd13b498a6b607f89d8f7e65491086fd4c277e674ee53fc3fa981843694fc64",
@@ -1722,6 +1992,16 @@
         "scope": "entity",
         "source_content_hash": "sha256:2d2573cdc6324b003b867807d2c27f9aed9bba81862c96b52798d47229ff1ef2",
         "source_path": "src/core/plugin_runner.py"
+      },
+      "state": "known"
+    },
+    "entities/ResultReceipt.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:90e92ba59511a4c2146b0d7a0c3195ddc94463de1beed17004f8d6b211b65228",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
       },
       "state": "known"
     },
@@ -1752,6 +2032,36 @@
         "scope": "entity",
         "source_content_hash": "sha256:2752438c99a552d90a4eca6a902e4d67eb3719ab9e014d5b6785be5e0027c1b2",
         "source_path": "src/core/pagination.py"
+      },
+      "state": "known"
+    },
+    "entities/RunInputs.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:33843b60202b709e3fc1fd9514b9847bc0a0554afc5ef6ee1605ed9e40c72097",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
+    "entities/RunLineage.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:fd9b85798c17f904413329ad387b2d5bd6f788a5280ac5efb3f92b4836ee7f25",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
+    "entities/RunSpec.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:01418e39e12f6710091c6e3f029b818da5e3def891aba443440322ee0dffb79a",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
       },
       "state": "known"
     },
@@ -1795,6 +2105,16 @@
       },
       "state": "known"
     },
+    "entities/ScorerRef.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:ca1570cc331d155662b1985283a1805567248cea9ae97550cf082606fd45157a",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
     "entities/ScriptedOpenAIClient.md": {
       "basis": {
         "concept_observation_hash": "sha256:b5788fb9c352856d7b36bddf970008066cec6f1a2355d261cf9c86b9293812d2",
@@ -1832,6 +2152,16 @@
         "scope": "entity",
         "source_content_hash": "sha256:387ffd0c8b395fbe3ebe68e985ca7c0091292f4014ccd7389ade2c36286b4db2",
         "source_path": "ui/src/api/client.ts"
+      },
+      "state": "known"
+    },
+    "entities/SecretReference.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:31f5f8a9c3b1bcc7789751802bd550259f4bfecc9060bf57c148c31a8e47cd4f",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
       },
       "state": "known"
     },
@@ -1985,6 +2315,16 @@
       },
       "state": "known"
     },
+    "entities/SkillDefaults.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:7146605e421c2e1eaffca17fb214678227d82331ce0fedf506f91bd13b718f37",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
     "entities/SkillGenerationError.md": {
       "basis": {
         "concept_observation_hash": "sha256:fbf016c7dd531021656d56a78daf7a080c399783a3863cb78c0b5149d8d16ce9",
@@ -2072,6 +2412,16 @@
         "scope": "entity",
         "source_content_hash": "sha256:af19f1de7a5a67d3283aa3222aeaa4ce53c88159db279aade68349e2757012f3",
         "source_path": "src/core/skill_registry.py"
+      },
+      "state": "known"
+    },
+    "entities/SkillPackageRef.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:be37202c89d313d9edbb64d6d7ac8a480631c5b698ed745063e6e8efe9eb7563",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
       },
       "state": "known"
     },
@@ -3115,6 +3465,16 @@
       },
       "state": "known"
     },
+    "entities/UnsupportedCapabilityError.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:7b0f90df726a4ed2e900cd4ba336da673720c2d81b4dca19172f7724491b6e89",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
     "entities/Usage.md": {
       "basis": {
         "concept_observation_hash": "sha256:059f9f2ebb75f593fe9e09c8f3af66741ab3f973be2bb866745e0d816d900e23",
@@ -3142,6 +3502,26 @@
         "scope": "entity",
         "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
         "source_path": "src/core/skill_manifest.py"
+      },
+      "state": "known"
+    },
+    "entities/VerifiedResult.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:bfd967d799742fdf25ff55beb2307eedef9a9c92fe0137074e0b102b3c8bdd2f",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
+    "entities/VersionedContract.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:83f26ba4508d9d0afd80379ae2e98b706b9d5738fae3cb21935243c5e5828aa7",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
       },
       "state": "known"
     },
@@ -3192,6 +3572,16 @@
         "scope": "entity",
         "source_content_hash": "sha256:452ab7cb4d1d8d4ac490b23e2e7a60ba2084a351b9596bea96f6e71eb144f57e",
         "source_path": "src/core/skill_manifest.py"
+      },
+      "state": "known"
+    },
+    "entities/WorkspaceBounds.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:9dcb16506d2c532811023d64d08a65bd7f2d2be67871250af5a8f646c0f960cf",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
       },
       "state": "known"
     },
@@ -4215,6 +4605,16 @@
       },
       "state": "known"
     },
+    "modules/check_execution_ledger.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:a34907ada84c0aae56846fa75751ec0337e7ae2d8c95758b2d7cac62c4b2fea9",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "module",
+        "source_content_hash": "sha256:4b1ca53c719450ef74ac1620dc58aa7ffccb11fbcc9a86707db1200f97b4e24f",
+        "source_path": "scripts/check_execution_ledger.py"
+      },
+      "state": "known"
+    },
     "modules/check_legacy_vocab_branching.md": {
       "basis": {
         "concept_observation_hash": "sha256:991680fe014d1d53b7e421e713e65e8f77b84a57fcce8c67d8d7c78256c187d4",
@@ -4422,6 +4822,16 @@
         "scope": "module",
         "source_content_hash": "sha256:d9bec0a840d38aea4800c0e44454e12ae1d2fb5f889fc0434d78c753a707590f",
         "source_path": "examples/prompt-registry/main.py"
+      },
+      "state": "known"
+    },
+    "modules/execution_contracts.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:9c70c66adace8aeba4a7473e75b58245cf0c8ec844764438309b295d4f05c1b4",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "module",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
       },
       "state": "known"
     },
@@ -5105,6 +5515,16 @@
       },
       "state": "known"
     },
+    "modules/test_contract_examples.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:3751b1960995564254d3cb484c10524fb566d3f441533ab947366d84aed4c310",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "module",
+        "source_content_hash": "sha256:9b369451dc7dc4166c9267c3e002b2f92d71b38cffa8e747a747c600d0ae7aea",
+        "source_path": "tests/test_contract_examples.py"
+      },
+      "state": "known"
+    },
     "modules/test_cross_session_digest_hint.md": {
       "basis": {
         "concept_observation_hash": "sha256:323cd46a601fc711c522564678600aca6eba4af5149ea6e642ae2e5646fc5871",
@@ -5222,6 +5642,26 @@
         "scope": "module",
         "source_content_hash": "sha256:d05a9695bd997e08cf4546cfcdbdae7c4638aa5492c9830bc40cb8d7ca10ce95",
         "source_path": "tests/test_execution_concurrency.py"
+      },
+      "state": "known"
+    },
+    "modules/test_execution_contracts.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:a39d08d9e5732e2da1f69365dae306b5d3d96c98e05957dda5ddc2075c414e15",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "module",
+        "source_content_hash": "sha256:55164436a75fd1447fb65b8bb0346849b5b40463c0623359c5f31984e71da930",
+        "source_path": "tests/test_execution_contracts.py"
+      },
+      "state": "known"
+    },
+    "modules/test_execution_ledger_validator.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:3f0e02414a998614000f7ed9edf94b87e81770164d2dcf0379df475df65eae02",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "module",
+        "source_content_hash": "sha256:689c6c915dc7f1a1f6131ae6597389bd0f6321a259ec2d75f4d3b68d5034d183",
+        "source_path": "tests/test_execution_ledger_validator.py"
       },
       "state": "known"
     },
@@ -6412,6 +6852,12 @@
       "scope": "entity",
       "source_path": "src/core/llm_provider.py"
     },
+    "entities/ArtifactRef.md": {
+      "entity_name": "ArtifactRef",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
     "entities/ArtifactStoreTarget.md": {
       "entity_name": "ArtifactStoreTarget",
       "occurrence": 1,
@@ -6465,6 +6911,30 @@
       "occurrence": 1,
       "scope": "entity",
       "source_path": "src/core/bootstrap_runner.py"
+    },
+    "entities/BudgetDimensions.md": {
+      "entity_name": "BudgetDimensions",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
+    "entities/CandidateData.md": {
+      "entity_name": "CandidateData",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
+    "entities/CandidateIdentity.md": {
+      "entity_name": "CandidateIdentity",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
+    "entities/CapabilityDescriptor.md": {
+      "entity_name": "CapabilityDescriptor",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
     },
     "entities/CapturingBroadcaster.md": {
       "entity_name": "_CapturingBroadcaster",
@@ -6556,6 +7026,18 @@
       "scope": "entity",
       "source_path": "src/api/research.py"
     },
+    "entities/ContractError.md": {
+      "entity_name": "ContractError",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
+    "entities/ContractMigrationError.md": {
+      "entity_name": "ContractMigrationError",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
     "entities/ControlFakeOrchestrator.md": {
       "entity_name": "ControlFakeOrchestrator",
       "occurrence": 1,
@@ -6616,6 +7098,12 @@
       "scope": "entity",
       "source_path": "src/core/domain_classifier.py"
     },
+    "entities/EnvironmentIdentity.md": {
+      "entity_name": "EnvironmentIdentity",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
     "entities/ErrorClass.md": {
       "entity_name": "ErrorClass",
       "occurrence": 1,
@@ -6639,6 +7127,18 @@
       "occurrence": 1,
       "scope": "entity",
       "source_path": "src/core/skill_manifest.py"
+    },
+    "entities/ExecutionRequest.md": {
+      "entity_name": "ExecutionRequest",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
+    "entities/FailureRecord.md": {
+      "entity_name": "FailureRecord",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
     },
     "entities/FakeMlflowAsyncClient.md": {
       "entity_name": "FakeMlflowAsyncClient",
@@ -6754,6 +7254,18 @@
       "scope": "entity",
       "source_path": "src/core/preflight.py"
     },
+    "entities/HarnessConfig.md": {
+      "entity_name": "HarnessConfig",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
+    "entities/HarnessPreferences.md": {
+      "entity_name": "HarnessPreferences",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
     "entities/HeadTailBuffer.md": {
       "entity_name": "_HeadTailBuffer",
       "occurrence": 1,
@@ -6832,6 +7344,18 @@
       "scope": "entity",
       "source_path": "src/core/skill_manifest.py"
     },
+    "entities/IntegrationDirection.md": {
+      "entity_name": "IntegrationDirection",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
+    "entities/IsolationBoundary.md": {
+      "entity_name": "IsolationBoundary",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
     "entities/Iteration.md": {
       "entity_name": "Iteration",
       "occurrence": 1,
@@ -6886,6 +7410,24 @@
       "scope": "entity",
       "source_path": "ui/src/api/client.ts"
     },
+    "entities/LedgerError.md": {
+      "entity_name": "LedgerError",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "scripts/check_execution_ledger.py"
+    },
+    "entities/LegacyFieldCompat.md": {
+      "entity_name": "LegacyFieldCompat",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
+    "entities/LegacyRunInputs.md": {
+      "entity_name": "LegacyRunInputs",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
     "entities/LexicalEmbeddingBackend.md": {
       "entity_name": "LexicalEmbeddingBackend",
       "occurrence": 1,
@@ -6927,6 +7469,12 @@
       "occurrence": 1,
       "scope": "entity",
       "source_path": "ui/src/components/hifi/primitives.tsx"
+    },
+    "entities/MetricConstraint.md": {
+      "entity_name": "MetricConstraint",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
     },
     "entities/MetricDef.md": {
       "entity_name": "MetricDef",
@@ -6970,6 +7518,36 @@
       "scope": "entity",
       "source_path": "ui/src/api/client.ts"
     },
+    "entities/NetworkPolicy.md": {
+      "entity_name": "NetworkPolicy",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
+    "entities/ObjectiveDirection.md": {
+      "entity_name": "ObjectiveDirection",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
+    "entities/ObjectiveGoal.md": {
+      "entity_name": "ObjectiveGoal",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
+    "entities/ObjectivePolicy.md": {
+      "entity_name": "ObjectivePolicy",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
+    "entities/ObservationIdentity.md": {
+      "entity_name": "ObservationIdentity",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
     "entities/OosProvenanceSummary.md": {
       "entity_name": "OosProvenanceSummary",
       "occurrence": 1,
@@ -6981,6 +7559,12 @@
       "occurrence": 1,
       "scope": "entity",
       "source_path": "src/core/llm_provider.py"
+    },
+    "entities/OperatorConstraints.md": {
+      "entity_name": "OperatorConstraints",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
     },
     "entities/OpsTone.md": {
       "entity_name": "OpsTone",
@@ -7384,11 +7968,35 @@
       "scope": "entity",
       "source_path": "ui/vitest.setup.ts"
     },
+    "entities/ResolutionRecord.md": {
+      "entity_name": "ResolutionRecord",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
+    "entities/ResolvedRunInputs.md": {
+      "entity_name": "ResolvedRunInputs",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
+    "entities/ResourceLimits.md": {
+      "entity_name": "ResourceLimits",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
     "entities/ResourceWatcher.md": {
       "entity_name": "_ResourceWatcher",
       "occurrence": 1,
       "scope": "entity",
       "source_path": "src/core/plugin_runner.py"
+    },
+    "entities/ResultReceipt.md": {
+      "entity_name": "ResultReceipt",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
     },
     "entities/RlProfitSummary.md": {
       "entity_name": "RlProfitSummary",
@@ -7407,6 +8015,24 @@
       "occurrence": 1,
       "scope": "entity",
       "source_path": "src/core/pagination.py"
+    },
+    "entities/RunInputs.md": {
+      "entity_name": "RunInputs",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
+    "entities/RunLineage.md": {
+      "entity_name": "RunLineage",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
+    "entities/RunSpec.md": {
+      "entity_name": "RunSpec",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
     },
     "entities/RuntimeResumeRequest.md": {
       "entity_name": "RuntimeResumeRequest",
@@ -7432,6 +8058,12 @@
       "scope": "entity",
       "source_path": "ui/src/api/client.ts"
     },
+    "entities/ScorerRef.md": {
+      "entity_name": "ScorerRef",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
     "entities/ScriptedOpenAIClient.md": {
       "entity_name": "_ScriptedOpenAIClient",
       "occurrence": 1,
@@ -7455,6 +8087,12 @@
       "occurrence": 1,
       "scope": "entity",
       "source_path": "ui/src/api/client.ts"
+    },
+    "entities/SecretReference.md": {
+      "entity_name": "SecretReference",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
     },
     "entities/SegmentedOption.md": {
       "entity_name": "SegmentedOption",
@@ -7546,6 +8184,12 @@
       "scope": "entity",
       "source_path": "src/core/skill_runtime.py"
     },
+    "entities/SkillDefaults.md": {
+      "entity_name": "SkillDefaults",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
     "entities/SkillGenerationError.md": {
       "entity_name": "SkillGenerationError",
       "occurrence": 1,
@@ -7599,6 +8243,12 @@
       "occurrence": 1,
       "scope": "entity",
       "source_path": "src/core/skill_registry.py"
+    },
+    "entities/SkillPackageRef.md": {
+      "entity_name": "SkillPackageRef",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
     },
     "entities/SkillPicker_Props.md": {
       "entity_name": "Props",
@@ -8224,6 +8874,12 @@
       "scope": "entity",
       "source_path": "src/core/skill_manifest.py"
     },
+    "entities/UnsupportedCapabilityError.md": {
+      "entity_name": "UnsupportedCapabilityError",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
     "entities/Usage.md": {
       "entity_name": "Usage",
       "occurrence": 1,
@@ -8241,6 +8897,18 @@
       "occurrence": 1,
       "scope": "entity",
       "source_path": "src/core/skill_manifest.py"
+    },
+    "entities/VerifiedResult.md": {
+      "entity_name": "VerifiedResult",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
+    "entities/VersionedContract.md": {
+      "entity_name": "VersionedContract",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
     },
     "entities/WSEvent.md": {
       "entity_name": "WSEvent",
@@ -8271,6 +8939,12 @@
       "occurrence": 1,
       "scope": "entity",
       "source_path": "src/core/skill_manifest.py"
+    },
+    "entities/WorkspaceBounds.md": {
+      "entity_name": "WorkspaceBounds",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
     },
     "entities/WorkspaceConfig.md": {
       "entity_name": "WorkspaceConfig",
@@ -8814,6 +9488,10 @@
       "scope": "module",
       "source_path": "scripts/check_domain_coupling.py"
     },
+    "modules/check_execution_ledger.md": {
+      "scope": "module",
+      "source_path": "scripts/check_execution_ledger.py"
+    },
     "modules/check_legacy_vocab_branching.md": {
       "scope": "module",
       "source_path": "scripts/check_legacy_vocab_branching.py"
@@ -8897,6 +9575,10 @@
     "modules/examples_prompt-registry_main.md": {
       "scope": "module",
       "source_path": "examples/prompt-registry/main.py"
+    },
+    "modules/execution_contracts.md": {
+      "scope": "module",
+      "source_path": "src/core/execution_contracts.py"
     },
     "modules/experiment_parser.md": {
       "scope": "module",
@@ -9170,6 +9852,10 @@
       "scope": "module",
       "source_path": "tests/test_config_promoter_gate_bundle.py"
     },
+    "modules/test_contract_examples.md": {
+      "scope": "module",
+      "source_path": "tests/test_contract_examples.py"
+    },
     "modules/test_cross_session_digest_hint.md": {
       "scope": "module",
       "source_path": "tests/test_cross_session_digest_hint.py"
@@ -9217,6 +9903,14 @@
     "modules/test_execution_concurrency.md": {
       "scope": "module",
       "source_path": "tests/test_execution_concurrency.py"
+    },
+    "modules/test_execution_contracts.md": {
+      "scope": "module",
+      "source_path": "tests/test_execution_contracts.py"
+    },
+    "modules/test_execution_ledger_validator.md": {
+      "scope": "module",
+      "source_path": "tests/test_execution_ledger_validator.py"
     },
     "modules/test_experiment_parser_calibration.md": {
       "scope": "module",
@@ -9711,6 +10405,51 @@
       "language": "python",
       "module_page": "check_domain_coupling",
       "semantic_hash": "sha256:06c0172a4f38874bd3c91c71cfc1c7112e7d4f1dcfa748190bd21c3e0ae81864"
+    },
+    "scripts/check_execution_ledger.py": {
+      "entities": [
+        "LedgerError"
+      ],
+      "entity_page_occurrences": [
+        {
+          "name": "LedgerError",
+          "occurrence": 1,
+          "page": "LedgerError"
+        }
+      ],
+      "entity_pages": {
+        "LedgerError": "LedgerError"
+      },
+      "generated_semantics": {
+        "entities": {
+          "LedgerError": {
+            "attributes": {},
+            "description": "Raised for structural problems that make the ledger uninterpretable.",
+            "methods": {}
+          }
+        },
+        "module": {
+          "classes": {
+            "LedgerError": "Raised for structural problems that make the ledger uninterpretable."
+          },
+          "description": "Execution-ledger validator: fail closed on inconsistent task state.\n\nValidates the private execution ledger set (cards, run, gates, prerequisites,\ndecisions) that a long-running implementation effort keeps to make progress\ndurable and auditable. Checks card-ID well-formedness, dependency resolution\nand acyclicity, state/transition legality, acceptance-to-check references, and\nclosure-evidence completeness for completed records.\n\nCard IDs are treated as opaque strings validated against the ledger's own\nregistry plus a generic pattern; no planning vocabulary is hard-coded here.\nRun at every state change and on resume.",
+          "functions": {
+            "_load_json": "—",
+            "_load_jsonl": "—",
+            "_validate_acceptance": "—",
+            "main": "—",
+            "validate_cards": "Validate the card registry; returns the set of known card IDs.",
+            "validate_closure": "A DONE record requires complete, passing, current closure evidence.",
+            "validate_dependencies": "Dependency references must resolve and the graph must be acyclic.",
+            "validate_ledger": "Run every check; return the list of errors found (empty = valid).",
+            "validate_side_files": "run/gates/prerequisites/decisions must parse and cross-reference cleanly."
+          }
+        }
+      },
+      "hash": "sha256:4b1ca53c719450ef74ac1620dc58aa7ffccb11fbcc9a86707db1200f97b4e24f",
+      "language": "python",
+      "module_page": "check_execution_ledger",
+      "semantic_hash": "sha256:dd7c404a9c2727b3652fd102b52cc7b46a5ab1b7d40738d436fcf5aae0abe83a"
     },
     "scripts/check_legacy_vocab_branching.py": {
       "entities": [],
@@ -11319,6 +12058,784 @@
       "language": "python",
       "module_page": "domain_classifier",
       "semantic_hash": "sha256:5af14b46187c9b123215ea4c6f2b47ac9c4d6d946b90dc1f498a0ad9688094ea"
+    },
+    "src/core/execution_contracts.py": {
+      "entities": [
+        "VersionedContract",
+        "ContractError",
+        "UnsupportedCapabilityError",
+        "ContractMigrationError",
+        "SecretReference",
+        "ArtifactRef",
+        "CandidateIdentity",
+        "CandidateData",
+        "ScorerRef",
+        "ObservationIdentity",
+        "ObjectiveDirection",
+        "ObjectiveGoal",
+        "MetricConstraint",
+        "ObjectivePolicy",
+        "IntegrationDirection",
+        "CapabilityDescriptor",
+        "IsolationBoundary",
+        "FailureRecord",
+        "ResultReceipt",
+        "VerifiedResult",
+        "WorkspaceBounds",
+        "NetworkPolicy",
+        "ResourceLimits",
+        "ExecutionRequest",
+        "SkillPackageRef",
+        "HarnessConfig",
+        "EnvironmentIdentity",
+        "BudgetDimensions",
+        "RunInputs",
+        "RunLineage",
+        "RunSpec",
+        "OperatorConstraints",
+        "SkillDefaults",
+        "HarnessPreferences",
+        "ResolutionRecord",
+        "ResolvedRunInputs",
+        "LegacyFieldCompat",
+        "LegacyRunInputs"
+      ],
+      "entity_page_occurrences": [
+        {
+          "name": "VersionedContract",
+          "occurrence": 1,
+          "page": "VersionedContract"
+        },
+        {
+          "name": "ContractError",
+          "occurrence": 1,
+          "page": "ContractError"
+        },
+        {
+          "name": "UnsupportedCapabilityError",
+          "occurrence": 1,
+          "page": "UnsupportedCapabilityError"
+        },
+        {
+          "name": "ContractMigrationError",
+          "occurrence": 1,
+          "page": "ContractMigrationError"
+        },
+        {
+          "name": "SecretReference",
+          "occurrence": 1,
+          "page": "SecretReference"
+        },
+        {
+          "name": "ArtifactRef",
+          "occurrence": 1,
+          "page": "ArtifactRef"
+        },
+        {
+          "name": "CandidateIdentity",
+          "occurrence": 1,
+          "page": "CandidateIdentity"
+        },
+        {
+          "name": "CandidateData",
+          "occurrence": 1,
+          "page": "CandidateData"
+        },
+        {
+          "name": "ScorerRef",
+          "occurrence": 1,
+          "page": "ScorerRef"
+        },
+        {
+          "name": "ObservationIdentity",
+          "occurrence": 1,
+          "page": "ObservationIdentity"
+        },
+        {
+          "name": "ObjectiveDirection",
+          "occurrence": 1,
+          "page": "ObjectiveDirection"
+        },
+        {
+          "name": "ObjectiveGoal",
+          "occurrence": 1,
+          "page": "ObjectiveGoal"
+        },
+        {
+          "name": "MetricConstraint",
+          "occurrence": 1,
+          "page": "MetricConstraint"
+        },
+        {
+          "name": "ObjectivePolicy",
+          "occurrence": 1,
+          "page": "ObjectivePolicy"
+        },
+        {
+          "name": "IntegrationDirection",
+          "occurrence": 1,
+          "page": "IntegrationDirection"
+        },
+        {
+          "name": "CapabilityDescriptor",
+          "occurrence": 1,
+          "page": "CapabilityDescriptor"
+        },
+        {
+          "name": "IsolationBoundary",
+          "occurrence": 1,
+          "page": "IsolationBoundary"
+        },
+        {
+          "name": "FailureRecord",
+          "occurrence": 1,
+          "page": "FailureRecord"
+        },
+        {
+          "name": "ResultReceipt",
+          "occurrence": 1,
+          "page": "ResultReceipt"
+        },
+        {
+          "name": "VerifiedResult",
+          "occurrence": 1,
+          "page": "VerifiedResult"
+        },
+        {
+          "name": "WorkspaceBounds",
+          "occurrence": 1,
+          "page": "WorkspaceBounds"
+        },
+        {
+          "name": "NetworkPolicy",
+          "occurrence": 1,
+          "page": "NetworkPolicy"
+        },
+        {
+          "name": "ResourceLimits",
+          "occurrence": 1,
+          "page": "ResourceLimits"
+        },
+        {
+          "name": "ExecutionRequest",
+          "occurrence": 1,
+          "page": "ExecutionRequest"
+        },
+        {
+          "name": "SkillPackageRef",
+          "occurrence": 1,
+          "page": "SkillPackageRef"
+        },
+        {
+          "name": "HarnessConfig",
+          "occurrence": 1,
+          "page": "HarnessConfig"
+        },
+        {
+          "name": "EnvironmentIdentity",
+          "occurrence": 1,
+          "page": "EnvironmentIdentity"
+        },
+        {
+          "name": "BudgetDimensions",
+          "occurrence": 1,
+          "page": "BudgetDimensions"
+        },
+        {
+          "name": "RunInputs",
+          "occurrence": 1,
+          "page": "RunInputs"
+        },
+        {
+          "name": "RunLineage",
+          "occurrence": 1,
+          "page": "RunLineage"
+        },
+        {
+          "name": "RunSpec",
+          "occurrence": 1,
+          "page": "RunSpec"
+        },
+        {
+          "name": "OperatorConstraints",
+          "occurrence": 1,
+          "page": "OperatorConstraints"
+        },
+        {
+          "name": "SkillDefaults",
+          "occurrence": 1,
+          "page": "SkillDefaults"
+        },
+        {
+          "name": "HarnessPreferences",
+          "occurrence": 1,
+          "page": "HarnessPreferences"
+        },
+        {
+          "name": "ResolutionRecord",
+          "occurrence": 1,
+          "page": "ResolutionRecord"
+        },
+        {
+          "name": "ResolvedRunInputs",
+          "occurrence": 1,
+          "page": "ResolvedRunInputs"
+        },
+        {
+          "name": "LegacyFieldCompat",
+          "occurrence": 1,
+          "page": "LegacyFieldCompat"
+        },
+        {
+          "name": "LegacyRunInputs",
+          "occurrence": 1,
+          "page": "LegacyRunInputs"
+        }
+      ],
+      "entity_pages": {
+        "ArtifactRef": "ArtifactRef",
+        "BudgetDimensions": "BudgetDimensions",
+        "CandidateData": "CandidateData",
+        "CandidateIdentity": "CandidateIdentity",
+        "CapabilityDescriptor": "CapabilityDescriptor",
+        "ContractError": "ContractError",
+        "ContractMigrationError": "ContractMigrationError",
+        "EnvironmentIdentity": "EnvironmentIdentity",
+        "ExecutionRequest": "ExecutionRequest",
+        "FailureRecord": "FailureRecord",
+        "HarnessConfig": "HarnessConfig",
+        "HarnessPreferences": "HarnessPreferences",
+        "IntegrationDirection": "IntegrationDirection",
+        "IsolationBoundary": "IsolationBoundary",
+        "LegacyFieldCompat": "LegacyFieldCompat",
+        "LegacyRunInputs": "LegacyRunInputs",
+        "MetricConstraint": "MetricConstraint",
+        "NetworkPolicy": "NetworkPolicy",
+        "ObjectiveDirection": "ObjectiveDirection",
+        "ObjectiveGoal": "ObjectiveGoal",
+        "ObjectivePolicy": "ObjectivePolicy",
+        "ObservationIdentity": "ObservationIdentity",
+        "OperatorConstraints": "OperatorConstraints",
+        "ResolutionRecord": "ResolutionRecord",
+        "ResolvedRunInputs": "ResolvedRunInputs",
+        "ResourceLimits": "ResourceLimits",
+        "ResultReceipt": "ResultReceipt",
+        "RunInputs": "RunInputs",
+        "RunLineage": "RunLineage",
+        "RunSpec": "RunSpec",
+        "ScorerRef": "ScorerRef",
+        "SecretReference": "SecretReference",
+        "SkillDefaults": "SkillDefaults",
+        "SkillPackageRef": "SkillPackageRef",
+        "UnsupportedCapabilityError": "UnsupportedCapabilityError",
+        "VerifiedResult": "VerifiedResult",
+        "VersionedContract": "VersionedContract",
+        "WorkspaceBounds": "WorkspaceBounds"
+      },
+      "generated_semantics": {
+        "entities": {
+          "ArtifactRef": {
+            "attributes": {
+              "digest": "—",
+              "name": "—",
+              "path": "—"
+            },
+            "description": "An immutable artifact location bound by content digest.",
+            "methods": {
+              "_digest_shape": "—"
+            }
+          },
+          "BudgetDimensions": {
+            "attributes": {
+              "max_budget_usd": "—",
+              "max_concurrency": "—",
+              "max_iterations": "—",
+              "timeout_s": "—"
+            },
+            "description": "Spend ceilings for a run; every dimension is explicit.",
+            "methods": {}
+          },
+          "CandidateData": {
+            "attributes": {
+              "payload": "—"
+            },
+            "description": "The mutable candidate payload — deliberately outside run contracts.\n\nOnly :class:`CandidateIdentity` (digests and immutable artifact refs)\nenters :class:`RunSpec` / :class:`ExecutionRequest`; payloads live in the\nwritable candidate tree and are bound at attempt start.",
+            "methods": {
+              "identity": "Derive the immutable identity for this payload's current content."
+            }
+          },
+          "CandidateIdentity": {
+            "attributes": {
+              "artifacts": "—",
+              "candidate_id": "—",
+              "digest": "—",
+              "parent_digest": "—",
+              "schema_version": "—"
+            },
+            "description": "Immutable identity of a proposed candidate.\n\nIdentity is the content digest: mutable candidate data may change on\ndisk, but every contract that binds a candidate references this digest,\nnever the payload.",
+            "methods": {
+              "_digest_shape": "—"
+            }
+          },
+          "CapabilityDescriptor": {
+            "attributes": {
+              "adapter_id": "—",
+              "capabilities": "—",
+              "integration": "—",
+              "protocol_version": "—",
+              "schema_version": "—",
+              "unsupported": "—"
+            },
+            "description": "What a harness/driver can do — with explicit gaps, never silent ones.\n\n``capabilities`` names what is supported; ``unsupported`` names what is\nnot, with a reason. Optional behaviors (pause, resume, mid-run input)\nare absent from ``capabilities`` unless genuinely available: an\nunsupported pause must not be equated with killing the process.",
+            "methods": {
+              "_capability_vocabulary": "—"
+            }
+          },
+          "ContractError": {
+            "attributes": {},
+            "description": "Base error for contract validation and resolution failures.",
+            "methods": {}
+          },
+          "ContractMigrationError": {
+            "attributes": {},
+            "description": "Raised when a legacy payload requests a rejected incomplete feature.\n\nCarries one entry per offending legacy field so a migration failure names\nevery problem at once instead of the first one only.",
+            "methods": {
+              "__init__": "—"
+            }
+          },
+          "EnvironmentIdentity": {
+            "attributes": {
+              "dependency_lock_digest": "—",
+              "image_digest": "—"
+            },
+            "description": "Pinned execution environment: image or dependency-lock digest.",
+            "methods": {
+              "_at_least_one": "—",
+              "_digest_shape": "—",
+              "digest": "Single digest covering whichever identities were pinned."
+            }
+          },
+          "ExecutionRequest": {
+            "attributes": {
+              "attempt_id": "—",
+              "candidate": "—",
+              "dataset_digests": "—",
+              "environment_digest": "—",
+              "evaluator_digest": "—",
+              "integration": "—",
+              "network": "—",
+              "request_id": "—",
+              "resources": "—",
+              "run_id": "—",
+              "run_spec_digest": "—",
+              "schema_version": "—",
+              "secrets": "—",
+              "workspace": "—"
+            },
+            "description": "One approved attempt: what the experiment executor may execute.\n\nThe executor resolves this request against the pinned run specification,\nstages inputs, enforces the declared policy, executes, and collects\nartifacts. A harness that runs its own shell still faces this contract;\nit cannot bypass trusted evaluation.",
+            "methods": {
+              "_dataset_digests_shape": "—",
+              "_digest_shape": "—",
+              "_secret_rules": "—"
+            }
+          },
+          "FailureRecord": {
+            "attributes": {
+              "code": "—",
+              "message": "—",
+              "retryable": "—",
+              "stage": "—"
+            },
+            "description": "Structured failure detail for an attempt that produced no metrics.",
+            "methods": {}
+          },
+          "HarnessConfig": {
+            "attributes": {
+              "adapter_id": "—",
+              "effective_config": "—",
+              "model_roles": "—",
+              "protocol_version": "—"
+            },
+            "description": "Harness identity and effective configuration.\n\n``effective_config`` and ``model_roles`` hold scalar values only — no\nharness SDK objects enter a kernel contract.",
+            "methods": {}
+          },
+          "HarnessPreferences": {
+            "attributes": {
+              "max_concurrency": "—",
+              "model_roles": "—",
+              "timeout_s": "—"
+            },
+            "description": "Harness-level convenience defaults. Advisory only.\n\nPreferences fill gaps that no higher layer resolved and can never widen\nauthority: they are bounded by operator constraints exactly like explicit\ninputs, and they do not supply domain parameter values.",
+            "methods": {}
+          },
+          "IntegrationDirection": {
+            "attributes": {},
+            "description": "_Auto-generated from `IntegrationDirection` in `src/core/execution_contracts.py`._",
+            "methods": {}
+          },
+          "IsolationBoundary": {
+            "attributes": {
+              "enforcement": "—",
+              "filesystem_confinement": "—",
+              "network_policy": "—",
+              "platform": "—",
+              "process_isolation": "—",
+              "resource_limits": "—"
+            },
+            "description": "Declared enforcement boundary for untrusted execution.\n\nThe qualified boundary is Linux with operating-system enforcement.\nApplication-only checks do not confine hostile code and are rejected\nwherever an enforced boundary is required.",
+            "methods": {}
+          },
+          "LegacyFieldCompat": {
+            "attributes": {
+              "contract_field": "—",
+              "disposition": "—",
+              "legacy_field": "—",
+              "reason": "—",
+              "rejected_when": "—"
+            },
+            "description": "One legacy surface's disposition under the v1 contracts.",
+            "methods": {}
+          },
+          "LegacyRunInputs": {
+            "attributes": {
+              "absent_rejected_fields": "—",
+              "budget": "—",
+              "focus_hint": "—",
+              "legacy_objective_text": "—",
+              "parameters": "—",
+              "preserved_fields": "—",
+              "schema_version": "—",
+              "skill_id": "—",
+              "source_schema": "—",
+              "subject_id": "—",
+              "variant": "—"
+            },
+            "description": "What a legacy payload migrates into: identity, parameters, budget.",
+            "methods": {}
+          },
+          "MetricConstraint": {
+            "attributes": {
+              "comparator": "—",
+              "metric_field": "—",
+              "required": "—",
+              "threshold": "—"
+            },
+            "description": "A guardrail threshold an eligible result must satisfy.",
+            "methods": {}
+          },
+          "NetworkPolicy": {
+            "attributes": {
+              "allowed_hosts": "—",
+              "mode": "—"
+            },
+            "description": "Network authority for one attempt; deny is the default posture.",
+            "methods": {
+              "_allowlist_consistency": "—"
+            }
+          },
+          "ObjectiveDirection": {
+            "attributes": {},
+            "description": "_Auto-generated from `ObjectiveDirection` in `src/core/execution_contracts.py`._",
+            "methods": {}
+          },
+          "ObjectiveGoal": {
+            "attributes": {},
+            "description": "_Auto-generated from `ObjectiveGoal` in `src/core/execution_contracts.py`._",
+            "methods": {}
+          },
+          "ObjectivePolicy": {
+            "attributes": {
+              "constraints": "—",
+              "direction": "—",
+              "goal": "—",
+              "metric_field": "—",
+              "schema_version": "—",
+              "tie_tolerance": "—"
+            },
+            "description": "What counts as better, and what must hold for a result to be eligible.\n\n``direction`` is authoritative for winner selection and ranking; ties\nwithin ``tie_tolerance`` are ties, not silent wins for either side.",
+            "methods": {}
+          },
+          "ObservationIdentity": {
+            "attributes": {
+              "candidate_digest": "—",
+              "dataset_digests": "—",
+              "fidelity": "—",
+              "observation_id": "—",
+              "schema_version": "—",
+              "scorer": "—",
+              "seed": "—",
+              "subject_id": "—",
+              "variant": "—"
+            },
+            "description": "Identity of one measured observation of a candidate.\n\nThe evaluation context (scorer, datasets, fidelity) is part of identity\nso results from different contexts can never be compared as if they\nmeasured the same thing.",
+            "methods": {
+              "_dataset_digests_shape": "—",
+              "_digest_shape": "—",
+              "context_digest": "Digest of the evaluation context — the comparability key."
+            }
+          },
+          "OperatorConstraints": {
+            "attributes": {
+              "allowed_capabilities": "—",
+              "allowed_integrations": "—",
+              "max_budget_usd": "—",
+              "max_concurrency": "—",
+              "max_iterations": "—",
+              "timeout_s": "—"
+            },
+            "description": "Authority bounds. Every resolved value falls inside these limits.\n\nConstraints are ceilings, not values: they never supply defaults and no\nlower-precedence layer (nor a harness preference) can widen them.",
+            "methods": {
+              "_capability_vocabulary": "—"
+            }
+          },
+          "ResolutionRecord": {
+            "attributes": {
+              "bounded": "—",
+              "effective": "—",
+              "field": "—",
+              "requested": "—",
+              "source": "—"
+            },
+            "description": "Provenance of one resolved value — nothing resolves silently.",
+            "methods": {}
+          },
+          "ResolvedRunInputs": {
+            "attributes": {
+              "budget": "—",
+              "model_roles": "—",
+              "parameters": "—",
+              "records": "—"
+            },
+            "description": "Deterministically resolved inputs with per-field provenance.",
+            "methods": {}
+          },
+          "ResourceLimits": {
+            "attributes": {
+              "max_processes": "—",
+              "memory_mb": "—",
+              "wall_clock_s": "—"
+            },
+            "description": "OS-enforced resource ceilings for one attempt.",
+            "methods": {}
+          },
+          "ResultReceipt": {
+            "attributes": {
+              "envelope_digest": "—",
+              "nonce": "—",
+              "ownership_epoch": "—",
+              "receipt_id": "—",
+              "sequence": "—"
+            },
+            "description": "Replay protection and ownership for a result envelope.\n\nThe receipt binds a result to one evaluator run in one ownership epoch;\na replayed or stale receipt is detectable without trusting the sender's\nclaims about metrics.",
+            "methods": {
+              "_digest_shape": "—"
+            }
+          },
+          "RunInputs": {
+            "attributes": {
+              "candidate_input_digests": "—",
+              "dataset_digests": "—",
+              "environment": "—",
+              "evaluator_digest": "—"
+            },
+            "description": "Pinned input identities: what the run evaluates against.",
+            "methods": {
+              "_digest_shape": "—",
+              "_digests_shape": "—"
+            }
+          },
+          "RunLineage": {
+            "attributes": {
+              "checkpoint_refs": "—",
+              "focus_hint": "—",
+              "parent_run_id": "—"
+            },
+            "description": "Continuation provenance: where this run came from and how to resume.",
+            "methods": {}
+          },
+          "RunSpec": {
+            "attributes": {
+              "artifacts": "—",
+              "budget": "—",
+              "capabilities": "—",
+              "harness": "—",
+              "inputs": "—",
+              "integration": "—",
+              "isolation": "—",
+              "lineage": "—",
+              "objective": "—",
+              "parameters": "—",
+              "policy_version": "—",
+              "run_id": "—",
+              "schema_version": "—",
+              "secrets": "—",
+              "skill": "—"
+            },
+            "description": "The persisted, fully resolved run specification.\n\nEverything needed to reproduce and audit a run is pinned here: skill\npackage identity and validated nonsecret parameters, harness identity\nand scalar effective configuration, input digests and environment\nidentity, capability and policy versions, budget dimensions, objective\npolicy, continuation lineage, and immutable artifact locations.\n\nMutable candidate data never appears inline — candidates are bound by\ndigest. Credentials appear only as :class:`SecretReference` records.",
+            "methods": {
+              "_contract_consistency": "—",
+              "spec_digest": "Canonical digest of the resolved specification."
+            }
+          },
+          "ScorerRef": {
+            "attributes": {
+              "digest": "—",
+              "scorer_id": "—",
+              "version": "—"
+            },
+            "description": "Identity of the scorer that produced an observation.",
+            "methods": {
+              "_digest_shape": "—"
+            }
+          },
+          "SecretReference": {
+            "attributes": {
+              "name": "—",
+              "provider": "—",
+              "role": "—",
+              "scope": "—"
+            },
+            "description": "A named reference to a credential; never the credential itself.\n\n``role`` records why the credential exists and ``scope`` how narrowly it\nis bound. Attached (external-agent) integrations may only reference\n``harness``/``evaluator`` roles: operator bearer tokens and approver\nsecrets are never handed to a driver.",
+            "methods": {
+              "_name_shape": "—",
+              "parse": "Parse the ``secret://<name>`` wire form into a reference.",
+              "wire_form": "Serialize this reference for use as a parameter map value."
+            }
+          },
+          "SkillDefaults": {
+            "attributes": {
+              "budget": "—",
+              "model_roles": "—",
+              "parameters": "—"
+            },
+            "description": "Defaults declared by the skill package (domain behavior).",
+            "methods": {}
+          },
+          "SkillPackageRef": {
+            "attributes": {
+              "digest": "—",
+              "skill_id": "—",
+              "version": "—"
+            },
+            "description": "The exact skill package a run executes.",
+            "methods": {
+              "_digest_shape": "—"
+            }
+          },
+          "UnsupportedCapabilityError": {
+            "attributes": {},
+            "description": "Raised before work starts when a capability is unknown or unsupported.\n\nUnknown or unsupported capabilities fail explicitly; nothing silently\nfalls back to weaker semantics.",
+            "methods": {}
+          },
+          "VerifiedResult": {
+            "attributes": {
+              "attempt_id": "—",
+              "candidate": "—",
+              "evaluator_digest": "—",
+              "failure": "—",
+              "metrics": "—",
+              "observation": "—",
+              "produced_at": "—",
+              "provenance": "—",
+              "receipt": "—",
+              "result_id": "—",
+              "run_id": "—",
+              "schema_version": "—",
+              "status": "—",
+              "verification": "—"
+            },
+            "description": "An evaluator-owned measurement of one candidate in one context.\n\nAuthoritative metrics arrive through this envelope from the trusted\nevaluator channel. Model output may propose candidates and annotate\nresults, but it never fills this contract. Third-party results carry\n``provenance=\"imported\"`` and stay ``unverified_imported`` until\nindependently validated.",
+            "methods": {
+              "_digest_shape": "—",
+              "_status_consistency": "—"
+            }
+          },
+          "VersionedContract": {
+            "attributes": {
+              "EXPECTED_SCHEMA_VERSION": "—",
+              "schema_version": "—"
+            },
+            "description": "Base for top-level contracts: pins ``schema_version`` to its family.\n\nSubclasses declare their expected version as a class attribute and give\n``schema_version`` the matching default. Any other version — a newer\nwriter or a corrupted artifact — fails explicitly at parse time.",
+            "methods": {
+              "_check_schema_version": "—"
+            }
+          },
+          "WorkspaceBounds": {
+            "attributes": {
+              "read_only_roots": "—",
+              "writable_roots": "—"
+            },
+            "description": "Where an attempt may write and what it may only read.",
+            "methods": {}
+          }
+        },
+        "module": {
+          "classes": {
+            "ArtifactRef": "An immutable artifact location bound by content digest.",
+            "BudgetDimensions": "Spend ceilings for a run; every dimension is explicit.",
+            "CandidateData": "The mutable candidate payload — deliberately outside run contracts.",
+            "CandidateIdentity": "Immutable identity of a proposed candidate.",
+            "CapabilityDescriptor": "What a harness/driver can do — with explicit gaps, never silent ones.",
+            "ContractError": "Base error for contract validation and resolution failures.",
+            "ContractMigrationError": "Raised when a legacy payload requests a rejected incomplete feature.",
+            "EnvironmentIdentity": "Pinned execution environment: image or dependency-lock digest.",
+            "ExecutionRequest": "One approved attempt: what the experiment executor may execute.",
+            "FailureRecord": "Structured failure detail for an attempt that produced no metrics.",
+            "HarnessConfig": "Harness identity and effective configuration.",
+            "HarnessPreferences": "Harness-level convenience defaults. Advisory only.",
+            "IntegrationDirection": "—",
+            "IsolationBoundary": "Declared enforcement boundary for untrusted execution.",
+            "LegacyFieldCompat": "One legacy surface's disposition under the v1 contracts.",
+            "LegacyRunInputs": "What a legacy payload migrates into: identity, parameters, budget.",
+            "MetricConstraint": "A guardrail threshold an eligible result must satisfy.",
+            "NetworkPolicy": "Network authority for one attempt; deny is the default posture.",
+            "ObjectiveDirection": "—",
+            "ObjectiveGoal": "—",
+            "ObjectivePolicy": "What counts as better, and what must hold for a result to be eligible.",
+            "ObservationIdentity": "Identity of one measured observation of a candidate.",
+            "OperatorConstraints": "Authority bounds. Every resolved value falls inside these limits.",
+            "ResolutionRecord": "Provenance of one resolved value — nothing resolves silently.",
+            "ResolvedRunInputs": "Deterministically resolved inputs with per-field provenance.",
+            "ResourceLimits": "OS-enforced resource ceilings for one attempt.",
+            "ResultReceipt": "Replay protection and ownership for a result envelope.",
+            "RunInputs": "Pinned input identities: what the run evaluates against.",
+            "RunLineage": "Continuation provenance: where this run came from and how to resume.",
+            "RunSpec": "The persisted, fully resolved run specification.",
+            "ScorerRef": "Identity of the scorer that produced an observation.",
+            "SecretReference": "A named reference to a credential; never the credential itself.",
+            "SkillDefaults": "Defaults declared by the skill package (domain behavior).",
+            "SkillPackageRef": "The exact skill package a run executes.",
+            "UnsupportedCapabilityError": "Raised before work starts when a capability is unknown or unsupported.",
+            "VerifiedResult": "An evaluator-owned measurement of one candidate in one context.",
+            "VersionedContract": "Base for top-level contracts: pins ``schema_version`` to its family.",
+            "WorkspaceBounds": "Where an attempt may write and what it may only read."
+          },
+          "description": "Versioned research and execution contracts.\n\nAuthoritative Pydantic v2 value contracts for the universal research control\nplane. They define *what* crosses the kernel boundary — run specifications,\nexecution requests, candidate and observation identity, evaluator-owned\nverified results, objective policy, and capability descriptors — as plain\nJSON-serializable value types shared by every integration direction.\n\nContract rules:\n\n* Every top-level contract carries a ``schema_version`` naming its contract\n  family (``research_<name>.v1``); an unknown version fails with an explicit\n  error instead of degrading silently.\n* Kernel contracts never embed harness SDK types. No provider clients,\n  message classes, or vendor payloads appear here; harness-specific settings\n  travel as scalar ``effective_config`` entries only.\n* Credentials never appear as values. Contracts carry :class:`SecretReference`\n  records, or the ``secret://<name>`` wire form inside parameter maps, and\n  resolution to real values happens outside these contracts.\n* Mutable candidate data stays outside resolved contracts: run specifications\n  bind candidates by content digest (:class:`CandidateIdentity`), never by an\n  inline payload.\n\nInput layers resolve deterministically (see :func:`resolve_run_inputs`):\nexplicit run inputs, then skill defaults, then harness preferences, then\nsystem defaults — with operator constraints bounding every step. Harness\npreferences fill remaining gaps and can never widen authority.\n\nCompatibility with pre-contract session artifacts and start-request shapes is\nexplicit: :data:`LEGACY_COMPATIBILITY` classifies each legacy surface as\npreserved or rejected-incomplete, and the legacy readers raise\n:class:`ContractMigrationError` when a rejected feature is actually requested.\nNothing the mapping classifies as preserved is silently dropped.",
+          "functions": {
+            "_chain_pick": "Resolve one field through the precedence chain (no bounding yet).",
+            "_check_digest": "—",
+            "_check_rejected_fields": "Raise on requested rejected features; return absent tolerated ones.",
+            "_is_requested": "Whether a legacy payload actually requests a feature (non-empty).",
+            "_require_identity": "Resolve (skill_id, subject_id, variant) plus consumed legacy fields.",
+            "canonical_digest": "Content digest of a mapping under canonical JSON encoding.",
+            "ensure_capabilities_allowed": "Fail when a descriptor claims capabilities beyond the allowed set.",
+            "ensure_isolation_boundary": "Reject any boundary weaker than the qualified OS-enforced one.",
+            "ensure_minimum_capabilities": "Fail before work starts when required capabilities are unavailable.",
+            "ensure_request_matches_run_spec": "Verify an execution request is bound to exactly this run specification.",
+            "is_secret_reference": "Whether ``value`` is a secret reference wire form (not a raw secret).",
+            "objective_policy_from_skill_metric": "Map a skill manifest metric declaration to its objective policy.",
+            "read_legacy_session_manifest": "Migrate a serialized session manifest (v1-v3) into contract inputs.",
+            "read_legacy_start_request": "Migrate a legacy start-request shape into contract inputs.",
+            "reject_raw_secret_parameters": "Reject credential-shaped parameter keys that hold raw values.",
+            "resolve_run_inputs": "Resolve run inputs with deterministic precedence and hard bounds.",
+            "validate_secret_list": "Reject duplicate names and authority-widening roles for attached runs."
+          }
+        }
+      },
+      "hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+      "language": "python",
+      "module_page": "execution_contracts",
+      "semantic_hash": "sha256:75737c7cae473712704cb9476cb6b671b64d4354da57c658c0d09c547eb53416"
     },
     "src/core/experiment_parser.py": {
       "entities": [
@@ -16390,6 +17907,36 @@
       "module_page": "test_config_promoter_gate_bundle",
       "semantic_hash": "sha256:d02d5a48a1401e198b8cd6a8f43442e30926724274a8f043518a7440ec46657f"
     },
+    "tests/test_contract_examples.py": {
+      "entities": [],
+      "entity_page_occurrences": [],
+      "entity_pages": {},
+      "generated_semantics": {
+        "entities": {},
+        "module": {
+          "classes": {},
+          "description": "Tests for the serialized contract examples under examples/contracts/v1/.\n\nEvery example bundle must validate against the contract models and\nround-trip through JSON unchanged.",
+          "functions": {
+            "_bundle": "—",
+            "_bundles": "—",
+            "_round_trip": "—",
+            "test_every_example_file_parses_with_identity_fields": "—",
+            "test_integration_bundle_contracts_validate_and_agree": "—",
+            "test_integration_bundles_cover_both_directions_and_three_domains": "—",
+            "test_integration_bundles_reference_no_raw_credentials": "—",
+            "test_legacy_compatibility_example_matches_the_code_mapping": "—",
+            "test_review_continuation_preserves_lineage_and_nondefaults": "—",
+            "test_review_failure_example_claims_no_metrics": "—",
+            "test_review_minimization_selects_the_lower_measurement": "—",
+            "test_review_unsupported_capability_is_rejected_before_work": "—"
+          }
+        }
+      },
+      "hash": "sha256:9b369451dc7dc4166c9267c3e002b2f92d71b38cffa8e747a747c600d0ae7aea",
+      "language": "python",
+      "module_page": "test_contract_examples",
+      "semantic_hash": "sha256:c097c624e1854effa4f977cca8096d72f0b45bc8c493648aac80ba42d4d40641"
+    },
     "tests/test_cross_session_digest_hint.py": {
       "entities": [],
       "entity_page_occurrences": [],
@@ -16915,6 +18462,130 @@
       "language": "python",
       "module_page": "test_execution_concurrency",
       "semantic_hash": "sha256:d48eb90baca05d79f88aa064f3d41bd3f1cfa94a52b2423b2250ebc26c6c96d7"
+    },
+    "tests/test_execution_contracts.py": {
+      "entities": [],
+      "entity_page_occurrences": [],
+      "entity_pages": {},
+      "generated_semantics": {
+        "entities": {},
+        "module": {
+          "classes": {},
+          "description": "Tests for the versioned research and execution contracts.\n\nFixture payloads use synthetic identifiers and digest strings only.",
+          "functions": {
+            "_candidate": "—",
+            "_capabilities": "—",
+            "_execution_request": "—",
+            "_legacy_manifest": "—",
+            "_objective": "—",
+            "_observation": "—",
+            "_receipt": "—",
+            "_resolve": "—",
+            "_run_spec": "—",
+            "_verified_result": "—",
+            "test_application_only_isolation_rejected": "—",
+            "test_attached_run_accepts_scoped_harness_credentials": "—",
+            "test_attached_run_rejects_operator_and_approver_credentials": "—",
+            "test_budget_fields_never_leak_into_parameters": "—",
+            "test_candidate_data_identity_is_order_independent": "—",
+            "test_capabilities_outside_operator_allowance_rejected": "—",
+            "test_capability_descriptor_rejects_claimed_and_unsupported_overlap": "—",
+            "test_capability_descriptor_rejects_unknown_identifiers": "—",
+            "test_compatibility_mapping_distinguishes_preserved_and_rejected": "—",
+            "test_contract_versions_are_unique": "—",
+            "test_digest_shape_is_enforced": "—",
+            "test_duplicate_secret_references_rejected": "—",
+            "test_evaluator_owned_results_are_verified_by_construction": "—",
+            "test_every_top_level_contract_rejects_unknown_version": "—",
+            "test_execution_request_json_round_trip": "—",
+            "test_execution_request_rejects_bad_digest_shapes": "—",
+            "test_explicit_parameters_override_skill_defaults": "—",
+            "test_failed_result_must_not_claim_metrics": "—",
+            "test_harness_preferences_cannot_widen_authority": "—",
+            "test_harness_preferences_never_set_domain_parameters": "—",
+            "test_imported_results_stay_unverified": "—",
+            "test_kernel_contract_module_imports_no_harness_sdks": "—",
+            "test_legacy_manifest_maps_preserved_fields": "—",
+            "test_legacy_reader_accepts_v1_and_v3_and_rejects_unknown": "—",
+            "test_legacy_reader_never_invents_a_budget": "—",
+            "test_legacy_reader_rejects_raw_secret_parameters": "—",
+            "test_legacy_reader_rejects_requested_incomplete_features": "—",
+            "test_legacy_reader_tolerates_absent_rejected_fields": "—",
+            "test_legacy_session_manifest_preserves_focus_hint": "—",
+            "test_legacy_start_request_converts_minutes_and_defaults": "—",
+            "test_minimum_capabilities_pass_and_fail": "—",
+            "test_missing_resource_limits_rejected": "—",
+            "test_model_roles_prefer_skill_defaults_over_preferences": "—",
+            "test_network_deny_rejects_allowed_hosts": "—",
+            "test_non_succeeded_result_requires_failure_record": "—",
+            "test_nonfinite_metrics_rejected": "—",
+            "test_objective_policy_maps_skill_metric_vocabulary": "—",
+            "test_objective_policy_rejects_nonfinite_threshold": "—",
+            "test_observation_context_digest_separates_fidelity": "—",
+            "test_operator_constraints_bound_explicit_inputs": "—",
+            "test_plain_parameter_names_are_not_flagged_as_secrets": "—",
+            "test_precedence_chain_for_budget_fields": "—",
+            "test_qualified_isolation_boundary_accepted": "—",
+            "test_request_run_spec_binding_accepts_exact_match": "—",
+            "test_request_run_spec_binding_rejects_mismatches": "—",
+            "test_resolve_rejects_negative_spend_request": "—",
+            "test_resolve_rejects_raw_secret_values": "—",
+            "test_run_spec_accepts_secret_reference_parameters": "—",
+            "test_run_spec_json_round_trip": "—",
+            "test_run_spec_rejects_inline_mutable_candidate_data": "—",
+            "test_run_spec_rejects_raw_credential_parameters": "—",
+            "test_run_spec_rejects_unknown_schema_version": "—",
+            "test_secret_reference_rejects_invalid_names": "—",
+            "test_secret_reference_wire_form_round_trip": "—",
+            "test_succeeded_result_requires_metrics": "—",
+            "test_verified_result_json_round_trip": "—"
+          }
+        }
+      },
+      "hash": "sha256:55164436a75fd1447fb65b8bb0346849b5b40463c0623359c5f31984e71da930",
+      "language": "python",
+      "module_page": "test_execution_contracts",
+      "semantic_hash": "sha256:3f0f104535a8d5435484f0419e92592ab118a3b30cca4f8a963d0ff0dbd5656b"
+    },
+    "tests/test_execution_ledger_validator.py": {
+      "entities": [],
+      "entity_page_occurrences": [],
+      "entity_pages": {},
+      "generated_semantics": {
+        "entities": {},
+        "module": {
+          "classes": {},
+          "description": "Tests for the execution-ledger validator (scripts/check_execution_ledger.py).\n\nFixtures use synthetic opaque card IDs; no real planning vocabulary appears\nhere by design — the validator must stay domain-agnostic.",
+          "functions": {
+            "_card": "—",
+            "_done_card": "—",
+            "_write_ledger": "—",
+            "test_acceptance_unknown_check_reference_rejected": "—",
+            "test_active_card_must_be_known": "—",
+            "test_dependency_cycle_rejected": "—",
+            "test_done_with_failed_check_rejected": "—",
+            "test_done_with_unfinished_prerequisite_rejected": "—",
+            "test_done_with_unresolved_review_finding_rejected": "—",
+            "test_done_with_unsatisfied_acceptance_rejected": "—",
+            "test_done_without_evidence_rejected": "A DONE record missing results/review/commits must not validate.",
+            "test_duplicate_card_id_rejected": "—",
+            "test_fully_evidenced_done_record_passes": "—",
+            "test_illegal_transition_rejected": "—",
+            "test_malformed_card_id_rejected": "—",
+            "test_missing_ledger_file_is_error_not_crash": "—",
+            "test_real_ledger_directory_is_valid": "The live run ledger must validate whenever it is present.",
+            "test_result_unknown_check_reference_rejected": "—",
+            "test_status_contradicting_history_rejected": "—",
+            "test_unknown_dependency_card_rejected": "—",
+            "test_unknown_state_rejected": "—",
+            "test_valid_minimal_ledger_passes": "—"
+          }
+        }
+      },
+      "hash": "sha256:689c6c915dc7f1a1f6131ae6597389bd0f6321a259ec2d75f4d3b68d5034d183",
+      "language": "python",
+      "module_page": "test_execution_ledger_validator",
+      "semantic_hash": "sha256:fdfedc5a8d78189feebd1e42a2776865d9798608ec56ac42129cf0381b175719"
     },
     "tests/test_experiment_parser_calibration.py": {
       "entities": [],

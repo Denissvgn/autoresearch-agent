@@ -36,16 +36,20 @@ Design note (P1-007 house style):
 ```mermaid
 flowchart LR
     n0["src/compat/legacy_alias.py"]
-    n1["src/core/legacy_alias.py"]
+    n1["src/core/execution_contracts.py"]
+    n2["src/core/legacy_alias.py"]
     n1 --> n0
+    n2 --> n0
     click n0 "../modules/compat_legacy_alias.md"
-    click n1 "../modules/core_legacy_alias.md"
+    click n1 "../modules/execution_contracts.md"
+    click n2 "../modules/core_legacy_alias.md"
 ```
 
 ### Internal neighbors
 
 | Direction | Module |
 |---|---|
+| Inbound | [execution_contracts](../modules/execution_contracts.md) |
 | Inbound | [core_legacy_alias](../modules/core_legacy_alias.md) |
 
 ## Functions

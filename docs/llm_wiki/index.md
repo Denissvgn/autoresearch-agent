@@ -6,11 +6,11 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 
 | Surface | Count | Start here |
 |---|---:|---|
-| Entities | 386 | [Open section](#entities) |
-| Modules | 238 | [Open section](#modules) |
+| Entities | 425 | [Open section](#entities) |
+| Modules | 243 | [Open section](#modules) |
 | Workflows | 13 | [Open section](#workflows) |
 | Guides | 0 | No pages |
-| Entry-point flows | 98 | [Open section](#entry-point-flows) |
+| Entry-point flows | 111 | [Open section](#entry-point-flows) |
 | Infrastructure | 3 | [Open section](#infrastructure) |
 | HTTP API contracts | 0 | No pages |
 | Dependency architecture | 2 | [Open section](#dependency-architecture) |
@@ -27,6 +27,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [AgentLog_Props](entities/AgentLog_Props.md)
 - [AgentOrchestrator](entities/AgentOrchestrator.md)
 - [AnthropicProvider](entities/AnthropicProvider.md)
+- [ArtifactRef](entities/ArtifactRef.md)
 - [ArtifactStoreTarget](entities/ArtifactStoreTarget.md)
 - [AuditStore](entities/AuditStore.md)
 - [AuthenticatedActor](entities/AuthenticatedActor.md)
@@ -36,6 +37,10 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [BlockerDetailShape](entities/BlockerDetailShape.md)
 - [BootstrapOutcome](entities/BootstrapOutcome.md)
 - [BootstrapRunner](entities/BootstrapRunner.md)
+- [BudgetDimensions](entities/BudgetDimensions.md)
+- [CandidateData](entities/CandidateData.md)
+- [CandidateIdentity](entities/CandidateIdentity.md)
+- [CapabilityDescriptor](entities/CapabilityDescriptor.md)
 - [CapturingBroadcaster](entities/CapturingBroadcaster.md)
 - [Category](entities/Category.md)
 - [ClassificationResult](entities/ClassificationResult.md)
@@ -51,6 +56,8 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [ConfigPromoter](entities/ConfigPromoter.md)
 - [ConsistencyReport](entities/ConsistencyReport.md)
 - [ContinueResearchRequest](entities/ContinueResearchRequest.md)
+- [ContractError](entities/ContractError.md)
+- [ContractMigrationError](entities/ContractMigrationError.md)
 - [ControlFakeOrchestrator](entities/ControlFakeOrchestrator.md)
 - [CostEstimate](entities/CostEstimate.md)
 - [DecisionVocabulary](entities/DecisionVocabulary.md)
@@ -61,10 +68,13 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [DomainClassifier](entities/DomainClassifier.md)
 - [DynamicFormFields_Props](entities/DynamicFormFields_Props.md)
 - [EmbeddingBackend](entities/EmbeddingBackend.md)
+- [EnvironmentIdentity](entities/EnvironmentIdentity.md)
 - [ErrorClass](entities/ErrorClass.md)
 - [EstimateCostRequest](entities/EstimateCostRequest.md)
 - [EventBroadcaster](entities/EventBroadcaster.md)
 - [ExecutionConfig](entities/ExecutionConfig.md)
+- [ExecutionRequest](entities/ExecutionRequest.md)
+- [FailureRecord](entities/FailureRecord.md)
 - [FakeMlflowAsyncClient](entities/FakeMlflowAsyncClient.md)
 - [FakeMlflowResponse](entities/FakeMlflowResponse.md)
 - [FakeOrchestrator](entities/FakeOrchestrator.md)
@@ -84,6 +94,8 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [GitBranchTarget](entities/GitBranchTarget.md)
 - [GovernedCommandRunner](entities/GovernedCommandRunner.md)
 - [HTTPHealthCheck](entities/HTTPHealthCheck.md)
+- [HarnessConfig](entities/HarnessConfig.md)
+- [HarnessPreferences](entities/HarnessPreferences.md)
 - [HeadTailBuffer](entities/HeadTailBuffer.md)
 - [HpoStudy](entities/HpoStudy.md)
 - [HpoStudyResult](entities/HpoStudyResult.md)
@@ -97,6 +109,8 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [IllegalTransitionError](entities/IllegalTransitionError.md)
 - [InferenceParitySummary](entities/InferenceParitySummary.md)
 - [InsightsConfig](entities/InsightsConfig.md)
+- [IntegrationDirection](entities/IntegrationDirection.md)
+- [IsolationBoundary](entities/IsolationBoundary.md)
 - [Iteration](entities/Iteration.md)
 - [IterationMetrics](entities/IterationMetrics.md)
 - [IterationRecord](entities/IterationRecord.md)
@@ -106,6 +120,9 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [LLMConfig](entities/LLMConfig.md)
 - [LLMProvider](entities/LLMProvider.md)
 - [LeaderboardEntry](entities/LeaderboardEntry.md)
+- [LedgerError](entities/LedgerError.md)
+- [LegacyFieldCompat](entities/LegacyFieldCompat.md)
+- [LegacyRunInputs](entities/LegacyRunInputs.md)
 - [LexicalEmbeddingBackend](entities/LexicalEmbeddingBackend.md)
 - [LifecycleTransitionResult](entities/LifecycleTransitionResult.md)
 - [ManifestSkillRuntime](entities/ManifestSkillRuntime.md)
@@ -113,6 +130,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [ManifestVersionError](entities/ManifestVersionError.md)
 - [Message](entities/Message.md)
 - [MetricChartProps](entities/MetricChartProps.md)
+- [MetricConstraint](entities/MetricConstraint.md)
 - [MetricDef](entities/MetricDef.md)
 - [MetricDiagnostic](entities/MetricDiagnostic.md)
 - [MetricGoal](entities/MetricGoal.md)
@@ -120,8 +138,14 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [MetricsChart_Props](entities/MetricsChart_Props.md)
 - [MockProvider](entities/MockProvider.md)
 - [ModelInfo](entities/ModelInfo.md)
+- [NetworkPolicy](entities/NetworkPolicy.md)
+- [ObjectiveDirection](entities/ObjectiveDirection.md)
+- [ObjectiveGoal](entities/ObjectiveGoal.md)
+- [ObjectivePolicy](entities/ObjectivePolicy.md)
+- [ObservationIdentity](entities/ObservationIdentity.md)
 - [OosProvenanceSummary](entities/OosProvenanceSummary.md)
 - [OpenAIProvider](entities/OpenAIProvider.md)
+- [OperatorConstraints](entities/OperatorConstraints.md)
 - [OpsTone](entities/OpsTone.md)
 - [OutputCallback](entities/OutputCallback.md)
 - [OutputParser](entities/OutputParser.md)
@@ -189,18 +213,27 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [ResearchState](entities/ResearchState.md)
 - [ResearchStatePanel_Props](entities/ResearchStatePanel_Props.md)
 - [ResizeObserverStub](entities/ResizeObserverStub.md)
+- [ResolutionRecord](entities/ResolutionRecord.md)
+- [ResolvedRunInputs](entities/ResolvedRunInputs.md)
+- [ResourceLimits](entities/ResourceLimits.md)
 - [ResourceWatcher](entities/ResourceWatcher.md)
+- [ResultReceipt](entities/ResultReceipt.md)
 - [RlProfitSummary](entities/RlProfitSummary.md)
 - [RollbackStatusSummary](entities/RollbackStatusSummary.md)
 - [RowExtractor](entities/RowExtractor.md)
+- [RunInputs](entities/RunInputs.md)
+- [RunLineage](entities/RunLineage.md)
+- [RunSpec](entities/RunSpec.md)
 - [RuntimeResumeRequest](entities/RuntimeResumeRequest.md)
 - [SQLiteStateStore](entities/SQLiteStateStore.md)
 - [ScopeOption](entities/ScopeOption.md)
 - [ScopedPromotionMetadata](entities/ScopedPromotionMetadata.md)
+- [ScorerRef](entities/ScorerRef.md)
 - [ScriptedOpenAIClient](entities/ScriptedOpenAIClient.md)
 - [ScriptedOrchestrator](entities/ScriptedOrchestrator.md)
 - [ScriptedProvider](entities/ScriptedProvider.md)
 - [SecondaryMetric](entities/SecondaryMetric.md)
+- [SecretReference](entities/SecretReference.md)
 - [SegmentedOption](entities/SegmentedOption.md)
 - [SegmentedProps](entities/SegmentedProps.md)
 - [ServicePreflightError](entities/ServicePreflightError.md)
@@ -216,6 +249,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [Settings](entities/Settings.md)
 - [SignificanceConfig](entities/SignificanceConfig.md)
 - [SkillConfigError](entities/SkillConfigError.md)
+- [SkillDefaults](entities/SkillDefaults.md)
 - [SkillGenerationError](entities/SkillGenerationError.md)
 - [SkillGenerator](entities/SkillGenerator.md)
 - [SkillLayout](entities/SkillLayout.md)
@@ -225,6 +259,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [SkillLifecycleState](entities/SkillLifecycleState.md)
 - [SkillMatch](entities/SkillMatch.md)
 - [SkillNotRegisteredError](entities/SkillNotRegisteredError.md)
+- [SkillPackageRef](entities/SkillPackageRef.md)
 - [SkillPicker_Props](entities/SkillPicker_Props.md)
 - [SkillPluginRenderer](entities/SkillPluginRenderer.md)
 - [SkillPluginRendererProps](entities/SkillPluginRendererProps.md)
@@ -329,14 +364,18 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [TrialIdentityConfig](entities/TrialIdentityConfig.md)
 - [TurnTrialState](entities/TurnTrialState.md)
 - [UIConfig](entities/UIConfig.md)
+- [UnsupportedCapabilityError](entities/UnsupportedCapabilityError.md)
 - [Usage](entities/Usage.md)
 - [VariantDescriptor](entities/VariantDescriptor.md)
 - [VariantsConfig](entities/VariantsConfig.md)
+- [VerifiedResult](entities/VerifiedResult.md)
+- [VersionedContract](entities/VersionedContract.md)
 - [WSEvent](entities/WSEvent.md)
 - [WebSocketContextValue](entities/WebSocketContextValue.md)
 - [WebhookDeliveryError](entities/WebhookDeliveryError.md)
 - [WebhookPromotionTarget](entities/WebhookPromotionTarget.md)
 - [WebhookTarget](entities/WebhookTarget.md)
+- [WorkspaceBounds](entities/WorkspaceBounds.md)
 - [WorkspaceConfig](entities/WorkspaceConfig.md)
 - [YieldingFakeWS](entities/YieldingFakeWS.md)
 - [client_MetricColumn](entities/client_MetricColumn.md)
@@ -442,6 +481,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [capture](modules/capture.md) - ARC-011 X-002 parity fixture capture.
 - [check_doc_references](modules/check_doc_references.md) - Referenced-doc integrity guard.
 - [check_domain_coupling](modules/check_domain_coupling.md) - Domain-coupling guard: fail when TRAID-platform vocabulary creeps back in.
+- [check_execution_ledger](modules/check_execution_ledger.md) - Execution-ledger validator: fail closed on inconsistent task state.
 - [check_legacy_vocab_branching](modules/check_legacy_vocab_branching.md) - Legacy-vocabulary branching guard.
 - [cli](modules/cli.md) - autoresearch CLI — operator entry points (P2 Skill SDK).
 - [client](modules/client.md) - `ui/src/api/client.ts`
@@ -463,6 +503,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [domain_classifier](modules/domain_classifier.md) - Embedding-based domain classifier (ARC-011 P5-016 / P5-018 / P5-019).
 - [events](modules/events.md) - WebSocket broadcast manager for real-time experiment events.
 - [examples_prompt-registry_main](modules/examples_prompt-registry_main.md) - Example prompt-registry receiver (P1-3).
+- [execution_contracts](modules/execution_contracts.md) - Versioned research and execution contracts.
 - [experiment_parser](modules/experiment_parser.md) - Parse prepare.py stdout output into structured metrics.
 - [gate_status](modules/gate_status.md) - Compatibility helpers for autoresearch gate-status fields.
 - [http_headers](modules/http_headers.md) - Request-header binding for the autoresearch API.
@@ -531,6 +572,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [test_command_policy](modules/test_command_policy.md) - `tests/test_command_policy.py`
 - [test_config_promoter_atomic](modules/test_config_promoter_atomic.md) - P0-012 — Crash-during-write promotion tests.
 - [test_config_promoter_gate_bundle](modules/test_config_promoter_gate_bundle.md) - `tests/test_config_promoter_gate_bundle.py`
+- [test_contract_examples](modules/test_contract_examples.md) - Tests for the serialized contract examples under examples/contracts/v1/.
 - [test_cross_session_digest_hint](modules/test_cross_session_digest_hint.md) - Fix B / Fix C — cross-session iteration summary + digest sections.
 - [test_cross_worker_control](modules/test_cross_worker_control.md) - ARC-011 implementation review C5 (2026-08-15) — cross-worker control at the SessionManager entry point (P6-004 / H3).
 - [test_delete_session_hpo_cascade](modules/test_delete_session_hpo_cascade.md) - Regression: delete_session must remove ALL research_id children — including hpo_studies — before the parent row. Previously hpo_studies was omitted, so RL/ structured-HPO sessions (which create study rows) hit SQLite 'FOREIGN KEY constraint failed' and could never be deleted.
@@ -543,6 +585,8 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [test_event_broadcaster_concurrency](modules/test_event_broadcaster_concurrency.md) - P0-014 — EventBroadcaster concurrency stress tests.
 - [test_evidence_artifact_validation](modules/test_evidence_artifact_validation.md) - AR-5: Tests for artifact-bound evidence-key validation for promotion-family phases.
 - [test_execution_concurrency](modules/test_execution_concurrency.md) - Execution-config plumbing tests (P1-4).
+- [test_execution_contracts](modules/test_execution_contracts.md) - Tests for the versioned research and execution contracts.
+- [test_execution_ledger_validator](modules/test_execution_ledger_validator.md) - Tests for the execution-ledger validator (scripts/check_execution_ledger.py).
 - [test_experiment_parser_calibration](modules/test_experiment_parser_calibration.md) - Tests for experiment_parser _json suffix handling for phase 5 evidence keys.
 - [test_experiment_parser_inference_parity](modules/test_experiment_parser_inference_parity.md) - Tests for experiment_parser _json suffix handling for phase 7 evidence keys.
 - [test_experiment_parser_promotion_scope](modules/test_experiment_parser_promotion_scope.md) - Tests for experiment_parser handling of phase 8 evidence key (promotion_scope).
@@ -675,20 +719,31 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [api-build_generation_prompt](flows/api-build_generation_prompt.md) - entry: `build_generation_prompt`
 - [api-build_provider](flows/api-build_provider.md) - entry: `build_provider`
 - [api-build_trial_context](flows/api-build_trial_context.md) - entry: `build_trial_context`
+- [api-canonical_digest](flows/api-canonical_digest.md) - entry: `canonical_digest`
+- [api-ensure_capabilities_allowed](flows/api-ensure_capabilities_allowed.md) - entry: `ensure_capabilities_allowed`
+- [api-ensure_isolation_boundary](flows/api-ensure_isolation_boundary.md) - entry: `ensure_isolation_boundary`
+- [api-ensure_minimum_capabilities](flows/api-ensure_minimum_capabilities.md) - entry: `ensure_minimum_capabilities`
+- [api-ensure_request_matches_run_spec](flows/api-ensure_request_matches_run_spec.md) - entry: `ensure_request_matches_run_spec`
 - [api-is_known_model_type](flows/api-is_known_model_type.md) - entry: `is_known_model_type`
 - [api-is_legal_transition](flows/api-is_legal_transition.md) - entry: `is_legal_transition`
+- [api-is_secret_reference](flows/api-is_secret_reference.md) - entry: `is_secret_reference`
 - [api-is_trial_eligible_command](flows/api-is_trial_eligible_command.md) - entry: `is_trial_eligible_command`
 - [api-load_layout](flows/api-load_layout.md) - entry: `load_layout`
 - [api-load_skill_manifest](flows/api-load_skill_manifest.md) - entry: `load_skill_manifest`
 - [api-materialize_skill_runtime](flows/api-materialize_skill_runtime.md) - entry: `materialize_skill_runtime`
 - [api-mean_std](flows/api-mean_std.md) - entry: `mean_std`
 - [api-model_type_to_skill_id](flows/api-model_type_to_skill_id.md) - entry: `model_type_to_skill_id`
+- [api-objective_policy_from_skill_metric](flows/api-objective_policy_from_skill_metric.md) - entry: `objective_policy_from_skill_metric`
 - [api-phases_for_model](flows/api-phases_for_model.md) - entry: `phases_for_model`
 - [api-preflight_check_from_target](flows/api-preflight_check_from_target.md) - entry: `preflight_check_from_target`
 - [api-prior_findings_path](flows/api-prior_findings_path.md) - entry: `prior_findings_path`
 - [api-promotion_target_from_manifest](flows/api-promotion_target_from_manifest.md) - entry: `promotion_target_from_manifest`
+- [api-read_legacy_session_manifest](flows/api-read_legacy_session_manifest.md) - entry: `read_legacy_session_manifest`
+- [api-read_legacy_start_request](flows/api-read_legacy_start_request.md) - entry: `read_legacy_start_request`
+- [api-reject_raw_secret_parameters](flows/api-reject_raw_secret_parameters.md) - entry: `reject_raw_secret_parameters`
 - [api-render_findings_markdown](flows/api-render_findings_markdown.md) - entry: `render_findings_markdown`
 - [api-render_path_template](flows/api-render_path_template.md) - entry: `render_path_template`
+- [api-resolve_run_inputs](flows/api-resolve_run_inputs.md) - entry: `resolve_run_inputs`
 - [api-samples_from_rows](flows/api-samples_from_rows.md) - entry: `samples_from_rows`
 - [api-sanitize_path_segment](flows/api-sanitize_path_segment.md) - entry: `sanitize_path_segment`
 - [api-selectable_for](flows/api-selectable_for.md) - entry: `selectable_for`
@@ -700,6 +755,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [api-target_state](flows/api-target_state.md) - entry: `target_state`
 - [api-trial_marker_candidates](flows/api-trial_marker_candidates.md) - entry: `trial_marker_candidates`
 - [api-validate_path_template](flows/api-validate_path_template.md) - entry: `validate_path_template`
+- [api-validate_secret_list](flows/api-validate_secret_list.md) - entry: `validate_secret_list`
 
 **http**
 
@@ -766,6 +822,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [process-capture](flows/process-capture.md) - entry: `main`
 - [process-check_doc_references](flows/process-check_doc_references.md) - entry: `main`
 - [process-check_domain_coupling](flows/process-check_domain_coupling.md) - entry: `main`
+- [process-check_execution_ledger](flows/process-check_execution_ledger.md) - entry: `main`
 - [process-check_legacy_vocab_branching](flows/process-check_legacy_vocab_branching.md) - entry: `main`
 - [process-main](flows/process-main.md) - entry: `__main__`
 - [process-migrate_sqlite_to_postgres](flows/process-migrate_sqlite_to_postgres.md) - entry: `main`

@@ -1,0 +1,30 @@
+# IntegrationDirection
+
+**Location:** `src/core/execution_contracts.py:412`
+**Kind:** Type alias
+**Bases:** —
+**Module:** [execution_contracts](../modules/execution_contracts.md)
+**Target:** `Literal['managed', 'attached']`
+
+## Description
+
+_Auto-generated from `IntegrationDirection` in `src/core/execution_contracts.py`._
+
+## Attributes
+
+*No annotated attributes found.*
+
+## Methods
+
+*No public methods. Inherits from base classes.*
+
+## Relationships
+
+<!-- Auto-generated relationship summary. Do not edit by hand. -->
+*No generated relationships detected.*
+
+### Summary
+
+| Module | Methods | Attributes |
+|---|---:|---|
+| [execution_contracts](../modules/execution_contracts.md) | 0 | — |

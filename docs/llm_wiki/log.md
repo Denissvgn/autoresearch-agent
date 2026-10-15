@@ -27,3 +27,59 @@ Append-only chronological log.
 - Kubernetes files: 0
 - Runtime/config YAML files: 0
 - Cross-references resolved: 403
+
+## 2026-10-15
+
+### Wiki sync
+- Source: `.`
+- Generator version: `2.5.0`
+- Source selection profile: none (default discovery)
+- Source selection fingerprint: none
+- Source snapshot digest: `sha256:4474283eea6eaa3c48033910ab7837b2cd3def61d666c0770b47bb3e8a6a64b1`
+- Pages created: 4
+- Pages updated: 3
+- Pages metadata-only: 0
+- Pages skipped (unchanged): 735
+- Pages deprecated: 0
+- Semantic fields preserved: 0
+- Moved entities: none
+- Flow pages initialized: 1 (process=1)
+- Workflow pages created: 0
+- Dependency pages initialized: 0
+- Surface policy updated: no
+
+## 2026-10-15
+
+### Wiki sync
+- Source: `.`
+- Generator version: `2.5.0`
+- Source selection profile: none (default discovery)
+- Source selection fingerprint: none
+- Source snapshot digest: `sha256:32e8a9a63c993f746c5da283e1a1656ca82fbc7b4e432d7a78735c32fc305195`
+- Pages created: 53
+- Pages updated: 4
+- Pages metadata-only: 0
+- Pages skipped (unchanged): 738
+- Pages deprecated: 0
+- Semantic fields preserved: 0
+- Moved entities: none
+- Flow pages initialized: 12 (api=12)
+- Workflow pages created: 0
+- Dependency pages initialized: 0
+- Surface policy updated: no
+
+## 2026-10-15
+
+### Wiki sync
+- Source: `.`
+- Generator version: `2.5.0`
+- Source selection profile: none (default discovery)
+- Source selection fingerprint: none
+- Source snapshot digest: `sha256:32e8a9a63c993f746c5da283e1a1656ca82fbc7b4e432d7a78735c32fc305195`
+- Pages created: 0
+- Pages updated: 2
+- Pages metadata-only: 0
+- Pages skipped (unchanged): 793
+- Pages deprecated: 0
+- Semantic fields preserved: 0
+- Moved entities: none

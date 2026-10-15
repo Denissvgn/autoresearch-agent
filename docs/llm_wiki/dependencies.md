@@ -82,7 +82,9 @@ flowchart TD
 | [skill_generator](modules/skill_generator.md) | 3 | 3 |
 | [trial_workspace](modules/trial_workspace.md) | 3 | 0 |
 | [src_main](modules/src_main.md) | 3 | 16 |
+| [compat_legacy_alias](modules/compat_legacy_alias.md) | 2 | 0 |
 | [bootstrap_runner](modules/bootstrap_runner.md) | 2 | 4 |
+| [execution_contracts](modules/execution_contracts.md) | 2 | 1 |
 | [http_headers](modules/http_headers.md) | 2 | 0 |
 | [output_digest](modules/output_digest.md) | 2 | 0 |
 | [research_manifest](modules/research_manifest.md) | 2 | 5 |
@@ -97,7 +99,6 @@ flowchart TD
 | [registry](modules/registry.md) | 2 | 2 |
 | [productionOps](modules/productionOps.md) | 2 | 0 |
 | [cli](modules/cli.md) | 1 | 7 |
-| [compat_legacy_alias](modules/compat_legacy_alias.md) | 1 | 0 |
 | [legacy_phase_tables](modules/legacy_phase_tables.md) | 1 | 0 |
 | [ml_enrichment](modules/ml_enrichment.md) | 1 | 0 |
 | [development_inference_validation](modules/development_inference_validation.md) | 1 | 0 |
@@ -123,6 +124,7 @@ flowchart TD
 | [examples_prompt-registry_main](modules/examples_prompt-registry_main.md) | 0 | 0 |
 | [check_doc_references](modules/check_doc_references.md) | 0 | 0 |
 | [check_domain_coupling](modules/check_domain_coupling.md) | 0 | 0 |
+| [check_execution_ledger](modules/check_execution_ledger.md) | 0 | 0 |
 | [check_legacy_vocab_branching](modules/check_legacy_vocab_branching.md) | 0 | 0 |
 | [migrate_sqlite_to_postgres](modules/migrate_sqlite_to_postgres.md) | 0 | 1 |
 | [code-refactor_bootstrap](modules/code-refactor_bootstrap.md) | 0 | 0 |
@@ -150,6 +152,7 @@ flowchart TD
 | [test_command_policy](modules/test_command_policy.md) | 0 | 3 |
 | [test_config_promoter_atomic](modules/test_config_promoter_atomic.md) | 0 | 1 |
 | [test_config_promoter_gate_bundle](modules/test_config_promoter_gate_bundle.md) | 0 | 3 |
+| [test_contract_examples](modules/test_contract_examples.md) | 0 | 1 |
 | [test_cross_session_digest_hint](modules/test_cross_session_digest_hint.md) | 0 | 2 |
 | [test_cross_worker_control](modules/test_cross_worker_control.md) | 0 | 4 |
 | [test_delete_session_hpo_cascade](modules/test_delete_session_hpo_cascade.md) | 0 | 1 |
@@ -162,6 +165,8 @@ flowchart TD
 | [test_event_broadcaster_concurrency](modules/test_event_broadcaster_concurrency.md) | 0 | 1 |
 | [test_evidence_artifact_validation](modules/test_evidence_artifact_validation.md) | 0 | 2 |
 | [test_execution_concurrency](modules/test_execution_concurrency.md) | 0 | 3 |
+| [test_execution_contracts](modules/test_execution_contracts.md) | 0 | 1 |
+| [test_execution_ledger_validator](modules/test_execution_ledger_validator.md) | 0 | 0 |
 | [test_experiment_parser_calibration](modules/test_experiment_parser_calibration.md) | 0 | 1 |
 | [test_experiment_parser_inference_parity](modules/test_experiment_parser_inference_parity.md) | 0 | 1 |
 | [test_experiment_parser_promotion_scope](modules/test_experiment_parser_promotion_scope.md) | 0 | 1 |

@@ -18,18 +18,18 @@
     "by_kind": {
       "api-contracts": 0,
       "dependencies": 1,
-      "entities": 386,
-      "flows": 98,
+      "entities": 425,
+      "flows": 111,
       "guides": 0,
       "index": 1,
       "infrastructure": 3,
       "load-order": 1,
       "log": 1,
-      "modules": 238,
+      "modules": 243,
       "workflows": 13
     },
     "dependency_architecture": 2,
-    "total": 742
+    "total": 799
   },
   "dependency_pages": {
     "count": 2,
@@ -504,6 +504,271 @@
       "category": "api",
       "detector": "builtin",
       "entry_point": {
+        "label": "canonical_digest",
+        "source_path": "src/core/execution_contracts.py",
+        "symbol": "canonical_digest"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [],
+          "gaps": [
+            {
+              "kind": "external_call",
+              "line": 218,
+              "step": "canonical_digest",
+              "target": "json.dumps"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 219,
+              "step": "canonical_digest",
+              "target": "hashlib.sha256(encoded.encode('utf-8')).hexdigest"
+            },
+            {
+              "kind": "external_call",
+              "line": 219,
+              "step": "canonical_digest",
+              "target": "hashlib.sha256"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 219,
+              "step": "canonical_digest",
+              "target": "encoded.encode"
+            }
+          ],
+          "generated": true,
+          "step_count": 5,
+          "transfer_count": 4,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/execution_contracts.py"
+          ],
+          "step_count": 5,
+          "truncated": false
+        }
+      },
+      "id": "api-canonical_digest",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
+        "label": "ensure_capabilities_allowed",
+        "source_path": "src/core/execution_contracts.py",
+        "symbol": "ensure_capabilities_allowed"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [],
+          "gaps": [
+            {
+              "kind": "external_call",
+              "line": 505,
+              "step": "ensure_capabilities_allowed",
+              "target": "sorted"
+            },
+            {
+              "kind": "external_call",
+              "line": 510,
+              "step": "ensure_capabilities_allowed",
+              "target": "sorted"
+            }
+          ],
+          "generated": true,
+          "step_count": 6,
+          "transfer_count": 5,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/execution_contracts.py"
+          ],
+          "step_count": 6,
+          "truncated": false
+        }
+      },
+      "id": "api-ensure_capabilities_allowed",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
+        "label": "ensure_isolation_boundary",
+        "source_path": "src/core/execution_contracts.py",
+        "symbol": "ensure_isolation_boundary"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [],
+          "gaps": [],
+          "generated": true,
+          "step_count": 2,
+          "transfer_count": 1,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/execution_contracts.py"
+          ],
+          "step_count": 2,
+          "truncated": false
+        }
+      },
+      "id": "api-ensure_isolation_boundary",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
+        "label": "ensure_minimum_capabilities",
+        "source_path": "src/core/execution_contracts.py",
+        "symbol": "ensure_minimum_capabilities"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [],
+          "gaps": [
+            {
+              "kind": "unresolved_call",
+              "line": 487,
+              "step": "ensure_minimum_capabilities",
+              "target": "descriptor.unsupported.get"
+            },
+            {
+              "kind": "external_call",
+              "line": 487,
+              "step": "ensure_minimum_capabilities",
+              "target": "sorted"
+            },
+            {
+              "kind": "external_call",
+              "line": 491,
+              "step": "ensure_minimum_capabilities",
+              "target": "sorted"
+            }
+          ],
+          "generated": true,
+          "step_count": 6,
+          "transfer_count": 5,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/execution_contracts.py"
+          ],
+          "step_count": 6,
+          "truncated": false
+        }
+      },
+      "id": "api-ensure_minimum_capabilities",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
+        "label": "ensure_request_matches_run_spec",
+        "source_path": "src/core/execution_contracts.py",
+        "symbol": "ensure_request_matches_run_spec"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 916,
+              "step": "ensure_request_matches_run_spec",
+              "step_index": 1,
+              "target": "mismatches.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 918,
+              "step": "ensure_request_matches_run_spec",
+              "step_index": 1,
+              "target": "mismatches.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 920,
+              "step": "ensure_request_matches_run_spec",
+              "step_index": 1,
+              "target": "mismatches.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 922,
+              "step": "ensure_request_matches_run_spec",
+              "step_index": 1,
+              "target": "mismatches.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 924,
+              "step": "ensure_request_matches_run_spec",
+              "step_index": 1,
+              "target": "mismatches.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 926,
+              "step": "ensure_request_matches_run_spec",
+              "step_index": 1,
+              "target": "mismatches.append"
+            }
+          ],
+          "gaps": [
+            {
+              "kind": "unresolved_call",
+              "line": 915,
+              "step": "ensure_request_matches_run_spec",
+              "target": "spec.spec_digest"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 925,
+              "step": "ensure_request_matches_run_spec",
+              "target": "spec.inputs.environment.digest"
+            },
+            {
+              "kind": "external_call",
+              "line": 930,
+              "step": "ensure_request_matches_run_spec",
+              "target": "sorted"
+            }
+          ],
+          "generated": true,
+          "step_count": 11,
+          "transfer_count": 10,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/execution_contracts.py"
+          ],
+          "step_count": 11,
+          "truncated": false
+        }
+      },
+      "id": "api-ensure_request_matches_run_spec",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
         "label": "is_known_model_type",
         "source_path": "src/compat/legacy_alias.py",
         "symbol": "is_known_model_type"
@@ -554,6 +819,47 @@
         }
       },
       "id": "api-is_legal_transition",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
+        "label": "is_secret_reference",
+        "source_path": "src/core/execution_contracts.py",
+        "symbol": "is_secret_reference"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [],
+          "gaps": [
+            {
+              "kind": "external_call",
+              "line": 182,
+              "step": "is_secret_reference",
+              "target": "isinstance"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 182,
+              "step": "is_secret_reference",
+              "target": "value.startswith"
+            }
+          ],
+          "generated": true,
+          "step_count": 3,
+          "transfer_count": 2,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/execution_contracts.py"
+          ],
+          "step_count": 3,
+          "truncated": false
+        }
+      },
+      "id": "api-is_secret_reference",
       "language": "python"
     },
     {
@@ -894,6 +1200,34 @@
       "category": "api",
       "detector": "builtin",
       "entry_point": {
+        "label": "objective_policy_from_skill_metric",
+        "source_path": "src/core/execution_contracts.py",
+        "symbol": "objective_policy_from_skill_metric"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [],
+          "gaps": [],
+          "generated": true,
+          "step_count": 2,
+          "transfer_count": 1,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/execution_contracts.py"
+          ],
+          "step_count": 2,
+          "truncated": false
+        }
+      },
+      "id": "api-objective_policy_from_skill_metric",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
         "label": "phases_for_model",
         "source_path": "src/compat/legacy_phase_tables.py",
         "symbol": "phases_for_model"
@@ -1068,6 +1402,303 @@
         }
       },
       "id": "api-promotion_target_from_manifest",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
+        "label": "read_legacy_session_manifest",
+        "source_path": "src/core/execution_contracts.py",
+        "symbol": "read_legacy_session_manifest"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 1421,
+              "step": "read_legacy_session_manifest",
+              "step_index": 1,
+              "target": "consumed.extend"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 1426,
+              "step": "read_legacy_session_manifest",
+              "step_index": 1,
+              "target": "consumed.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 1430,
+              "step": "read_legacy_session_manifest",
+              "step_index": 1,
+              "target": "consumed.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 1433,
+              "step": "read_legacy_session_manifest",
+              "step_index": 1,
+              "target": "consumed.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 1328,
+              "step": "_check_rejected_fields",
+              "step_index": 5,
+              "target": "issues.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 1339,
+              "step": "_check_rejected_fields",
+              "step_index": 5,
+              "target": "absent.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 1354,
+              "step": "_require_identity",
+              "step_index": 12,
+              "target": "consumed.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 1357,
+              "step": "_require_identity",
+              "step_index": 12,
+              "target": "consumed.append"
+            }
+          ],
+          "gaps": [
+            {
+              "kind": "unresolved_call",
+              "line": 1394,
+              "step": "read_legacy_session_manifest",
+              "target": "payload.get"
+            },
+            {
+              "kind": "external_call",
+              "line": 1398,
+              "step": "read_legacy_session_manifest",
+              "target": "sorted"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 1326,
+              "step": "_check_rejected_fields",
+              "target": "payload.get"
+            },
+            {
+              "kind": "external_call",
+              "line": 1343,
+              "step": "_check_rejected_fields",
+              "target": "sorted"
+            },
+            {
+              "kind": "step_limit",
+              "line": 0,
+              "step": "read_legacy_session_manifest",
+              "target": "first 12 steps"
+            }
+          ],
+          "generated": true,
+          "step_count": 12,
+          "transfer_count": 11,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/execution_contracts.py",
+            "src/compat/legacy_alias.py"
+          ],
+          "step_count": 61,
+          "truncated": false
+        }
+      },
+      "id": "api-read_legacy_session_manifest",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
+        "label": "read_legacy_start_request",
+        "source_path": "src/core/execution_contracts.py",
+        "symbol": "read_legacy_start_request"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 1470,
+              "step": "read_legacy_start_request",
+              "step_index": 1,
+              "target": "consumed.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 1475,
+              "step": "read_legacy_start_request",
+              "step_index": 1,
+              "target": "consumed.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 1479,
+              "step": "read_legacy_start_request",
+              "step_index": 1,
+              "target": "consumed.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 1482,
+              "step": "read_legacy_start_request",
+              "step_index": 1,
+              "target": "consumed.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 1328,
+              "step": "_check_rejected_fields",
+              "step_index": 2,
+              "target": "issues.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 1339,
+              "step": "_check_rejected_fields",
+              "step_index": 2,
+              "target": "absent.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 1354,
+              "step": "_require_identity",
+              "step_index": 9,
+              "target": "consumed.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 1357,
+              "step": "_require_identity",
+              "step_index": 9,
+              "target": "consumed.append"
+            }
+          ],
+          "gaps": [
+            {
+              "kind": "unresolved_call",
+              "line": 1326,
+              "step": "_check_rejected_fields",
+              "target": "payload.get"
+            },
+            {
+              "kind": "external_call",
+              "line": 1343,
+              "step": "_check_rejected_fields",
+              "target": "sorted"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 1352,
+              "step": "_require_identity",
+              "target": "payload.get"
+            },
+            {
+              "kind": "step_limit",
+              "line": 0,
+              "step": "read_legacy_start_request",
+              "target": "first 12 steps"
+            }
+          ],
+          "generated": true,
+          "step_count": 12,
+          "transfer_count": 11,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/execution_contracts.py",
+            "src/compat/legacy_alias.py"
+          ],
+          "step_count": 57,
+          "truncated": false
+        }
+      },
+      "id": "api-read_legacy_start_request",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
+        "label": "reject_raw_secret_parameters",
+        "source_path": "src/core/execution_contracts.py",
+        "symbol": "reject_raw_secret_parameters"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [],
+          "gaps": [
+            {
+              "kind": "unresolved_call",
+              "line": 187,
+              "step": "reject_raw_secret_parameters",
+              "target": "parameters.items"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 188,
+              "step": "reject_raw_secret_parameters",
+              "target": "_SECRET_PARAM_KEY_RE.search"
+            },
+            {
+              "kind": "external_call",
+              "line": 182,
+              "step": "is_secret_reference",
+              "target": "isinstance"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 182,
+              "step": "is_secret_reference",
+              "target": "value.startswith"
+            }
+          ],
+          "generated": true,
+          "step_count": 7,
+          "transfer_count": 6,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/execution_contracts.py"
+          ],
+          "step_count": 7,
+          "truncated": false
+        }
+      },
+      "id": "api-reject_raw_secret_parameters",
       "language": "python"
     },
     {
@@ -1281,6 +1912,90 @@
         }
       },
       "id": "api-render_path_template",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
+        "label": "resolve_run_inputs",
+        "source_path": "src/core/execution_contracts.py",
+        "symbol": "resolve_run_inputs"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 1103,
+              "step": "resolve_run_inputs",
+              "step_index": 1,
+              "target": "records.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 1126,
+              "step": "resolve_run_inputs",
+              "step_index": 1,
+              "target": "records.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 1142,
+              "step": "resolve_run_inputs",
+              "step_index": 1,
+              "target": "records.append"
+            }
+          ],
+          "gaps": [
+            {
+              "kind": "unresolved_call",
+              "line": 187,
+              "step": "reject_raw_secret_parameters",
+              "target": "parameters.items"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 188,
+              "step": "reject_raw_secret_parameters",
+              "target": "_SECRET_PARAM_KEY_RE.search"
+            },
+            {
+              "kind": "external_call",
+              "line": 182,
+              "step": "is_secret_reference",
+              "target": "isinstance"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 182,
+              "step": "is_secret_reference",
+              "target": "value.startswith"
+            },
+            {
+              "kind": "step_limit",
+              "line": 0,
+              "step": "resolve_run_inputs",
+              "target": "first 12 steps"
+            }
+          ],
+          "generated": true,
+          "step_count": 12,
+          "transfer_count": 11,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/execution_contracts.py"
+          ],
+          "step_count": 34,
+          "truncated": false
+        }
+      },
+      "id": "api-resolve_run_inputs",
       "language": "python"
     },
     {
@@ -1899,6 +2614,43 @@
         }
       },
       "id": "api-validate_path_template",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
+        "label": "validate_secret_list",
+        "source_path": "src/core/execution_contracts.py",
+        "symbol": "validate_secret_list"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 201,
+              "step": "validate_secret_list",
+              "step_index": 1,
+              "target": "seen.add"
+            }
+          ],
+          "gaps": [],
+          "generated": true,
+          "step_count": 5,
+          "transfer_count": 4,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/execution_contracts.py"
+          ],
+          "step_count": 5,
+          "truncated": false
+        }
+      },
+      "id": "api-validate_secret_list",
       "language": "python"
     },
     {
@@ -6397,6 +7149,130 @@
       "category": "process",
       "detector": "builtin",
       "entry_point": {
+        "label": "check_execution_ledger",
+        "source_path": "scripts/check_execution_ledger.py",
+        "symbol": "main"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [
+            {
+              "confidence": "unknown",
+              "kind": "output",
+              "line": 291,
+              "step": "main",
+              "step_index": 1,
+              "target": "print"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "output",
+              "line": 293,
+              "step": "main",
+              "step_index": 1,
+              "target": "print"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "output",
+              "line": 295,
+              "step": "main",
+              "step_index": 1,
+              "target": "print"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 281,
+              "step": "validate_ledger",
+              "step_index": 5,
+              "target": "errors.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "filesystem_read",
+              "line": 56,
+              "step": "_load_json",
+              "step_index": 6,
+              "target": "path.read_text"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 83,
+              "step": "validate_cards",
+              "step_index": 11,
+              "target": "errors.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 90,
+              "step": "validate_cards",
+              "step_index": 11,
+              "target": "errors.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 94,
+              "step": "validate_cards",
+              "step_index": 11,
+              "target": "errors.append"
+            }
+          ],
+          "gaps": [
+            {
+              "kind": "external_call",
+              "line": 286,
+              "step": "main",
+              "target": "argparse.ArgumentParser"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 287,
+              "step": "main",
+              "target": "ap.add_argument"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 288,
+              "step": "main",
+              "target": "ap.parse_args"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 81,
+              "step": "validate_cards",
+              "target": "cards_doc.get"
+            },
+            {
+              "kind": "step_limit",
+              "line": 0,
+              "step": "main",
+              "target": "first 12 steps"
+            }
+          ],
+          "generated": true,
+          "step_count": 12,
+          "transfer_count": 11,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "scripts/check_execution_ledger.py"
+          ],
+          "step_count": 148,
+          "truncated": false
+        }
+      },
+      "id": "process-check_execution_ledger",
+      "language": "python"
+    },
+    {
+      "category": "process",
+      "detector": "builtin",
+      "entry_point": {
         "label": "check_legacy_vocab_branching",
         "source_path": "scripts/check_legacy_vocab_branching.py",
         "symbol": "main"
@@ -7049,6 +7925,7 @@
         "entities/AgentLogWriter.md",
         "entities/AgentOrchestrator.md",
         "entities/AnthropicProvider.md",
+        "entities/ArtifactRef.md",
         "entities/ArtifactStoreTarget.md",
         "entities/AuditStore.md",
         "entities/AuthenticatedActor.md",
@@ -7058,6 +7935,10 @@
         "entities/BlockerDetailShape.md",
         "entities/BootstrapOutcome.md",
         "entities/BootstrapRunner.md",
+        "entities/BudgetDimensions.md",
+        "entities/CandidateData.md",
+        "entities/CandidateIdentity.md",
+        "entities/CapabilityDescriptor.md",
         "entities/CapturingBroadcaster.md",
         "entities/Category.md",
         "entities/ClassificationResult.md",
@@ -7080,6 +7961,8 @@
         "entities/ConfigPromoter.md",
         "entities/ConsistencyReport.md",
         "entities/ContinueResearchRequest.md",
+        "entities/ContractError.md",
+        "entities/ContractMigrationError.md",
         "entities/ControlFakeOrchestrator.md",
         "entities/CostEstimate.md",
         "entities/DecisionVocabulary.md",
@@ -7090,10 +7973,13 @@
         "entities/DomainClassifier.md",
         "entities/DynamicFormFields_Props.md",
         "entities/EmbeddingBackend.md",
+        "entities/EnvironmentIdentity.md",
         "entities/ErrorClass.md",
         "entities/EstimateCostRequest.md",
         "entities/EventBroadcaster.md",
         "entities/ExecutionConfig.md",
+        "entities/ExecutionRequest.md",
+        "entities/FailureRecord.md",
         "entities/FakeMlflowAsyncClient.md",
         "entities/FakeMlflowResponse.md",
         "entities/FakeOrchestrator.md",
@@ -7112,6 +7998,8 @@
         "entities/GenuinenessStore.md",
         "entities/GitBranchTarget.md",
         "entities/GovernedCommandRunner.md",
+        "entities/HarnessConfig.md",
+        "entities/HarnessPreferences.md",
         "entities/HeadTailBuffer.md",
         "entities/HpoStudy.md",
         "entities/HpoStudyResult.md",
@@ -7126,6 +8014,8 @@
         "entities/IllegalTransitionError.md",
         "entities/InferenceParitySummary.md",
         "entities/InsightsConfig.md",
+        "entities/IntegrationDirection.md",
+        "entities/IsolationBoundary.md",
         "entities/Iteration.md",
         "entities/IterationMetrics.md",
         "entities/IterationRecord.md",
@@ -7133,6 +8023,9 @@
         "entities/IterationsTable_Props.md",
         "entities/JSONMarkerParser.md",
         "entities/LeaderboardEntry.md",
+        "entities/LedgerError.md",
+        "entities/LegacyFieldCompat.md",
+        "entities/LegacyRunInputs.md",
         "entities/LexicalEmbeddingBackend.md",
         "entities/LifecycleTransitionResult.md",
         "entities/LLMConfig.md",
@@ -7142,6 +8035,7 @@
         "entities/ManifestVersionError.md",
         "entities/Message.md",
         "entities/MetricChartProps.md",
+        "entities/MetricConstraint.md",
         "entities/MetricDef.md",
         "entities/MetricDiagnostic.md",
         "entities/MetricGoal.md",
@@ -7149,8 +8043,14 @@
         "entities/MetricsChart_Props.md",
         "entities/MockProvider.md",
         "entities/ModelInfo.md",
+        "entities/NetworkPolicy.md",
+        "entities/ObjectiveDirection.md",
+        "entities/ObjectiveGoal.md",
+        "entities/ObjectivePolicy.md",
+        "entities/ObservationIdentity.md",
         "entities/OosProvenanceSummary.md",
         "entities/OpenAIProvider.md",
+        "entities/OperatorConstraints.md",
         "entities/OpsTone.md",
         "entities/OutputCallback.md",
         "entities/OutputParser.md",
@@ -7224,17 +8124,26 @@
         "entities/ResearchState.md",
         "entities/ResearchStatePanel_Props.md",
         "entities/ResizeObserverStub.md",
+        "entities/ResolutionRecord.md",
+        "entities/ResolvedRunInputs.md",
+        "entities/ResourceLimits.md",
         "entities/ResourceWatcher.md",
+        "entities/ResultReceipt.md",
         "entities/RlProfitSummary.md",
         "entities/RollbackStatusSummary.md",
         "entities/RowExtractor.md",
+        "entities/RunInputs.md",
+        "entities/RunLineage.md",
+        "entities/RunSpec.md",
         "entities/RuntimeResumeRequest.md",
         "entities/ScopedPromotionMetadata.md",
         "entities/ScopeOption.md",
+        "entities/ScorerRef.md",
         "entities/ScriptedOpenAIClient.md",
         "entities/ScriptedOrchestrator.md",
         "entities/ScriptedProvider.md",
         "entities/SecondaryMetric.md",
+        "entities/SecretReference.md",
         "entities/SegmentedOption.md",
         "entities/SegmentedProps.md",
         "entities/ServicePreflightError.md",
@@ -7257,6 +8166,7 @@
         "entities/skill_manifest_PromotionTarget.md",
         "entities/skill_runtime_Phase.md",
         "entities/SkillConfigError.md",
+        "entities/SkillDefaults.md",
         "entities/SkillGenerationError.md",
         "entities/SkillGenerator.md",
         "entities/SkillLayout.md",
@@ -7266,6 +8176,7 @@
         "entities/SkillLifecycleState.md",
         "entities/SkillMatch.md",
         "entities/SkillNotRegisteredError.md",
+        "entities/SkillPackageRef.md",
         "entities/SkillPicker_Props.md",
         "entities/SkillPluginRenderer.md",
         "entities/SkillPluginRendererProps.md",
@@ -7416,13 +8327,17 @@
         "entities/TrialIdentityConfig.md",
         "entities/TurnTrialState.md",
         "entities/UIConfig.md",
+        "entities/UnsupportedCapabilityError.md",
         "entities/Usage.md",
         "entities/VariantDescriptor.md",
         "entities/VariantsConfig.md",
+        "entities/VerifiedResult.md",
+        "entities/VersionedContract.md",
         "entities/WebhookDeliveryError.md",
         "entities/WebhookPromotionTarget.md",
         "entities/WebhookTarget.md",
         "entities/WebSocketContextValue.md",
+        "entities/WorkspaceBounds.md",
         "entities/WorkspaceConfig.md",
         "entities/WSEvent.md",
         "entities/YieldingFakeWS.md",
@@ -7433,20 +8348,31 @@
         "flows/api-build_generation_prompt.md",
         "flows/api-build_provider.md",
         "flows/api-build_trial_context.md",
+        "flows/api-canonical_digest.md",
+        "flows/api-ensure_capabilities_allowed.md",
+        "flows/api-ensure_isolation_boundary.md",
+        "flows/api-ensure_minimum_capabilities.md",
+        "flows/api-ensure_request_matches_run_spec.md",
         "flows/api-is_known_model_type.md",
         "flows/api-is_legal_transition.md",
+        "flows/api-is_secret_reference.md",
         "flows/api-is_trial_eligible_command.md",
         "flows/api-load_layout.md",
         "flows/api-load_skill_manifest.md",
         "flows/api-materialize_skill_runtime.md",
         "flows/api-mean_std.md",
         "flows/api-model_type_to_skill_id.md",
+        "flows/api-objective_policy_from_skill_metric.md",
         "flows/api-phases_for_model.md",
         "flows/api-preflight_check_from_target.md",
         "flows/api-prior_findings_path.md",
         "flows/api-promotion_target_from_manifest.md",
+        "flows/api-read_legacy_session_manifest.md",
+        "flows/api-read_legacy_start_request.md",
+        "flows/api-reject_raw_secret_parameters.md",
         "flows/api-render_findings_markdown.md",
         "flows/api-render_path_template.md",
+        "flows/api-resolve_run_inputs.md",
         "flows/api-samples_from_rows.md",
         "flows/api-sanitize_path_segment.md",
         "flows/api-selectable_for.md",
@@ -7458,6 +8384,7 @@
         "flows/api-target_state.md",
         "flows/api-trial_marker_candidates.md",
         "flows/api-validate_path_template.md",
+        "flows/api-validate_secret_list.md",
         "flows/http-continue_research.md",
         "flows/http-delete_research.md",
         "flows/http-download_agent_log.md",
@@ -7518,6 +8445,7 @@
         "flows/process-capture.md",
         "flows/process-check_doc_references.md",
         "flows/process-check_domain_coupling.md",
+        "flows/process-check_execution_ledger.md",
         "flows/process-check_legacy_vocab_branching.md",
         "flows/process-main.md",
         "flows/process-migrate_sqlite_to_postgres.md",
@@ -7541,6 +8469,7 @@
         "modules/capture.md",
         "modules/check_doc_references.md",
         "modules/check_domain_coupling.md",
+        "modules/check_execution_ledger.md",
         "modules/check_legacy_vocab_branching.md",
         "modules/cli.md",
         "modules/client.md",
@@ -7567,6 +8496,7 @@
         "modules/DynamicFormFields.test.md",
         "modules/events.md",
         "modules/examples_prompt-registry_main.md",
+        "modules/execution_contracts.md",
         "modules/experiment_parser.md",
         "modules/gate_status.md",
         "modules/History.md",
@@ -7652,6 +8582,7 @@
         "modules/test_command_policy.md",
         "modules/test_config_promoter_atomic.md",
         "modules/test_config_promoter_gate_bundle.md",
+        "modules/test_contract_examples.md",
         "modules/test_cross_session_digest_hint.md",
         "modules/test_cross_worker_control.md",
         "modules/test_delete_session_hpo_cascade.md",
@@ -7664,6 +8595,8 @@
         "modules/test_event_broadcaster_concurrency.md",
         "modules/test_evidence_artifact_validation.md",
         "modules/test_execution_concurrency.md",
+        "modules/test_execution_contracts.md",
+        "modules/test_execution_ledger_validator.md",
         "modules/test_experiment_parser_calibration.md",
         "modules/test_experiment_parser_inference_parity.md",
         "modules/test_experiment_parser_promotion_scope.md",
@@ -7917,6 +8850,18 @@
       "title": "AnthropicProvider"
     },
     {
+      "canonical_path": "entities/ArtifactRef.md",
+      "id": "ArtifactRef",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/ArtifactRef",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "ArtifactRef"
+    },
+    {
       "canonical_path": "entities/ArtifactStoreTarget.md",
       "id": "ArtifactStoreTarget",
       "kind": "entities",
@@ -8027,6 +8972,58 @@
       "role": "semantic",
       "source_path": "src/core/bootstrap_runner.py",
       "title": "BootstrapRunner"
+    },
+    {
+      "canonical_path": "entities/BudgetDimensions.md",
+      "id": "BudgetDimensions",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/BudgetDimensions",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "BudgetDimensions"
+    },
+    {
+      "canonical_path": "entities/CandidateData.md",
+      "id": "CandidateData",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/CandidateData",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "CandidateData"
+    },
+    {
+      "canonical_path": "entities/CandidateIdentity.md",
+      "id": "CandidateIdentity",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/CandidateIdentity",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "CandidateIdentity"
+    },
+    {
+      "canonical_path": "entities/CapabilityDescriptor.md",
+      "id": "CapabilityDescriptor",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/CapabilityDescriptor",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "CapabilityDescriptor"
     },
     {
       "canonical_path": "entities/CapturingBroadcaster.md",
@@ -8321,6 +9318,30 @@
       "title": "ContinueResearchRequest"
     },
     {
+      "canonical_path": "entities/ContractError.md",
+      "id": "ContractError",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/ContractError",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "ContractError"
+    },
+    {
+      "canonical_path": "entities/ContractMigrationError.md",
+      "id": "ContractMigrationError",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/ContractMigrationError",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "ContractMigrationError"
+    },
+    {
       "canonical_path": "entities/ControlFakeOrchestrator.md",
       "id": "ControlFakeOrchestrator",
       "kind": "entities",
@@ -8448,6 +9469,19 @@
       "title": "EmbeddingBackend"
     },
     {
+      "canonical_path": "entities/EnvironmentIdentity.md",
+      "id": "EnvironmentIdentity",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/EnvironmentIdentity",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "EnvironmentIdentity"
+    },
+    {
       "canonical_path": "entities/ErrorClass.md",
       "id": "ErrorClass",
       "kind": "entities",
@@ -8504,6 +9538,32 @@
       "role": "semantic",
       "source_path": "src/core/skill_manifest.py",
       "title": "ExecutionConfig"
+    },
+    {
+      "canonical_path": "entities/ExecutionRequest.md",
+      "id": "ExecutionRequest",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/ExecutionRequest",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "ExecutionRequest"
+    },
+    {
+      "canonical_path": "entities/FailureRecord.md",
+      "id": "FailureRecord",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/FailureRecord",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "FailureRecord"
     },
     {
       "canonical_path": "entities/FakeMlflowAsyncClient.md",
@@ -8734,6 +9794,32 @@
       "title": "GovernedCommandRunner"
     },
     {
+      "canonical_path": "entities/HarnessConfig.md",
+      "id": "HarnessConfig",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/HarnessConfig",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "HarnessConfig"
+    },
+    {
+      "canonical_path": "entities/HarnessPreferences.md",
+      "id": "HarnessPreferences",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/HarnessPreferences",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "HarnessPreferences"
+    },
+    {
       "canonical_path": "entities/HeadTailBuffer.md",
       "id": "HeadTailBuffer",
       "kind": "entities",
@@ -8910,6 +9996,31 @@
       "title": "InsightsConfig"
     },
     {
+      "canonical_path": "entities/IntegrationDirection.md",
+      "id": "IntegrationDirection",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/IntegrationDirection",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "IntegrationDirection"
+    },
+    {
+      "canonical_path": "entities/IsolationBoundary.md",
+      "id": "IsolationBoundary",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/IsolationBoundary",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "IsolationBoundary"
+    },
+    {
       "canonical_path": "entities/Iteration.md",
       "id": "Iteration",
       "kind": "entities",
@@ -9003,6 +10114,42 @@
       "role": "semantic",
       "source_path": "ui/src/api/client.ts",
       "title": "LeaderboardEntry"
+    },
+    {
+      "canonical_path": "entities/LedgerError.md",
+      "id": "LedgerError",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/LedgerError",
+      "outgoing_internal_links": [
+        "modules/check_execution_ledger.md"
+      ],
+      "role": "semantic",
+      "source_path": "scripts/check_execution_ledger.py",
+      "title": "LedgerError"
+    },
+    {
+      "canonical_path": "entities/LegacyFieldCompat.md",
+      "id": "LegacyFieldCompat",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/LegacyFieldCompat",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "LegacyFieldCompat"
+    },
+    {
+      "canonical_path": "entities/LegacyRunInputs.md",
+      "id": "LegacyRunInputs",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/LegacyRunInputs",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "LegacyRunInputs"
     },
     {
       "canonical_path": "entities/LexicalEmbeddingBackend.md",
@@ -9130,6 +10277,19 @@
       "title": "MetricChartProps"
     },
     {
+      "canonical_path": "entities/MetricConstraint.md",
+      "id": "MetricConstraint",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/MetricConstraint",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "MetricConstraint"
+    },
+    {
       "canonical_path": "entities/MetricDef.md",
       "id": "MetricDef",
       "kind": "entities",
@@ -9216,6 +10376,69 @@
       "title": "ModelInfo"
     },
     {
+      "canonical_path": "entities/NetworkPolicy.md",
+      "id": "NetworkPolicy",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/NetworkPolicy",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "NetworkPolicy"
+    },
+    {
+      "canonical_path": "entities/ObjectiveDirection.md",
+      "id": "ObjectiveDirection",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/ObjectiveDirection",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "ObjectiveDirection"
+    },
+    {
+      "canonical_path": "entities/ObjectiveGoal.md",
+      "id": "ObjectiveGoal",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/ObjectiveGoal",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "ObjectiveGoal"
+    },
+    {
+      "canonical_path": "entities/ObjectivePolicy.md",
+      "id": "ObjectivePolicy",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/ObjectivePolicy",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "ObjectivePolicy"
+    },
+    {
+      "canonical_path": "entities/ObservationIdentity.md",
+      "id": "ObservationIdentity",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/ObservationIdentity",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "ObservationIdentity"
+    },
+    {
       "canonical_path": "entities/OosProvenanceSummary.md",
       "id": "OosProvenanceSummary",
       "kind": "entities",
@@ -9240,6 +10463,19 @@
       "role": "semantic",
       "source_path": "src/core/llm_provider.py",
       "title": "OpenAIProvider"
+    },
+    {
+      "canonical_path": "entities/OperatorConstraints.md",
+      "id": "OperatorConstraints",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/OperatorConstraints",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "OperatorConstraints"
     },
     {
       "canonical_path": "entities/OpsTone.md",
@@ -10184,6 +11420,43 @@
       "title": "ResizeObserverStub"
     },
     {
+      "canonical_path": "entities/ResolutionRecord.md",
+      "id": "ResolutionRecord",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/ResolutionRecord",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "ResolutionRecord"
+    },
+    {
+      "canonical_path": "entities/ResolvedRunInputs.md",
+      "id": "ResolvedRunInputs",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/ResolvedRunInputs",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "ResolvedRunInputs"
+    },
+    {
+      "canonical_path": "entities/ResourceLimits.md",
+      "id": "ResourceLimits",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/ResourceLimits",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "ResourceLimits"
+    },
+    {
       "canonical_path": "entities/ResourceWatcher.md",
       "id": "ResourceWatcher",
       "kind": "entities",
@@ -10194,6 +11467,19 @@
       "role": "semantic",
       "source_path": "src/core/plugin_runner.py",
       "title": "_ResourceWatcher"
+    },
+    {
+      "canonical_path": "entities/ResultReceipt.md",
+      "id": "ResultReceipt",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/ResultReceipt",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "ResultReceipt"
     },
     {
       "canonical_path": "entities/RlProfitSummary.md",
@@ -10232,6 +11518,44 @@
       "title": "RowExtractor"
     },
     {
+      "canonical_path": "entities/RunInputs.md",
+      "id": "RunInputs",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/RunInputs",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "RunInputs"
+    },
+    {
+      "canonical_path": "entities/RunLineage.md",
+      "id": "RunLineage",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/RunLineage",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "RunLineage"
+    },
+    {
+      "canonical_path": "entities/RunSpec.md",
+      "id": "RunSpec",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/RunSpec",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "RunSpec"
+    },
+    {
       "canonical_path": "entities/RuntimeResumeRequest.md",
       "id": "RuntimeResumeRequest",
       "kind": "entities",
@@ -10266,6 +11590,19 @@
       "role": "semantic",
       "source_path": "ui/src/pages/Promote.tsx",
       "title": "ScopeOption"
+    },
+    {
+      "canonical_path": "entities/ScorerRef.md",
+      "id": "ScorerRef",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/ScorerRef",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "ScorerRef"
     },
     {
       "canonical_path": "entities/ScriptedOpenAIClient.md",
@@ -10314,6 +11651,19 @@
       "role": "semantic",
       "source_path": "ui/src/api/client.ts",
       "title": "SecondaryMetric"
+    },
+    {
+      "canonical_path": "entities/SecretReference.md",
+      "id": "SecretReference",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/SecretReference",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "SecretReference"
     },
     {
       "canonical_path": "entities/SegmentedOption.md",
@@ -10621,6 +11971,19 @@
       "title": "SkillConfigError"
     },
     {
+      "canonical_path": "entities/SkillDefaults.md",
+      "id": "SkillDefaults",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/SkillDefaults",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "SkillDefaults"
+    },
+    {
       "canonical_path": "entities/SkillGenerationError.md",
       "id": "SkillGenerationError",
       "kind": "entities",
@@ -10745,6 +12108,19 @@
       "role": "semantic",
       "source_path": "src/core/skill_registry.py",
       "title": "SkillNotRegisteredError"
+    },
+    {
+      "canonical_path": "entities/SkillPackageRef.md",
+      "id": "SkillPackageRef",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/SkillPackageRef",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "SkillPackageRef"
     },
     {
       "canonical_path": "entities/SkillPicker_Props.md",
@@ -12615,6 +13991,18 @@
       "title": "UIConfig"
     },
     {
+      "canonical_path": "entities/UnsupportedCapabilityError.md",
+      "id": "UnsupportedCapabilityError",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/UnsupportedCapabilityError",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "UnsupportedCapabilityError"
+    },
+    {
       "canonical_path": "entities/Usage.md",
       "id": "Usage",
       "kind": "entities",
@@ -12653,6 +14041,31 @@
       "role": "semantic",
       "source_path": "src/core/skill_manifest.py",
       "title": "VariantsConfig"
+    },
+    {
+      "canonical_path": "entities/VerifiedResult.md",
+      "id": "VerifiedResult",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/VerifiedResult",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "VerifiedResult"
+    },
+    {
+      "canonical_path": "entities/VersionedContract.md",
+      "id": "VersionedContract",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/VersionedContract",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "VersionedContract"
     },
     {
       "canonical_path": "entities/WebhookDeliveryError.md",
@@ -12707,6 +14120,19 @@
       "role": "semantic",
       "source_path": "ui/src/hooks/useWebSocket.tsx",
       "title": "WebSocketContextValue"
+    },
+    {
+      "canonical_path": "entities/WorkspaceBounds.md",
+      "id": "WorkspaceBounds",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/WorkspaceBounds",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "WorkspaceBounds"
     },
     {
       "canonical_path": "entities/WorkspaceConfig.md",
@@ -12939,6 +14365,18 @@
       "title": "check_domain_coupling Module"
     },
     {
+      "canonical_path": "modules/check_execution_ledger.md",
+      "id": "check_execution_ledger",
+      "kind": "modules",
+      "mcp_uri": "llm-wiki://modules/check_execution_ledger",
+      "outgoing_internal_links": [
+        "entities/LedgerError.md"
+      ],
+      "role": "semantic",
+      "source_path": "scripts/check_execution_ledger.py",
+      "title": "check_execution_ledger Module"
+    },
+    {
       "canonical_path": "modules/check_legacy_vocab_branching.md",
       "id": "check_legacy_vocab_branching",
       "kind": "modules",
@@ -13110,7 +14548,8 @@
       "mcp_uri": "llm-wiki://modules/compat_legacy_alias",
       "outgoing_internal_links": [
         "modules/compat_legacy_alias.md",
-        "modules/core_legacy_alias.md"
+        "modules/core_legacy_alias.md",
+        "modules/execution_contracts.md"
       ],
       "role": "semantic",
       "source_path": "src/compat/legacy_alias.py",
@@ -13356,6 +14795,59 @@
       "role": "semantic",
       "source_path": "examples/prompt-registry/main.py",
       "title": "main Module"
+    },
+    {
+      "canonical_path": "modules/execution_contracts.md",
+      "id": "execution_contracts",
+      "kind": "modules",
+      "mcp_uri": "llm-wiki://modules/execution_contracts",
+      "outgoing_internal_links": [
+        "entities/ArtifactRef.md",
+        "entities/BudgetDimensions.md",
+        "entities/CandidateData.md",
+        "entities/CandidateIdentity.md",
+        "entities/CapabilityDescriptor.md",
+        "entities/ContractError.md",
+        "entities/ContractMigrationError.md",
+        "entities/EnvironmentIdentity.md",
+        "entities/ExecutionRequest.md",
+        "entities/FailureRecord.md",
+        "entities/HarnessConfig.md",
+        "entities/HarnessPreferences.md",
+        "entities/IntegrationDirection.md",
+        "entities/IsolationBoundary.md",
+        "entities/LegacyFieldCompat.md",
+        "entities/LegacyRunInputs.md",
+        "entities/MetricConstraint.md",
+        "entities/NetworkPolicy.md",
+        "entities/ObjectiveDirection.md",
+        "entities/ObjectiveGoal.md",
+        "entities/ObjectivePolicy.md",
+        "entities/ObservationIdentity.md",
+        "entities/OperatorConstraints.md",
+        "entities/ResolutionRecord.md",
+        "entities/ResolvedRunInputs.md",
+        "entities/ResourceLimits.md",
+        "entities/ResultReceipt.md",
+        "entities/RunInputs.md",
+        "entities/RunLineage.md",
+        "entities/RunSpec.md",
+        "entities/ScorerRef.md",
+        "entities/SecretReference.md",
+        "entities/SkillDefaults.md",
+        "entities/SkillPackageRef.md",
+        "entities/UnsupportedCapabilityError.md",
+        "entities/VerifiedResult.md",
+        "entities/VersionedContract.md",
+        "entities/WorkspaceBounds.md",
+        "modules/compat_legacy_alias.md",
+        "modules/execution_contracts.md",
+        "modules/test_contract_examples.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "execution_contracts Module"
     },
     {
       "canonical_path": "modules/experiment_parser.md",
@@ -14808,6 +16300,19 @@
       "title": "test_config_promoter_gate_bundle Module"
     },
     {
+      "canonical_path": "modules/test_contract_examples.md",
+      "id": "test_contract_examples",
+      "kind": "modules",
+      "mcp_uri": "llm-wiki://modules/test_contract_examples",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_contract_examples.md"
+      ],
+      "role": "semantic",
+      "source_path": "tests/test_contract_examples.py",
+      "title": "test_contract_examples Module"
+    },
+    {
       "canonical_path": "modules/test_cross_session_digest_hint.md",
       "id": "test_cross_session_digest_hint",
       "kind": "modules",
@@ -14986,6 +16491,29 @@
       "role": "semantic",
       "source_path": "tests/test_execution_concurrency.py",
       "title": "test_execution_concurrency Module"
+    },
+    {
+      "canonical_path": "modules/test_execution_contracts.md",
+      "id": "test_execution_contracts",
+      "kind": "modules",
+      "mcp_uri": "llm-wiki://modules/test_execution_contracts",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "tests/test_execution_contracts.py",
+      "title": "test_execution_contracts Module"
+    },
+    {
+      "canonical_path": "modules/test_execution_ledger_validator.md",
+      "id": "test_execution_ledger_validator",
+      "kind": "modules",
+      "mcp_uri": "llm-wiki://modules/test_execution_ledger_validator",
+      "outgoing_internal_links": [],
+      "role": "semantic",
+      "source_path": "tests/test_execution_ledger_validator.py",
+      "title": "test_execution_ledger_validator Module"
     },
     {
       "canonical_path": "modules/test_experiment_parser_calibration.md",
@@ -16896,6 +18424,66 @@
       "title": "build_trial_context"
     },
     {
+      "canonical_path": "flows/api-canonical_digest.md",
+      "id": "api-canonical_digest",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-canonical_digest",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "canonical_digest"
+    },
+    {
+      "canonical_path": "flows/api-ensure_capabilities_allowed.md",
+      "id": "api-ensure_capabilities_allowed",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-ensure_capabilities_allowed",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "ensure_capabilities_allowed"
+    },
+    {
+      "canonical_path": "flows/api-ensure_isolation_boundary.md",
+      "id": "api-ensure_isolation_boundary",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-ensure_isolation_boundary",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "ensure_isolation_boundary"
+    },
+    {
+      "canonical_path": "flows/api-ensure_minimum_capabilities.md",
+      "id": "api-ensure_minimum_capabilities",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-ensure_minimum_capabilities",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "ensure_minimum_capabilities"
+    },
+    {
+      "canonical_path": "flows/api-ensure_request_matches_run_spec.md",
+      "id": "api-ensure_request_matches_run_spec",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-ensure_request_matches_run_spec",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "ensure_request_matches_run_spec"
+    },
+    {
       "canonical_path": "flows/api-is_known_model_type.md",
       "id": "api-is_known_model_type",
       "kind": "flows",
@@ -16918,6 +18506,18 @@
       "role": "mixed",
       "source_path": "src/core/skill_lifecycle.py",
       "title": "is_legal_transition"
+    },
+    {
+      "canonical_path": "flows/api-is_secret_reference.md",
+      "id": "api-is_secret_reference",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-is_secret_reference",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "is_secret_reference"
     },
     {
       "canonical_path": "flows/api-is_trial_eligible_command.md",
@@ -16994,6 +18594,18 @@
       "title": "model_type_to_skill_id"
     },
     {
+      "canonical_path": "flows/api-objective_policy_from_skill_metric.md",
+      "id": "api-objective_policy_from_skill_metric",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-objective_policy_from_skill_metric",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "objective_policy_from_skill_metric"
+    },
+    {
       "canonical_path": "flows/api-phases_for_model.md",
       "id": "api-phases_for_model",
       "kind": "flows",
@@ -17042,6 +18654,44 @@
       "title": "promotion_target_from_manifest"
     },
     {
+      "canonical_path": "flows/api-read_legacy_session_manifest.md",
+      "id": "api-read_legacy_session_manifest",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-read_legacy_session_manifest",
+      "outgoing_internal_links": [
+        "modules/compat_legacy_alias.md",
+        "modules/execution_contracts.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "read_legacy_session_manifest"
+    },
+    {
+      "canonical_path": "flows/api-read_legacy_start_request.md",
+      "id": "api-read_legacy_start_request",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-read_legacy_start_request",
+      "outgoing_internal_links": [
+        "modules/compat_legacy_alias.md",
+        "modules/execution_contracts.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "read_legacy_start_request"
+    },
+    {
+      "canonical_path": "flows/api-reject_raw_secret_parameters.md",
+      "id": "api-reject_raw_secret_parameters",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-reject_raw_secret_parameters",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "reject_raw_secret_parameters"
+    },
+    {
       "canonical_path": "flows/api-render_findings_markdown.md",
       "id": "api-render_findings_markdown",
       "kind": "flows",
@@ -17064,6 +18714,18 @@
       "role": "mixed",
       "source_path": "src/core/skill_paths.py",
       "title": "render_path_template"
+    },
+    {
+      "canonical_path": "flows/api-resolve_run_inputs.md",
+      "id": "api-resolve_run_inputs",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-resolve_run_inputs",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "resolve_run_inputs"
     },
     {
       "canonical_path": "flows/api-samples_from_rows.md",
@@ -17196,6 +18858,18 @@
       "role": "mixed",
       "source_path": "src/core/skill_paths.py",
       "title": "validate_path_template"
+    },
+    {
+      "canonical_path": "flows/api-validate_secret_list.md",
+      "id": "api-validate_secret_list",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-validate_secret_list",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "validate_secret_list"
     },
     {
       "canonical_path": "flows/http-continue_research.md",
@@ -18002,6 +19676,18 @@
       "title": "check_domain_coupling"
     },
     {
+      "canonical_path": "flows/process-check_execution_ledger.md",
+      "id": "process-check_execution_ledger",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/process-check_execution_ledger",
+      "outgoing_internal_links": [
+        "modules/check_execution_ledger.md"
+      ],
+      "role": "mixed",
+      "source_path": "scripts/check_execution_ledger.py",
+      "title": "check_execution_ledger"
+    },
+    {
       "canonical_path": "flows/process-check_legacy_vocab_branching.md",
       "id": "process-check_legacy_vocab_branching",
       "kind": "flows",
@@ -18122,6 +19808,7 @@
         "modules/capture.md",
         "modules/check_doc_references.md",
         "modules/check_domain_coupling.md",
+        "modules/check_execution_ledger.md",
         "modules/check_legacy_vocab_branching.md",
         "modules/cli.md",
         "modules/client.md",
@@ -18148,6 +19835,7 @@
         "modules/DynamicFormFields.test.md",
         "modules/events.md",
         "modules/examples_prompt-registry_main.md",
+        "modules/execution_contracts.md",
         "modules/experiment_parser.md",
         "modules/gate_status.md",
         "modules/History.md",
@@ -18233,6 +19921,7 @@
         "modules/test_command_policy.md",
         "modules/test_config_promoter_atomic.md",
         "modules/test_config_promoter_gate_bundle.md",
+        "modules/test_contract_examples.md",
         "modules/test_cross_session_digest_hint.md",
         "modules/test_cross_worker_control.md",
         "modules/test_delete_session_hpo_cascade.md",
@@ -18245,6 +19934,8 @@
         "modules/test_event_broadcaster_concurrency.md",
         "modules/test_evidence_artifact_validation.md",
         "modules/test_execution_concurrency.md",
+        "modules/test_execution_contracts.md",
+        "modules/test_execution_ledger_validator.md",
         "modules/test_experiment_parser_calibration.md",
         "modules/test_experiment_parser_inference_parity.md",
         "modules/test_experiment_parser_promotion_scope.md",
@@ -18371,6 +20062,7 @@
         "modules/capture.md",
         "modules/check_doc_references.md",
         "modules/check_domain_coupling.md",
+        "modules/check_execution_ledger.md",
         "modules/check_legacy_vocab_branching.md",
         "modules/cli.md",
         "modules/client.md",
@@ -18397,6 +20089,7 @@
         "modules/DynamicFormFields.test.md",
         "modules/events.md",
         "modules/examples_prompt-registry_main.md",
+        "modules/execution_contracts.md",
         "modules/experiment_parser.md",
         "modules/gate_status.md",
         "modules/History.md",
@@ -18482,6 +20175,7 @@
         "modules/test_command_policy.md",
         "modules/test_config_promoter_atomic.md",
         "modules/test_config_promoter_gate_bundle.md",
+        "modules/test_contract_examples.md",
         "modules/test_cross_session_digest_hint.md",
         "modules/test_cross_worker_control.md",
         "modules/test_delete_session_hpo_cascade.md",
@@ -18494,6 +20188,8 @@
         "modules/test_event_broadcaster_concurrency.md",
         "modules/test_evidence_artifact_validation.md",
         "modules/test_execution_concurrency.md",
+        "modules/test_execution_contracts.md",
+        "modules/test_execution_ledger_validator.md",
         "modules/test_experiment_parser_calibration.md",
         "modules/test_experiment_parser_inference_parity.md",
         "modules/test_experiment_parser_promotion_scope.md",
@@ -18604,5 +20300,5 @@
     }
   ],
   "schema_version": "llm-wiki-surface-index/v1",
-  "source_hash": "sha256:8d5f5c24e2ffb9a02b4baf88e3efb57e62b96849707cb44f86b9518c0e5afae1"
+  "source_hash": "sha256:551dd04a3aa553c11c3bfa573f5911540c7f104158e0db0e56a37ac03b76130c"
 }
