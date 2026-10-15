@@ -1,6 +1,6 @@
 # SessionManager
 
-**Location:** `src/core/session_manager.py:86`
+**Location:** `src/core/session_manager.py:87`
 **Kind:** Class
 **Bases:** —
 **Module:** [session_manager](../modules/session_manager.md)

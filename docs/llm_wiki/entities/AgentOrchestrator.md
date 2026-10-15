@@ -1,6 +1,6 @@
 # AgentOrchestrator
 
-**Location:** `src/core/orchestrator.py:326`
+**Location:** `src/core/orchestrator.py:327`
 **Kind:** Class
 **Bases:** —
 **Module:** [orchestrator](../modules/orchestrator.md)

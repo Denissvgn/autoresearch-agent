@@ -1,6 +1,6 @@
 # ResearchConfig
 
-**Location:** `src/core/orchestrator.py:187`
+**Location:** `src/core/orchestrator.py:188`
 **Kind:** Class
 **Bases:** —
 **Module:** [orchestrator](../modules/orchestrator.md)

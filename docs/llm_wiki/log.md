@@ -108,3 +108,19 @@ Append-only chronological log.
 - Infrastructure moved: 0
 - Infrastructure removed: 0
 - Unsupported infrastructure YAML: 8
+
+## 2026-10-15
+
+### Wiki sync
+- Source: `.`
+- Generator version: `2.5.0`
+- Source selection profile: none (default discovery)
+- Source selection fingerprint: none
+- Source snapshot digest: `sha256:369fdd05a7374855104bef8fc76f79bc40edea510f9e9022c8e5567aaa1f8eae`
+- Pages created: 4
+- Pages updated: 27
+- Pages metadata-only: 0
+- Pages skipped (unchanged): 771
+- Pages deprecated: 0
+- Semantic fields preserved: 0
+- Moved entities: none

@@ -6,8 +6,8 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 
 | Surface | Count | Start here |
 |---|---:|---|
-| Entities | 426 | [Open section](#entities) |
-| Modules | 245 | [Open section](#modules) |
+| Entities | 428 | [Open section](#entities) |
+| Modules | 247 | [Open section](#modules) |
 | Workflows | 13 | [Open section](#workflows) |
 | Guides | 0 | No pages |
 | Entry-point flows | 111 | [Open section](#entry-point-flows) |
@@ -85,6 +85,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [FeatureReadinessSummary](entities/FeatureReadinessSummary.md)
 - [FieldProps](entities/FieldProps.md)
 - [FieldTypes](entities/FieldTypes.md)
+- [FilesystemSafetyError](entities/FilesystemSafetyError.md)
 - [FormField](entities/FormField.md)
 - [GateBundles](entities/GateBundles.md)
 - [GenerateSkillRequest](entities/GenerateSkillRequest.md)
@@ -269,6 +270,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [SkillRegistryPromotionTarget](entities/SkillRegistryPromotionTarget.md)
 - [SkillRuntime](entities/SkillRuntime.md)
 - [SkillSummary](entities/SkillSummary.md)
+- [SkipCallback](entities/SkipCallback.md)
 - [SlowFakeWS](entities/SlowFakeWS.md)
 - [SnapshotCollector](entities/SnapshotCollector.md)
 - [SparklineProps](entities/SparklineProps.md)
@@ -506,6 +508,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [examples_prompt-registry_main](modules/examples_prompt-registry_main.md) - Example prompt-registry receiver (P1-3).
 - [execution_contracts](modules/execution_contracts.md) - Versioned research and execution contracts.
 - [experiment_parser](modules/experiment_parser.md) - Parse prepare.py stdout output into structured metrics.
+- [fs_safety](modules/fs_safety.md) - Descriptor-relative, no-follow filesystem primitives.
 - [gate_status](modules/gate_status.md) - Compatibility helpers for autoresearch gate-status fields.
 - [http_headers](modules/http_headers.md) - Request-header binding for the autoresearch API.
 - [index](modules/index.md) - `ui/src/skill-plugins/index.ts`
@@ -596,6 +599,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [test_experiment_parser_volatility_phase8](modules/test_experiment_parser_volatility_phase8.md) - Tests for experiment_parser handling of phases 6-8 evidence keys emitted by the volatility experiment scripts.
 - [test_exploration_markers](modules/test_exploration_markers.md) - Gap 1 — server-side derivation of phase-advancement markers from salient-knob diffs vs the baseline iter's config_snapshot.
 - [test_fencing_tokens](modules/test_fencing_tokens.md) - ARC-011 P6-004 — fencing tokens + cross-worker control tests.
+- [test_fs_safety](modules/test_fs_safety.md) - Symlink-race and shared-alias resistance for filesystem operations.
 - [test_gap1_duplicate_guard](modules/test_gap1_duplicate_guard.md) - Gap 1 regression — server-side variant-marker injection must skip rejected-duplicate iterations (and iters with no training_time_s).
 - [test_gate_bundle_production_economics](modules/test_gate_bundle_production_economics.md) - MQ-B5 — production-scope unconditional post-cost economic gate.
 - [test_gate_status_contract](modules/test_gate_status_contract.md) - `tests/test_gate_status_contract.py`

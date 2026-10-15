@@ -18,6 +18,7 @@ declared evaluation data are not candidate-writable.
 | Source | Symbols |
 |--------|---------|
 | `__future__` | `annotations` |
+| `os` | `os` |
 | `pathlib` | `Path` |
 | `pytest` | `pytest` |
 | `src.core.agent_tools` | `_execute_tool`, `_tool_glob`, `_tool_grep` |
@@ -97,4 +98,6 @@ flowchart LR
 | `test_config_flag_path_faces_shared_authorization` | `(tmp_path: Path) -> None` | — | — |
 | `test_legacy_style_workspace_paths_still_authorize` | `(tmp_path: Path) -> None` | — | — |
 | `test_write_file_rejects_symlink_leaves` | `(tmp_path: Path) -> None` | — | — |
+| `test_write_file_rejects_hardlinked_alias` | `(tmp_path: Path) -> None` | — | — |
+| `test_cp_source_must_not_be_a_link_or_alias` | `(tmp_path: Path) -> None` | — | — |
 | `test_skill_manifest_evaluation_data_declaration_is_enforced` | `() -> None` | — | — |

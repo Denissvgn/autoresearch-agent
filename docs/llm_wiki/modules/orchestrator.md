@@ -23,6 +23,7 @@ Agent orchestrator — drives Claude via the Anthropic SDK with tool use.
 | `re` | `re` |
 | `shlex` | `shlex` |
 | `src.config` | `secret_value`, `settings` |
+| `src.core` | `fs_safety` |
 | `src.core.agent_tools` | `AGENT_TOOLS`, `ToolAccessContext`, `ToolExecutionResult`, `_config_snapshot_path_from_command`, `_execute_tool`, `_load_packaged_skill_md`, `_nonce_env_for_command`, `_normalize_command_for_plan`, `_tool_bash`, `_tool_glob`, `_tool_grep`, `_tool_read_file`, `_tool_write_file`, `build_tool_access_context` |
 | `src.core.artifact_reference` | `normalize_artifact_references_in_mapping` |
 | `src.core.command_runner` | `CommandProcessRegistry`, `GovernedCommandRunner`, `OutputCallback`, `_build_child_env`, `redact_sensitive_text` |
@@ -70,7 +71,7 @@ flowchart LR
 |---|---|
 | Inbound | `src` (2) |
 | Inbound | `tests` (35) |
-| Outbound | `src` (21) |
+| Outbound | `src` (22) |
 
 ### External packages
 
@@ -78,13 +79,13 @@ flowchart LR
 |---|---:|---:|
 | python | 1 | 0 |
 
-> All 57 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 58 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [ResearchConfig](../entities/ResearchConfig.md) | 187 | — | — |
-| [TurnTrialState](../entities/TurnTrialState.md) | 271 | — | Mutable per-turn execution state owned by the agent tool loop. |
-| [PendingTrial](../entities/PendingTrial.md) | 301 | — | One deferred trial execution (P2 parallel-trial dispatch). |
-| [AgentOrchestrator](../entities/AgentOrchestrator.md) | 326 | — | Runs a Claude agent session for autonomous ML experiment tuning. |
+| [ResearchConfig](../entities/ResearchConfig.md) | 188 | — | — |
+| [TurnTrialState](../entities/TurnTrialState.md) | 272 | — | Mutable per-turn execution state owned by the agent tool loop. |
+| [PendingTrial](../entities/PendingTrial.md) | 302 | — | One deferred trial execution (P2 parallel-trial dispatch). |
+| [AgentOrchestrator](../entities/AgentOrchestrator.md) | 327 | — | Runs a Claude agent session for autonomous ML experiment tuning. |

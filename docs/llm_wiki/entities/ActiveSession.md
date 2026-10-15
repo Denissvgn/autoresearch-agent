@@ -1,6 +1,6 @@
 # ActiveSession
 
-**Location:** `src/core/session_manager.py:79`
+**Location:** `src/core/session_manager.py:80`
 **Kind:** Class
 **Bases:** —
 **Module:** [session_manager](../modules/session_manager.md)

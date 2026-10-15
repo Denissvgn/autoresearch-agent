@@ -48,8 +48,8 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| trial_marker_candidates | Path | 165 | `Path(trial_dir)` |
-| trial_marker_candidates | list | 166 | `list(marker_paths)` |
+| trial_marker_candidates | Path | 161 | `Path(trial_dir)` |
+| trial_marker_candidates | list | 162 | `list(marker_paths)` |
 
 ### Boundary effects
 

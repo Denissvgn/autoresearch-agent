@@ -41,6 +41,7 @@ never an authorization root for file access.
 | `fnmatch` | `fnmatch` |
 | `os` | `os` |
 | `pathlib` | `Path` |
+| `stat` | `stat` |
 | `typing` | `Iterable`, `Optional`, `Sequence` |
 
 ## Local dependency map
@@ -54,9 +55,10 @@ flowchart LR
     n3["src/core/tool_access.py"]
     n4["tests/test_async_tool_path.py"]
     n5["tests/test_command_policy.py"]
-    n6["tests/test_orchestrator_timeout.py"]
-    n7["tests/test_tool_access.py"]
-    n8["tests/test_trial_workspace.py"]
+    n6["tests/test_fs_safety.py"]
+    n7["tests/test_orchestrator_timeout.py"]
+    n8["tests/test_tool_access.py"]
+    n9["tests/test_trial_workspace.py"]
     n0 --> n2
     n0 --> n3
     n1 --> n3
@@ -68,23 +70,25 @@ flowchart LR
     n5 --> n1
     n5 --> n2
     n5 --> n3
-    n6 --> n2
     n6 --> n3
-    n7 --> n0
-    n7 --> n1
+    n7 --> n2
     n7 --> n3
     n8 --> n0
-    n8 --> n2
+    n8 --> n1
     n8 --> n3
+    n9 --> n0
+    n9 --> n2
+    n9 --> n3
     click n0 "../modules/agent_tools.md"
     click n1 "../modules/command_policy.md"
     click n2 "../modules/command_runner.md"
     click n3 "../modules/tool_access.md"
     click n4 "../modules/test_async_tool_path.md"
     click n5 "../modules/test_command_policy.md"
-    click n6 "../modules/test_orchestrator_timeout.md"
-    click n7 "../modules/test_tool_access.md"
-    click n8 "../modules/test_trial_workspace.md"
+    click n6 "../modules/test_fs_safety.md"
+    click n7 "../modules/test_orchestrator_timeout.md"
+    click n8 "../modules/test_tool_access.md"
+    click n9 "../modules/test_trial_workspace.md"
 ```
 
 ### Internal neighbors
@@ -96,6 +100,7 @@ flowchart LR
 | Inbound | [command_runner](../modules/command_runner.md) |
 | Inbound | [test_async_tool_path](../modules/test_async_tool_path.md) |
 | Inbound | [test_command_policy](../modules/test_command_policy.md) |
+| Inbound | [test_fs_safety](../modules/test_fs_safety.md) |
 | Inbound | [test_orchestrator_timeout](../modules/test_orchestrator_timeout.md) |
 | Inbound | [test_tool_access](../modules/test_tool_access.md) |
 | Inbound | [test_trial_workspace](../modules/test_trial_workspace.md) |
@@ -104,7 +109,7 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [ToolAccessContext](../entities/ToolAccessContext.md) | 90 | — | Server-derived file authorization for one run/attempt's tool calls. |
+| [ToolAccessContext](../entities/ToolAccessContext.md) | 107 | — | Server-derived file authorization for one run/attempt's tool calls. |
 
 ## Functions
 
@@ -113,4 +118,5 @@ flowchart LR
 | `_resolved` | `(path: str \| os.PathLike[str]) -> str` | — | — |
 | `path_within_roots` | `(path: str, roots: Sequence[str], *, follow_leaf: bool = True) -> bool` | — | Whether ``path`` resolves inside one of ``roots``. |
 | `matches_protected_name` | `(relative: str, patterns: Sequence[str]) -> bool` | — | Whether a workspace-relative path matches a protected name/pattern. |
+| `_multi_link_reason` | `(path: str) -> Optional[str]` | — | Reason a leaf is an ambiguous shared-file alias, or ``None``. |
 | `build_tool_access_context` | `(session_workspace: str, *, workspace_root: Optional[str] = None, extra_protected_names: Optional[Iterable[str]] = None) -> ToolAccessContext` | — | Derive the file authorization for one run/attempt, server-side. |

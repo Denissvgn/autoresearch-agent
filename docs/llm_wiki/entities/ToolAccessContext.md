@@ -1,6 +1,6 @@
 # ToolAccessContext
 
-**Location:** `src/core/tool_access.py:90`
+**Location:** `src/core/tool_access.py:107`
 **Kind:** Class
 **Bases:** —
 **Module:** [tool_access](../modules/tool_access.md)
@@ -34,6 +34,8 @@ declarations; tool arguments never construct or extend it.
 | `_select` | `(raw: str, *, write: bool) -> tuple[Optional[str], str]` | — | Return ``(denial_reason, resolved)`` for one tool-supplied path. |
 | `authorize_read` | `(raw: str) -> str` | — | Resolve ``raw`` and require it to land inside a readable root. |
 | `authorize_write` | `(raw: str) -> str` | — | Resolve ``raw`` and require an authorized, unprotected target. |
+| `authorize_import` | `(raw: str) -> str` | — | Resolve ``raw`` as a copy-in source with strict leaf rules. |
+| `writable_root_and_relative` | `(resolved: str) -> tuple[str, str]` | — | Split an authorized write target into ``(root, relative_path)``. |
 | `is_write_protected` | `(resolved: str) -> bool` | — | Whether a resolved path is server-owned/evaluation state. |
 | `filter_readable` | `(candidates: Iterable[str]) -> list[str]` | — | Keep only candidates that resolve inside a readable root. |
 | `with_extra_protected` | `(names: Optional[Iterable[str]]) -> 'ToolAccessContext'` | — | Return a copy with additional protected names merged in. |
@@ -87,7 +89,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [tool_access](../modules/tool_access.md) | 8 | `protected_names`, `protected_paths`, `readable_roots`, `session_workspace`, `workspace_root`, `writable_roots` |
+| [tool_access](../modules/tool_access.md) | 10 | `protected_names`, `protected_paths`, `readable_roots`, `session_workspace`, `workspace_root`, `writable_roots` |
 
 ### References
 

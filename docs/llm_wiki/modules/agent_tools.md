@@ -27,6 +27,7 @@ these for back-compat; new code should import from here.
 | `pathlib` | `Path` |
 | `re` | `re` |
 | `shlex` | `shlex` |
+| `src.core` | `fs_safety` |
 | `src.core.command_runner` | `CommandProcessRegistry`, `GovernedCommandRunner`, `OutputCallback`, `_build_child_env`, `_collect_process_output`, `_SessionOutputLog` |
 | `src.core.llm_provider` | `ToolDef` |
 | `src.core.skill_registry` | `DEFAULT_SKILLS_ROOT` |
@@ -42,40 +43,44 @@ these for back-compat; new code should import from here.
 flowchart LR
     n0["src/core/agent_tools.py"]
     n1["src/core/command_runner.py"]
-    n2["src/core/llm_provider.py"]
-    n3["src/core/orchestrator.py"]
-    n4["src/core/skill_registry.py"]
-    n5["src/core/tool_access.py"]
-    n6["tests/test_async_tool_path.py"]
-    n7["tests/test_tool_access.py"]
-    n8["tests/test_trial_workspace.py"]
+    n2["src/core/fs_safety.py"]
+    n3["src/core/llm_provider.py"]
+    n4["src/core/orchestrator.py"]
+    n5["src/core/skill_registry.py"]
+    n6["src/core/tool_access.py"]
+    n7["tests/test_async_tool_path.py"]
+    n8["tests/test_tool_access.py"]
+    n9["tests/test_trial_workspace.py"]
     n0 --> n1
     n0 --> n2
-    n0 --> n4
+    n0 --> n3
     n0 --> n5
-    n1 --> n5
-    n3 --> n0
-    n3 --> n1
-    n3 --> n2
-    n6 --> n0
-    n6 --> n1
-    n6 --> n3
-    n6 --> n5
+    n0 --> n6
+    n1 --> n6
+    n4 --> n0
+    n4 --> n1
+    n4 --> n2
+    n4 --> n3
     n7 --> n0
+    n7 --> n1
     n7 --> n4
-    n7 --> n5
+    n7 --> n6
     n8 --> n0
-    n8 --> n1
     n8 --> n5
+    n8 --> n6
+    n9 --> n0
+    n9 --> n1
+    n9 --> n6
     click n0 "../modules/agent_tools.md"
     click n1 "../modules/command_runner.md"
-    click n2 "../modules/llm_provider.md"
-    click n3 "../modules/orchestrator.md"
-    click n4 "../modules/skill_registry.md"
-    click n5 "../modules/tool_access.md"
-    click n6 "../modules/test_async_tool_path.md"
-    click n7 "../modules/test_tool_access.md"
-    click n8 "../modules/test_trial_workspace.md"
+    click n2 "../modules/fs_safety.md"
+    click n3 "../modules/llm_provider.md"
+    click n4 "../modules/orchestrator.md"
+    click n5 "../modules/skill_registry.md"
+    click n6 "../modules/tool_access.md"
+    click n7 "../modules/test_async_tool_path.md"
+    click n8 "../modules/test_tool_access.md"
+    click n9 "../modules/test_trial_workspace.md"
 ```
 
 ### Internal neighbors
@@ -87,6 +92,7 @@ flowchart LR
 | Inbound | [test_tool_access](../modules/test_tool_access.md) |
 | Inbound | [test_trial_workspace](../modules/test_trial_workspace.md) |
 | Outbound | [command_runner](../modules/command_runner.md) |
+| Outbound | [fs_safety](../modules/fs_safety.md) |
 | Outbound | [llm_provider](../modules/llm_provider.md) |
 | Outbound | [skill_registry](../modules/skill_registry.md) |
 | Outbound | [tool_access](../modules/tool_access.md) |
@@ -95,7 +101,7 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [ToolExecutionResult](../entities/ToolExecutionResult.md) | 45 | — | — |
+| [ToolExecutionResult](../entities/ToolExecutionResult.md) | 46 | — | — |
 
 ## Functions
 

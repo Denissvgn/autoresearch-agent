@@ -37,7 +37,7 @@ applies unchanged — and are retained as operator-inspectable provenance.
 | `dataclasses` | `dataclass` |
 | `logging` | `logging` |
 | `pathlib` | `Path` |
-| `shutil` | `shutil` |
+| `src.core` | `fs_safety` |
 | `typing` | `Iterable`, `Mapping`, `Optional` |
 
 ## Local dependency map
@@ -45,18 +45,26 @@ applies unchanged — and are retained as operator-inspectable provenance.
 <!-- Auto-generated local dependency summary. Do not edit by hand. -->
 ```mermaid
 flowchart LR
-    n0["src/core/orchestrator.py"]
-    n1["src/core/trial_workspace.py"]
-    n2["tests/test_parallel_trials.py"]
-    n3["tests/test_trial_workspace.py"]
-    n0 --> n1
+    n0["src/core/fs_safety.py"]
+    n1["src/core/orchestrator.py"]
+    n2["src/core/trial_workspace.py"]
+    n3["tests/test_fs_safety.py"]
+    n4["tests/test_parallel_trials.py"]
+    n5["tests/test_trial_workspace.py"]
+    n1 --> n0
+    n1 --> n2
     n2 --> n0
-    n2 --> n1
-    n3 --> n1
-    click n0 "../modules/orchestrator.md"
-    click n1 "../modules/trial_workspace.md"
-    click n2 "../modules/test_parallel_trials.md"
-    click n3 "../modules/test_trial_workspace.md"
+    n3 --> n0
+    n3 --> n2
+    n4 --> n1
+    n4 --> n2
+    n5 --> n2
+    click n0 "../modules/fs_safety.md"
+    click n1 "../modules/orchestrator.md"
+    click n2 "../modules/trial_workspace.md"
+    click n3 "../modules/test_fs_safety.md"
+    click n4 "../modules/test_parallel_trials.md"
+    click n5 "../modules/test_trial_workspace.md"
 ```
 
 ### Internal neighbors
@@ -64,14 +72,16 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Inbound | [orchestrator](../modules/orchestrator.md) |
+| Inbound | [test_fs_safety](../modules/test_fs_safety.md) |
 | Inbound | [test_parallel_trials](../modules/test_parallel_trials.md) |
 | Inbound | [test_trial_workspace](../modules/test_trial_workspace.md) |
+| Outbound | [fs_safety](../modules/fs_safety.md) |
 
 ## Classes
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [TrialContext](../entities/TrialContext.md) | 50 | — | Per-command execution context (P2 per-workdir state). |
+| [TrialContext](../entities/TrialContext.md) | 51 | — | Per-command execution context (P2 per-workdir state). |
 
 ## Functions
 

@@ -20,6 +20,7 @@ Session manager — tracks active asyncio tasks for research sessions.
 | `secrets` | `secrets` |
 | `shutil` | `shutil` |
 | `src.config` | `settings` |
+| `src.core` | `fs_safety` |
 | `src.core.orchestrator` | `AgentOrchestrator`, `ResearchConfig` |
 | `src.core.research_manifest` | `build_research_manifest`, `manifest_pretty_json` |
 | `src.core.service_preflight` | `ServicePreflightTarget`, `require_preflight_ready`, `run_service_preflight` |
@@ -53,16 +54,16 @@ flowchart LR
 |---|---|
 | Inbound | `src` (1) |
 | Inbound | `tests` (9) |
-| Outbound | `src` (9) |
+| Outbound | `src` (10) |
 
-> All 19 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 20 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [ActiveSession](../entities/ActiveSession.md) | 79 | — | — |
-| [SessionManager](../entities/SessionManager.md) | 86 | — | Manages the lifecycle of research sessions as asyncio tasks. |
+| [ActiveSession](../entities/ActiveSession.md) | 80 | — | — |
+| [SessionManager](../entities/SessionManager.md) | 87 | — | Manages the lifecycle of research sessions as asyncio tasks. |
 
 ## Functions
 

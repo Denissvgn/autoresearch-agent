@@ -1,6 +1,6 @@
 # PendingTrial
 
-**Location:** `src/core/orchestrator.py:301`
+**Location:** `src/core/orchestrator.py:302`
 **Kind:** Class
 **Bases:** —
 **Module:** [orchestrator](../modules/orchestrator.md)

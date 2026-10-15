@@ -1,8 +1,8 @@
 {
   "artifact_hashes": {
-    "evaluated_envelope_hash": "sha256:a5e4111be66215ba2dad5f71ee77090b7a6b0382257ffffd0df69f57d8271947",
-    "knowledge_index_hash": "sha256:d11f870e480d605597646a29b9ce8f5566011944b6ee5494765fa3ef2f88e730",
-    "surface_index_hash": "sha256:4156ec7bf0c7aab09559c8daf6e95680b15f8db153b2ba452470f4e5c912c74e"
+    "evaluated_envelope_hash": "sha256:210708831e4c1bb7d6fdd479b18510cd697716f67808062495b854dc318d2cb2",
+    "knowledge_index_hash": "sha256:044796acd4ef831f407c738574a7c166fb52d03ae87fa265b178d8ea8f7536c0",
+    "surface_index_hash": "sha256:3f1d8c2d27d08896b7a3b791a6736bcccdebf026c5520c9d854aa40d3c1adfbf"
   },
   "evidence_baselines": {
     "entities/AccentName.md": {
@@ -20,7 +20,7 @@
         "concept_observation_hash": "sha256:ce14b02a1dd6f96c61bca3be42156a0e0443c6935253d390e6e0f0becca48f39",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:ba655d545205a83644d4ca8b61cb3ffb19157a0c85db4e8849f5a9ea70c37c16",
+        "source_content_hash": "sha256:183cecfa5fd57115e01ce9e855853839731d9b97e426f63345cc6b7f9bb690e7",
         "source_path": "src/core/session_manager.py"
       },
       "state": "known"
@@ -80,7 +80,7 @@
         "concept_observation_hash": "sha256:bf4ed2f83b31f44e1da88577319db943dde7f7870186736e8d0d416eb2ed2e4c",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:67520456699eb4d4a5edef2e7c1e57d1dfcbd629869f205b915e165b8d774bbe",
+        "source_content_hash": "sha256:8298aa4fc99ff3c70b442e37c24cddef61c0ceb90e4d5d30474ff17a6d1f05fe",
         "source_path": "src/core/orchestrator.py"
       },
       "state": "known"
@@ -280,7 +280,7 @@
         "concept_observation_hash": "sha256:c6990ed933ee72452fd381f9384d9e163952d9d498f447a1923ab6df5b3b6662",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:1d91621795373ea15afdf15254fb025220447fd104d12ba1f59d3f41db4f9712",
+        "source_content_hash": "sha256:5afc4db2a721aa9d458fb6789f591656f4f54ea36095125ecdadaad1a8a9700a",
         "source_path": "src/core/command_policy.py"
       },
       "state": "known"
@@ -672,6 +672,16 @@
         "scope": "entity",
         "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
+      },
+      "state": "known"
+    },
+    "entities/FilesystemSafetyError.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:4311967f3911ed7775cb5b9e314da02a1b0448ebd5452935673e9344204a0b87",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:d4b61c646fbf752bc916d357ac3d916125ca7fe55353f7774b497ba185e433f7",
+        "source_path": "src/core/fs_safety.py"
       },
       "state": "known"
     },
@@ -1390,7 +1400,7 @@
         "concept_observation_hash": "sha256:0e893a76429cc899f1ab73fae1332479a1e6e057688f9acb8b9492dcec4a858c",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:67520456699eb4d4a5edef2e7c1e57d1dfcbd629869f205b915e165b8d774bbe",
+        "source_content_hash": "sha256:8298aa4fc99ff3c70b442e37c24cddef61c0ceb90e4d5d30474ff17a6d1f05fe",
         "source_path": "src/core/orchestrator.py"
       },
       "state": "known"
@@ -1890,7 +1900,7 @@
         "concept_observation_hash": "sha256:266de332bcf9101e31e17959e339e01fcc0dad96e3574ec51bb8754860d2bfda",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:67520456699eb4d4a5edef2e7c1e57d1dfcbd629869f205b915e165b8d774bbe",
+        "source_content_hash": "sha256:8298aa4fc99ff3c70b442e37c24cddef61c0ceb90e4d5d30474ff17a6d1f05fe",
         "source_path": "src/core/orchestrator.py"
       },
       "state": "known"
@@ -2240,7 +2250,7 @@
         "concept_observation_hash": "sha256:725dc0a95869a7f876b6f3467c8aff66da9e8bc4d1e6311f068aafd1f4c0641a",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:ba655d545205a83644d4ca8b61cb3ffb19157a0c85db4e8849f5a9ea70c37c16",
+        "source_content_hash": "sha256:183cecfa5fd57115e01ce9e855853839731d9b97e426f63345cc6b7f9bb690e7",
         "source_path": "src/core/session_manager.py"
       },
       "state": "known"
@@ -2512,6 +2522,16 @@
         "scope": "entity",
         "source_content_hash": "sha256:387ffd0c8b395fbe3ebe68e985ca7c0091292f4014ccd7389ade2c36286b4db2",
         "source_path": "ui/src/api/client.ts"
+      },
+      "state": "known"
+    },
+    "entities/SkipCallback.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:4f852e828ac5f0b3395a71a1c3a3b3337cb6902150a8d601c9a1e58ffe2dd866",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:d4b61c646fbf752bc916d357ac3d916125ca7fe55353f7774b497ba185e433f7",
+        "source_path": "src/core/fs_safety.py"
       },
       "state": "known"
     },
@@ -3357,10 +3377,10 @@
     },
     "entities/ToolAccessContext.md": {
       "basis": {
-        "concept_observation_hash": "sha256:38130913bd5e82ab66b4870570ebc6136ab14b2921a64eec6768e68c449f7298",
+        "concept_observation_hash": "sha256:aa3ac093de2eccb279576bd829d3af596e66c68b2e5925c788231916774cb6ff",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:beb76de655650abe2fa9062d98dab8c7f38f43a950995d29b909e1bcc581cc7f",
+        "source_content_hash": "sha256:57d6ae215cf505c15424d228b7091e5a8a7d2142992df38bea41d9c0ed1611cf",
         "source_path": "src/core/tool_access.py"
       },
       "state": "known"
@@ -3380,7 +3400,7 @@
         "concept_observation_hash": "sha256:0cb9ae70f7da2292ab87a6aea2d7e4e2a3eee4530b5fabdb24c922876cccf149",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:e9bfe25453004dac1616aad2490f018705f44f671dbc2276ecc3f3a5eb5f29b9",
+        "source_content_hash": "sha256:28295a822ea4a0447f7407ba593f9ffdfe1001301da9689f0a1bd1d2e96cf263",
         "source_path": "src/core/agent_tools.py"
       },
       "state": "known"
@@ -3440,7 +3460,7 @@
         "concept_observation_hash": "sha256:8acfc557dbf17fef351ccffa08ca1351f94bf47447714b3b5aa73a3e340c1cf1",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:92e81e560673bf483d3e3657832cc7e75420501c63547c26a91b34b2e0bbe601",
+        "source_content_hash": "sha256:ef4d3aed51c314eee199fa19d6261b50aee1db8da917096552c6f4013c0bc761",
         "source_path": "src/core/trial_workspace.py"
       },
       "state": "known"
@@ -3460,7 +3480,7 @@
         "concept_observation_hash": "sha256:cab1b7a430045d06f1dc65c838a3639b0ff2372d737be242ae1fd9a328e9dd92",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:67520456699eb4d4a5edef2e7c1e57d1dfcbd629869f205b915e165b8d774bbe",
+        "source_content_hash": "sha256:8298aa4fc99ff3c70b442e37c24cddef61c0ceb90e4d5d30474ff17a6d1f05fe",
         "source_path": "src/core/orchestrator.py"
       },
       "state": "known"
@@ -4527,10 +4547,10 @@
     },
     "modules/agent_tools.md": {
       "basis": {
-        "concept_observation_hash": "sha256:9f1f0ae675af13242865b950ef66cf81dd828cf7c9342e715dc3ae34cdd658e8",
+        "concept_observation_hash": "sha256:0ef25e4d3ebfd541862b84d09d46aa7af2d8fd28a6d0cbb77de94935744c7862",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:e9bfe25453004dac1616aad2490f018705f44f671dbc2276ecc3f3a5eb5f29b9",
+        "source_content_hash": "sha256:28295a822ea4a0447f7407ba593f9ffdfe1001301da9689f0a1bd1d2e96cf263",
         "source_path": "src/core/agent_tools.py"
       },
       "state": "known"
@@ -4680,7 +4700,7 @@
         "concept_observation_hash": "sha256:7f2e08d02631cc4d9f98e878eda8673bcfcfddca632aa4e0b1fdf44ee6dcf9ac",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:1d91621795373ea15afdf15254fb025220447fd104d12ba1f59d3f41db4f9712",
+        "source_content_hash": "sha256:5afc4db2a721aa9d458fb6789f591656f4f54ea36095125ecdadaad1a8a9700a",
         "source_path": "src/core/command_policy.py"
       },
       "state": "known"
@@ -4855,6 +4875,16 @@
       },
       "state": "known"
     },
+    "modules/fs_safety.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:d626c87e7068a5bd6ca007a9fea83e591712e4bb5ffc9029c2a2f3fe5b526d4d",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "module",
+        "source_content_hash": "sha256:d4b61c646fbf752bc916d357ac3d916125ca7fe55353f7774b497ba185e433f7",
+        "source_path": "src/core/fs_safety.py"
+      },
+      "state": "known"
+    },
     "modules/gate_status.md": {
       "basis": {
         "concept_observation_hash": "sha256:3e43f6464eed5750248a81562c49e07389af1cc7a942aaad1158d13c5ce49844",
@@ -4907,10 +4937,10 @@
     },
     "modules/iteration_snapshot.md": {
       "basis": {
-        "concept_observation_hash": "sha256:71f3a570c76f0069533b0af2fbf697f70560c2aac70a10eef5369b94d105fb70",
+        "concept_observation_hash": "sha256:40e08c3464015c6143e753a71dbf2cca2ba50b2056f57b4321757fa01f2547e8",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:d1510b4d9276a1e33e570bc87814cbfd95ca958532cba0788231bc4cc8d0d997",
+        "source_content_hash": "sha256:4956ed20c5c2fca7c931b333d6262bf0b7c0d61a1d483c5c22632e401af78b8c",
         "source_path": "src/core/iteration_snapshot.py"
       },
       "state": "known"
@@ -4977,10 +5007,10 @@
     },
     "modules/orchestrator.md": {
       "basis": {
-        "concept_observation_hash": "sha256:927693bad4fe889e7dbad0a976566927a8fe8efb9ff6cb905e6d8bed4833b509",
+        "concept_observation_hash": "sha256:f27146f7f77c317b2854bcf81c28aa7268c0a10b2eb2cab4344f7045871924ea",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:67520456699eb4d4a5edef2e7c1e57d1dfcbd629869f205b915e165b8d774bbe",
+        "source_content_hash": "sha256:8298aa4fc99ff3c70b442e37c24cddef61c0ceb90e4d5d30474ff17a6d1f05fe",
         "source_path": "src/core/orchestrator.py"
       },
       "state": "known"
@@ -5187,10 +5217,10 @@
     },
     "modules/result_artifact.md": {
       "basis": {
-        "concept_observation_hash": "sha256:b949ba9710130b7f283e8e2ac904c2aa4b3397b9c3e3196de939e94a2d2482c1",
+        "concept_observation_hash": "sha256:be282f202bc99d3f956e16fdd874b88f1a1451a82c39b1b60667b30594f27092",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:655a830417f2b078de6e18db7806a4f0e8f1c4446d9c0c2161a4d3acb15cbf71",
+        "source_content_hash": "sha256:2b117ef28ff3c611e65de01012f774d397694cd57de800d085a720a7fbc515df",
         "source_path": "src/core/result_artifact.py"
       },
       "state": "known"
@@ -5237,10 +5267,10 @@
     },
     "modules/session_manager.md": {
       "basis": {
-        "concept_observation_hash": "sha256:4408214da51245e09c335b42997299effd1b4e3c54db0cb7b1ec9f00c8b6a04f",
+        "concept_observation_hash": "sha256:5c5bbd0b1ea3c4839d9b7131682eb4b0438fe707b6ea476e688c5a0e896e8b22",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:ba655d545205a83644d4ca8b61cb3ffb19157a0c85db4e8849f5a9ea70c37c16",
+        "source_content_hash": "sha256:183cecfa5fd57115e01ce9e855853839731d9b97e426f63345cc6b7f9bb690e7",
         "source_path": "src/core/session_manager.py"
       },
       "state": "known"
@@ -5752,6 +5782,16 @@
         "scope": "module",
         "source_content_hash": "sha256:6e266dcb36c84be1f7c9e76dbba3a2c3d388941f096940a55b30ecade06e763e",
         "source_path": "tests/test_fencing_tokens.py"
+      },
+      "state": "known"
+    },
+    "modules/test_fs_safety.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:0a0e77206c904e79dbabc5d9419cba3ee5cd3e9b7640ad369f3f48ad196fd144",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "module",
+        "source_content_hash": "sha256:89ef5383ebda9cf2db57eb02bd2e0be948d2a7a46c6aec917f6a6ffb9278e695",
+        "source_path": "tests/test_fs_safety.py"
       },
       "state": "known"
     },
@@ -6567,10 +6607,10 @@
     },
     "modules/test_tool_access.md": {
       "basis": {
-        "concept_observation_hash": "sha256:75f9289f26290a10b6c153b7cd7531b9ebbe0c42321d00d4dc0a24e07c4ae36b",
+        "concept_observation_hash": "sha256:8e18df99baeb2624bb009cca61a07ef4f9af87df09c805dea5b8ea15c334b343",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:59119ddbf499b33bcbdfa1719a1a102c81e63043d1c46f8027b2e0a51d902b27",
+        "source_content_hash": "sha256:5460902b1809da2d5cbc0da5436ef4fa1ced8483e80fa1d18a3b5e36aa3d913c",
         "source_path": "tests/test_tool_access.py"
       },
       "state": "known"
@@ -6617,20 +6657,20 @@
     },
     "modules/tool_access.md": {
       "basis": {
-        "concept_observation_hash": "sha256:8a103f4f81cdaf09c07dbf6070c1e42d607f2c61c30f69cb3b9e2302baf1da10",
+        "concept_observation_hash": "sha256:374d6f39547f4883f118bc359a32f045edafe1f954ce3314db21e0d976b4298f",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:beb76de655650abe2fa9062d98dab8c7f38f43a950995d29b909e1bcc581cc7f",
+        "source_content_hash": "sha256:57d6ae215cf505c15424d228b7091e5a8a7d2142992df38bea41d9c0ed1611cf",
         "source_path": "src/core/tool_access.py"
       },
       "state": "known"
     },
     "modules/trial_workspace.md": {
       "basis": {
-        "concept_observation_hash": "sha256:9402714ecb95973b815cdf03153b789d7f0ba5f5dcfe7f87694427cd8fc3ab4f",
+        "concept_observation_hash": "sha256:b185ce55406e2d941e03cf8ea25aa68940e7b3480a188d9b20f278ff242d2727",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:92e81e560673bf483d3e3657832cc7e75420501c63547c26a91b34b2e0bbe601",
+        "source_content_hash": "sha256:ef4d3aed51c314eee199fa19d6261b50aee1db8da917096552c6f4013c0bc761",
         "source_path": "src/core/trial_workspace.py"
       },
       "state": "known"
@@ -7229,6 +7269,12 @@
       "occurrence": 1,
       "scope": "entity",
       "source_path": "src/core/skill_manifest.py"
+    },
+    "entities/FilesystemSafetyError.md": {
+      "entity_name": "FilesystemSafetyError",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/fs_safety.py"
     },
     "entities/FormField.md": {
       "entity_name": "FormField",
@@ -8333,6 +8379,12 @@
       "occurrence": 1,
       "scope": "entity",
       "source_path": "ui/src/api/client.ts"
+    },
+    "entities/SkipCallback.md": {
+      "entity_name": "SkipCallback",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/fs_safety.py"
     },
     "entities/SlowFakeWS.md": {
       "entity_name": "_SlowFakeWS",
@@ -9620,6 +9672,10 @@
       "scope": "module",
       "source_path": "src/core/experiment_parser.py"
     },
+    "modules/fs_safety.md": {
+      "scope": "module",
+      "source_path": "src/core/fs_safety.py"
+    },
     "modules/gate_status.md": {
       "scope": "module",
       "source_path": "src/core/gate_status.py"
@@ -9979,6 +10035,10 @@
     "modules/test_fencing_tokens.md": {
       "scope": "module",
       "source_path": "tests/test_fencing_tokens.py"
+    },
+    "modules/test_fs_safety.md": {
+      "scope": "module",
+      "source_path": "tests/test_fs_safety.py"
     },
     "modules/test_gap1_duplicate_guard.md": {
       "scope": "module",
@@ -11353,10 +11413,10 @@
           }
         }
       },
-      "hash": "sha256:e9bfe25453004dac1616aad2490f018705f44f671dbc2276ecc3f3a5eb5f29b9",
+      "hash": "sha256:28295a822ea4a0447f7407ba593f9ffdfe1001301da9689f0a1bd1d2e96cf263",
       "language": "python",
       "module_page": "agent_tools",
-      "semantic_hash": "sha256:e8b133dcdc560b15e09567a2e5a1f6d2e60aa8f8dbd0d678473da4cbd6337bac"
+      "semantic_hash": "sha256:61d4e99f8cc258cd21d18899d3cb25131f01c16b4e198bf825e0b079fa6b5b33"
     },
     "src/core/artifact_reference.py": {
       "entities": [],
@@ -11545,10 +11605,10 @@
           }
         }
       },
-      "hash": "sha256:1d91621795373ea15afdf15254fb025220447fd104d12ba1f59d3f41db4f9712",
+      "hash": "sha256:5afc4db2a721aa9d458fb6789f591656f4f54ea36095125ecdadaad1a8a9700a",
       "language": "python",
       "module_page": "command_policy",
-      "semantic_hash": "sha256:5e453b0b2ea0bb7150c0bafe57c10b78e21c091e543d97a765e158649e2dcb45"
+      "semantic_hash": "sha256:469889de6f787d9e71ef0d29539239752261ffaee6657b6e1dcb2fb035765cb8"
     },
     "src/core/command_runner.py": {
       "entities": [
@@ -12971,6 +13031,71 @@
       "module_page": "experiment_parser",
       "semantic_hash": "sha256:54964adfe0c27851a8252cd4ac113d2d978247aaa3c2bfc23a9fbdf7582fb08d"
     },
+    "src/core/fs_safety.py": {
+      "entities": [
+        "SkipCallback",
+        "FilesystemSafetyError"
+      ],
+      "entity_page_occurrences": [
+        {
+          "name": "SkipCallback",
+          "occurrence": 1,
+          "page": "SkipCallback"
+        },
+        {
+          "name": "FilesystemSafetyError",
+          "occurrence": 1,
+          "page": "FilesystemSafetyError"
+        }
+      ],
+      "entity_pages": {
+        "FilesystemSafetyError": "FilesystemSafetyError",
+        "SkipCallback": "SkipCallback"
+      },
+      "generated_semantics": {
+        "entities": {
+          "FilesystemSafetyError": {
+            "attributes": {},
+            "description": "A denied filesystem operation.\n\n``operation`` names the denied operation (``write`` / ``read`` /\n``copy`` / ``path``); the message repeats it alongside the path and the\nreason so callers and logs identify exactly what was refused.",
+            "methods": {
+              "__init__": "—"
+            }
+          },
+          "SkipCallback": {
+            "attributes": {},
+            "description": "_Auto-generated from `SkipCallback` in `src/core/fs_safety.py`._",
+            "methods": {}
+          }
+        },
+        "module": {
+          "classes": {
+            "FilesystemSafetyError": "A denied filesystem operation.",
+            "SkipCallback": "—"
+          },
+          "description": "Descriptor-relative, no-follow filesystem primitives.\n\nSensitive writes in this service land in trees whose *contents* are\ncandidate-influenced (session workspaces, trial staging, server snapshot\ndirectories). Resolve-then-open checks leave a check/use race: a path\ncomponent swapped for a symlink between the check and the open redirects the\nwrite outside the authorized root. These helpers close that race on the\nqualified Linux target by pinning every path component with a file\ndescriptor and refusing to follow links at any level.\n\nLink policy (defined here; enforced for writes, imports, and staging):\n\n* **Writes** never follow links. A symlink leaf is denied independently of\n  whether its target exists (a dangling link is denied exactly like a link\n  to an existing file); symlink parent components are denied; a leaf with\n  multiple hard links is denied as an ambiguous alias for a shared file.\n  Replacement is atomic (temp file + ``os.replace`` in the pinned parent),\n  so a concurrent rename/link swap cannot redirect the write: a rename\n  replaces directory entries and never follows links.\n* **Imports and staged inputs** (result collection, trial staging) copy\n  only regular files with a single hard link, opened ``O_NOFOLLOW``.\n  Symlinked, hardlinked, and special entries are skipped or denied with an\n  error that names the operation.\n* **Plain reads** of candidate files follow links only when the resolved\n  target stays inside the authorized roots (enforced by the tool-access\n  layer); a leaf with multiple hard links is denied as ambiguous.\n\nThe trusted root anchor (a server-derived directory) is opened normally —\nits own path may legitimately traverse operator-managed links. Every\ncomponent below it is opened ``O_NOFOLLOW | O_DIRECTORY``.",
+          "functions": {
+            "_close_chain": "—",
+            "_copy_dir_at": "Recursively copy a directory's regular, single-link files.",
+            "_copy_entry_at": "Copy one entry (and its subtree) without following any link.",
+            "_leaf_denial_reason": "Why this leaf cannot be written/imported, or ``None`` when allowed.",
+            "_open_parent_chain": "Walk (and optionally create) parent components without following links.",
+            "_open_root": "Open the trusted root anchor as a directory descriptor.",
+            "_parent_denial_reason": "—",
+            "_relative_components": "Split a relative path into components; reject escapes and absolutes.",
+            "_unlink_quiet": "—",
+            "_write_at": "Replace one leaf in a pinned parent directory, never following links.",
+            "copy_tree_regular_files": "Copy a tree's regular, single-link files; never follow any link.",
+            "read_regular_file": "Read a file for import: regular, single-link, never through a link.",
+            "safe_write_bytes": "Write ``data`` to ``root/relative_path`` with no-follow safety.",
+            "safe_write_text": "Text convenience wrapper over :func:`safe_write_bytes`."
+          }
+        }
+      },
+      "hash": "sha256:d4b61c646fbf752bc916d357ac3d916125ca7fe55353f7774b497ba185e433f7",
+      "language": "python",
+      "module_page": "fs_safety",
+      "semantic_hash": "sha256:f795cc32b2838f1e9d58e83ac8c6bc62158eae76619f839dee46be08a757eca3"
+    },
     "src/core/gate_status.py": {
       "entities": [],
       "entity_page_occurrences": [],
@@ -13150,10 +13275,10 @@
           }
         }
       },
-      "hash": "sha256:d1510b4d9276a1e33e570bc87814cbfd95ca958532cba0788231bc4cc8d0d997",
+      "hash": "sha256:4956ed20c5c2fca7c931b333d6262bf0b7c0d61a1d483c5c22632e401af78b8c",
       "language": "python",
       "module_page": "iteration_snapshot",
-      "semantic_hash": "sha256:43ef2a8fbd6dd9150197f796f640a096ffe82c10299d36162f8704570b18c189"
+      "semantic_hash": "sha256:268f29f9989d35b0f987ac53b64baf2762273747759a21fa341b4061d4bd7fc2"
     },
     "src/core/legacy_alias.py": {
       "entities": [],
@@ -13778,10 +13903,10 @@
           "functions": {}
         }
       },
-      "hash": "sha256:67520456699eb4d4a5edef2e7c1e57d1dfcbd629869f205b915e165b8d774bbe",
+      "hash": "sha256:8298aa4fc99ff3c70b442e37c24cddef61c0ceb90e4d5d30474ff17a6d1f05fe",
       "language": "python",
       "module_page": "orchestrator",
-      "semantic_hash": "sha256:3252c8dc201e13c5b377e5b7b794b2c736ee529f94b123a7542ed96d23d6d5db"
+      "semantic_hash": "sha256:c52dbec37491fbcba5e063fbd532e8a3bdea7418fbab9866a0a79c7ab45a8692"
     },
     "src/core/output_digest.py": {
       "entities": [],
@@ -14630,17 +14755,16 @@
             "_is_allowed_source": "—",
             "_log_debug": "—",
             "_resolve_source_path": "—",
-            "_sha256_file": "—",
             "_should_consume_source": "—",
             "enrich_marker_from_result_artifact": "Copy and merge a result artifact referenced by a marker.",
             "merge_result_payload": "Merge promotion-relevant rich result evidence into a marker."
           }
         }
       },
-      "hash": "sha256:655a830417f2b078de6e18db7806a4f0e8f1c4446d9c0c2161a4d3acb15cbf71",
+      "hash": "sha256:2b117ef28ff3c611e65de01012f774d397694cd57de800d085a720a7fbc515df",
       "language": "python",
       "module_page": "result_artifact",
-      "semantic_hash": "sha256:af3a8f2d968a9220d3e8618b3a8f3e5cbd0fda85b33a896163bd1f1dae54b0fd"
+      "semantic_hash": "sha256:aee89b5ab20277d94c7b3b82edf868624489d74df1166f864a16ec6f02e3e3cc"
     },
     "src/core/results_store.py": {
       "entities": [],
@@ -14803,10 +14927,10 @@
           }
         }
       },
-      "hash": "sha256:ba655d545205a83644d4ca8b61cb3ffb19157a0c85db4e8849f5a9ea70c37c16",
+      "hash": "sha256:183cecfa5fd57115e01ce9e855853839731d9b97e426f63345cc6b7f9bb690e7",
       "language": "python",
       "module_page": "session_manager",
-      "semantic_hash": "sha256:5135589cf1b9fa74baf493139c6c1fa08a666a1ac8230e0dd3ff71dbca8e0f33"
+      "semantic_hash": "sha256:1ccfed2a9b1152f5a053c383bde3f92235a15f3fe66222f8fc7d516a73f4bf0a"
     },
     "src/core/significance.py": {
       "entities": [],
@@ -16764,13 +16888,15 @@
             "description": "Server-derived file authorization for one run/attempt's tool calls.\n\nBuilt once per run from the owning session workspace and the skill's\ndeclarations; tool arguments never construct or extend it.",
             "methods": {
               "_select": "Return ``(denial_reason, resolved)`` for one tool-supplied path.",
+              "authorize_import": "Resolve ``raw`` as a copy-in source with strict leaf rules.",
               "authorize_read": "Resolve ``raw`` and require it to land inside a readable root.",
               "authorize_write": "Resolve ``raw`` and require an authorized, unprotected target.",
               "filter_readable": "Keep only candidates that resolve inside a readable root.",
               "is_write_protected": "Whether a resolved path is server-owned/evaluation state.",
               "resolve": "Resolve ``raw`` to the authorized target path.",
               "resolve_candidates": "Resolve a tool-supplied path to its authorized candidates.",
-              "with_extra_protected": "Return a copy with additional protected names merged in."
+              "with_extra_protected": "Return a copy with additional protected names merged in.",
+              "writable_root_and_relative": "Split an authorized write target into ``(root, relative_path)``."
             }
           }
         },
@@ -16780,6 +16906,7 @@
           },
           "description": "Shared file-tool authorization: one context for every file operation.\n\nEvery path a tool call exposes — read, write, glob, grep, copy, and any\npath-bearing tool argument — resolves through the same authorization\ncontext. The context is derived server-side from run/attempt ownership\n(the run's session workspace) plus skill declarations; tool-supplied paths,\ncandidate files, and workspace instructions never grant additional access.\n\nAuthorization model:\n\n* ``readable_roots`` / ``writable_roots`` are explicit roots. A resolved\n  path outside every root of the requested kind is rejected — sibling\n  sessions, evaluator packages, interpreter environments, control-plane\n  storage, and shared evaluation assets are excluded by construction\n  because they live outside the owning session's workspace.\n* ``protected_paths`` / ``protected_names`` carve server-owned state out of\n  the writable roots: private evidence, command logs, trial staging, the\n  bootstrap and session manifests, and skill-declared evaluation data are\n  never candidate-writable even though they live inside the workspace.\n* Relative tool paths resolve against the session workspace; the legacy\n  shared-root path style is still accepted when it lands inside the\n  authorized roots. Absolute paths are accepted only when they land inside\n  an authorized root.\n\nThe shared workspace root is carried for command-policy plumbing (the\ngoverned interpreter and legacy ``cd`` normalization live there); it is\nnever an authorization root for file access.",
           "functions": {
+            "_multi_link_reason": "Reason a leaf is an ambiguous shared-file alias, or ``None``.",
             "_resolved": "—",
             "build_tool_access_context": "Derive the file authorization for one run/attempt, server-side.",
             "matches_protected_name": "Whether a workspace-relative path matches a protected name/pattern.",
@@ -16787,10 +16914,10 @@
           }
         }
       },
-      "hash": "sha256:beb76de655650abe2fa9062d98dab8c7f38f43a950995d29b909e1bcc581cc7f",
+      "hash": "sha256:57d6ae215cf505c15424d228b7091e5a8a7d2142992df38bea41d9c0ed1611cf",
       "language": "python",
       "module_page": "tool_access",
-      "semantic_hash": "sha256:9455422400b3dfe2c34d06721f931089f4910aa541fd1e4366bbeefe735fb372"
+      "semantic_hash": "sha256:90215e0326f4219264646807ae85b5bde9d962f71c5bcff8a844dfbc1c4091cb"
     },
     "src/core/trial_workspace.py": {
       "entities": [
@@ -16838,10 +16965,10 @@
           }
         }
       },
-      "hash": "sha256:92e81e560673bf483d3e3657832cc7e75420501c63547c26a91b34b2e0bbe601",
+      "hash": "sha256:ef4d3aed51c314eee199fa19d6261b50aee1db8da917096552c6f4013c0bc761",
       "language": "python",
       "module_page": "trial_workspace",
-      "semantic_hash": "sha256:d1e3c3a292bbaa024229a81a6e5aa37e48dbe15f961a805aaf6573a09ebf0dd9"
+      "semantic_hash": "sha256:26a06049242820b4e120be806ba34d1cf030aa19c16c54d7d5d4c8500941a518"
     },
     "src/main.py": {
       "entities": [],
@@ -18894,6 +19021,45 @@
       "language": "python",
       "module_page": "test_fencing_tokens",
       "semantic_hash": "sha256:16b34c31bca69cd25aba56a4f831b7ed4e14ec049ee3ba3fe2b5b683ee67312f"
+    },
+    "tests/test_fs_safety.py": {
+      "entities": [],
+      "entity_page_occurrences": [],
+      "entity_pages": {},
+      "generated_semantics": {
+        "entities": {},
+        "module": {
+          "classes": {},
+          "description": "Symlink-race and shared-alias resistance for filesystem operations.\n\nEvery sensitive write must be immune to check/use races: dangling leaf\nlinks, linked parents, hardlink aliases, and concurrent rename/link\nreplacement must never create or overwrite data outside the authorized\nroot. Denied operations must name themselves (``write`` / ``read`` /\n``copy``) in the error.",
+          "functions": {
+            "_assert_untouched": "—",
+            "_result_marker": "—",
+            "_sentinel": "—",
+            "test_attempt_snapshot_write_refuses_planted_target_link": "—",
+            "test_attempt_snapshot_write_still_works": "—",
+            "test_concurrent_rename_and_link_replacement_never_escapes": "—",
+            "test_dangling_leaf_symlink_never_creates_the_outside_target": "—",
+            "test_hardlinked_leaf_write_is_denied": "—",
+            "test_import_read_requires_regular_single_link_file": "—",
+            "test_leaf_swapped_to_dangling_link_after_authorization_is_denied": "—",
+            "test_linked_parent_is_denied_for_write": "—",
+            "test_nested_parent_creation_without_following_links": "—",
+            "test_non_regular_leaf_write_is_denied": "—",
+            "test_parent_swapped_to_link_after_authorization_is_denied": "—",
+            "test_replace_updates_regular_leaf_without_temp_leftovers": "—",
+            "test_result_collection_rejects_linked_sources": "—",
+            "test_result_collection_still_copies_regular_results": "—",
+            "test_result_collection_target_link_is_not_followed": "—",
+            "test_stage_trial_workspace_skips_links_and_hardlinks": "—",
+            "test_symlink_to_existing_file_is_denied_for_write": "—",
+            "test_unsafe_relative_paths_are_rejected": "—"
+          }
+        }
+      },
+      "hash": "sha256:89ef5383ebda9cf2db57eb02bd2e0be948d2a7a46c6aec917f6a6ffb9278e695",
+      "language": "python",
+      "module_page": "test_fs_safety",
+      "semantic_hash": "sha256:8fbf4fb14d39269d3896c24599345b7b02ce98388fcd7be21289a41362aecef0"
     },
     "tests/test_gap1_duplicate_guard.py": {
       "entities": [],
@@ -22964,6 +23130,7 @@
             "test_control_plane_files_never_reachable": "—",
             "test_cp_and_cat_reject_sibling_and_outside_paths": "—",
             "test_cp_destination_faces_write_protection": "—",
+            "test_cp_source_must_not_be_a_link_or_alias": "—",
             "test_glob_expansion_cannot_escape_the_roots": "—",
             "test_grep_rejects_outside_search_paths_and_finds_own_files": "—",
             "test_interpreter_environment_and_evaluator_code_unreachable": "—",
@@ -22975,15 +23142,16 @@
             "test_skill_declared_evaluation_data_is_write_protected": "—",
             "test_skill_manifest_evaluation_data_declaration_is_enforced": "—",
             "test_write_file_cannot_modify_sibling_candidate": "—",
+            "test_write_file_rejects_hardlinked_alias": "—",
             "test_write_file_rejects_symlink_leaves": "—",
             "test_write_file_rejects_traversal_and_shared_root_targets": "—"
           }
         }
       },
-      "hash": "sha256:59119ddbf499b33bcbdfa1719a1a102c81e63043d1c46f8027b2e0a51d902b27",
+      "hash": "sha256:5460902b1809da2d5cbc0da5436ef4fa1ced8483e80fa1d18a3b5e36aa3d913c",
       "language": "python",
       "module_page": "test_tool_access",
-      "semantic_hash": "sha256:297cbc73ecfb2eedb94b3987a9386c3718a17c24153cfd6ff3015902bd8f3d72"
+      "semantic_hash": "sha256:675a989ce11b865c4f472812ae357d7dfee3480ead851adfd9efb7f3011f703b"
     },
     "tests/test_trial_workspace.py": {
       "entities": [

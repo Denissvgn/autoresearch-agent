@@ -18,18 +18,18 @@
     "by_kind": {
       "api-contracts": 0,
       "dependencies": 1,
-      "entities": 426,
+      "entities": 428,
       "flows": 111,
       "guides": 0,
       "index": 1,
       "infrastructure": 3,
       "load-order": 1,
       "log": 1,
-      "modules": 245,
+      "modules": 247,
       "workflows": 13
     },
     "dependency_architecture": 2,
-    "total": 802
+    "total": 806
   },
   "dependency_pages": {
     "count": 2,
@@ -51,7 +51,7 @@
           "gaps": [
             {
               "kind": "unresolved_call",
-              "line": 102,
+              "line": 103,
               "step": "allocate_trial_dir",
               "target": "trial_dir.mkdir"
             }
@@ -446,34 +446,17 @@
       },
       "evidence": {
         "data_flow": {
-          "boundary_effects": [
-            {
-              "confidence": "unknown",
-              "kind": "filesystem_write",
-              "line": 123,
-              "step": "stage_trial_workspace",
-              "step_index": 11,
-              "target": "shutil.copytree"
-            },
-            {
-              "confidence": "unknown",
-              "kind": "filesystem_write",
-              "line": 125,
-              "step": "stage_trial_workspace",
-              "step_index": 11,
-              "target": "shutil.copy2"
-            }
-          ],
+          "boundary_effects": [],
           "gaps": [
             {
               "kind": "external_call",
-              "line": 93,
+              "line": 94,
               "step": "is_trial_eligible_command",
               "target": "any"
             },
             {
               "kind": "unresolved_call",
-              "line": 102,
+              "line": 103,
               "step": "allocate_trial_dir",
               "target": "trial_dir.mkdir"
             },
@@ -482,19 +465,26 @@
               "line": 0,
               "step": "build_trial_context",
               "target": "first 12 steps"
+            },
+            {
+              "kind": "truncated_flow",
+              "line": 0,
+              "step": "build_trial_context",
+              "target": "depth limit"
             }
           ],
           "generated": true,
           "step_count": 12,
           "transfer_count": 11,
-          "truncated": false
+          "truncated": true
         },
         "flow": {
           "modules_touched": [
-            "src/core/trial_workspace.py"
+            "src/core/trial_workspace.py",
+            "src/core/fs_safety.py"
           ],
-          "step_count": 24,
-          "truncated": false
+          "step_count": 69,
+          "truncated": true
         }
       },
       "id": "api-build_trial_context",
@@ -876,7 +866,7 @@
           "gaps": [
             {
               "kind": "external_call",
-              "line": 93,
+              "line": 94,
               "step": "is_trial_eligible_command",
               "target": "any"
             }
@@ -2304,60 +2294,31 @@
       },
       "evidence": {
         "data_flow": {
-          "boundary_effects": [
-            {
-              "confidence": "unknown",
-              "kind": "filesystem_write",
-              "line": 123,
-              "step": "stage_trial_workspace",
-              "step_index": 2,
-              "target": "shutil.copytree"
-            },
-            {
-              "confidence": "unknown",
-              "kind": "filesystem_write",
-              "line": 125,
-              "step": "stage_trial_workspace",
-              "step_index": 2,
-              "target": "shutil.copy2"
-            }
-          ],
+          "boundary_effects": [],
           "gaps": [
             {
               "kind": "unresolved_call",
-              "line": 116,
+              "line": 120,
               "step": "stage_trial_workspace",
               "target": "dst.mkdir"
             },
             {
               "kind": "external_call",
-              "line": 118,
-              "step": "stage_trial_workspace",
+              "line": 378,
+              "step": "copy_tree_regular_files",
+              "target": "os.makedirs"
+            },
+            {
+              "kind": "external_call",
+              "line": 80,
+              "step": "_open_root",
+              "target": "os.open"
+            },
+            {
+              "kind": "external_call",
+              "line": 384,
+              "step": "copy_tree_regular_files",
               "target": "sorted"
-            },
-            {
-              "kind": "unresolved_call",
-              "line": 118,
-              "step": "stage_trial_workspace",
-              "target": "src.iterdir"
-            },
-            {
-              "kind": "unresolved_call",
-              "line": 122,
-              "step": "stage_trial_workspace",
-              "target": "entry.is_dir"
-            },
-            {
-              "kind": "unresolved_call",
-              "line": 124,
-              "step": "stage_trial_workspace",
-              "target": "entry.is_file"
-            },
-            {
-              "kind": "unresolved_call",
-              "line": 130,
-              "step": "stage_trial_workspace",
-              "target": "logger.warning"
             },
             {
               "kind": "step_limit",
@@ -2373,9 +2334,10 @@
         },
         "flow": {
           "modules_touched": [
-            "src/core/trial_workspace.py"
+            "src/core/trial_workspace.py",
+            "src/core/fs_safety.py"
           ],
-          "step_count": 13,
+          "step_count": 61,
           "truncated": false
         }
       },
@@ -2392,72 +2354,56 @@
       },
       "evidence": {
         "data_flow": {
-          "boundary_effects": [
-            {
-              "confidence": "unknown",
-              "kind": "filesystem_write",
-              "line": 123,
-              "step": "stage_trial_workspace",
-              "step_index": 1,
-              "target": "shutil.copytree"
-            },
-            {
-              "confidence": "unknown",
-              "kind": "filesystem_write",
-              "line": 125,
-              "step": "stage_trial_workspace",
-              "step_index": 1,
-              "target": "shutil.copy2"
-            }
-          ],
+          "boundary_effects": [],
           "gaps": [
             {
               "kind": "unresolved_call",
-              "line": 116,
+              "line": 120,
               "step": "stage_trial_workspace",
               "target": "dst.mkdir"
             },
             {
               "kind": "external_call",
-              "line": 118,
-              "step": "stage_trial_workspace",
+              "line": 378,
+              "step": "copy_tree_regular_files",
+              "target": "os.makedirs"
+            },
+            {
+              "kind": "external_call",
+              "line": 80,
+              "step": "_open_root",
+              "target": "os.open"
+            },
+            {
+              "kind": "external_call",
+              "line": 384,
+              "step": "copy_tree_regular_files",
               "target": "sorted"
             },
             {
-              "kind": "unresolved_call",
-              "line": 118,
-              "step": "stage_trial_workspace",
-              "target": "src.iterdir"
+              "kind": "external_call",
+              "line": 384,
+              "step": "copy_tree_regular_files",
+              "target": "os.listdir"
             },
             {
-              "kind": "unresolved_call",
-              "line": 122,
+              "kind": "step_limit",
+              "line": 0,
               "step": "stage_trial_workspace",
-              "target": "entry.is_dir"
-            },
-            {
-              "kind": "unresolved_call",
-              "line": 124,
-              "step": "stage_trial_workspace",
-              "target": "entry.is_file"
-            },
-            {
-              "kind": "unresolved_call",
-              "line": 130,
-              "step": "stage_trial_workspace",
-              "target": "logger.warning"
+              "target": "first 12 steps"
             }
           ],
           "generated": true,
-          "step_count": 11,
-          "transfer_count": 10,
+          "step_count": 12,
+          "transfer_count": 11,
           "truncated": false
         },
         "flow": {
           "modules_touched": [
-            "src/core/trial_workspace.py"
+            "src/core/trial_workspace.py",
+            "src/core/fs_safety.py"
           ],
-          "step_count": 11,
+          "step_count": 59,
           "truncated": false
         }
       },
@@ -7990,6 +7936,7 @@
         "entities/FeatureReadinessSummary.md",
         "entities/FieldProps.md",
         "entities/FieldTypes.md",
+        "entities/FilesystemSafetyError.md",
         "entities/FormField.md",
         "entities/GateBundles.md",
         "entities/GeneratedDraft.md",
@@ -8186,6 +8133,7 @@
         "entities/SkillRegistryPromotionTarget.md",
         "entities/SkillRuntime.md",
         "entities/SkillSummary.md",
+        "entities/SkipCallback.md",
         "entities/SlowFakeWS.md",
         "entities/SnapshotCollector.md",
         "entities/SparklineProps.md",
@@ -8499,6 +8447,7 @@
         "modules/examples_prompt-registry_main.md",
         "modules/execution_contracts.md",
         "modules/experiment_parser.md",
+        "modules/fs_safety.md",
         "modules/gate_status.md",
         "modules/History.md",
         "modules/http_headers.md",
@@ -8606,6 +8555,7 @@
         "modules/test_experiment_parser_volatility_phase8.md",
         "modules/test_exploration_markers.md",
         "modules/test_fencing_tokens.md",
+        "modules/test_fs_safety.md",
         "modules/test_gap1_duplicate_guard.md",
         "modules/test_gate_bundle_production_economics.md",
         "modules/test_gate_status_contract.md",
@@ -9689,6 +9639,19 @@
       "role": "semantic",
       "source_path": "src/core/skill_manifest.py",
       "title": "FieldTypes"
+    },
+    {
+      "canonical_path": "entities/FilesystemSafetyError.md",
+      "id": "FilesystemSafetyError",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/FilesystemSafetyError",
+      "outgoing_internal_links": [
+        "modules/fs_safety.md",
+        "modules/test_fs_safety.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/fs_safety.py",
+      "title": "FilesystemSafetyError"
     },
     {
       "canonical_path": "entities/FormField.md",
@@ -12247,6 +12210,18 @@
       "title": "SkillSummary"
     },
     {
+      "canonical_path": "entities/SkipCallback.md",
+      "id": "SkipCallback",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/SkipCallback",
+      "outgoing_internal_links": [
+        "modules/fs_safety.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/fs_safety.py",
+      "title": "SkipCallback"
+    },
+    {
       "canonical_path": "entities/SlowFakeWS.md",
       "id": "SlowFakeWS",
       "kind": "entities",
@@ -14216,6 +14191,7 @@
         "entities/ToolExecutionResult.md",
         "modules/agent_tools.md",
         "modules/command_runner.md",
+        "modules/fs_safety.md",
         "modules/llm_provider.md",
         "modules/orchestrator.md",
         "modules/skill_registry.md",
@@ -14887,6 +14863,27 @@
       "title": "experiment_parser Module"
     },
     {
+      "canonical_path": "modules/fs_safety.md",
+      "id": "fs_safety",
+      "kind": "modules",
+      "mcp_uri": "llm-wiki://modules/fs_safety",
+      "outgoing_internal_links": [
+        "entities/FilesystemSafetyError.md",
+        "entities/SkipCallback.md",
+        "modules/agent_tools.md",
+        "modules/fs_safety.md",
+        "modules/iteration_snapshot.md",
+        "modules/orchestrator.md",
+        "modules/result_artifact.md",
+        "modules/session_manager.md",
+        "modules/test_fs_safety.md",
+        "modules/trial_workspace.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/fs_safety.py",
+      "title": "fs_safety Module"
+    },
+    {
       "canonical_path": "modules/gate_status.md",
       "id": "gate_status",
       "kind": "modules",
@@ -14988,9 +14985,11 @@
       "mcp_uri": "llm-wiki://modules/iteration_snapshot",
       "outgoing_internal_links": [
         "modules/artifact_reference.md",
+        "modules/fs_safety.md",
         "modules/iteration_snapshot.md",
         "modules/orchestrator.md",
         "modules/test_baseline_capture_dedup_bypass.md",
+        "modules/test_fs_safety.md",
         "modules/test_iteration_snapshot.md",
         "modules/test_iteration_snapshot_canonical_payload.md",
         "modules/test_mlflow_run_id_contract.md",
@@ -15688,8 +15687,10 @@
       "mcp_uri": "llm-wiki://modules/result_artifact",
       "outgoing_internal_links": [
         "modules/artifact_reference.md",
+        "modules/fs_safety.md",
         "modules/orchestrator.md",
         "modules/result_artifact.md",
+        "modules/test_fs_safety.md",
         "modules/test_issue6_adaptive_not_attempted.md",
         "modules/test_mlflow_run_id_contract.md",
         "modules/test_result_artifact_ingestion.md"
@@ -16644,6 +16645,23 @@
       "role": "semantic",
       "source_path": "tests/test_fencing_tokens.py",
       "title": "test_fencing_tokens Module"
+    },
+    {
+      "canonical_path": "modules/test_fs_safety.md",
+      "id": "test_fs_safety",
+      "kind": "modules",
+      "mcp_uri": "llm-wiki://modules/test_fs_safety",
+      "outgoing_internal_links": [
+        "modules/fs_safety.md",
+        "modules/iteration_snapshot.md",
+        "modules/result_artifact.md",
+        "modules/test_fs_safety.md",
+        "modules/tool_access.md",
+        "modules/trial_workspace.md"
+      ],
+      "role": "semantic",
+      "source_path": "tests/test_fs_safety.py",
+      "title": "test_fs_safety Module"
     },
     {
       "canonical_path": "modules/test_gap1_duplicate_guard.md",
@@ -18028,6 +18046,7 @@
         "modules/command_runner.md",
         "modules/test_async_tool_path.md",
         "modules/test_command_policy.md",
+        "modules/test_fs_safety.md",
         "modules/test_orchestrator_timeout.md",
         "modules/test_tool_access.md",
         "modules/test_trial_workspace.md",
@@ -18065,7 +18084,9 @@
       "mcp_uri": "llm-wiki://modules/trial_workspace",
       "outgoing_internal_links": [
         "entities/TrialContext.md",
+        "modules/fs_safety.md",
         "modules/orchestrator.md",
+        "modules/test_fs_safety.md",
         "modules/test_parallel_trials.md",
         "modules/test_trial_workspace.md",
         "modules/trial_workspace.md"
@@ -18205,6 +18226,7 @@
       "mcp_uri": "llm-wiki://workflows/AgentOrchestrator__finalize_tool_result",
       "outgoing_internal_links": [
         "modules/experiment_parser.md",
+        "modules/fs_safety.md",
         "modules/iteration_snapshot.md",
         "modules/llm_provider.md",
         "modules/orchestrator.md",
@@ -18481,6 +18503,7 @@
       "kind": "flows",
       "mcp_uri": "llm-wiki://flows/api-build_trial_context",
       "outgoing_internal_links": [
+        "modules/fs_safety.md",
         "modules/trial_workspace.md"
       ],
       "role": "mixed",
@@ -18869,6 +18892,7 @@
       "kind": "flows",
       "mcp_uri": "llm-wiki://flows/api-stage_trial_or_none",
       "outgoing_internal_links": [
+        "modules/fs_safety.md",
         "modules/trial_workspace.md"
       ],
       "role": "mixed",
@@ -18881,6 +18905,7 @@
       "kind": "flows",
       "mcp_uri": "llm-wiki://flows/api-stage_trial_workspace",
       "outgoing_internal_links": [
+        "modules/fs_safety.md",
         "modules/trial_workspace.md"
       ],
       "role": "mixed",
@@ -19901,6 +19926,7 @@
         "modules/examples_prompt-registry_main.md",
         "modules/execution_contracts.md",
         "modules/experiment_parser.md",
+        "modules/fs_safety.md",
         "modules/gate_status.md",
         "modules/History.md",
         "modules/http_headers.md",
@@ -20008,6 +20034,7 @@
         "modules/test_experiment_parser_volatility_phase8.md",
         "modules/test_exploration_markers.md",
         "modules/test_fencing_tokens.md",
+        "modules/test_fs_safety.md",
         "modules/test_gap1_duplicate_guard.md",
         "modules/test_gate_bundle_production_economics.md",
         "modules/test_gate_status_contract.md",
@@ -20157,6 +20184,7 @@
         "modules/examples_prompt-registry_main.md",
         "modules/execution_contracts.md",
         "modules/experiment_parser.md",
+        "modules/fs_safety.md",
         "modules/gate_status.md",
         "modules/History.md",
         "modules/http_headers.md",
@@ -20264,6 +20292,7 @@
         "modules/test_experiment_parser_volatility_phase8.md",
         "modules/test_exploration_markers.md",
         "modules/test_fencing_tokens.md",
+        "modules/test_fs_safety.md",
         "modules/test_gap1_duplicate_guard.md",
         "modules/test_gate_bundle_production_economics.md",
         "modules/test_gate_status_contract.md",
@@ -20368,5 +20397,5 @@
     }
   ],
   "schema_version": "llm-wiki-surface-index/v1",
-  "source_hash": "sha256:f398a19cf0ef47a5dbe45727494682db276fc0521dfb9cdb3e2fb02ba0c8847e"
+  "source_hash": "sha256:cb22aac61e5f3bb9283bf749f40a8f6636d1cfa04efbd79aff67acc554ebcee6"
 }
