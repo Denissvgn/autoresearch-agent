@@ -26,19 +26,19 @@ from src.config import secret_value, settings
 # _load_packaged_skill_md/_nonce_env_for_command/AGENT_TOOLS from orchestrator).
 from src.core.agent_tools import (  # noqa: F401
     AGENT_TOOLS,
+    ToolAccessContext,
     ToolExecutionResult,
     _config_snapshot_path_from_command,
     _execute_tool,
     _load_packaged_skill_md,
     _nonce_env_for_command,
     _normalize_command_for_plan,
-    _safe_path,
-    _safe_write_path,
     _tool_bash,
     _tool_glob,
     _tool_grep,
     _tool_read_file,
     _tool_write_file,
+    build_tool_access_context,
 )
 from src.core.artifact_reference import normalize_artifact_references_in_mapping
 from src.core.command_runner import (
@@ -2296,6 +2296,15 @@ class AgentOrchestrator:
         # the default policy sets inside ``evaluate_command_policy``; the
         # transitional runtimes return {} (parity with the hardcoded sets).
         skill_policy_extension = skill.command_policy_extension()
+        # One shared file-operation authorization for this run, derived
+        # server-side from run ownership (the session workspace) and the
+        # skill's declared evaluation data. Every tool call resolves its
+        # paths through it; tool arguments never widen it.
+        tool_access = build_tool_access_context(
+            workspace,
+            workspace_root=settings.workspace_root,
+            extra_protected_names=skill_policy_extension.get("write_protected_files"),
+        )
         # P2 per-workdir state: the skill's parallel-trial opt-in
         # (``execution.concurrency``, default 1 = strictly sequential,
         # byte-identical behavior). Defensive against stub runtimes in tests.
@@ -2863,8 +2872,7 @@ class AgentOrchestrator:
                                     _execute_tool,
                                     block.name,
                                     block.input,
-                                    settings.workspace_root,
-                                    workspace,
+                                    tool_access,
                                     output_callback,
                                     command_deadline_mono=_command_deadline_mono,
                                     proc_registry=self._command_procs,
@@ -2894,8 +2902,7 @@ class AgentOrchestrator:
                                 _execute_tool,
                                 block.name,
                                 block.input,
-                                settings.workspace_root,
-                                workspace,
+                                tool_access,
                                 output_callback,
                                 command_deadline_mono=_command_deadline_mono,
                                 proc_registry=self._command_procs,

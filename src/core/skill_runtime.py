@@ -111,6 +111,10 @@ class CommandPolicyExtension(TypedDict, total=False):
     allowed_executables: list[str]
     copyable_files: list[str]
     readable_files: list[str]
+    #: Evaluation-data filenames the candidate must never overwrite (staged
+    #: eval sets, protected test files). Enforced by the shared file-tool
+    #: authorization on every candidate write.
+    write_protected_files: list[str]
     script_paths: dict[str, str]
     #: ARC-012 P7-011: the CLI flag carrying the skill's per-iteration config
     #: artifact (default ``--config`` when absent).
@@ -680,6 +684,8 @@ class ManifestSkillRuntime:
             ext["copyable_files"] = sorted(cp.copyable_files)
         if cp.readable_files:
             ext["readable_files"] = sorted(cp.readable_files)
+        if cp.write_protected_files:
+            ext["write_protected_files"] = sorted(cp.write_protected_files)
         # ARC-012 P7-011: the skill's declared config-artifact flag — policy
         # confinement and the pre-run snapshot both key on it (default
         # ``--config``).

@@ -34,6 +34,7 @@ from pathlib import Path
 import pytest
 
 from src.core.orchestrator import _execute_tool, _tool_glob, _tool_grep
+from src.core.tool_access import ToolAccessContext, build_tool_access_context
 
 # ── helpers ────────────────────────────────────────────────────────────────
 
@@ -42,6 +43,10 @@ def _workspace(tmp_path: Path) -> str:
     ws = tmp_path / "workspace"
     ws.mkdir()
     return str(ws)
+
+
+def _access(workspace: str) -> ToolAccessContext:
+    return build_tool_access_context(workspace, workspace_root=workspace)
 
 
 # ── dispatch shape ─────────────────────────────────────────────────────────
@@ -79,7 +84,7 @@ def test_grep_returns_matches(tmp_path: Path):
     (Path(workspace) / "a.txt").write_text("alpha\nbeta\n", encoding="utf-8")
     (Path(workspace) / "b.txt").write_text("alpha\ngamma\n", encoding="utf-8")
 
-    result = _tool_grep({"pattern": "alpha"}, workspace)
+    result = _tool_grep({"pattern": "alpha"}, _access(workspace))
 
     # grep reports the search-path prefix (absolute safe_dir) + filename.
     assert "a.txt" in result and "alpha" in result
@@ -93,7 +98,7 @@ def test_grep_no_matches_returns_marker(tmp_path: Path):
     workspace = _workspace(tmp_path)
     (Path(workspace) / "a.txt").write_text("alpha\n", encoding="utf-8")
 
-    result = _tool_grep({"pattern": "zzz_not_present"}, workspace)
+    result = _tool_grep({"pattern": "zzz_not_present"}, _access(workspace))
 
     assert result == "(no matches)"
 
@@ -105,7 +110,7 @@ def test_grep_truncates_large_output(tmp_path: Path):
     big = "matchme\n" * 10_000
     (Path(workspace) / "big.txt").write_text(big, encoding="utf-8")
 
-    result = _tool_grep({"pattern": "matchme"}, workspace)
+    result = _tool_grep({"pattern": "matchme"}, _access(workspace))
 
     assert "...(truncated)..." in result
     assert len(result) <= 60_000 + len("...(truncated)...\n") + 10
@@ -118,7 +123,7 @@ def test_grep_include_filter(tmp_path: Path):
     (Path(workspace) / "skip.txt").write_text("target\n", encoding="utf-8")
 
     result = _tool_grep(
-        {"pattern": "target", "include": "*.py"}, workspace,
+        {"pattern": "target", "include": "*.py"}, _access(workspace),
     )
 
     assert "keep.py" in result
@@ -134,7 +139,7 @@ def test_execute_tool_dispatches_grep(tmp_path: Path):
     workspace = _workspace(tmp_path)
     (Path(workspace) / "a.txt").write_text("hello\n", encoding="utf-8")
 
-    result = _execute_tool("grep", {"pattern": "hello"}, workspace)
+    result = _execute_tool("grep", {"pattern": "hello"}, _access(workspace))
 
     assert "a.txt" in result.content
     assert "hello" in result.content
@@ -145,7 +150,7 @@ def test_execute_tool_dispatches_glob(tmp_path: Path):
     workspace = _workspace(tmp_path)
     (Path(workspace) / "find.txt").write_text("x", encoding="utf-8")
 
-    result = _execute_tool("glob", {"pattern": "*.txt"}, workspace)
+    result = _execute_tool("glob", {"pattern": "*.txt"}, _access(workspace))
 
     assert "find.txt" in result.content
 
@@ -174,7 +179,7 @@ def test_grep_timeout_returns_marker(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(tools.subprocess, "Popen", _slow_grep)
     monkeypatch.setattr(tools, "_collect_process_output", _short_deadline)
     start = time.monotonic()
-    result = _tool_grep({"pattern": "anything"}, workspace)
+    result = _tool_grep({"pattern": "anything"}, _access(workspace))
     assert result == "Grep timed out after 30s"
     assert time.monotonic() - start < 5
     assert children[0].poll() is not None
@@ -233,7 +238,7 @@ def test_grep_does_not_inherit_control_plane_secrets(
 
     monkeypatch.setattr(tools.subprocess, "Popen", _capturing_popen)
 
-    _tool_grep({"pattern": "alpha"}, workspace)
+    _tool_grep({"pattern": "alpha"}, _access(workspace))
 
     assert captured_env, "_tool_grep did not invoke subprocess.Popen"
     for name in canaries:
@@ -261,7 +266,7 @@ def test_grep_child_env_still_has_path(tmp_path: Path, monkeypatch):
 
     monkeypatch.setattr(tools.subprocess, "Popen", _capturing_popen)
 
-    _tool_grep({"pattern": "alpha"}, workspace)
+    _tool_grep({"pattern": "alpha"}, _access(workspace))
 
     assert "PATH" in captured_env, (
         "PATH missing from grep child env — subprocess would fail to find grep"

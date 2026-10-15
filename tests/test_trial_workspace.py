@@ -18,6 +18,7 @@ from unittest.mock import MagicMock, patch
 
 from src.core.agent_tools import _config_snapshot_path_from_command, _tool_bash
 from src.core.command_runner import CommandRunResult
+from src.core.tool_access import build_tool_access_context
 from src.core.trial_workspace import (
     TRIALS_DIRNAME,
     TrialContext,
@@ -175,6 +176,10 @@ def test_build_trial_context_bookkeeping_command_not_trialed(tmp_path):
 # --- cwd seam ---------------------------------------------------------------
 
 
+def _ws_access():
+    return build_tool_access_context("/ws", workspace_root="/ws")
+
+
 class _CapturingRunner:
     captured: dict = {}
 
@@ -193,13 +198,13 @@ def test_tool_bash_threads_cwd_to_governed_runner():
     _CapturingRunner.captured = {}
     with patch("src.core.agent_tools.GovernedCommandRunner", _CapturingRunner):
         _tool_bash(
-            {"command": "echo hi", "timeout_s": 30}, "/ws",
+            {"command": "echo hi", "timeout_s": 30}, _ws_access(),
             command_deadline_mono=None,
         )
         # Default (no trial) → cwd None → runner uses the session workspace.
         assert _CapturingRunner.captured["cwd"] is None
         _tool_bash(
-            {"command": "echo hi", "timeout_s": 30}, "/ws",
+            {"command": "echo hi", "timeout_s": 30}, _ws_access(),
             command_deadline_mono=None, cwd="/ws/.trials/turn-001-seq-01",
         )
         assert _CapturingRunner.captured["cwd"] == "/ws/.trials/turn-001-seq-01"

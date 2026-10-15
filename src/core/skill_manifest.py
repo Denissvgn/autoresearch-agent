@@ -410,6 +410,10 @@ class CommandPolicy(BaseModel):
     allowed_executables: list[str] = Field(default_factory=list)
     copyable_files: list[str] = Field(default_factory=list)
     readable_files: list[str] = Field(default_factory=list)
+    #: Evaluation-data filenames (staged eval sets, protected test files) the
+    #: candidate must never overwrite. Enforced by the shared file-tool
+    #: authorization on every candidate write — not advisory.
+    write_protected_files: list[str] = Field(default_factory=list)
     forbidden_tokens: list[str] = Field(default_factory=list)
     forbidden_substrings: list[str] = Field(default_factory=list)
     secret_markers: list[str] = Field(default_factory=list)

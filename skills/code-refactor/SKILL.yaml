@@ -91,6 +91,9 @@ command_policy:
   allowed_executables: [cp, cat, jq]
   copyable_files: [refactor_target.py, best_refactor_target.py]
   readable_files: [refactor_target.py, best_refactor_target.py, eval_result.json]
+  # Evaluation data staged by bootstrap: the candidate must never rewrite the
+  # protected test file it is graded against.
+  write_protected_files: [tests_target.jsonl]
   forbidden_tokens: ["|", "||", "&&", ";", "&"]
   forbidden_substrings: ["`", "$", ">", "<", "\\n", "\\r"]
   secret_markers: [.env, /proc/, /run/secrets, authorization, bearer, credential, id_rsa, password, secret, token]

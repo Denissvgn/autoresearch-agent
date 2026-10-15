@@ -44,6 +44,7 @@ from src.core.command_runner import CommandProcessRegistry, CommandRunResult, Go
 from src.core.llm_provider import ProviderResponse, StopReason, ToolUseBlock, Usage
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig, _tool_bash
 from src.core.results_store import ResultsStore
+from src.core.tool_access import ToolAccessContext, build_tool_access_context
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -269,6 +270,10 @@ async def test_registry_kill_all_reaps_in_flight_subprocess(tmp_path: Path) -> N
 # ---------------------------------------------------------------------------
 
 
+def _ws_access() -> ToolAccessContext:
+    return build_tool_access_context("/ws", workspace_root="/ws")
+
+
 class _CapturingRunner:
     """Stand-in for GovernedCommandRunner that records the resolved timeout_s."""
 
@@ -313,7 +318,7 @@ def test_command_timeout_cap_respects_floor_then_budget() -> None:
         # Ample remaining budget: agent asked for 30s, floored to 900, not capped.
         _tool_bash(
             {"command": "echo hi", "timeout_s": 30},
-            "/ws",
+            _ws_access(),
             command_deadline_mono=time.monotonic() + 5000,
         )
         assert _CapturingRunner.captures[-1]["timeout_s"] == 900
@@ -321,7 +326,7 @@ def test_command_timeout_cap_respects_floor_then_budget() -> None:
         # Tight remaining budget (< floor): the cap wins even though 30 < 900.
         _tool_bash(
             {"command": "echo hi", "timeout_s": 30},
-            "/ws",
+            _ws_access(),
             command_deadline_mono=time.monotonic() + 5,
         )
         capped = _CapturingRunner.captures[-1]["timeout_s"]
@@ -329,7 +334,7 @@ def test_command_timeout_cap_respects_floor_then_budget() -> None:
         assert 4 <= capped <= 6, capped  # ceil(≈5) → 5 or 6
 
         # No deadline → unchanged behavior (floor only).
-        _tool_bash({"command": "echo hi", "timeout_s": 30}, "/ws")
+        _tool_bash({"command": "echo hi", "timeout_s": 30}, _ws_access())
         assert _CapturingRunner.captures[-1]["timeout_s"] == 900
 
 

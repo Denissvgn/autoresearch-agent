@@ -128,6 +128,9 @@ command_policy:
   allowed_executables: [cp, cat, jq]
   copyable_files: [prompt.yaml, best_prompt.yaml]
   readable_files: [prompt.yaml, best_prompt.yaml, eval_result.json]
+  # Evaluation data staged by bootstrap: the candidate must never rewrite the
+  # held-out eval set it is scored against.
+  write_protected_files: [eval_set.jsonl]
   forbidden_tokens: ["|", "||", "&&", ";", "&"]
   forbidden_substrings: ["`", "$", ">", "<", "\n", "\r"]
   secret_markers: [.env, /proc/, /run/secrets, authorization, bearer, credential, id_rsa, password, secret, token]

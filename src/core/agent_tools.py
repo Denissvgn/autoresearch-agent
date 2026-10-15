@@ -1,12 +1,12 @@
 """Agent tool surface — the 5 sandboxed tools + path safety (P1-1 split).
 
-Extracted verbatim from ``orchestrator.py`` (behavior-identical): the
-``ToolExecutionResult`` value type, the ``AGENT_TOOLS`` definitions handed to
-the LLM provider, the workspace path-safety helpers, the five tool
-implementations (``bash`` / ``read_file`` / ``write_file`` / ``glob`` /
-``grep``), the packaged-skill primer loader, and the W11 nonce-env narrowing
-helper. ``orchestrator.py`` re-exports all of these for back-compat; new code
-should import from here.
+Extracted from ``orchestrator.py``: the ``ToolExecutionResult`` value type,
+the ``AGENT_TOOLS`` definitions handed to the LLM provider, the shared
+``ToolAccessContext`` path authorization (one context for every file
+operation), the five tool implementations (``bash`` / ``read_file`` /
+``write_file`` / ``glob`` / ``grep``), the packaged-skill primer loader, and
+the W11 nonce-env narrowing helper. ``orchestrator.py`` re-exports all of
+these for back-compat; new code should import from here.
 """
 
 from __future__ import annotations
@@ -32,6 +32,11 @@ from src.core.command_runner import (
     _SessionOutputLog,
 )
 from src.core.llm_provider import ToolDef
+from src.core.tool_access import (
+    ToolAccessContext,
+    build_tool_access_context,
+    path_within_roots,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,13 +80,13 @@ AGENT_TOOLS: list[ToolDef] = [
     ),
     ToolDef(
         name="read_file",
-        description="Read the contents of a file in the workspace.",
+        description="Read the contents of a file in the session workspace.",
         input_schema={
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Relative or absolute path within the workspace.",
+                    "description": "Relative or absolute path within the session workspace.",
                 },
             },
             "required": ["path"],
@@ -90,7 +95,7 @@ AGENT_TOOLS: list[ToolDef] = [
     ToolDef(
         name="write_file",
         description=(
-            "Write content to a file in the workspace. "
+            "Write content to a file in the session workspace. "
             "Creates parent directories if needed."
         ),
         input_schema={
@@ -98,7 +103,7 @@ AGENT_TOOLS: list[ToolDef] = [
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "Relative or absolute path within the workspace.",
+                    "description": "Relative or absolute path within the session workspace.",
                 },
                 "content": {
                     "type": "string",
@@ -110,7 +115,7 @@ AGENT_TOOLS: list[ToolDef] = [
     ),
     ToolDef(
         name="glob",
-        description="List files matching a glob pattern within the workspace.",
+        description="List files matching a glob pattern within the session workspace.",
         input_schema={
             "type": "object",
             "properties": {
@@ -124,7 +129,7 @@ AGENT_TOOLS: list[ToolDef] = [
     ),
     ToolDef(
         name="grep",
-        description="Search for a regex pattern in files within the workspace.",
+        description="Search for a regex pattern in files within the session workspace.",
         input_schema={
             "type": "object",
             "properties": {
@@ -134,7 +139,7 @@ AGENT_TOOLS: list[ToolDef] = [
                 },
                 "path": {
                     "type": "string",
-                    "description": "File or directory to search in (default: workspace root).",
+                    "description": "File or directory to search (default: workspace root).",
                 },
                 "include": {
                     "type": "string",
@@ -150,35 +155,10 @@ AGENT_TOOLS: list[ToolDef] = [
 # ---------------------------------------------------------------------------
 # Path safety
 # ---------------------------------------------------------------------------
-
-
-def _safe_path(raw: str, workspace: str) -> str:
-    """Resolve a path and ensure it stays within the workspace."""
-    if os.path.isabs(raw):
-        resolved = Path(raw).resolve(strict=False)
-    else:
-        resolved = Path(workspace, raw).resolve(strict=False)
-    ws_real = Path(workspace).resolve(strict=False)
-    try:
-        resolved.relative_to(ws_real)
-    except ValueError as exc:
-        raise ValueError(f"Path {raw!r} resolves outside workspace") from exc
-    return str(resolved)
-
-
-def _safe_write_path(raw: str, workspace: str) -> str:
-    """Resolve a writable path and ensure existing parents stay in workspace."""
-
-    path = Path(raw) if os.path.isabs(raw) else Path(workspace, raw)
-    resolved_parent = path.parent.resolve(strict=False)
-    workspace_root = Path(workspace).resolve(strict=False)
-    try:
-        resolved_parent.relative_to(workspace_root)
-    except ValueError as exc:
-        raise ValueError(f"Path {raw!r} parent resolves outside workspace") from exc
-    if path.exists() and path.is_symlink():
-        raise ValueError(f"Path {raw!r} is a symlink and cannot be overwritten")
-    return str(resolved_parent / path.name)
+# File-tool path authorization lives in ``tool_access.ToolAccessContext``:
+# one shared context (readable roots, writable candidate roots, protected
+# server-owned state) authorizes read, write, glob, grep, copy, and every
+# path-bearing tool argument. Tool-supplied paths never widen it.
 
 
 def _normalize_command_for_plan(command: str) -> str:
@@ -234,8 +214,10 @@ def _config_snapshot_path_from_command(
         resolved = os.path.realpath(
             os.path.join(base_dir if base_dir is not None else session_workspace, raw_path)
         )
+    # Shared authorization: a tool-argument path must land inside the
+    # session's authorized roots exactly like every other file operation.
     session_real = os.path.realpath(session_workspace)
-    if not resolved.startswith(session_real + os.sep) and resolved != session_real:
+    if not path_within_roots(resolved, (session_real,)):
         return None
     return resolved
 
@@ -248,8 +230,7 @@ def _config_snapshot_path_from_command(
 def _execute_tool(
     name: str,
     input_data: Dict[str, Any],
-    workspace: str,
-    session_workspace: str | None = None,
+    access: ToolAccessContext,
     output_callback: OutputCallback | None = None,
     *,
     command_deadline_mono: float | None = None,
@@ -261,13 +242,15 @@ def _execute_tool(
 ) -> ToolExecutionResult:
     """Execute a tool call and return the text result.
 
-    ``cwd`` (P2 per-workdir state) overrides the bash subprocess working
-    directory (trial-directory execution); other tools ignore it.
+    ``access`` is the server-derived authorization context for every file
+    operation the tool surface performs. ``cwd`` (P2 per-workdir state)
+    overrides the bash subprocess working directory (trial-directory
+    execution); other tools ignore it.
     """
     try:
         if name == "bash":
             return _tool_bash(
-                input_data, workspace, session_workspace, output_callback,
+                input_data, access, output_callback,
                 command_deadline_mono=command_deadline_mono,
                 proc_registry=proc_registry,
                 research_id=research_id,
@@ -276,13 +259,13 @@ def _execute_tool(
                 cwd=cwd,
             )
         elif name == "read_file":
-            return ToolExecutionResult(_tool_read_file(input_data, workspace))
+            return ToolExecutionResult(_tool_read_file(input_data, access))
         elif name == "write_file":
-            return ToolExecutionResult(_tool_write_file(input_data, workspace))
+            return ToolExecutionResult(_tool_write_file(input_data, access))
         elif name == "glob":
-            return ToolExecutionResult(_tool_glob(input_data, workspace))
+            return ToolExecutionResult(_tool_glob(input_data, access))
         elif name == "grep":
-            return ToolExecutionResult(_tool_grep(input_data, workspace, session_workspace))
+            return ToolExecutionResult(_tool_grep(input_data, access))
         else:
             return ToolExecutionResult(f"Unknown tool: {name}")
     except Exception as exc:
@@ -291,8 +274,7 @@ def _execute_tool(
 
 def _tool_bash(
     input_data: Dict[str, Any],
-    workspace: str,
-    session_workspace: str | None = None,
+    access: ToolAccessContext,
     output_callback: OutputCallback | None = None,
     *,
     command_deadline_mono: float | None = None,
@@ -316,9 +298,10 @@ def _tool_bash(
     if command_deadline_mono is not None:
         timeout = min(timeout, max(0, math.ceil(command_deadline_mono - time.monotonic())))
     runner = GovernedCommandRunner(
-        workspace_root=workspace,
-        session_workspace=session_workspace,
+        workspace_root=access.workspace_root,
+        session_workspace=access.session_workspace,
         policy_extension=policy_extension,
+        access=access,
     )
     result = runner.run(
         command, timeout_s=timeout, output_callback=output_callback,
@@ -344,20 +327,21 @@ def _tool_bash(
     )
 
 
-def _tool_read_file(input_data: Dict[str, Any], workspace: str) -> str:
+def _tool_read_file(input_data: Dict[str, Any], access: ToolAccessContext) -> str:
     """Read at most 100,001 characters, never materializing a whole large file.
 
     >>> import tempfile
-    >>> with tempfile.TemporaryDirectory() as workspace:
-    ...     path = Path(workspace) / "large.txt"
+    >>> with tempfile.TemporaryDirectory() as ws:
+    ...     access = build_tool_access_context(ws)
+    ...     path = Path(ws) / "large.txt"
     ...     _ = path.write_text("x" * 100_001, encoding="utf-8")
-    ...     result = _tool_read_file({"path": "large.txt"}, workspace)
+    ...     result = _tool_read_file({"path": "large.txt"}, access)
     ...     assert result.startswith("x" * 100_000)
     ...     assert "truncated" in result and len(result) < 100_100
     ...     _ = path.write_text("é" * 100_000, encoding="utf-8")
-    ...     assert _tool_read_file({"path": "large.txt"}, workspace) == "é" * 100_000
+    ...     assert _tool_read_file({"path": "large.txt"}, access) == "é" * 100_000
     """
-    path = _safe_path(input_data["path"], workspace)
+    path = access.authorize_read(input_data["path"])
     try:
         with open(path, encoding="utf-8", errors="replace") as source:
             content = source.read(100_001)
@@ -371,50 +355,51 @@ def _tool_read_file(input_data: Dict[str, Any], workspace: str) -> str:
         return f"File not found: {input_data['path']}"
 
 
-def _tool_write_file(input_data: Dict[str, Any], workspace: str) -> str:
-    path = _safe_write_path(input_data["path"], workspace)
+def _tool_write_file(input_data: Dict[str, Any], access: ToolAccessContext) -> str:
+    path = access.authorize_write(input_data["path"])
     os.makedirs(os.path.dirname(path), exist_ok=True)
     Path(path).write_text(input_data["content"], encoding="utf-8")
     return f"Wrote {len(input_data['content'])} bytes to {input_data['path']}"
 
 
-def _tool_glob(input_data: Dict[str, Any], workspace: str) -> str:
+def _tool_glob(input_data: Dict[str, Any], access: ToolAccessContext) -> str:
     pattern = input_data["pattern"]
-    full_pattern = os.path.join(workspace, pattern)
-    matches = sorted(glob_mod.glob(full_pattern, recursive=True))
-    # Return paths relative to workspace
-    ws = str(Path(workspace).resolve(strict=False))
+    matches: list[str] = []
+    for anchor in (access.session_workspace, access.workspace_root):
+        for match in sorted(glob_mod.glob(os.path.join(anchor, pattern), recursive=True)):
+            if match not in matches:
+                matches.append(match)
+    # Return paths relative to the session workspace; matches outside the
+    # readable roots (traversal/glob expansion escapes) are filtered out.
+    ws = str(Path(access.session_workspace).resolve(strict=False))
     relative = []
-    for match in matches:
-        try:
-            safe_match = _safe_path(match, workspace)
-            relative.append(str(Path(safe_match).relative_to(ws)))
-        except ValueError:
-            logger.debug("Filtered glob match outside workspace: %s", match)
+    for match in access.filter_readable(matches):
+        relative.append(str(Path(match).relative_to(ws)))
     if not relative:
         return "(no matches)"
     return "\n".join(relative[:500])
 
 
 def _tool_grep(
-    input_data: Dict[str, Any], workspace: str, session_workspace: str | None = None,
+    input_data: Dict[str, Any], access: ToolAccessContext,
 ) -> str:
     """Incremental grep capture, excluding its own active log.
 
     >>> import tempfile
-    >>> with tempfile.TemporaryDirectory() as workspace:
-    ...     _ = Path(workspace, "keep.py").write_text("match" * 30000)
-    ...     _ = Path(workspace, "skip.txt").write_text("match")
-    ...     result = _tool_grep({"pattern": "match", "include": "*.py"}, workspace)
+    >>> with tempfile.TemporaryDirectory() as ws:
+    ...     access = build_tool_access_context(ws)
+    ...     _ = Path(ws, "keep.py").write_text("match" * 30000)
+    ...     _ = Path(ws, "skip.txt").write_text("match")
+    ...     result = _tool_grep({"pattern": "match", "include": "*.py"}, access)
     ...     assert "keep.py" in result and "skip.txt" not in result
     ...     assert "truncated" in result and len(result) <= 60020
-    ...     logs = list(Path(workspace, "logs").glob("*.log"))
+    ...     logs = list(Path(ws, "logs").glob("*.log"))
     ...     assert len(logs) == 1 and logs[0].stat().st_size > 120000
     """
     pattern = input_data["pattern"]
     search_path = input_data.get("path", ".")
     include = input_data.get("include", "")
-    safe_dir = _safe_path(search_path, workspace)
+    safe_dir = access.authorize_read(search_path)
 
     cmd = ["grep", "-rn", "--color=never"]
     if include:
@@ -426,7 +411,7 @@ def _tool_grep(
     # Keep the governed child environment and the existing no-match sentinel.
     log = None
     try:
-        log = _SessionOutputLog(session_workspace or workspace)
+        log = _SessionOutputLog(access.session_workspace)
         # Never search our own growing capture file (recursive grep would feed
         # matches back into its output). Other existing logs remain searchable.
         # Keep include first: GNU grep's first include/exclude rule determines
@@ -444,7 +429,7 @@ def _tool_grep(
             log.close()
         raise
     output, _, timed_out, _, _ = _collect_process_output(
-        proc, timeout_s=30, workspace=session_workspace or workspace, log=log,
+        proc, timeout_s=30, workspace=access.session_workspace, log=log,
     )
     if timed_out:
         return "Grep timed out after 30s"

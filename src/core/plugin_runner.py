@@ -27,7 +27,8 @@ Design contract (X-004 §6, verbatim where load-bearing):
   propagates to the server process** (the single-instance W14 guarantee).
 * **Path confinement (D4):** the plugin's CWD is the session workspace;
   ``skills/`` is reachable read-only; writes are confined to the workspace when
-  ``caps.fs_write == "workspace"``. Reuses ``command_policy._is_within``.
+  ``caps.fs_write == "workspace"``. Path confinement uses ``relative_to``
+  checks against the declared roots.
 
 The ``BootstrapRunner`` (P5-005, ``bootstrap_runner.py``) is the first
 consumer; ``parser`` / ``preflight`` / ``resolve_identity`` plugins follow the
@@ -66,7 +67,6 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Literal, Mapping, Optional
 
-from src.core.command_policy import _is_within
 from src.core.skill_manifest import PluginCaps, PluginKind
 
 try:

@@ -19,6 +19,7 @@ from types import MappingProxyType
 from typing import Any, Callable, Literal, Mapping
 
 from src.core.command_policy import CommandDecision, evaluate_command_policy
+from src.core.tool_access import ToolAccessContext
 
 try:
     import psutil
@@ -311,6 +312,7 @@ class GovernedCommandRunner:
         workspace_root: str,
         session_workspace: str | None = None,
         policy_extension: Mapping[str, Any] | None = None,
+        access: ToolAccessContext | None = None,
     ) -> None:
         self._workspace_root = workspace_root
         self._session_workspace = session_workspace
@@ -318,6 +320,9 @@ class GovernedCommandRunner:
         # ``command_policy:`` section). ``None`` (legacy sessions) keeps the
         # hardcoded validator sets exactly as before.
         self._policy_extension = policy_extension
+        # Shared file-operation authorization context (the same one the file
+        # tools use). ``None`` derives one inside the policy evaluator.
+        self._access = access
 
     def run(
         self,
@@ -342,6 +347,7 @@ class GovernedCommandRunner:
             workspace_root=self._workspace_root,
             session_workspace=self._session_workspace,
             policy_extension=self._policy_extension,
+            access=self._access,
         )
         if not decision.allowed:
             reason = decision.reason or "Command is not allowed"

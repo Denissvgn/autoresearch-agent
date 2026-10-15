@@ -35,6 +35,7 @@ except ModuleNotFoundError:
     )
 
 from src.core.orchestrator import _execute_tool
+from src.core.tool_access import build_tool_access_context
 
 
 def _workspace(tmp_path: Path) -> tuple[str, str]:
@@ -136,20 +137,21 @@ def test_command_policy_rejects_symlink_escape_for_cat(tmp_path: Path):
 
 def test_file_tools_reject_and_filter_symlink_escapes(tmp_path: Path):
     workspace, _ = _workspace(tmp_path)
+    access = build_tool_access_context(workspace, workspace_root=workspace)
     outside = tmp_path / "outside.txt"
     outside.write_text("secret", encoding="utf-8")
     link = Path(workspace) / "linked.txt"
     link.symlink_to(outside)
 
-    read_result = _execute_tool("read_file", {"path": "linked.txt"}, workspace)
+    read_result = _execute_tool("read_file", {"path": "linked.txt"}, access)
     write_result = _execute_tool(
         "write_file",
         {"path": "linked.txt", "content": "replacement"},
-        workspace,
+        access,
     )
-    glob_result = _execute_tool("glob", {"pattern": "*.txt"}, workspace)
+    glob_result = _execute_tool("glob", {"pattern": "*.txt"}, access)
 
-    assert "resolves outside workspace" in read_result.content
+    assert "resolves outside" in read_result.content
     assert "symlink" in write_result.content
     assert "linked.txt" not in glob_result.content
 
@@ -283,12 +285,12 @@ def _process_exists(pid: int) -> bool:
 
 def test_execute_tool_returns_policy_rejection_metadata(tmp_path: Path):
     workspace, session = _workspace(tmp_path)
+    access = build_tool_access_context(session, workspace_root=workspace)
 
     result = _execute_tool(
         "bash",
         {"command": "wget https://example.com/model.sh"},
-        workspace,
-        session,
+        access,
     )
 
     assert "Command rejected by policy" in result.content
@@ -476,14 +478,14 @@ def test_execute_tool_threads_extra_env_to_bash(tmp_path: Path):
     orchestrator.py passes ``extra_env=nonce_extra_env``)."""
     workspace, session = _workspace(tmp_path)
     script, dump_path = _nonce_dump_script(Path(workspace))
+    access = build_tool_access_context(session, workspace_root=workspace)
 
     nonce = "cafebabe" * 8
     result = _execute_tool(
         "bash",
         {"command": ".venv/bin/python scripts/autotuner/enrich_rl_dataset.py "
                     "--instrument DOGE_USDT --timeframe 15m"},
-        workspace,
-        session,
+        access,
         extra_env={"AUTORESEARCH_SESSION_NONCE": nonce},
         policy_extension={"allowed_scripts": {
             "scripts/autotuner/enrich_rl_dataset.py",

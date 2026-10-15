@@ -417,9 +417,9 @@ Autonomy: Implement one shared authorization context for every file operation. D
 allowed roots server-side from run/attempt ownership; candidate-supplied paths or
 workspace instructions never grant additional access.
 
-- [ ] Pass an explicit tool context containing readable roots and writable candidate roots instead of the shared workspace root.
-- [ ] Apply common authorization to read, write, glob, grep, copy, and any paths exposed through tool arguments.
-- [ ] Exclude sibling sessions, evaluator code, evaluation data, interpreter environments, control-plane storage, and private evidence from candidate writes.
+- [x] Pass an explicit tool context containing readable roots and writable candidate roots instead of the shared workspace root.
+- [x] Apply common authorization to read, write, glob, grep, copy, and any paths exposed through tool arguments.
+- [x] Exclude sibling sessions, evaluator code, evaluation data, interpreter environments, control-plane storage, and private evidence from candidate writes.
 
 Acceptance: a tool call in session A cannot inspect private session B data or
 modify its candidate; allowed candidate edits still work. Candidate code cannot

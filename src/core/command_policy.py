@@ -6,7 +6,9 @@ import os
 import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Mapping
+from typing import Iterable, Mapping, Optional
+
+from src.core.tool_access import ToolAccessContext, build_tool_access_context
 
 _ALLOWED_PYTHON = (".venv/bin/python", "./.venv/bin/python")
 # Default-deny: no script is allowed by the base policy. Every skill declares
@@ -63,6 +65,7 @@ def evaluate_command_policy(
     workspace_root: str,
     session_workspace: str | None = None,
     policy_extension: Mapping[str, Iterable[str]] | None = None,
+    access: ToolAccessContext | None = None,
 ) -> CommandDecision:
     """Parse and validate a single agent command before execution.
 
@@ -73,12 +76,28 @@ def evaluate_command_policy(
     accepted but currently a no-op: the base dispatch only knows
     python/cp/cat (all already allowed); widening executable dispatch is
     deferred (P2-023).
+
+    ``access`` is the shared file-operation authorization context (the same
+    one the file tools use). When omitted, one is derived server-side from
+    the session workspace and the skill's declarations. Every path a command
+    exposes — copy sources/destinations, readable result files, and the
+    config-artifact flag value — is authorized through it.
     """
 
     ext: Mapping[str, Iterable[str]] = policy_extension or {}
     allowed_scripts = _ALLOWED_SCRIPTS | set(ext.get("allowed_scripts") or ())
     copyable_files = _COPY_FILENAMES | set(ext.get("copyable_files") or ())
     readable_files = _CAT_FILENAMES | set(ext.get("readable_files") or ())
+    if access is None:
+        access = build_tool_access_context(
+            session_workspace or workspace_root,
+            workspace_root=workspace_root,
+            extra_protected_names=ext.get("write_protected_files"),
+        )
+    else:
+        # Defense in depth: skill-declared evaluation data is enforced even
+        # when the caller's context predates the declaration.
+        access = access.with_extra_protected(ext.get("write_protected_files"))
     # ARC-011 review C4: declared-name → packaged-path resolution map
     # (server-built by the skill runtime; see _evaluate_python).
     script_paths_raw = ext.get("script_paths") or {}
@@ -120,16 +139,19 @@ def evaluate_command_policy(
             copyable_files=copyable_files,
             script_paths=script_paths,
             config_flag=config_flag,
+            access=access,
         )
     if executable == "cp":
         return _evaluate_cp(
             argv, workspace_root, session_workspace,
             copyable_files=copyable_files,
+            access=access,
         )
     if executable == "cat":
         return _evaluate_cat(
             argv, workspace_root, session_workspace,
             readable_files=readable_files,
+            access=access,
         )
 
     return _reject(f"Executable {argv[0]!r} is not allowed")
@@ -193,6 +215,7 @@ def _evaluate_python(
     copyable_files: set[str] | None = None,
     script_paths: Mapping[str, str] | None = None,
     config_flag: str = "--config",
+    access: ToolAccessContext | None = None,
 ) -> CommandDecision:
     scripts = _ALLOWED_SCRIPTS if allowed_scripts is None else allowed_scripts
     if len(argv) < 2:
@@ -223,6 +246,7 @@ def _evaluate_python(
     config_error = _validate_prepare_config(
         argv, script, workspace_root, session_workspace,
         copyable_files=copyable_files, config_flag=config_flag,
+        access=access,
     )
     if config_error:
         return _reject(config_error)
@@ -237,15 +261,16 @@ def _validate_prepare_config(
     *,
     copyable_files: set[str] | None = None,
     config_flag: str = "--config",
+    access: ToolAccessContext | None = None,
 ) -> str | None:
     """Confine a script's config-artifact argument to the session workspace.
 
     Applies to any allowed script invocation that passes the skill's declared
     ``config_flag`` (ARC-012 P7-011; the ML vocabulary's ``--config`` by
     default — non-ML skills declare their own, e.g. ``--prompt``) — the
-    config an experiment reads or writes must live in the session workspace
-    and be an operator-declared copyable file (default-deny when the skill
-    declares none).
+    config an experiment reads or writes must live in the session workspace,
+    pass the shared file authorization, and be an operator-declared copyable
+    file (default-deny when the skill declares none).
     """
     copyable = _COPY_FILENAMES if copyable_files is None else copyable_files
     if config_flag not in argv:
@@ -253,13 +278,22 @@ def _validate_prepare_config(
     index = argv.index(config_flag)
     if index == len(argv) - 1:
         return "--config requires a path"
-    config_path = _resolve_workspace_file(
-        argv[index + 1],
-        workspace_root=workspace_root,
-        session_workspace=session_workspace,
-    )
-    if session_workspace and not _is_within(config_path, session_workspace):
-        return "--config must point inside the session workspace"
+    raw = argv[index + 1]
+    if session_workspace:
+        if access is None:
+            access = build_tool_access_context(
+                session_workspace, workspace_root=workspace_root
+            )
+        try:
+            config_path = access.authorize_write(raw)
+        except ValueError as exc:
+            return f"--config must point inside the session workspace: {exc}"
+    else:
+        config_path = _resolve_workspace_file(
+            raw,
+            workspace_root=workspace_root,
+            session_workspace=session_workspace,
+        )
     if os.path.basename(config_path) not in copyable:
         return "--config may only target files the skill declares copyable"
     return None
@@ -271,28 +305,33 @@ def _evaluate_cp(
     session_workspace: str | None,
     *,
     copyable_files: set[str] | None = None,
+    access: ToolAccessContext | None = None,
 ) -> CommandDecision:
     copyable = _COPY_FILENAMES if copyable_files is None else copyable_files
     if not session_workspace:
         return _reject("cp requires a resolved session workspace")
+    if access is None:
+        access = build_tool_access_context(
+            session_workspace,
+            workspace_root=workspace_root,
+            extra_protected_names=None,
+        )
     args = argv[1:]
     if args and args[0] == "-f":
         args = args[1:]
     if len(args) != 2:
         return _reject("cp may only copy one source file to one destination")
-    resolved = [
-        _resolve_workspace_file(
-            arg,
-            workspace_root=workspace_root,
-            session_workspace=session_workspace,
-        )
-        for arg in args
-    ]
-    for path in resolved:
-        if not _is_within(path, session_workspace):
-            return _reject("cp may only operate inside the session workspace")
+    resolved: list[str] = []
+    for index, arg in enumerate(args):
+        try:
+            # Source is a read; the destination is a candidate write and
+            # faces the same protection rules as the write tool.
+            path = access.authorize_read(arg) if index == 0 else access.authorize_write(arg)
+        except ValueError as exc:
+            return _reject(f"cp may only operate inside the session workspace: {exc}")
         if os.path.basename(path) not in copyable:
             return _reject("cp may only copy files the skill declares copyable")
+        resolved.append(path)
     return _allow(["cp", *resolved], operation="cp:workspace-config")
 
 
@@ -302,23 +341,25 @@ def _evaluate_cat(
     session_workspace: str | None,
     *,
     readable_files: set[str] | None = None,
+    access: ToolAccessContext | None = None,
 ) -> CommandDecision:
     readable = _CAT_FILENAMES if readable_files is None else readable_files
     if not session_workspace:
         return _reject("cat requires a resolved session workspace")
+    if access is None:
+        access = build_tool_access_context(
+            session_workspace, workspace_root=workspace_root
+        )
     if len(argv) < 2:
         return _reject("cat requires at least one explicit file")
     resolved: list[str] = []
     for arg in argv[1:]:
         if arg.startswith("-"):
             return _reject("cat options are not allowed")
-        path = _resolve_workspace_file(
-            arg,
-            workspace_root=workspace_root,
-            session_workspace=session_workspace,
-        )
-        if not _is_within(path, session_workspace):
-            return _reject("cat may only read explicit files in the session workspace")
+        try:
+            path = access.authorize_read(arg)
+        except ValueError as exc:
+            return _reject(f"cat may only read explicit files in the session workspace: {exc}")
         if os.path.basename(path) not in readable:
             return _reject("cat may only read approved workspace result files")
         resolved.append(path)
@@ -348,13 +389,3 @@ def _resolve_workspace_file(
     if session_workspace and os.sep not in raw:
         return str(Path(session_workspace, raw).resolve(strict=False))
     return str(Path(workspace_root, raw).resolve(strict=False))
-
-
-def _is_within(path: str, directory: str) -> bool:
-    resolved = Path(path).resolve(strict=False)
-    root = Path(directory).resolve(strict=False)
-    try:
-        resolved.relative_to(root)
-        return True
-    except ValueError:
-        return False
