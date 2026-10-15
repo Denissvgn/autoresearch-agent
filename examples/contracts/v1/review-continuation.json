@@ -1,0 +1,112 @@
+{
+  "description": "A continued run: parent and checkpoint references plus the nondefault parameters and budget of the original run are preserved.",
+  "example_id": "review-continuation",
+  "kind": "review",
+  "run_spec": {
+    "artifacts": [
+      {
+        "digest": "sha256:42e680c06977b55fd162591cc825ec7df911f430a8491064ab157e6820d9bfaa",
+        "name": "run-log",
+        "path": "artifacts/run.log"
+      }
+    ],
+    "budget": {
+      "max_budget_usd": 2.25,
+      "max_concurrency": 1,
+      "max_iterations": 17,
+      "timeout_s": 1500
+    },
+    "capabilities": {
+      "adapter_id": "builtin-loop",
+      "capabilities": [
+        "cancel",
+        "close",
+        "event_stream",
+        "immutable_artifacts",
+        "os_isolation",
+        "start",
+        "usage_reporting"
+      ],
+      "integration": "managed",
+      "protocol_version": "1",
+      "schema_version": "research_capability_descriptor.v1",
+      "unsupported": {
+        "pause": "no pause channel; stop only at safe boundaries"
+      }
+    },
+    "harness": {
+      "adapter_id": "builtin-loop",
+      "effective_config": {
+        "model": "example-model",
+        "region": "local"
+      },
+      "model_roles": {
+        "primary": "example-model"
+      },
+      "protocol_version": "1"
+    },
+    "inputs": {
+      "candidate_input_digests": [
+        "sha256:cec4884cc33097a945b2821a6b8b46cba3d0c759392ff6990c5b670961069565"
+      ],
+      "dataset_digests": [
+        "sha256:9949f763739aae0ee69a4fff9b7e9c524dc0cd6938da7527836d848199e9665c"
+      ],
+      "environment": {
+        "dependency_lock_digest": "sha256:c809e4ce094b9b4afc02e905330d321def67a134061290a74f7bd2116a84b77f",
+        "image_digest": null
+      },
+      "evaluator_digest": "sha256:24d7dc217a7b53614860c44d2e3c70395e5bcfd9312d1eaaec104167f43e382d"
+    },
+    "integration": "managed",
+    "isolation": {
+      "enforcement": "os",
+      "filesystem_confinement": true,
+      "network_policy": true,
+      "platform": "linux",
+      "process_isolation": true,
+      "resource_limits": true
+    },
+    "lineage": {
+      "checkpoint_refs": [
+        "checkpoint://run-parent-1/iteration-9"
+      ],
+      "focus_hint": "keep the simplification that preserved the tests",
+      "parent_run_id": "run-parent-1"
+    },
+    "objective": {
+      "constraints": [],
+      "direction": "maximize",
+      "goal": "optimize",
+      "metric_field": "primary_metric",
+      "schema_version": "research_objective_policy.v1",
+      "tie_tolerance": 0.0
+    },
+    "parameters": {
+      "max_complexity": 6,
+      "target_file": "refactor_target.py"
+    },
+    "policy_version": "execution-policy.v1",
+    "run_id": "run-review-continuation",
+    "schema_version": "research_run_spec.v1",
+    "secrets": [
+      {
+        "name": "harness.auth",
+        "provider": "env",
+        "role": "harness",
+        "scope": "run"
+      },
+      {
+        "name": "scorer.api_key",
+        "provider": "env",
+        "role": "evaluator",
+        "scope": "run"
+      }
+    ],
+    "skill": {
+      "digest": "sha256:9e7b34b85c1c92f017e6f45eb3737932c077a931a01a8f6a961fdf2a2326ad96",
+      "skill_id": "code-refactor",
+      "version": "0.1.0"
+    }
+  }
+}

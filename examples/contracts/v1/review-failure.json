@@ -1,0 +1,106 @@
+{
+  "description": "An evaluation failure: the verified result carries a structured failure record and claims no metrics.",
+  "example_id": "review-failure",
+  "execution_request": {
+    "attempt_id": "attempt-review-failure",
+    "candidate": {
+      "artifacts": [],
+      "candidate_id": "cand-prompt-evaluation-managed",
+      "digest": "sha256:5c578377031898e0aaea055efd05db4794e2dc01d7c22b0ade6a5fbcb4b8577e",
+      "parent_digest": null,
+      "schema_version": "research_candidate_identity.v1"
+    },
+    "dataset_digests": [
+      "sha256:2748f41af814bb4e5f7c5e248af959db9fabcf6f36618a85fb22e1b4c1d2f386"
+    ],
+    "environment_digest": "sha256:909b0c21104786202c02f9a382e8cedec651e1dd9e5553ddaa6901a2c2735118",
+    "evaluator_digest": "sha256:9038486695ea0a645bc00349f2e288ed5fcd225805be650b266b9eda92dd93af",
+    "integration": "managed",
+    "network": {
+      "allowed_hosts": [],
+      "mode": "deny"
+    },
+    "request_id": "req-prompt-evaluation-managed",
+    "resources": {
+      "max_processes": 8,
+      "memory_mb": 512,
+      "wall_clock_s": 600
+    },
+    "run_id": "run-review-failure",
+    "run_spec_digest": "sha256:e4ea3d7801b3c69a8d608512cb6c2215cdb39da995960a7fef0b545de10eecd0",
+    "schema_version": "research_execution_request.v1",
+    "secrets": [
+      {
+        "name": "harness.auth",
+        "provider": "env",
+        "role": "harness",
+        "scope": "run"
+      },
+      {
+        "name": "scorer.api_key",
+        "provider": "env",
+        "role": "evaluator",
+        "scope": "run"
+      }
+    ],
+    "workspace": {
+      "read_only_roots": [
+        "inputs",
+        "evaluators"
+      ],
+      "writable_roots": [
+        "candidate"
+      ]
+    }
+  },
+  "kind": "review",
+  "verified_result": {
+    "attempt_id": "attempt-review-failure",
+    "candidate": {
+      "artifacts": [],
+      "candidate_id": "cand-prompt-evaluation-managed",
+      "digest": "sha256:5c578377031898e0aaea055efd05db4794e2dc01d7c22b0ade6a5fbcb4b8577e",
+      "parent_digest": null,
+      "schema_version": "research_candidate_identity.v1"
+    },
+    "evaluator_digest": "sha256:9038486695ea0a645bc00349f2e288ed5fcd225805be650b266b9eda92dd93af",
+    "failure": {
+      "code": "scorer_unavailable",
+      "message": "scoring endpoint returned a transport error",
+      "retryable": true,
+      "stage": "evaluation"
+    },
+    "metrics": {},
+    "observation": {
+      "candidate_digest": "sha256:5c578377031898e0aaea055efd05db4794e2dc01d7c22b0ade6a5fbcb4b8577e",
+      "dataset_digests": [
+        "sha256:2748f41af814bb4e5f7c5e248af959db9fabcf6f36618a85fb22e1b4c1d2f386"
+      ],
+      "fidelity": "measured",
+      "observation_id": "obs-cand-prompt-evaluation-managed",
+      "schema_version": "research_observation_identity.v1",
+      "scorer": {
+        "digest": "sha256:be53cceab284f23cc31b07c3c196a50ea8c521c6ee05af47156a7328f82c3a0c",
+        "scorer_id": "prompt-eval-scorer",
+        "version": "1.0"
+      },
+      "seed": 7,
+      "subject_id": "subject-1",
+      "variant": "variant-1"
+    },
+    "produced_at": "2026-10-15T12:05:00Z",
+    "provenance": "evaluator_owned",
+    "receipt": {
+      "envelope_digest": "sha256:82d078f7360e853ccb285c106d75fc947228349556fd14e32c91af2df29be1ec",
+      "nonce": "nonce-review-failure",
+      "ownership_epoch": 1,
+      "receipt_id": "rcpt-review-failure",
+      "sequence": 1
+    },
+    "result_id": "res-review-failure",
+    "run_id": "run-review-failure",
+    "schema_version": "research_verified_result.v1",
+    "status": "failed",
+    "verification": "verified"
+  }
+}

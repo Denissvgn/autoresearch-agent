@@ -1,0 +1,210 @@
+{
+  "description": "Prompt evaluation domain: score prompt candidates against a pinned held-out eval set with a real scoring endpoint. Shown through the managed integration direction.",
+  "domain": "prompt-evaluation",
+  "example_id": "managed-prompt-evaluation",
+  "execution_request": {
+    "attempt_id": "attempt-prompt-evaluation-managed",
+    "candidate": {
+      "artifacts": [],
+      "candidate_id": "cand-prompt-evaluation-managed",
+      "digest": "sha256:5c578377031898e0aaea055efd05db4794e2dc01d7c22b0ade6a5fbcb4b8577e",
+      "parent_digest": null,
+      "schema_version": "research_candidate_identity.v1"
+    },
+    "dataset_digests": [
+      "sha256:2748f41af814bb4e5f7c5e248af959db9fabcf6f36618a85fb22e1b4c1d2f386"
+    ],
+    "environment_digest": "sha256:909b0c21104786202c02f9a382e8cedec651e1dd9e5553ddaa6901a2c2735118",
+    "evaluator_digest": "sha256:9038486695ea0a645bc00349f2e288ed5fcd225805be650b266b9eda92dd93af",
+    "integration": "managed",
+    "network": {
+      "allowed_hosts": [],
+      "mode": "deny"
+    },
+    "request_id": "req-prompt-evaluation-managed",
+    "resources": {
+      "max_processes": 8,
+      "memory_mb": 512,
+      "wall_clock_s": 600
+    },
+    "run_id": "run-prompt-evaluation-managed",
+    "run_spec_digest": "sha256:4ba033674a35ec5c7553eb3b98530a8f2e46650580f3e25f966f21b81be785b1",
+    "schema_version": "research_execution_request.v1",
+    "secrets": [
+      {
+        "name": "harness.auth",
+        "provider": "env",
+        "role": "harness",
+        "scope": "run"
+      },
+      {
+        "name": "scorer.api_key",
+        "provider": "env",
+        "role": "evaluator",
+        "scope": "run"
+      }
+    ],
+    "workspace": {
+      "read_only_roots": [
+        "inputs",
+        "evaluators"
+      ],
+      "writable_roots": [
+        "candidate"
+      ]
+    }
+  },
+  "integration": "managed",
+  "kind": "integration",
+  "run_spec": {
+    "artifacts": [
+      {
+        "digest": "sha256:857cdc5d07bcbaf557d7ff8b2f22f5a76ac8b28963d0c6bcd2c112ddba4e6cd5",
+        "name": "run-log",
+        "path": "artifacts/run.log"
+      }
+    ],
+    "budget": {
+      "max_budget_usd": 3.0,
+      "max_concurrency": 1,
+      "max_iterations": 12,
+      "timeout_s": 2400
+    },
+    "capabilities": {
+      "adapter_id": "builtin-loop",
+      "capabilities": [
+        "cancel",
+        "close",
+        "event_stream",
+        "immutable_artifacts",
+        "os_isolation",
+        "start",
+        "usage_reporting"
+      ],
+      "integration": "managed",
+      "protocol_version": "1",
+      "schema_version": "research_capability_descriptor.v1",
+      "unsupported": {
+        "pause": "no pause channel; stop only at safe boundaries"
+      }
+    },
+    "harness": {
+      "adapter_id": "builtin-loop",
+      "effective_config": {
+        "model": "example-model",
+        "region": "local"
+      },
+      "model_roles": {
+        "primary": "example-model"
+      },
+      "protocol_version": "1"
+    },
+    "inputs": {
+      "candidate_input_digests": [
+        "sha256:75258fcfe4cdf1dd510d14ae0aa228ae4469cee411f2f799fed31b60a0afbd0f"
+      ],
+      "dataset_digests": [
+        "sha256:2748f41af814bb4e5f7c5e248af959db9fabcf6f36618a85fb22e1b4c1d2f386"
+      ],
+      "environment": {
+        "dependency_lock_digest": "sha256:c809e4ce094b9b4afc02e905330d321def67a134061290a74f7bd2116a84b77f",
+        "image_digest": null
+      },
+      "evaluator_digest": "sha256:9038486695ea0a645bc00349f2e288ed5fcd225805be650b266b9eda92dd93af"
+    },
+    "integration": "managed",
+    "isolation": {
+      "enforcement": "os",
+      "filesystem_confinement": true,
+      "network_policy": true,
+      "platform": "linux",
+      "process_isolation": true,
+      "resource_limits": true
+    },
+    "lineage": {
+      "checkpoint_refs": [],
+      "focus_hint": null,
+      "parent_run_id": null
+    },
+    "objective": {
+      "constraints": [],
+      "direction": "maximize",
+      "goal": "optimize",
+      "metric_field": "primary_metric",
+      "schema_version": "research_objective_policy.v1",
+      "tie_tolerance": 0.0
+    },
+    "parameters": {
+      "eval_set": "heldout-v1",
+      "prompt_variant": "concise"
+    },
+    "policy_version": "execution-policy.v1",
+    "run_id": "run-prompt-evaluation-managed",
+    "schema_version": "research_run_spec.v1",
+    "secrets": [
+      {
+        "name": "harness.auth",
+        "provider": "env",
+        "role": "harness",
+        "scope": "run"
+      },
+      {
+        "name": "scorer.api_key",
+        "provider": "env",
+        "role": "evaluator",
+        "scope": "run"
+      }
+    ],
+    "skill": {
+      "digest": "sha256:96e2c7ab9c6d13895d05948eaf56ed8e4dce4052d679f8e92e9940f85c688078",
+      "skill_id": "prompt-engineering",
+      "version": "0.3.0"
+    }
+  },
+  "verified_result": {
+    "attempt_id": "attempt-prompt-evaluation-managed",
+    "candidate": {
+      "artifacts": [],
+      "candidate_id": "cand-prompt-evaluation-managed",
+      "digest": "sha256:5c578377031898e0aaea055efd05db4794e2dc01d7c22b0ade6a5fbcb4b8577e",
+      "parent_digest": null,
+      "schema_version": "research_candidate_identity.v1"
+    },
+    "evaluator_digest": "sha256:9038486695ea0a645bc00349f2e288ed5fcd225805be650b266b9eda92dd93af",
+    "failure": null,
+    "metrics": {
+      "primary_metric": 0.81
+    },
+    "observation": {
+      "candidate_digest": "sha256:5c578377031898e0aaea055efd05db4794e2dc01d7c22b0ade6a5fbcb4b8577e",
+      "dataset_digests": [
+        "sha256:2748f41af814bb4e5f7c5e248af959db9fabcf6f36618a85fb22e1b4c1d2f386"
+      ],
+      "fidelity": "measured",
+      "observation_id": "obs-cand-prompt-evaluation-managed",
+      "schema_version": "research_observation_identity.v1",
+      "scorer": {
+        "digest": "sha256:be53cceab284f23cc31b07c3c196a50ea8c521c6ee05af47156a7328f82c3a0c",
+        "scorer_id": "prompt-eval-scorer",
+        "version": "1.0"
+      },
+      "seed": 7,
+      "subject_id": "subject-1",
+      "variant": "variant-1"
+    },
+    "produced_at": "2026-10-15T12:00:00Z",
+    "provenance": "evaluator_owned",
+    "receipt": {
+      "envelope_digest": "sha256:579c4d75fb6425c3eaff877c70db3767b483084ba545e8cc1f608bee2920667a",
+      "nonce": "nonce-prompt-evaluation",
+      "ownership_epoch": 1,
+      "receipt_id": "rcpt-prompt-evaluation",
+      "sequence": 0
+    },
+    "result_id": "res-prompt-evaluation",
+    "run_id": "run-prompt-evaluation-managed",
+    "schema_version": "research_verified_result.v1",
+    "status": "succeeded",
+    "verification": "verified"
+  }
+}

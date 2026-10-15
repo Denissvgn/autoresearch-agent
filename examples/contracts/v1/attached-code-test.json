@@ -1,0 +1,210 @@
+{
+  "description": "Code/test domain: evaluate candidate bundles against fixed protected tests, lint, and type checks from a trusted evaluator. Shown through the attached integration direction.",
+  "domain": "code-test",
+  "example_id": "attached-code-test",
+  "execution_request": {
+    "attempt_id": "attempt-code-test-attached",
+    "candidate": {
+      "artifacts": [],
+      "candidate_id": "cand-code-test-attached",
+      "digest": "sha256:a4c55da3d9229cee3704f2bd09a39ee22d211f472c8778f149391f3017aa0b08",
+      "parent_digest": null,
+      "schema_version": "research_candidate_identity.v1"
+    },
+    "dataset_digests": [
+      "sha256:9949f763739aae0ee69a4fff9b7e9c524dc0cd6938da7527836d848199e9665c"
+    ],
+    "environment_digest": "sha256:909b0c21104786202c02f9a382e8cedec651e1dd9e5553ddaa6901a2c2735118",
+    "evaluator_digest": "sha256:24d7dc217a7b53614860c44d2e3c70395e5bcfd9312d1eaaec104167f43e382d",
+    "integration": "attached",
+    "network": {
+      "allowed_hosts": [],
+      "mode": "deny"
+    },
+    "request_id": "req-code-test-attached",
+    "resources": {
+      "max_processes": 8,
+      "memory_mb": 512,
+      "wall_clock_s": 600
+    },
+    "run_id": "run-code-test-attached",
+    "run_spec_digest": "sha256:55e903144e13b4d0b85ddcc639119b10ae48dc019714ebdf2949a1a8cecab800",
+    "schema_version": "research_execution_request.v1",
+    "secrets": [
+      {
+        "name": "driver.auth",
+        "provider": "env",
+        "role": "harness",
+        "scope": "attempt"
+      },
+      {
+        "name": "scorer.api_key",
+        "provider": "env",
+        "role": "evaluator",
+        "scope": "run"
+      }
+    ],
+    "workspace": {
+      "read_only_roots": [
+        "inputs",
+        "evaluators"
+      ],
+      "writable_roots": [
+        "candidate"
+      ]
+    }
+  },
+  "integration": "attached",
+  "kind": "integration",
+  "run_spec": {
+    "artifacts": [
+      {
+        "digest": "sha256:42e680c06977b55fd162591cc825ec7df911f430a8491064ab157e6820d9bfaa",
+        "name": "run-log",
+        "path": "artifacts/run.log"
+      }
+    ],
+    "budget": {
+      "max_budget_usd": 3.0,
+      "max_concurrency": 1,
+      "max_iterations": 12,
+      "timeout_s": 2400
+    },
+    "capabilities": {
+      "adapter_id": "attached-api",
+      "capabilities": [
+        "cancel",
+        "close",
+        "event_stream",
+        "immutable_artifacts",
+        "os_isolation",
+        "start",
+        "usage_reporting"
+      ],
+      "integration": "attached",
+      "protocol_version": "1",
+      "schema_version": "research_capability_descriptor.v1",
+      "unsupported": {
+        "pause": "no pause channel; stop only at safe boundaries"
+      }
+    },
+    "harness": {
+      "adapter_id": "attached-api",
+      "effective_config": {
+        "model": "example-model",
+        "region": "local"
+      },
+      "model_roles": {
+        "primary": "example-model"
+      },
+      "protocol_version": "1"
+    },
+    "inputs": {
+      "candidate_input_digests": [
+        "sha256:cec4884cc33097a945b2821a6b8b46cba3d0c759392ff6990c5b670961069565"
+      ],
+      "dataset_digests": [
+        "sha256:9949f763739aae0ee69a4fff9b7e9c524dc0cd6938da7527836d848199e9665c"
+      ],
+      "environment": {
+        "dependency_lock_digest": "sha256:c809e4ce094b9b4afc02e905330d321def67a134061290a74f7bd2116a84b77f",
+        "image_digest": null
+      },
+      "evaluator_digest": "sha256:24d7dc217a7b53614860c44d2e3c70395e5bcfd9312d1eaaec104167f43e382d"
+    },
+    "integration": "attached",
+    "isolation": {
+      "enforcement": "os",
+      "filesystem_confinement": true,
+      "network_policy": true,
+      "platform": "linux",
+      "process_isolation": true,
+      "resource_limits": true
+    },
+    "lineage": {
+      "checkpoint_refs": [],
+      "focus_hint": null,
+      "parent_run_id": null
+    },
+    "objective": {
+      "constraints": [],
+      "direction": "maximize",
+      "goal": "optimize",
+      "metric_field": "primary_metric",
+      "schema_version": "research_objective_policy.v1",
+      "tie_tolerance": 0.0
+    },
+    "parameters": {
+      "max_complexity": 10,
+      "target_file": "refactor_target.py"
+    },
+    "policy_version": "execution-policy.v1",
+    "run_id": "run-code-test-attached",
+    "schema_version": "research_run_spec.v1",
+    "secrets": [
+      {
+        "name": "driver.auth",
+        "provider": "env",
+        "role": "harness",
+        "scope": "attempt"
+      },
+      {
+        "name": "scorer.api_key",
+        "provider": "env",
+        "role": "evaluator",
+        "scope": "run"
+      }
+    ],
+    "skill": {
+      "digest": "sha256:9e7b34b85c1c92f017e6f45eb3737932c077a931a01a8f6a961fdf2a2326ad96",
+      "skill_id": "code-refactor",
+      "version": "0.1.0"
+    }
+  },
+  "verified_result": {
+    "attempt_id": "attempt-code-test-attached",
+    "candidate": {
+      "artifacts": [],
+      "candidate_id": "cand-code-test-attached",
+      "digest": "sha256:a4c55da3d9229cee3704f2bd09a39ee22d211f472c8778f149391f3017aa0b08",
+      "parent_digest": null,
+      "schema_version": "research_candidate_identity.v1"
+    },
+    "evaluator_digest": "sha256:24d7dc217a7b53614860c44d2e3c70395e5bcfd9312d1eaaec104167f43e382d",
+    "failure": null,
+    "metrics": {
+      "primary_metric": 0.93
+    },
+    "observation": {
+      "candidate_digest": "sha256:a4c55da3d9229cee3704f2bd09a39ee22d211f472c8778f149391f3017aa0b08",
+      "dataset_digests": [
+        "sha256:9949f763739aae0ee69a4fff9b7e9c524dc0cd6938da7527836d848199e9665c"
+      ],
+      "fidelity": "measured",
+      "observation_id": "obs-cand-code-test-attached",
+      "schema_version": "research_observation_identity.v1",
+      "scorer": {
+        "digest": "sha256:9226371c418cdd2cad9ecfcc8366d11752fb307e2e3269c9ffa12d4d9fa6d553",
+        "scorer_id": "code-test-evaluator",
+        "version": "1.0"
+      },
+      "seed": 7,
+      "subject_id": "subject-1",
+      "variant": "variant-1"
+    },
+    "produced_at": "2026-10-15T12:00:00Z",
+    "provenance": "evaluator_owned",
+    "receipt": {
+      "envelope_digest": "sha256:a38b3cfbd24ca3ed9de800b371c9b8bcbdf7be672b64487ee6e6c65dcd9a6c85",
+      "nonce": "nonce-code-test",
+      "ownership_epoch": 1,
+      "receipt_id": "rcpt-code-test",
+      "sequence": 0
+    },
+    "result_id": "res-code-test",
+    "run_id": "run-code-test-attached",
+    "schema_version": "research_verified_result.v1",
+    "status": "succeeded",
+    "verification": "verified"
+  }
+}

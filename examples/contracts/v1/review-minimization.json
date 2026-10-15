@@ -1,0 +1,108 @@
+{
+  "description": "A minimize-direction objective over measured latency: the lower measurement is the winner.",
+  "example_id": "review-minimization",
+  "kind": "review",
+  "objective_policy": {
+    "constraints": [],
+    "direction": "minimize",
+    "goal": "optimize",
+    "metric_field": "p95_latency_ms",
+    "schema_version": "research_objective_policy.v1",
+    "tie_tolerance": 0.0
+  },
+  "verified_results": [
+    {
+      "attempt_id": "attempt-review-minimization",
+      "candidate": {
+        "artifacts": [],
+        "candidate_id": "cand-baseline",
+        "digest": "sha256:26edfb806bc1640a957c550d8707c55496bbbfbac6e3205c6f303b3dae41113c",
+        "parent_digest": null,
+        "schema_version": "research_candidate_identity.v1"
+      },
+      "evaluator_digest": "sha256:ab9b08a4eb2a8c249b2a226628200ee8c009e49824b428305623b8b9dc803e9a",
+      "failure": null,
+      "metrics": {
+        "p95_latency_ms": 58.0
+      },
+      "observation": {
+        "candidate_digest": "sha256:26edfb806bc1640a957c550d8707c55496bbbfbac6e3205c6f303b3dae41113c",
+        "dataset_digests": [
+          "sha256:a0fa90db70619b3e834d860248623abe867a51db83a1e098bec600998aca763a"
+        ],
+        "fidelity": "measured",
+        "observation_id": "obs-cand-baseline",
+        "schema_version": "research_observation_identity.v1",
+        "scorer": {
+          "digest": "sha256:ef288db2ef21ded782766963f249770af491ae917939853147f32f4bfdb7ac32",
+          "scorer_id": "latency-benchmark-service",
+          "version": "1.0"
+        },
+        "seed": 7,
+        "subject_id": "subject-1",
+        "variant": "variant-1"
+      },
+      "produced_at": "2026-10-15T12:10:00Z",
+      "provenance": "evaluator_owned",
+      "receipt": {
+        "envelope_digest": "sha256:3068fbb802c1e0796bfbef15743a8932ae5bd3858266be893a2152dc17504b80",
+        "nonce": "nonce-review-minimization-baseline",
+        "ownership_epoch": 1,
+        "receipt_id": "rcpt-review-minimization-baseline",
+        "sequence": 0
+      },
+      "result_id": "res-review-minimization-baseline",
+      "run_id": "run-review-minimization",
+      "schema_version": "research_verified_result.v1",
+      "status": "succeeded",
+      "verification": "verified"
+    },
+    {
+      "attempt_id": "attempt-review-minimization",
+      "candidate": {
+        "artifacts": [],
+        "candidate_id": "cand-improved",
+        "digest": "sha256:bcd559f010815ab11425ee1fe1424ac219a1b3a66a2cfbd7ab6106d6fa9f8fa3",
+        "parent_digest": null,
+        "schema_version": "research_candidate_identity.v1"
+      },
+      "evaluator_digest": "sha256:ab9b08a4eb2a8c249b2a226628200ee8c009e49824b428305623b8b9dc803e9a",
+      "failure": null,
+      "metrics": {
+        "p95_latency_ms": 41.5
+      },
+      "observation": {
+        "candidate_digest": "sha256:bcd559f010815ab11425ee1fe1424ac219a1b3a66a2cfbd7ab6106d6fa9f8fa3",
+        "dataset_digests": [
+          "sha256:a0fa90db70619b3e834d860248623abe867a51db83a1e098bec600998aca763a"
+        ],
+        "fidelity": "measured",
+        "observation_id": "obs-cand-improved",
+        "schema_version": "research_observation_identity.v1",
+        "scorer": {
+          "digest": "sha256:ef288db2ef21ded782766963f249770af491ae917939853147f32f4bfdb7ac32",
+          "scorer_id": "latency-benchmark-service",
+          "version": "1.0"
+        },
+        "seed": 7,
+        "subject_id": "subject-1",
+        "variant": "variant-1"
+      },
+      "produced_at": "2026-10-15T12:10:00Z",
+      "provenance": "evaluator_owned",
+      "receipt": {
+        "envelope_digest": "sha256:f9d51ba392ba35157b95fa1cb60fbeec6eecebff3475e4aadd5603c1bec1bf5a",
+        "nonce": "nonce-review-minimization-improved",
+        "ownership_epoch": 1,
+        "receipt_id": "rcpt-review-minimization-improved",
+        "sequence": 0
+      },
+      "result_id": "res-review-minimization-improved",
+      "run_id": "run-review-minimization",
+      "schema_version": "research_verified_result.v1",
+      "status": "succeeded",
+      "verification": "verified"
+    }
+  ],
+  "winner_result_id": "res-review-minimization-improved"
+}

@@ -1,0 +1,29 @@
+{
+  "capability_descriptor": {
+    "adapter_id": "minimal-adapter",
+    "capabilities": [
+      "start",
+      "event_stream",
+      "close"
+    ],
+    "integration": "managed",
+    "protocol_version": "1",
+    "schema_version": "research_capability_descriptor.v1",
+    "unsupported": {
+      "cancel": "no cancellation channel",
+      "immutable_artifacts": "writes results in place",
+      "os_isolation": "runs on the host without confinement"
+    }
+  },
+  "description": "A capability descriptor below the minimum supported set: work must not start and the missing capabilities are named.",
+  "example_id": "review-unsupported-capability",
+  "expected_rejection": {
+    "error": "UnsupportedCapabilityError",
+    "missing_capabilities": [
+      "cancel",
+      "immutable_artifacts",
+      "os_isolation"
+    ]
+  },
+  "kind": "review"
+}

@@ -391,9 +391,9 @@ Operator constraints bound explicit run inputs, then skill defaults, then system
 defaults; harness preferences cannot widen authority. Resolve and record every
 contract choice before dependent implementation.
 
-- [ ] Specify RunSpec, ExecutionRequest, candidate/observation identity, verified result, objective policy, and capability descriptor as versioned data contracts.
-- [ ] Separate operator constraints, skill defaults, harness preferences, and mutable candidate data; define deterministic precedence and secret references.
-- [ ] Specify legacy readers, explicit migration errors, minimum supported capabilities, and the Linux isolation boundary; resolve choices through bounded probes and record decisions with reopening triggers.
+- [x] Specify RunSpec, ExecutionRequest, candidate/observation identity, verified result, objective policy, and capability descriptor as versioned data contracts.
+- [x] Separate operator constraints, skill defaults, harness preferences, and mutable candidate data; define deterministic precedence and secret references.
+- [x] Specify legacy readers, explicit migration errors, minimum supported capabilities, and the Linux isolation boundary; resolve choices through bounded probes and record decisions with reopening triggers.
 
 Acceptance: serialized example contracts cover both integration directions and
 all three initial domains. A v1 compatibility mapping distinguishes preserved

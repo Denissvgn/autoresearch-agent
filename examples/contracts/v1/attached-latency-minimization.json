@@ -1,0 +1,210 @@
+{
+  "description": "Latency minimization domain: measure p95 latency of a loopback service under a fixed request mix; lower is better. Shown through the attached integration direction.",
+  "domain": "latency-minimization",
+  "example_id": "attached-latency-minimization",
+  "execution_request": {
+    "attempt_id": "attempt-latency-minimization-attached",
+    "candidate": {
+      "artifacts": [],
+      "candidate_id": "cand-latency-minimization-attached",
+      "digest": "sha256:8454aecdd72cc25b4166993360d30871ab115dd339ad9c59c871ebf571814e54",
+      "parent_digest": null,
+      "schema_version": "research_candidate_identity.v1"
+    },
+    "dataset_digests": [
+      "sha256:a0fa90db70619b3e834d860248623abe867a51db83a1e098bec600998aca763a"
+    ],
+    "environment_digest": "sha256:909b0c21104786202c02f9a382e8cedec651e1dd9e5553ddaa6901a2c2735118",
+    "evaluator_digest": "sha256:ab9b08a4eb2a8c249b2a226628200ee8c009e49824b428305623b8b9dc803e9a",
+    "integration": "attached",
+    "network": {
+      "allowed_hosts": [],
+      "mode": "deny"
+    },
+    "request_id": "req-latency-minimization-attached",
+    "resources": {
+      "max_processes": 8,
+      "memory_mb": 512,
+      "wall_clock_s": 600
+    },
+    "run_id": "run-latency-minimization-attached",
+    "run_spec_digest": "sha256:866951074892072007b3987c3089856f6f147fc0455dc112d42f414fd09c25d2",
+    "schema_version": "research_execution_request.v1",
+    "secrets": [
+      {
+        "name": "driver.auth",
+        "provider": "env",
+        "role": "harness",
+        "scope": "attempt"
+      },
+      {
+        "name": "scorer.api_key",
+        "provider": "env",
+        "role": "evaluator",
+        "scope": "run"
+      }
+    ],
+    "workspace": {
+      "read_only_roots": [
+        "inputs",
+        "evaluators"
+      ],
+      "writable_roots": [
+        "candidate"
+      ]
+    }
+  },
+  "integration": "attached",
+  "kind": "integration",
+  "run_spec": {
+    "artifacts": [
+      {
+        "digest": "sha256:4ce2c2e39dbb74f3018d5c948592ae0b3e2257ea5842e7c93823d18ad7c1f917",
+        "name": "run-log",
+        "path": "artifacts/run.log"
+      }
+    ],
+    "budget": {
+      "max_budget_usd": 3.0,
+      "max_concurrency": 1,
+      "max_iterations": 12,
+      "timeout_s": 2400
+    },
+    "capabilities": {
+      "adapter_id": "attached-api",
+      "capabilities": [
+        "cancel",
+        "close",
+        "event_stream",
+        "immutable_artifacts",
+        "os_isolation",
+        "start",
+        "usage_reporting"
+      ],
+      "integration": "attached",
+      "protocol_version": "1",
+      "schema_version": "research_capability_descriptor.v1",
+      "unsupported": {
+        "pause": "no pause channel; stop only at safe boundaries"
+      }
+    },
+    "harness": {
+      "adapter_id": "attached-api",
+      "effective_config": {
+        "model": "example-model",
+        "region": "local"
+      },
+      "model_roles": {
+        "primary": "example-model"
+      },
+      "protocol_version": "1"
+    },
+    "inputs": {
+      "candidate_input_digests": [
+        "sha256:545535a97640fff584737332382b51685fac313605e27c3fd4ded4f4d3d6a351"
+      ],
+      "dataset_digests": [
+        "sha256:a0fa90db70619b3e834d860248623abe867a51db83a1e098bec600998aca763a"
+      ],
+      "environment": {
+        "dependency_lock_digest": "sha256:c809e4ce094b9b4afc02e905330d321def67a134061290a74f7bd2116a84b77f",
+        "image_digest": null
+      },
+      "evaluator_digest": "sha256:ab9b08a4eb2a8c249b2a226628200ee8c009e49824b428305623b8b9dc803e9a"
+    },
+    "integration": "attached",
+    "isolation": {
+      "enforcement": "os",
+      "filesystem_confinement": true,
+      "network_policy": true,
+      "platform": "linux",
+      "process_isolation": true,
+      "resource_limits": true
+    },
+    "lineage": {
+      "checkpoint_refs": [],
+      "focus_hint": null,
+      "parent_run_id": null
+    },
+    "objective": {
+      "constraints": [],
+      "direction": "minimize",
+      "goal": "optimize",
+      "metric_field": "p95_latency_ms",
+      "schema_version": "research_objective_policy.v1",
+      "tie_tolerance": 0.0
+    },
+    "parameters": {
+      "request_mix": "fixed-oltp",
+      "warmup_s": 30
+    },
+    "policy_version": "execution-policy.v1",
+    "run_id": "run-latency-minimization-attached",
+    "schema_version": "research_run_spec.v1",
+    "secrets": [
+      {
+        "name": "driver.auth",
+        "provider": "env",
+        "role": "harness",
+        "scope": "attempt"
+      },
+      {
+        "name": "scorer.api_key",
+        "provider": "env",
+        "role": "evaluator",
+        "scope": "run"
+      }
+    ],
+    "skill": {
+      "digest": "sha256:aa71ff4136cc6f41c3487066c2ed71feee363bdbd039607dabec6026db83a4c6",
+      "skill_id": "latency-benchmark",
+      "version": "0.1.0"
+    }
+  },
+  "verified_result": {
+    "attempt_id": "attempt-latency-minimization-attached",
+    "candidate": {
+      "artifacts": [],
+      "candidate_id": "cand-latency-minimization-attached",
+      "digest": "sha256:8454aecdd72cc25b4166993360d30871ab115dd339ad9c59c871ebf571814e54",
+      "parent_digest": null,
+      "schema_version": "research_candidate_identity.v1"
+    },
+    "evaluator_digest": "sha256:ab9b08a4eb2a8c249b2a226628200ee8c009e49824b428305623b8b9dc803e9a",
+    "failure": null,
+    "metrics": {
+      "p95_latency_ms": 42.5
+    },
+    "observation": {
+      "candidate_digest": "sha256:8454aecdd72cc25b4166993360d30871ab115dd339ad9c59c871ebf571814e54",
+      "dataset_digests": [
+        "sha256:a0fa90db70619b3e834d860248623abe867a51db83a1e098bec600998aca763a"
+      ],
+      "fidelity": "measured",
+      "observation_id": "obs-cand-latency-minimization-attached",
+      "schema_version": "research_observation_identity.v1",
+      "scorer": {
+        "digest": "sha256:ef288db2ef21ded782766963f249770af491ae917939853147f32f4bfdb7ac32",
+        "scorer_id": "latency-benchmark-service",
+        "version": "1.0"
+      },
+      "seed": 7,
+      "subject_id": "subject-1",
+      "variant": "variant-1"
+    },
+    "produced_at": "2026-10-15T12:00:00Z",
+    "provenance": "evaluator_owned",
+    "receipt": {
+      "envelope_digest": "sha256:82020700b6fe64147b9813fad51bc91ac8daf596e67106297c21e2b6e028b691",
+      "nonce": "nonce-latency-minimization",
+      "ownership_epoch": 1,
+      "receipt_id": "rcpt-latency-minimization",
+      "sequence": 0
+    },
+    "result_id": "res-latency-minimization",
+    "run_id": "run-latency-minimization-attached",
+    "schema_version": "research_verified_result.v1",
+    "status": "succeeded",
+    "verification": "verified"
+  }
+}

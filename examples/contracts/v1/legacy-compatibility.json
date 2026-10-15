@@ -1,0 +1,112 @@
+{
+  "description": "The v1 compatibility mapping: preserved legacy behavior versus rejected incomplete features.",
+  "example_id": "legacy-compatibility",
+  "kind": "compatibility",
+  "mapping": [
+    {
+      "contract_field": "reader gate",
+      "disposition": "preserved",
+      "legacy_field": "schema_version",
+      "reason": "session artifacts v1-v3 are accepted and normalized by the reader",
+      "rejected_when": null
+    },
+    {
+      "contract_field": "SkillPackageRef.skill_id",
+      "disposition": "preserved",
+      "legacy_field": "skill_id / model_type",
+      "reason": "legacy model_type aliases resolve through the alias registry",
+      "rejected_when": null
+    },
+    {
+      "contract_field": "ObservationIdentity.subject_id",
+      "disposition": "preserved",
+      "legacy_field": "subject_id / instrument",
+      "reason": "legacy identity fields map to canonical subject identity",
+      "rejected_when": null
+    },
+    {
+      "contract_field": "ObservationIdentity.variant",
+      "disposition": "preserved",
+      "legacy_field": "variant / timeframe",
+      "reason": "legacy identity fields map to canonical variant identity",
+      "rejected_when": null
+    },
+    {
+      "contract_field": "BudgetDimensions.max_budget_usd",
+      "disposition": "preserved",
+      "legacy_field": "budget.max_budget_usd",
+      "reason": "spend ceilings carry over unchanged",
+      "rejected_when": null
+    },
+    {
+      "contract_field": "BudgetDimensions.max_iterations",
+      "disposition": "preserved",
+      "legacy_field": "max_iterations",
+      "reason": "iteration ceilings carry over unchanged",
+      "rejected_when": null
+    },
+    {
+      "contract_field": "BudgetDimensions.timeout_s",
+      "disposition": "preserved",
+      "legacy_field": "timeout_s / timeout_minutes",
+      "reason": "time ceilings carry over; minute values convert to seconds",
+      "rejected_when": null
+    },
+    {
+      "contract_field": "LegacyRunInputs.legacy_objective_text",
+      "disposition": "preserved",
+      "legacy_field": "objective",
+      "reason": "descriptive objective text is preserved verbatim; metric semantics come from the skill metric declaration",
+      "rejected_when": null
+    },
+    {
+      "contract_field": "RunSpec.parameters",
+      "disposition": "preserved",
+      "legacy_field": "skill_params",
+      "reason": "nonsecret parameters migrate; credential-shaped keys must already use secret references",
+      "rejected_when": null
+    },
+    {
+      "contract_field": "RunLineage.focus_hint",
+      "disposition": "preserved",
+      "legacy_field": "focus_hint",
+      "reason": "continuation guidance is preserved through restart",
+      "rejected_when": null
+    },
+    {
+      "contract_field": "ObjectivePolicy",
+      "disposition": "preserved",
+      "legacy_field": "skill / metric_schema",
+      "reason": "the skill's metric declaration yields the objective policy",
+      "rejected_when": null
+    },
+    {
+      "contract_field": "artifact digest evidence",
+      "disposition": "preserved",
+      "legacy_field": "manifest_hash",
+      "reason": "existing manifest digests remain provenance evidence",
+      "rejected_when": null
+    },
+    {
+      "contract_field": null,
+      "disposition": "preserved",
+      "legacy_field": "tag / quick_mode / hpo / legacy provenance sections",
+      "reason": "retained on their existing session surfaces as-is; no v1 contract field, so migration neither maps nor drops them",
+      "rejected_when": null
+    },
+    {
+      "contract_field": null,
+      "disposition": "rejected",
+      "legacy_field": "session_nonce",
+      "reason": "nonce-echo self-verification is an incomplete trust feature; verified results require an evaluator receipt, and legacy self-claims migrate as unverified_imported at best",
+      "rejected_when": "non-empty"
+    },
+    {
+      "contract_field": null,
+      "disposition": "rejected",
+      "legacy_field": "mlflow_experiment",
+      "reason": "experiment-tracking integration was never implemented; accepting the field would promise inert behavior",
+      "rejected_when": "non-empty"
+    }
+  ]
+}
