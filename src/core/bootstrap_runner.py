@@ -258,11 +258,15 @@ class BootstrapRunner:
         seed_search: Optional[dict[str, Any]] = None,
         dry: bool = False,
         timeout_s: Optional[float] = None,
+        proc_registry: Any = None,
+        research_id: Optional[str] = None,
     ) -> BootstrapOutcome:
         """Execute the skill's ``bootstrap.py`` and write the artifact.
 
         ``dry=True`` runs the bootstrap in a throwaway overlay (P5-008 D5(b)),
         capturing the planned writes without touching the real workspace.
+        ``proc_registry`` registers the live plugin spawn so a session
+        stop/cancel can reap the bootstrap tree through bounded cleanup.
         """
         bootstrap_entry = layout.plugins.get("bootstrap")
         if bootstrap_entry is None:
@@ -297,6 +301,8 @@ class BootstrapRunner:
                 tool_config=tool_config,
                 seed_search=seed_search,
                 timeout_s=timeout_s,
+                proc_registry=proc_registry,
+                research_id=research_id,
             )
         workspace.mkdir(parents=True, exist_ok=True)
         input_json = {
@@ -314,6 +320,8 @@ class BootstrapRunner:
             caps=caps,
             workspace=workspace,
             timeout_s=timeout_s,
+            proc_registry=proc_registry,
+            research_id=research_id,
         )
         if not result.ok:
             return BootstrapOutcome(
@@ -355,6 +363,8 @@ class BootstrapRunner:
         tool_config: Optional[dict[str, Any]],
         seed_search: Optional[dict[str, Any]],
         timeout_s: Optional[float],
+        proc_registry: Any = None,
+        research_id: Optional[str] = None,
     ) -> BootstrapOutcome:
         """X-004 D5(b) overlay dry mode (P5-008).
 
@@ -382,6 +392,8 @@ class BootstrapRunner:
                 caps=caps,
                 workspace=overlay,
                 timeout_s=timeout_s,
+                proc_registry=proc_registry,
+                research_id=research_id,
             )
             if not result.ok:
                 return BootstrapOutcome(

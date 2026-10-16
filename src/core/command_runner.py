@@ -23,6 +23,7 @@ from src.core.tool_access import ToolAccessContext
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from src.core.isolation import IsolationPolicy
+    from src.core.process_limits import TreeResourceGuard
 
 try:
     import psutil
@@ -261,6 +262,12 @@ class CommandRunResult:
     timed_out: bool = False
     log_path: str | None = None
     log_truncated: bool = False
+    #: Attributed resource violation kind ("cpu", "rss", "processes",
+    #: "output", "file_size", "wall_time") or None for a clean run.
+    resource_violation: str | None = None
+    #: Explicit cleanup status: True when a descendant survived the bounded
+    #: termination window (successful cleanup always reports False).
+    cleanup_incomplete: bool = False
     #: Execution boundary label: ``"sandboxed:bwrap"`` when the run was wrapped
     #: in the isolation backend, ``"trusted_local_code"`` for the retained
     #: trusted local-code path (pinned executables) — which is never advertised
@@ -311,21 +318,27 @@ class CommandProcessRegistry:
         with self._lock:
             return len(self._procs)
 
-    def kill_all(self, research_id: str) -> None:
+    def kill_all(self, research_id: str) -> bool:
         """Best-effort terminate every still-running subprocess tree for a session.
 
-        Snapshots under the lock, then kills outside it so the psutil wait
-        (up to ~10s) does not block worker-thread ``register``/``unregister``.
-        Already-exited procs (``poll()`` is not ``None``) are skipped.
+        Snapshots under the lock, then kills outside it so the bounded cleanup
+        window does not block worker-thread ``register``/``unregister``.
+        Already-exited procs (``poll()`` is not ``None``) are skipped. Returns
+        ``True`` when every tree was fully reaped (no orphaned descendant);
+        ``False`` is the explicit incomplete-cleanup status callers must
+        surface.
         """
         with self._lock:
             procs = list(self._procs.get(research_id, ()))
+        all_clean = True
         for proc in procs:
             try:
                 if proc.poll() is None:
-                    _terminate_process_group_without_communicate(proc)
+                    if not _terminate_process_group_without_communicate(proc):
+                        all_clean = False
             except Exception:
-                pass
+                all_clean = False
+        return all_clean
 
 
 class GovernedCommandRunner:
@@ -437,6 +450,34 @@ class GovernedCommandRunner:
         else:
             boundary = "trusted_local_code"
 
+        from src.config import get_settings
+        from src.core.process_limits import (
+            ProcessResourceCaps,
+            TreeResourceGuard,
+            UnenforceableResourceCapabilityError,
+            rlimit_prefix,
+            signal_violation,
+        )
+
+        _settings = get_settings()
+        resource_caps = ProcessResourceCaps(
+            wall_s=float(request.timeout_s),
+            cpu_s=_settings.command_max_cpu_s,
+            rss_mb=_settings.command_max_rss_mb,
+            max_processes=_settings.execution_max_processes,
+            max_output_bytes=_settings.execution_max_output_bytes,
+            max_file_write_bytes=_settings.execution_max_file_write_bytes,
+        )
+        try:
+            spawn_argv = [*rlimit_prefix(resource_caps), *spawn_argv]
+        except UnenforceableResourceCapabilityError as exc:
+            return CommandRunResult(
+                output=f"Execution refused: unenforceable resource capability: {exc}",
+                decision=decision,
+                execution_boundary="refused",
+                resource_violation="unenforceable",
+            )
+
         proc = subprocess.Popen(
             spawn_argv,
             cwd=request.cwd,
@@ -451,14 +492,25 @@ class GovernedCommandRunner:
         # (cancelling asyncio.to_thread cannot interrupt this poll loop).
         if proc_registry is not None and research_id is not None:
             proc_registry.register(research_id, proc)
+        guard = TreeResourceGuard(proc, resource_caps)
+        guard.start()
         try:
-            stdout, stderr, timed_out, log_path, log_truncated = _collect_process_output(
+            (
+                stdout, stderr, timed_out, log_path, log_truncated,
+                drain_violation, cleanup_incomplete,
+            ) = _collect_process_output(
                 proc, timeout_s=request.timeout_s,
                 workspace=self._session_workspace or self._workspace_root,
                 output_callback=output_callback,
+                resource_guard=guard,
+                max_output_bytes=resource_caps.max_output_bytes,
             )
+            violation = drain_violation or signal_violation(proc.returncode)
+            if violation == "wall_time" and guard.violation:
+                violation = guard.violation
+            cleanup_incomplete = cleanup_incomplete or guard.cleanup_incomplete
             output = _truncate_output(redact_sensitive_text(_combine_output(stdout, stderr)))
-            if timed_out:
+            if violation == "wall_time" or timed_out:
                 output = (output + f"\n[Command timed out after {request.timeout_s}s]"
                           if output else f"Command timed out after {request.timeout_s}s")
             elif proc.returncode != 0:
@@ -471,12 +523,15 @@ class GovernedCommandRunner:
                 output=output or "(no output)",
                 decision=decision,
                 returncode=proc.returncode,
-                timed_out=timed_out,
+                timed_out=timed_out or violation == "wall_time",
                 log_path=log_path,
                 log_truncated=log_truncated,
                 execution_boundary=boundary,
+                resource_violation=violation,
+                cleanup_incomplete=cleanup_incomplete,
             )
         finally:
+            guard.stop()
             if proc_registry is not None and research_id is not None:
                 proc_registry.unregister(research_id, proc)
 
@@ -511,12 +566,17 @@ def _collect_process_output(
     workspace: str,
     output_callback: OutputCallback | None = None,
     log: _SessionOutputLog | None = None,
-) -> tuple[str, str, bool, str | None, bool]:
+    resource_guard: "TreeResourceGuard | None" = None,
+    max_output_bytes: int | None = None,
+) -> tuple[str, str, bool, str | None, bool, str | None, bool]:
     """Drain both pipes incrementally, without communicate(), threads or queues.
 
     Keep callbacks line-oriented for ordinary output; exceptionally long lines
     are delivered in bounded fragments. A dead child holding inherited pipes
     open cannot defeat the deadline. Logging failures never stop pipe draining.
+    A resource-guard violation or the configured output quota terminates the
+    tree immediately and is returned as an attributed violation; the trailing
+    flag reports whether cleanup left survivors.
 
     >>> import sys, tempfile
     >>> with tempfile.TemporaryDirectory() as workspace:
@@ -527,9 +587,10 @@ def _collect_process_output(
     ...     code = "import os; os.write(1, b'x' * 2000000); os.write(2, b'y' * 2000000)"
     ...     proc = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE,
     ...                             stderr=subprocess.PIPE, start_new_session=True)
-    ...     out, err, expired, path, clipped = _collect_process_output(
+    ...     out, err, expired, path, clipped, violation, incomplete = _collect_process_output(
     ...         proc, timeout_s=10, workspace=workspace, output_callback=callback)
     ...     assert not expired and not clipped and proc.returncode == 0
+    ...     assert violation is None and not incomplete
     ...     assert len(out) <= 60_020 and len(err) <= 60_020
     ...     assert counts == {"stdout": 2000000, "stderr": 2000000}
     ...     assert Path(path).stat().st_size == 4000000
@@ -537,7 +598,7 @@ def _collect_process_output(
     ...     proc = subprocess.Popen([sys.executable, "-c", "print('still drained')"],
     ...                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     ...                             start_new_session=True)
-    ...     out, _, expired, _, clipped = _collect_process_output(
+    ...     out, _, expired, _, clipped, _, _ = _collect_process_output(
     ...         proc, timeout_s=10, workspace=workspace, log=log)
     ...     assert "still drained" in out and clipped and not expired
     ...     proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"],
@@ -548,6 +609,9 @@ def _collect_process_output(
     """
     buffers = {name: _HeadTailBuffer() for name in ("stdout", "stderr")}
     pending = {name: "" for name in buffers}
+    violation: str | None = None
+    cleanup_incomplete = False
+    total_bytes = 0
     decoders = {name: codecs.getincrementaldecoder("utf-8")("replace") for name in buffers}
     log_failed = False
     timed_out = False
@@ -621,12 +685,19 @@ def _collect_process_output(
                     os.set_blocking(pipe.fileno(), False)
                     selector.register(pipe, selectors.EVENT_READ, name)
             while selector.get_map() or proc.poll() is None:
+                if resource_guard is not None and resource_guard.violation is not None:
+                    violation = resource_guard.violation
+                    if not _terminate_process_group_without_communicate(proc):
+                        cleanup_incomplete = True
+                    break
                 now = time.monotonic()
                 if now >= deadline:
                     if timed_out:
                         break  # escaped descendants may still own pipe handles
                     timed_out = True
-                    _terminate_process_group_without_communicate(proc)
+                    violation = "wall_time"
+                    if not _terminate_process_group_without_communicate(proc):
+                        cleanup_incomplete = True
                     deadline = time.monotonic() + 2
                 for key, _ in selector.select(timeout=0.05):
                     name = key.data
@@ -634,14 +705,24 @@ def _collect_process_output(
                         chunk = os.read(key.fd, _OUTPUT_CHUNK_SIZE)
                     except BlockingIOError:
                         continue
+                    if chunk:
+                        total_bytes += len(chunk)
+                        if max_output_bytes is not None and total_bytes > max_output_bytes:
+                            violation = "output"
+                            if not _terminate_process_group_without_communicate(proc):
+                                cleanup_incomplete = True
+                            break
                     consume(name, decoders[name].decode(chunk, final=not chunk), final=not chunk)
                     if not chunk:
                         selector.unregister(key.fileobj)
+                if violation is not None:
+                    break
             for name in buffers:
                 consume(name, "", final=True)
         return (
             buffers["stdout"].getvalue(), buffers["stderr"].getvalue(), timed_out,
             log.path if log else None, log_failed or bool(log and log.truncated),
+            violation, cleanup_incomplete,
         )
     finally:
         try:
@@ -661,47 +742,12 @@ def _truncate_output(output: str) -> str:
     return output[:30_000] + "\n...(truncated)...\n" + output[-30_000:]
 
 
-def _terminate_process_group_without_communicate(proc: subprocess.Popen[str]) -> None:
-    """Terminate a timed-out process tree without accumulating pipe output."""
+def _terminate_process_group_without_communicate(proc: subprocess.Popen[str]) -> bool:
+    """Terminate a timed-out process tree without accumulating pipe output.
 
-    if psutil is not None:
-        try:
-            root = psutil.Process(proc.pid)
-            targets = root.children(recursive=True) + [root]
-            for process in targets:
-                try:
-                    process.terminate()
-                except psutil.NoSuchProcess:
-                    pass
-            _, alive = psutil.wait_procs(targets, timeout=5)
-            for process in alive:
-                try:
-                    process.kill()
-                except psutil.NoSuchProcess:
-                    pass
-            if alive:
-                psutil.wait_procs(alive, timeout=5)
-        except psutil.NoSuchProcess:
-            pass
-        try:
-            proc.wait(timeout=1)
-        except subprocess.TimeoutExpired:
-            try:
-                proc.kill()
-            except ProcessLookupError:
-                pass
-            proc.wait(timeout=5)
-        return
+    Returns ``True`` when the tree is fully reaped within the bounded cleanup
+    window; ``False`` marks cleanup incomplete (callers surface the status).
+    """
+    from src.core.process_limits import terminate_process_tree
 
-    try:
-        os.killpg(proc.pid, signal.SIGTERM)
-    except ProcessLookupError:
-        pass
-    try:
-        proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        try:
-            os.killpg(proc.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        proc.wait(timeout=5)
+    return terminate_process_tree(proc)

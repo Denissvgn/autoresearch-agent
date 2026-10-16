@@ -37,15 +37,17 @@ same contract.
 Design decisions (P1-007 house style):
 
 * **Sync subprocess + thread offload.** Like ``GovernedCommandRunner.run``,
-  the blocking ``Popen`` poll loop lives on a worker thread; the public
-  ``run()`` is ``async`` and wraps the body in ``asyncio.to_thread`` so a hard
-  timeout / cancel can reap the tree via ``_terminate_process_group_without_communicate``.
+  the blocking drain lives on a worker thread; the public ``run()`` is
+  ``async`` and wraps the body in ``asyncio.to_thread`` so stop/cancel can
+  reap the tree through the process registry and the bounded cleanup path.
 * **No env inheritance.** The plugin child env is built fresh from the X-004
   §4.2 strict allow-list — it does NOT call ``command_runner._build_child_env``
   (that one is the agent path and carries experiment-legitimate creds plugins
   must never see).
-* **Resource monitoring.** A psutil watcher thread enforces ``max_rss_mb`` /
-  ``max_cpu_s``; on breach the tree is killed and the result is fail-closed.
+* **Resource bounds.** ``src.core.process_limits`` enforces cumulative CPU,
+  process-tree RSS, wall time, process count, and the configured output and
+  filesystem quotas over the whole tree; breaches terminate immediately and
+  the result is an attributed fail-closed record with explicit cleanup status.
 * **Auditing is the caller's job.** ``PluginRunner`` returns a ``PluginResult``
   with ``error``/``returncode``/``timed_out``; the caller (``BootstrapRunner``
   / orchestrator) writes the ``audit_events`` row. Keeps the runner free of the
@@ -70,16 +72,8 @@ from typing import Any, Literal, Mapping, Optional
 
 from src.core.skill_manifest import PluginCaps, PluginKind
 
-try:
-    import psutil
-except ImportError:  # pragma: no cover - dependency is declared for runtime.
-    psutil = None  # type: ignore[assignment]
-
 logger = logging.getLogger(__name__)
 
-# Re-export the kill helper so the bootstrap runner / tests reach it through
-# one module without a second import site.
-from src.core.command_runner import _terminate_process_group_without_communicate  # noqa: E402
 from src.core.isolation import (  # noqa: E402
     SANDBOXED_PREFIX,
     TRUSTED_LOCAL_CODE,
@@ -87,6 +81,14 @@ from src.core.isolation import (  # noqa: E402
     IsolationUnavailableError,
     UnsupportedCapabilityError,
     wrap_command,
+)
+from src.core.process_limits import (  # noqa: E402
+    ProcessResourceCaps,
+    TreeResourceGuard,
+    UnenforceableResourceCapabilityError,
+    bounded_drain,
+    rlimit_prefix,
+    signal_violation,
 )
 
 # ---------------------------------------------------------------------------
@@ -211,6 +213,19 @@ class PluginResult:
     timed_out: bool = False
     rss_exceeded: bool = False
     cpu_exceeded: bool = False
+    #: Process-tree size cap breached (configured process-count quota).
+    processes_exceeded: bool = False
+    #: Output quota breached: the tree was terminated past the configured
+    #: stdout+stderr byte bound (capture itself stays bounded).
+    output_exceeded: bool = False
+    #: Per-file write quota breached at the kernel (RLIMIT_FSIZE / SIGXFSZ).
+    fsize_exceeded: bool = False
+    #: Attributed violation kind ("cpu", "rss", "processes", "output",
+    #: "file_size", "wall_time") or None for a clean run.
+    violation: Optional[str] = None
+    #: Explicit cleanup status: True when a descendant survived the bounded
+    #: termination window (successful cleanup always reports False).
+    cleanup_incomplete: bool = False
     error: Optional[str] = None
     #: Wall-clock duration in seconds (for audit / observability).
     duration_s: float = 0.0
@@ -246,12 +261,16 @@ class PluginRunner:
         caps: PluginCaps,
         workspace: Optional[Path] = None,
         timeout_s: Optional[float] = None,
+        proc_registry: Any = None,
+        research_id: Optional[str] = None,
     ) -> PluginResult:
         """Run one plugin. See module docstring for the contract.
 
         ``workspace`` is the session workspace (CWD + write target when
         ``caps.fs_write == "workspace"``). ``timeout_s`` overrides
         ``caps.timeout_s`` when supplied (the caller may tighten, never loosen).
+        ``proc_registry`` registers the live spawn so a session stop/cancel can
+        reap the whole plugin tree through the bounded cleanup path.
         """
         plugin_path = (Path(skill_dir) / plugin).resolve()
         # Path confinement (D4): the plugin must live under its skill dir, and
@@ -297,6 +316,17 @@ class PluginRunner:
                 error=refusal, caps=caps, isolation=isolation_label,
             )
 
+        from src.config import get_settings
+
+        _settings = get_settings()
+        resource_caps = ProcessResourceCaps(
+            wall_s=effective_timeout,
+            cpu_s=caps.max_cpu_s,
+            rss_mb=caps.max_rss_mb,
+            max_processes=_settings.execution_max_processes,
+            max_output_bytes=_settings.execution_max_output_bytes,
+            max_file_write_bytes=_settings.execution_max_file_write_bytes,
+        )
         body = _PluginRunBody(
             plugin_path=plugin_path,
             kind=kind,
@@ -307,6 +337,9 @@ class PluginRunner:
             timeout_s=effective_timeout,
             spawn_argv=spawn_argv,
             isolation=isolation_label,
+            resource_caps=resource_caps,
+            proc_registry=proc_registry,
+            research_id=research_id,
         )
         return await asyncio.to_thread(self._run_sync, body)
 
@@ -385,8 +418,17 @@ class PluginRunner:
         payload = json.dumps(body.input_json).encode("utf-8")
         child_env = _build_plugin_env()
         try:
+            rlimits = rlimit_prefix(body.resource_caps)
+        except UnenforceableResourceCapabilityError as exc:
+            return PluginResult(
+                ok=False, kind=body.kind, plugin_path=body.plugin,
+                error=f"unenforceable resource capability: {exc}",
+                duration_s=time.monotonic() - started,
+                caps=body.caps,
+            )
+        try:
             proc = subprocess.Popen(
-                list(body.spawn_argv),
+                [*rlimits, *body.spawn_argv],
                 cwd=body.cwd,
                 env=child_env,
                 stdin=subprocess.PIPE,
@@ -403,78 +445,67 @@ class PluginRunner:
                 caps=body.caps,
             )
 
-        watcher = _ResourceWatcher(proc.pid, body.caps) if psutil is not None else None
-        if watcher is not None:
-            watcher.start()
+        if body.proc_registry is not None and body.research_id is not None:
+            body.proc_registry.register(body.research_id, proc)
+        guard = TreeResourceGuard(proc, body.resource_caps)
+        guard.start()
         try:
-            try:
-                stdout_bytes, stderr_bytes = proc.communicate(
-                    input=payload, timeout=body.timeout_s
-                )
-            except subprocess.TimeoutExpired:
-                _terminate_process_group_without_communicate(proc)
-                return PluginResult(
-                    ok=False, kind=body.kind, plugin_path=body.plugin,
-                    returncode=proc.returncode, timed_out=True,
-                    error=f"plugin timed out after {body.timeout_s}s",
-                    duration_s=time.monotonic() - started,
-                    caps=body.caps,
-                )
-            rss_exceeded = watcher.rss_exceeded if watcher else False
-            cpu_exceeded = watcher.cpu_exceeded if watcher else False
-            if rss_exceeded or cpu_exceeded:
-                _terminate_process_group_without_communicate(proc)
-                limit = "RSS" if rss_exceeded else "CPU"
-                return PluginResult(
-                    ok=False, kind=body.kind, plugin_path=body.plugin,
-                    returncode=proc.returncode,
-                    rss_exceeded=rss_exceeded, cpu_exceeded=cpu_exceeded,
-                    error=f"plugin exceeded {limit} cap "
-                          f"({body.caps.max_rss_mb}MB / {body.caps.max_cpu_s}s)",
-                    duration_s=time.monotonic() - started,
-                    caps=body.caps,
-                )
-            stdout_text = stdout_bytes.decode("utf-8", errors="replace") if stdout_bytes else ""
-            stderr_text = stderr_bytes.decode("utf-8", errors="replace") if stderr_bytes else ""
-            if proc.returncode != 0:
-                tail = _tail((stdout_text + "\n" + stderr_text).strip())
-                return PluginResult(
-                    ok=False, kind=body.kind, plugin_path=body.plugin,
-                    returncode=proc.returncode,
-                    raw_output=tail,
-                    error=f"plugin exited non-zero (code={proc.returncode})",
-                    duration_s=time.monotonic() - started,
-                    caps=body.caps,
-                )
-            try:
-                parsed = json.loads(stdout_text) if stdout_text.strip() else None
-            except json.JSONDecodeError as exc:
-                tail = _tail(stdout_text.strip())
-                return PluginResult(
-                    ok=False, kind=body.kind, plugin_path=body.plugin,
-                    returncode=proc.returncode, raw_output=tail,
-                    error=f"plugin emitted invalid JSON: {exc}",
-                    duration_s=time.monotonic() - started,
-                    caps=body.caps,
-                )
-            if not isinstance(parsed, dict):
-                return PluginResult(
-                    ok=False, kind=body.kind, plugin_path=body.plugin,
-                    returncode=proc.returncode, raw_output=_tail(stdout_text.strip()),
-                    error="plugin stdout was not a JSON object",
-                    duration_s=time.monotonic() - started,
-                    caps=body.caps,
-                )
+            outcome = bounded_drain(
+                proc, input_bytes=payload,
+                caps=body.resource_caps, guard=guard,
+            )
+        finally:
+            guard.stop()
+            if body.proc_registry is not None and body.research_id is not None:
+                body.proc_registry.unregister(body.research_id, proc)
+
+        violation = outcome.violation or signal_violation(proc.returncode)
+        cleanup_incomplete = outcome.cleanup_incomplete or guard.cleanup_incomplete
+        stdout_text = outcome.stdout.decode("utf-8", errors="replace") if outcome.stdout else ""
+        stderr_text = outcome.stderr.decode("utf-8", errors="replace") if outcome.stderr else ""
+        if violation is not None:
+            return _violation_result(
+                body, proc=proc, started=started,
+                violation=violation, timed_out=outcome.timed_out,
+                cleanup_incomplete=cleanup_incomplete,
+                raw=_tail((stdout_text + "\n" + stderr_text).strip()),
+            )
+        if proc.returncode != 0:
+            tail = _tail((stdout_text + "\n" + stderr_text).strip())
             return PluginResult(
+                ok=False, kind=body.kind, plugin_path=body.plugin,
+                returncode=proc.returncode,
+                raw_output=tail,
+                error=f"plugin exited non-zero (code={proc.returncode})",
+                duration_s=time.monotonic() - started,
+                caps=body.caps,
+            )
+        try:
+            parsed = json.loads(stdout_text) if stdout_text.strip() else None
+        except json.JSONDecodeError as exc:
+            tail = _tail(stdout_text.strip())
+            return PluginResult(
+                ok=False, kind=body.kind, plugin_path=body.plugin,
+                returncode=proc.returncode, raw_output=tail,
+                error=f"plugin emitted invalid JSON: {exc}",
+                duration_s=time.monotonic() - started,
+                caps=body.caps,
+            )
+        if not isinstance(parsed, dict):
+            return PluginResult(
+                ok=False, kind=body.kind, plugin_path=body.plugin,
+                returncode=proc.returncode, raw_output=_tail(stdout_text.strip()),
+                error="plugin stdout was not a JSON object",
+                duration_s=time.monotonic() - started,
+                caps=body.caps,
+            )
+        return PluginResult(
                 ok=True, kind=body.kind, plugin_path=body.plugin,
                 output=parsed, raw_output=stdout_text,
                 returncode=proc.returncode,
                 duration_s=time.monotonic() - started,
                 caps=body.caps,
             )
-        finally:
-            if watcher is not None:
-                watcher.stop()
 
 
 @dataclass
@@ -493,6 +524,11 @@ class _PluginRunBody:
     spawn_argv: list[str]
     #: The boundary label for the run (see :attr:`PluginResult.isolation`).
     isolation: str
+    #: Finite resource caps enforced over the whole process tree.
+    resource_caps: ProcessResourceCaps
+    #: Optional process registry so stop/cancel can reap the plugin tree.
+    proc_registry: Any = None
+    research_id: Optional[str] = None
 
 
 def _tail(text: str, *, max_chars: int = 2000) -> str:
@@ -502,70 +538,53 @@ def _tail(text: str, *, max_chars: int = 2000) -> str:
     return "…" + text[-max_chars:]
 
 
-# ---------------------------------------------------------------------------
-# Resource watcher (D6 — RSS / CPU caps)
-# ---------------------------------------------------------------------------
+_VIOLATION_LABELS = {
+    "wall_time": "wall-clock timeout",
+    "cpu": "CPU cap",
+    "rss": "RSS cap",
+    "processes": "process-count cap",
+    "output": "output quota",
+    "file_size": "per-file write quota",
+}
 
 
-class _ResourceWatcher:
-    """Polls a live plugin subprocess's RSS / CPU and flags cap breaches (D6).
+def _violation_result(
+    body: "_PluginRunBody", *, proc: Any, started: float, violation: str,
+    timed_out: bool, cleanup_incomplete: bool, raw: str,
+) -> PluginResult:
+    """Build the attributed failed result for one resource-cap breach."""
+    caps = body.resource_caps
+    detail = {
+        "cpu": f"{caps.cpu_s}s",
+        "rss": f"{caps.rss_mb}MB",
+        "processes": str(caps.max_processes),
+        "output": f"{caps.max_output_bytes} bytes",
+        "file_size": f"{caps.max_file_write_bytes} bytes",
+        "wall_time": f"{body.timeout_s}s",
+    }.get(violation, "")
+    label = _VIOLATION_LABELS.get(violation, violation)
+    error = f"plugin exceeded {label} ({detail})" if detail else f"plugin exceeded {label}"
+    if violation == "wall_time":
+        error = f"plugin timed out after {body.timeout_s}s"
+    if cleanup_incomplete:
+        error += "; cleanup incomplete (descendants survived the termination bound)"
+    return PluginResult(
+        ok=False, kind=body.kind, plugin_path=body.plugin,
+        returncode=proc.returncode, timed_out=timed_out,
+        rss_exceeded=(violation == "rss"),
+        cpu_exceeded=(violation == "cpu"),
+        processes_exceeded=(violation == "processes"),
+        output_exceeded=(violation == "output"),
+        fsize_exceeded=(violation == "file_size"),
+        violation=violation,
+        cleanup_incomplete=cleanup_incomplete,
+        raw_output=raw,
+        error=error,
+        duration_s=time.monotonic() - started,
+        caps=body.caps,
+    )
 
-    The runner checks ``rss_exceeded`` / ``cpu_exceeded`` after ``communicate``
-    returns; if a cap was breached the tree is killed and the result fails
-    closed. Sampling cadence (0.1s) balances responsiveness against overhead —
-    plugins are short-lived (bootstrap/preflight once per session; parser once
-    per iteration).
-    """
 
-    _POLL_INTERVAL_S = 0.1
-
-    def __init__(self, pid: int, caps: PluginCaps) -> None:
-        self._pid = pid
-        self._caps = caps
-        self._stop = threading.Event()
-        self._thread: Optional[threading.Thread] = None
-        self.rss_exceeded = False
-        self.cpu_exceeded = False
-
-    def start(self) -> None:
-        self._thread = threading.Thread(target=self._loop, daemon=True)
-        self._thread.start()
-
-    def stop(self) -> None:
-        self._stop.set()
-        if self._thread is not None:
-            self._thread.join(timeout=1.0)
-
-    def _loop(self) -> None:
-        try:
-            proc = psutil.Process(self._pid)  # type: ignore[union-attr]
-        except (psutil.NoSuchProcess, Exception):  # type: ignore[union-attr]
-            return
-        last_cpu = None
-        while not self._stop.is_set():
-            try:
-                children = proc.children(recursive=True) + [proc]
-                total_rss = 0
-                total_cpu = 0.0
-                for child in children:
-                    try:
-                        mem = child.memory_info()
-                        total_rss += mem.rss
-                        cpu = child.cpu_times()
-                        total_cpu += (cpu.user or 0.0) + (cpu.system or 0.0)
-                    except (psutil.NoSuchProcess, Exception):  # type: ignore[union-attr]
-                        pass
-                if total_rss > self._caps.max_rss_mb * 1024 * 1024:
-                    self.rss_exceeded = True
-                    return
-                if last_cpu is not None and total_cpu - last_cpu > self._caps.max_cpu_s:
-                    # CPU delta over one interval exceeding the whole cap ⇒ runaway.
-                    self.cpu_exceeded = True
-                    return
-                last_cpu = total_cpu
-            except (psutil.NoSuchProcess, Exception):  # type: ignore[union-attr]
-                return
-            self._stop.wait(self._POLL_INTERVAL_S)
 
 
 __all__ = [

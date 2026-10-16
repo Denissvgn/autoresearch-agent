@@ -551,9 +551,9 @@ Autonomy: Choose finite configurable limits from bounded workload probes and rec
 the tested termination bound. Enforce limits on descendants and parent-side buffering;
 an unenforceable required resource cap rejects the capability.
 
-- [ ] Enforce cumulative CPU, process-tree memory, wall time, process count, and configured filesystem/output quotas using the qualified backend.
-- [ ] Stream bounded stdout/stderr and terminate immediately on limit violations instead of checking watcher flags after `communicate` completes.
-- [ ] Propagate stop/timeout/cancel through plugins, evaluators, and descendants; define bounded cleanup and explicit incomplete-cleanup status.
+- [x] Enforce cumulative CPU, process-tree memory, wall time, process count, and configured filesystem/output quotas using the qualified backend.
+- [x] Stream bounded stdout/stderr and terminate immediately on limit violations instead of checking watcher flags after `communicate` completes.
+- [x] Propagate stop/timeout/cancel through plugins, evaluators, and descendants; define bounded cleanup and explicit incomplete-cleanup status.
 
 Acceptance: resource breach stops the process tree within a documented tested
 bound and produces an attributed failed attempt. No unbounded parent buffering

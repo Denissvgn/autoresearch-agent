@@ -350,6 +350,9 @@ def _tool_bash(
             "timed_out": result.timed_out,
             "command_log_path": result.log_path,
             "command_log_truncated": result.log_truncated,
+            # Attributed resource-bound status (caps enforced over the tree).
+            "resource_violation": result.resource_violation,
+            "cleanup_incomplete": result.cleanup_incomplete,
             # Execution boundary honesty: "trusted_local_code" is the retained
             # pinned-executable path and is never advertised as sandboxed.
             "execution_boundary": result.execution_boundary or "trusted_local_code",
@@ -458,7 +461,7 @@ def _tool_grep(
         if log is not None:
             log.close()
         raise
-    output, _, timed_out, _, _ = _collect_process_output(
+    output, _, timed_out, _, _, _, _ = _collect_process_output(
         proc, timeout_s=30, workspace=access.session_workspace, log=log,
     )
     if timed_out:

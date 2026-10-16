@@ -584,14 +584,28 @@ class SessionManager:
                 f"skill_id {config.skill_id!r} was rejected by the skill "
                 f"registry while bootstrapping: {exc}"
             ) from exc
-        outcome = await BootstrapRunner().run(
-            skill_dir=skill_dir,
-            layout=layout,
-            manifest=manifest,
-            workspace=Path(config.workspace_path),
-            skill_params=dict(config.skill_params or {}),
-            timeout_s=30.0,
-        )
+        from src.core.command_runner import CommandProcessRegistry
+
+        proc_registry = CommandProcessRegistry()
+        try:
+            outcome = await BootstrapRunner().run(
+                skill_dir=skill_dir,
+                layout=layout,
+                manifest=manifest,
+                workspace=Path(config.workspace_path),
+                skill_params=dict(config.skill_params or {}),
+                timeout_s=30.0,
+                proc_registry=proc_registry,
+                research_id=config.id,
+            )
+        except asyncio.CancelledError:
+            clean = proc_registry.kill_all(config.id)
+            logger.warning(
+                "bootstrap cancelled for %s — plugin tree cleanup %s",
+                config.id,
+                "complete" if clean else "INCOMPLETE (descendants survived the termination bound)",
+            )
+            raise
         if not outcome.ok:
             raise SkillConfigError(
                 f"skill {config.skill_id!r} bootstrap failed to render the "

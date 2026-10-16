@@ -435,6 +435,68 @@ class Settings(BaseSettings):
             "labeled, and are never advertised as sandboxed."
         ),
     )
+    execution_max_processes: int = Field(
+        default=512,
+        ge=1,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_EXECUTION_MAX_PROCESSES",
+            "EXECUTION_MAX_PROCESSES",
+        ),
+        description=(
+            "Maximum live processes in one candidate-controlled process tree. "
+            "Breaches terminate the tree immediately (resource guard)."
+        ),
+    )
+    execution_max_output_bytes: int = Field(
+        default=4_194_304,
+        ge=1024,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_EXECUTION_MAX_OUTPUT_BYTES",
+            "EXECUTION_MAX_OUTPUT_BYTES",
+        ),
+        description=(
+            "Maximum total stdout+stderr bytes one candidate-controlled run "
+            "may deliver before the tree is terminated; capture itself stays "
+            "bounded regardless."
+        ),
+    )
+    execution_max_file_write_bytes: int = Field(
+        default=2_147_483_648,
+        ge=1024,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_EXECUTION_MAX_FILE_WRITE_BYTES",
+            "EXECUTION_MAX_FILE_WRITE_BYTES",
+        ),
+        description=(
+            "Kernel per-file write quota (RLIMIT_FSIZE) for candidate-controlled "
+            "subprocesses. When set and prlimit is unavailable the capability is "
+            "rejected rather than run unbounded."
+        ),
+    )
+    command_max_rss_mb: int = Field(
+        default=4096,
+        ge=64,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_COMMAND_MAX_RSS_MB",
+            "COMMAND_MAX_RSS_MB",
+        ),
+        description=(
+            "Process-tree RSS cap in MB for governed evaluator commands "
+            "(plugin runs use their manifest caps)."
+        ),
+    )
+    command_max_cpu_s: float = Field(
+        default=3600.0,
+        gt=0,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_COMMAND_MAX_CPU_S",
+            "COMMAND_MAX_CPU_S",
+        ),
+        description=(
+            "Cumulative CPU cap in seconds for governed evaluator commands "
+            "(plugin runs use their manifest caps)."
+        ),
+    )
     # --- Dependency Preflight ---
     preflight_enabled: bool = Field(
         default=True,
