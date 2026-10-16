@@ -89,16 +89,22 @@ def evaluate_command_policy(
     ext: Mapping[str, Any] = policy_extension or {}
     copyable_files = _COPY_FILENAMES | set(ext.get("copyable_files") or ())
     readable_files = _CAT_FILENAMES | set(ext.get("readable_files") or ())
+    # The declared result channel (marker/result handoff files) is written
+    # by the pinned evaluator subprocess only; candidate file tools must not
+    # forge result content. The standard results handoff is included.
+    from src.core.result_authority import protected_result_names
+
+    protected_names = protected_result_names(ext)
     if access is None:
         access = build_tool_access_context(
             session_workspace or workspace_root,
             workspace_root=workspace_root,
-            extra_protected_names=ext.get("write_protected_files"),
+            extra_protected_names=protected_names,
         )
     else:
         # Defense in depth: skill-declared evaluation data is enforced even
         # when the caller's context predates the declaration.
-        access = access.with_extra_protected(ext.get("write_protected_files"))
+        access = access.with_extra_protected(protected_names)
 
     request, error = resolve_execution_request(
         command,

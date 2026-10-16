@@ -403,6 +403,21 @@ class Settings(BaseSettings):
             "this secret."
         ),
     )
+    result_receipt_key: SecretStr | None = Field(
+        default=None,
+        repr=False,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_RESULT_RECEIPT_KEY",
+            "RESULT_RECEIPT_KEY",
+        ),
+        description=(
+            "Server-only HMAC-SHA256 key for authenticated result receipts "
+            "when evaluator results cross a trust boundary. Never delivered "
+            "to candidates or evaluators. When unset, receipts use "
+            "deterministic digest ids (tamper-evident and idempotent within "
+            "the server's own records)."
+        ),
+    )
     # --- Dependency Preflight ---
     preflight_enabled: bool = Field(
         default=True,

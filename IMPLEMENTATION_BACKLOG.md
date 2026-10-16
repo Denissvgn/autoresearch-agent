@@ -505,9 +505,9 @@ Bind canonical result content and all identities to the attempt; use authenticat
 receipts when crossing a trust boundary. Model-visible nonces never establish
 authority.
 
-- [ ] Bind evaluator output to a server-created attempt and exact candidate/evaluator/dataset identities; parse it without requiring an LLM relay.
-- [ ] Separate model annotations/proposals from verified metrics, gates, and scored snapshots; remove model-marker overwrite authority.
-- [ ] Define idempotent receipt and replay handling; label legacy nonce-only/imported records honestly, with no retroactive authenticity upgrade.
+- [x] Bind evaluator output to a server-created attempt and exact candidate/evaluator/dataset identities; parse it without requiring an LLM relay.
+- [x] Separate model annotations/proposals from verified metrics, gates, and scored snapshots; remove model-marker overwrite authority.
+- [x] Define idempotent receipt and replay handling; label legacy nonce-only/imported records honestly, with no retroactive authenticity upgrade.
 
 Acceptance: changing metric, gate, candidate, or attempt identity invalidates a
 receipt. Repeating a legitimate receipt does not create a new result. A model

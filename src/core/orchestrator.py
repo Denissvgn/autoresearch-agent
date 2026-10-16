@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import glob as glob_mod
+import hashlib
 import json
 import logging
 import math
@@ -923,6 +924,7 @@ class AgentOrchestrator:
                     pipeline_id=config.pipeline_id,
                 )
             if _kv_result is not None:
+                self._label_result_authority(_kv_result, tool_meta)
                 state.iteration_count += 1
                 marker_from_tool = _kv_result
                 self._attach_runtime_command_metadata(
@@ -1090,6 +1092,7 @@ class AgentOrchestrator:
                         pipeline_id=config.pipeline_id,
                     )
                 if _file_result is not None:
+                    self._label_result_authority(_file_result, tool_meta)
                     state.iteration_count += 1
                     marker_from_file = _file_result
                     self._attach_runtime_command_metadata(
@@ -1298,6 +1301,126 @@ class AgentOrchestrator:
         if os.path.exists(claude_md_path):
             return Path(claude_md_path).read_text(encoding="utf-8")
         return ""
+
+    # ── Evaluator-result authority ─────────────────────────────────────────
+    # Model-visible nonces never establish authority: provenance labels are
+    # assigned at ingestion from the channel a result arrived on, and only
+    # trusted-channel results are bound by a receipt. Labels are honest and
+    # never upgraded retroactively.
+
+    @staticmethod
+    def _label_result_authority(
+        marker: Dict[str, Any],
+        tool_meta: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Assign the ingestion-time provenance label for a result marker.
+
+        ``receipt_verified`` only when the result came from a pinned
+        evaluator command (its execution identity rides tool metadata or
+        the marker) or the marker file of a declared request output; a
+        model-visible nonce echo alone yields ``nonce_only``, everything
+        else ``unverified_imported``. An existing label set at the
+        ingestion site is preserved — labels are never rewritten.
+        """
+
+        from src.core.result_authority import (
+            AUTHORITY_NONCE_ONLY,
+            AUTHORITY_RECEIPT_VERIFIED,
+            AUTHORITY_UNVERIFIED_IMPORTED,
+        )
+
+        if marker.get("result_authority"):
+            return
+        meta = tool_meta or {}
+        request_meta = meta.get("execution_request") or {}
+        if (
+            meta.get("execution_identity")
+            or marker.get("execution_identity")
+            or request_meta.get("outputs")
+        ):
+            marker["result_authority"] = AUTHORITY_RECEIPT_VERIFIED
+        elif marker.get("metrics_verification") == "metrics_verified":
+            marker["result_authority"] = AUTHORITY_NONCE_ONLY
+        else:
+            marker["result_authority"] = AUTHORITY_UNVERIFIED_IMPORTED
+
+    async def _issue_result_receipt_if_trusted(
+        self,
+        marker: Dict[str, Any],
+        *,
+        research_id: str,
+        turn: Optional[int],
+        iteration: int,
+        session: Optional[Dict[str, Any]],
+    ) -> Optional[str]:
+        """Issue the attempt-binding receipt for a trusted-channel result.
+
+        Returns the receipt id (for idempotent duplicate delivery) or
+        ``None`` for results that carry no authority label.
+        """
+
+        from src.core import result_authority as ra
+
+        if marker.get("result_authority") != ra.AUTHORITY_RECEIPT_VERIFIED:
+            return None
+        identity = marker.get("execution_identity") or {}
+        evaluator = identity.get("evaluator") or {}
+        evaluation_data = identity.get("evaluation_data") or {}
+        candidate_digest = (
+            marker.get("canonical_config_hash")
+            or marker.get("config_snapshot_sha256")
+            or "sha256:" + hashlib.sha256(
+                str(marker.get("config_snapshot") or "").encode("utf-8")
+            ).hexdigest()
+        )
+        attempt_id = (
+            f"{research_id}/turn-{turn if turn is not None else -1}"
+            f"/iteration-{iteration}"
+        )
+        runtime_command = marker.get("runtime_command") or {}
+        sequence = runtime_command.get("runtime_command_id")
+        if not isinstance(sequence, int):
+            sequence = iteration
+        epoch_raw = (session or {}).get("lock_epoch") if isinstance(session, dict) else None
+        ownership_epoch = (
+            int(epoch_raw)
+            if isinstance(epoch_raw, int) and epoch_raw >= 1
+            else 1
+        )
+        key = None
+        secret = getattr(settings, "result_receipt_key", None)
+        if secret is not None:
+            key = secret.get_secret_value() or None
+        receipt = ra.issue_result_receipt(
+            payload=ra.result_payload(marker),
+            attempt_id=attempt_id,
+            candidate_digest=str(candidate_digest),
+            evaluator_digest=str(evaluator.get("sha256") or ""),
+            dataset_digests=sorted(
+                str(v) for v in evaluation_data.values() if v and v != "missing"
+            ),
+            ownership_epoch=ownership_epoch,
+            sequence=int(sequence),
+            key=key,
+        )
+        marker["result_receipt"] = receipt
+        return str(receipt["receipt_id"])
+
+    async def _receipt_already_recorded(
+        self, research_id: str, receipt_id: str
+    ) -> bool:
+        """Whether this exact receipt already produced a recorded result."""
+
+        try:
+            iterations = await self._store.get_iterations(research_id)
+        except Exception:  # noqa: BLE001 - provenance lookup must not kill a run
+            return False
+        for row in iterations or []:
+            metrics = self._parse_metrics_json(row.get("metrics_json"))
+            receipt = metrics.get("result_receipt") if isinstance(metrics, dict) else None
+            if isinstance(receipt, dict) and receipt.get("receipt_id") == receipt_id:
+                return True
+        return False
 
     def _read_marker_file(
         self,
@@ -2317,10 +2440,14 @@ class AgentOrchestrator:
         # server-side from run ownership (the session workspace) and the
         # skill's declared evaluation data. Every tool call resolves its
         # paths through it; tool arguments never widen it.
+        from src.core.result_authority import protected_result_names
+
         tool_access = build_tool_access_context(
             workspace,
             workspace_root=settings.workspace_root,
-            extra_protected_names=skill_policy_extension.get("write_protected_files"),
+            extra_protected_names=protected_result_names(
+                skill_policy_extension
+            ),
         )
         # P2 per-workdir state: the skill's parallel-trial opt-in
         # (``execution.concurrency``, default 1 = strictly sequential,
@@ -3024,11 +3151,12 @@ class AgentOrchestrator:
                 _policy_aborted = _policy_aborted or turn_state.policy_aborted
 
                 # Secondary: check for explicit ITERATION_RESULT: markers
-                # in agent text. If the model emits one, it may carry richer
-                # fields (decision, description) so we prefer it over the
-                # auto-detected one.  If this turn already recorded an
-                # iteration from bash output, overwrite it with the richer
-                # marker instead of creating a duplicate.
+                # in agent text. Model-authored markers are annotations or
+                # proposals: they may describe a result but never replace
+                # verified metrics, gate outcomes, or scored candidate
+                # snapshots, and a model-visible nonce never establishes
+                # authority. If this turn already recorded an iteration
+                # from the trusted channel, only annotations merge.
                 #
                 # ARC-011 P4-003: route through ``skill.parse_iteration`` (not
                 # the bare ``parse_iteration_marker`` facade) so the W11 nonce
@@ -3074,19 +3202,65 @@ class AgentOrchestrator:
                                 outcome="success",
                             )
                         if turn_recorded_iteration:
-                            # Overwrite last iteration with richer marker
-                            await self._attach_consistency_report(
-                                research_id, iteration_count, marker,
+                            # Annotations only (F03): a model-authored
+                            # marker may describe a recorded result but
+                            # NEVER replace verified metrics, gate
+                            # outcomes, or scored candidate snapshots.
+                            # The free-text description is merged into the
+                            # existing record; every other proposed field
+                            # is logged as a proposal and dropped.
+                            existing = await self._store.get_iteration(
+                                research_id, iteration_count,
                             )
-                            await self._store.update_iteration(
-                                research_id, iteration_count, marker,
+                            merged = dict(
+                                self._parse_metrics_json(
+                                    (existing or {}).get("metrics_json")
+                                )
+                                or {}
                             )
+                            if marker.get("description"):
+                                merged["description"] = marker.get("description")
+                            if merged:
+                                await self._store.update_iteration(
+                                    research_id, iteration_count, merged,
+                                )
                             await self._refresh_phase_state(research_id)
                             logger.info(
-                                "Research %s turn %d: overwrote iteration "
-                                "%d with explicit ITERATION_RESULT marker",
+                                "Research %s turn %d: recorded model "
+                                "annotations for iteration %d (verified "
+                                "metrics/gates/snapshots preserved)",
                                 research_id, turn, iteration_count,
                             )
+                            await agent_log.append(
+                                "system",
+                                (
+                                    "ITERATION_RESULT marker in model output "
+                                    "was recorded as annotation only: "
+                                    "verified metrics, gate outcomes, and "
+                                    "scored candidate snapshots come from "
+                                    "the trusted evaluator channel and are "
+                                    "never replaced by model-authored "
+                                    "markers."
+                                ),
+                                turn=turn,
+                            )
+                            try:
+                                await self._store.record_audit_event(
+                                    actor_id="autoresearch-agent",
+                                    action="result.annotate",
+                                    research_id=research_id,
+                                    pipeline_id=config.pipeline_id,
+                                    request_metadata={
+                                        "turn": turn,
+                                        "iteration": iteration_count,
+                                        "proposed_keys": sorted(
+                                            str(k) for k in marker.keys()
+                                        ),
+                                    },
+                                    outcome="success",
+                                )
+                            except Exception:  # noqa: BLE001 - audit must not kill the turn
+                                pass
                         elif not turn_ran_training_command:
                             # Reject ITERATION_RESULT markers that aren't backed
                             # by a real training run this turn. The agent
@@ -3125,6 +3299,19 @@ class AgentOrchestrator:
                                     marker.get("primary_metric"),
                                     marker.get("training_gates_passed"),
                                 )
+                            # Model-authored content is a proposal: the
+                            # record is honestly labeled and never receives
+                            # a receipt, so an echoed nonce cannot make it
+                            # authoritative or upgrade it later. Forged
+                            # provenance keys are stripped — only the
+                            # server issues receipts and identities.
+                            from src.core.result_authority import (
+                                AUTHORITY_MODEL_PROPOSED,
+                            )
+
+                            marker.pop("result_receipt", None)
+                            marker.pop("execution_identity", None)
+                            marker["result_authority"] = AUTHORITY_MODEL_PROPOSED
                             await self._record_iteration(
                                 research_id, iteration_count, marker,
                                 total_cost,
@@ -4027,6 +4214,17 @@ class AgentOrchestrator:
         """Record an iteration and broadcast the event."""
         marker = dict(marker)
         normalize_artifact_references_in_mapping(marker)
+        # Honest provenance labels: a record that carries none (crash/failed
+        # paths) is labeled from its own provenance — an execution identity
+        # marks a pinned-evaluator command, an echo-verified nonce is only
+        # ``nonce_only``, and everything else stays ``unverified_imported``.
+        # Labels are never upgraded retroactively, and only server-issued
+        # receipts exist: anything else drops its claimed receipt.
+        self._label_result_authority(marker)
+        from src.core.result_authority import AUTHORITY_RECEIPT_VERIFIED
+
+        if marker.get("result_authority") != AUTHORITY_RECEIPT_VERIFIED:
+            marker.pop("result_receipt", None)
         # AR-1: coerce dict/list config_snapshot to a JSON string so all
         # downstream consumers that declare config_snapshot: Optional[str]
         # receive a valid string.  The LLM may emit a JSON object instead of
@@ -4114,6 +4312,30 @@ class AgentOrchestrator:
                 logger=logger,
                 output_root=marker.get("trial_dir"),
             )
+
+        # Evaluator-result authority: a trusted-channel result is bound to
+        # this server-created attempt and its exact candidate/evaluator/
+        # dataset identities by a receipt issued over the final content.
+        # Repeating a legitimate receipt (duplicate delivery) creates no
+        # new result; model-authored markers carry only a proposal label
+        # and never receive a receipt.
+        receipt_id = await self._issue_result_receipt_if_trusted(
+            marker,
+            research_id=research_id,
+            turn=turn,
+            iteration=iteration,
+            session=session,
+        )
+        if receipt_id and await self._receipt_already_recorded(
+            research_id, receipt_id
+        ):
+            logger.info(
+                "Research %s: duplicate result delivery for receipt %s — "
+                "no new result recorded",
+                research_id,
+                receipt_id,
+            )
+            return
 
         attempt_snapshot = None
         attempt_snapshot_path = None
