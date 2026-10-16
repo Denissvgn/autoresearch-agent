@@ -97,7 +97,7 @@ flowchart LR
 |-------|------|------|----------------|-------------|
 | [VersionedContract](../entities/VersionedContract.md) | Pydantic model | 75 | `BaseModel` | Base for top-level contracts: pins ``schema_version`` to its family. |
 | [ContractError](../entities/ContractError.md) | Class | 101 | `ValueError` | Base error for contract validation and resolution failures. |
-| [UnsupportedCapabilityError](../entities/UnsupportedCapabilityError.md) | Class | 105 | `ContractError` | Raised before work starts when a capability is unknown or unsupported. |
+| [UnsupportedCapabilityError](../entities/execution_contracts_UnsupportedCapabilityError.md) | Class | 105 | `ContractError` | Raised before work starts when a capability is unknown or unsupported. |
 | [ContractMigrationError](../entities/ContractMigrationError.md) | Class | 113 | `ContractError` | Raised when a legacy payload requests a rejected incomplete feature. |
 | [SecretReference](../entities/SecretReference.md) | Pydantic model | 142 | `BaseModel` | A named reference to a credential; never the credential itself. |
 | [ArtifactRef](../entities/ArtifactRef.md) | Pydantic model | 228 | `BaseModel` | An immutable artifact location bound by content digest. |

@@ -1,8 +1,8 @@
 {
   "artifact_hashes": {
-    "evaluated_envelope_hash": "sha256:75c00fefa3b6b1a469d871c62e6b88bdcadab8acade5dbfef2fb37715077f326",
-    "knowledge_index_hash": "sha256:e6768a9f435d9058e2e94a16089eda14f53b59772707fe2995369c83f670d363",
-    "surface_index_hash": "sha256:ece4e73cd91dab3b502b9ee8b6b81f724d6c289c604871e792100e6cecd3941c"
+    "evaluated_envelope_hash": "sha256:f585ac5d8ff768a28568a40c7b3f1912ab1ed9856fc9c6fbf9982df3d38010a3",
+    "knowledge_index_hash": "sha256:aea12c3fd900a65c775a77c2b9f15c6d4d7318f0b305de5f25a2273007b36cc1",
+    "surface_index_hash": "sha256:364767324ba9d2f21082b494dd1dc85f49c03ab1e4ee133bb347fe81d4e2a231"
   },
   "evidence_baselines": {
     "entities/AccentName.md": {
@@ -205,6 +205,16 @@
       },
       "state": "known"
     },
+    "entities/BwrapBackend.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:e06e8fc93c39b39638408dce9fc284ed6ccf76b14a95ea3fde8f85261281ba8a",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:d057053c35be8a0cbb6a6ae7a484b7a1636d9f6ab161f4ae2cb4c2c0356083b6",
+        "source_path": "src/core/isolation.py"
+      },
+      "state": "known"
+    },
     "entities/CandidateData.md": {
       "basis": {
         "concept_observation_hash": "sha256:182137f4d71cc6084558407dd745c887836ef980ac3817f8485cae87eab0b928",
@@ -320,17 +330,17 @@
         "concept_observation_hash": "sha256:0dbd50fc51c9e62ca0556c889984f3cb60d6d91b90f4ec974780bff8c1bb39ad",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:633c5226469760ee7e24496790217f128566ecb52996f6260d834523c52fbf56",
+        "source_content_hash": "sha256:f5513f3079127f339be0b19fdcd18eecfdc1174aefbe227c124e0514a2882083",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
     },
     "entities/CommandRunResult.md": {
       "basis": {
-        "concept_observation_hash": "sha256:2c4fc7340886f4d1ea5be496137a6c594ede7c7b578c6726f333d1ed76b9a7a1",
+        "concept_observation_hash": "sha256:4bc8fac485db593df457ca85096f5c70d4dab2347b209e0ac331fa95228683a5",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:633c5226469760ee7e24496790217f128566ecb52996f6260d834523c52fbf56",
+        "source_content_hash": "sha256:f5513f3079127f339be0b19fdcd18eecfdc1174aefbe227c124e0514a2882083",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -747,10 +757,10 @@
     },
     "entities/GovernedCommandRunner.md": {
       "basis": {
-        "concept_observation_hash": "sha256:2ab1121412ad541b16213d916b2ae998932256fb016eb62791b50ddaa228958d",
+        "concept_observation_hash": "sha256:f5a9ce383fd07e2213e07228fdec35c96fa45719b3d023b28c9dae3839bea1e7",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:633c5226469760ee7e24496790217f128566ecb52996f6260d834523c52fbf56",
+        "source_content_hash": "sha256:f5513f3079127f339be0b19fdcd18eecfdc1174aefbe227c124e0514a2882083",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -790,7 +800,7 @@
         "concept_observation_hash": "sha256:a198573250d9e2accccdb70c149ae0d40ebc0321b0b9650027dd4642cefda038",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:633c5226469760ee7e24496790217f128566ecb52996f6260d834523c52fbf56",
+        "source_content_hash": "sha256:f5513f3079127f339be0b19fdcd18eecfdc1174aefbe227c124e0514a2882083",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -932,6 +942,36 @@
         "scope": "entity",
         "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
         "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
+    "entities/IsolationError.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:304651c0a759183df6f4778402066959be010ab39d8d3ed9a484491a11e93d41",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:d057053c35be8a0cbb6a6ae7a484b7a1636d9f6ab161f4ae2cb4c2c0356083b6",
+        "source_path": "src/core/isolation.py"
+      },
+      "state": "known"
+    },
+    "entities/IsolationPolicy.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:54f108d4be9f63a1c7401636b59079380511f0700a9788965eac75e7140d0c20",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:d057053c35be8a0cbb6a6ae7a484b7a1636d9f6ab161f4ae2cb4c2c0356083b6",
+        "source_path": "src/core/isolation.py"
+      },
+      "state": "known"
+    },
+    "entities/IsolationUnavailableError.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:85df2343f861d9e941549b9bed2a03b658fb9b77c40caf8abddb403ab086bc76",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:d057053c35be8a0cbb6a6ae7a484b7a1636d9f6ab161f4ae2cb4c2c0356083b6",
+        "source_path": "src/core/isolation.py"
       },
       "state": "known"
     },
@@ -1300,7 +1340,7 @@
         "concept_observation_hash": "sha256:8a7b62ee9480ecdc54f64dee9c7150d3b57b710989c31ed158c0da87e527c6ff",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:633c5226469760ee7e24496790217f128566ecb52996f6260d834523c52fbf56",
+        "source_content_hash": "sha256:f5513f3079127f339be0b19fdcd18eecfdc1174aefbe227c124e0514a2882083",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -1340,7 +1380,7 @@
         "concept_observation_hash": "sha256:b6887e98ea87434a72b3f6f1114a89cb14bcb9c8542fd8be7f3491aecf50fc1d",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:633c5226469760ee7e24496790217f128566ecb52996f6260d834523c52fbf56",
+        "source_content_hash": "sha256:f5513f3079127f339be0b19fdcd18eecfdc1174aefbe227c124e0514a2882083",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -1477,30 +1517,30 @@
     },
     "entities/PluginResult.md": {
       "basis": {
-        "concept_observation_hash": "sha256:6aaa55107444f821747938022e44ec71a9a19e89fbf2cef880aac00e2a897032",
+        "concept_observation_hash": "sha256:aad0aa059594e1901b2053bba54541ad334a64834a8a780922e5a3768c520322",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:ca182f5830a5d15603333e28e3aa94b2813ab6ff6d8474df7554a1cf6bf853d8",
+        "source_content_hash": "sha256:e405986b00ff940dc7164106dcbbfa7f0c28175cfe77b218fbacc552ab7bd508",
         "source_path": "src/core/plugin_runner.py"
       },
       "state": "known"
     },
     "entities/PluginRunBody.md": {
       "basis": {
-        "concept_observation_hash": "sha256:70bc803d7294fbaec813a393eb533755cbc925a0040a395cce485c6196bdbe8f",
+        "concept_observation_hash": "sha256:efee188a817034925ab061af5187c616fa79956fc01b093d680eabc2434b6a5c",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:ca182f5830a5d15603333e28e3aa94b2813ab6ff6d8474df7554a1cf6bf853d8",
+        "source_content_hash": "sha256:e405986b00ff940dc7164106dcbbfa7f0c28175cfe77b218fbacc552ab7bd508",
         "source_path": "src/core/plugin_runner.py"
       },
       "state": "known"
     },
     "entities/PluginRunner.md": {
       "basis": {
-        "concept_observation_hash": "sha256:767c5af9eba5974c4f7df69e4c07d6f991bec17f699244da157252312870322d",
+        "concept_observation_hash": "sha256:c61fe0b68bea22aec6e0181ce815920c0d22aff77ac6831f179b4d0c92ff3700",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:ca182f5830a5d15603333e28e3aa94b2813ab6ff6d8474df7554a1cf6bf853d8",
+        "source_content_hash": "sha256:e405986b00ff940dc7164106dcbbfa7f0c28175cfe77b218fbacc552ab7bd508",
         "source_path": "src/core/plugin_runner.py"
       },
       "state": "known"
@@ -2000,7 +2040,7 @@
         "concept_observation_hash": "sha256:ddd13b498a6b607f89d8f7e65491086fd4c277e674ee53fc3fa981843694fc64",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:ca182f5830a5d15603333e28e3aa94b2813ab6ff6d8474df7554a1cf6bf853d8",
+        "source_content_hash": "sha256:e405986b00ff940dc7164106dcbbfa7f0c28175cfe77b218fbacc552ab7bd508",
         "source_path": "src/core/plugin_runner.py"
       },
       "state": "known"
@@ -2250,7 +2290,7 @@
         "concept_observation_hash": "sha256:213352ff5b4781bc17751f3e7aef56d85e1f068639c3b353e869258023cd4319",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:633c5226469760ee7e24496790217f128566ecb52996f6260d834523c52fbf56",
+        "source_content_hash": "sha256:f5513f3079127f339be0b19fdcd18eecfdc1174aefbe227c124e0514a2882083",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -2287,10 +2327,10 @@
     },
     "entities/Settings.md": {
       "basis": {
-        "concept_observation_hash": "sha256:9db612c06b988d344ef8f4e53d542dc805435fb9663942f451cb4c7b76aff7bc",
+        "concept_observation_hash": "sha256:07d3090815a0ba3c8053c4def891e97d30d00431e94446f620caebf4f5b00563",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:53c51efb809ca564a2102a0b6372a67384303cc9ecb917e789805cfa4b12181a",
+        "source_content_hash": "sha256:c41b15437a009fc3740d00f21fef2b83de59596e53fea1922daa6afdf8a2e3e4",
         "source_path": "src/config.py"
       },
       "state": "known"
@@ -3390,7 +3430,7 @@
         "concept_observation_hash": "sha256:0cb9ae70f7da2292ab87a6aea2d7e4e2a3eee4530b5fabdb24c922876cccf149",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:8662b176e1a488578e052c0e4425b27293d2307befad812b6907d329ecb6db9f",
+        "source_content_hash": "sha256:51406864f48d82a66400c8f5a656c4be2d324ae492ccfa276e9c580cb6b56488",
         "source_path": "src/core/agent_tools.py"
       },
       "state": "known"
@@ -3492,16 +3532,6 @@
         "scope": "entity",
         "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
-      },
-      "state": "known"
-    },
-    "entities/UnsupportedCapabilityError.md": {
-      "basis": {
-        "concept_observation_hash": "sha256:7b0f90df726a4ed2e900cd4ba336da673720c2d81b4dca19172f7724491b6e89",
-        "extractor_ref": "llm-wiki/extractor/python",
-        "scope": "entity",
-        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
-        "source_path": "src/core/execution_contracts.py"
       },
       "state": "known"
     },
@@ -3715,6 +3745,16 @@
       },
       "state": "known"
     },
+    "entities/execution_contracts_UnsupportedCapabilityError.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:7b0f90df726a4ed2e900cd4ba336da673720c2d81b4dca19172f7724491b6e89",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:c5b33f61e46bf15ac401518c916f9db576e2e0ea35d205add2ab3dd6578e821e",
+        "source_path": "src/core/execution_contracts.py"
+      },
+      "state": "known"
+    },
     "entities/execution_request_ExecutionRequest.md": {
       "basis": {
         "concept_observation_hash": "sha256:b0425f7dde63508aa3ba3a9156adc02a67dce2bbf2ca09e5044983b3d79dc823",
@@ -3722,6 +3762,16 @@
         "scope": "entity",
         "source_content_hash": "sha256:4080b5d7779fdc6efab96de23e6ef6faa9733690f3486768ec3073c71a760ded",
         "source_path": "src/core/execution_request.py"
+      },
+      "state": "known"
+    },
+    "entities/isolation_UnsupportedCapabilityError.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:8de25c71c68d26383219b6cec508b773421c429b8eb80fb4451dee78628f80ab",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:d057053c35be8a0cbb6a6ae7a484b7a1636d9f6ab161f4ae2cb4c2c0356083b6",
+        "source_path": "src/core/isolation.py"
       },
       "state": "known"
     },
@@ -4587,10 +4637,10 @@
     },
     "modules/agent_tools.md": {
       "basis": {
-        "concept_observation_hash": "sha256:8917a343778d59fc19172d836bf3adf0480d4363256b6707fd35d706492b1545",
+        "concept_observation_hash": "sha256:02cbc599faaf4dc5f000c408270e156565c3df1d8ef7fa8964c6e8cd5d4ce767",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:8662b176e1a488578e052c0e4425b27293d2307befad812b6907d329ecb6db9f",
+        "source_content_hash": "sha256:51406864f48d82a66400c8f5a656c4be2d324ae492ccfa276e9c580cb6b56488",
         "source_path": "src/core/agent_tools.py"
       },
       "state": "known"
@@ -4747,10 +4797,10 @@
     },
     "modules/command_runner.md": {
       "basis": {
-        "concept_observation_hash": "sha256:12aad5a3c7ff188072ff2536ccd62749e8484aa4d3356eb2675046e2992184d6",
+        "concept_observation_hash": "sha256:fda22584ab88c9967cb9e1910f3eada5fb6fc4ff4ba9c8069fa8586cdb641e2b",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:633c5226469760ee7e24496790217f128566ecb52996f6260d834523c52fbf56",
+        "source_content_hash": "sha256:f5513f3079127f339be0b19fdcd18eecfdc1174aefbe227c124e0514a2882083",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -4767,10 +4817,10 @@
     },
     "modules/config.md": {
       "basis": {
-        "concept_observation_hash": "sha256:a3abea4a1ba7cdfec981b5e1efc267bb5d431ac64d1a530db7fdc721e7dd77dc",
+        "concept_observation_hash": "sha256:20ba6a67cd1cec7350aa3d25f3568c2776165d62899ed310e41182bd086b5bf4",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:53c51efb809ca564a2102a0b6372a67384303cc9ecb917e789805cfa4b12181a",
+        "source_content_hash": "sha256:c41b15437a009fc3740d00f21fef2b83de59596e53fea1922daa6afdf8a2e3e4",
         "source_path": "src/config.py"
       },
       "state": "known"
@@ -4975,6 +5025,16 @@
       },
       "state": "known"
     },
+    "modules/isolation.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:6e435457c01e9c64a32a5039387921402b540ed5d59c3e8adb86fbcc7cfb00b8",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "module",
+        "source_content_hash": "sha256:d057053c35be8a0cbb6a6ae7a484b7a1636d9f6ab161f4ae2cb4c2c0356083b6",
+        "source_path": "src/core/isolation.py"
+      },
+      "state": "known"
+    },
     "modules/iteration_context.md": {
       "basis": {
         "concept_observation_hash": "sha256:cb1411c20663485441d09665fa95b76432eb8c65d27fd4c983b3fe6265ca9b92",
@@ -5107,10 +5167,10 @@
     },
     "modules/plugin_runner.md": {
       "basis": {
-        "concept_observation_hash": "sha256:39410240034dd0b1c43d7572ca0a37cb81c9fdb2b1a551dea0e2a7dee587f34c",
+        "concept_observation_hash": "sha256:faf5437e1431ae10082e8f5493004da0b058bcba3bfb83a5d59b64325066aa44",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:ca182f5830a5d15603333e28e3aa94b2813ab6ff6d8474df7554a1cf6bf853d8",
+        "source_content_hash": "sha256:e405986b00ff940dc7164106dcbbfa7f0c28175cfe77b218fbacc552ab7bd508",
         "source_path": "src/core/plugin_runner.py"
       },
       "state": "known"
@@ -5752,6 +5812,16 @@
         "scope": "module",
         "source_content_hash": "sha256:55164436a75fd1447fb65b8bb0346849b5b40463c0623359c5f31984e71da930",
         "source_path": "tests/test_execution_contracts.py"
+      },
+      "state": "known"
+    },
+    "modules/test_execution_isolation.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:27a7b91e69b996ccdcd28dcc3c3e355da0e256ac1cc659b2a1d5cc40b58a6b40",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "module",
+        "source_content_hash": "sha256:d74c28f9950d54060f18d3ca97bef388e87caa86e66df93ae411c3b0b207ebae",
+        "source_path": "tests/test_execution_isolation.py"
       },
       "state": "known"
     },
@@ -7078,6 +7148,12 @@
       "scope": "entity",
       "source_path": "src/core/execution_contracts.py"
     },
+    "entities/BwrapBackend.md": {
+      "entity_name": "BwrapBackend",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/isolation.py"
+    },
     "entities/CandidateData.md": {
       "entity_name": "CandidateData",
       "occurrence": 1,
@@ -7515,6 +7591,24 @@
       "occurrence": 1,
       "scope": "entity",
       "source_path": "src/core/execution_contracts.py"
+    },
+    "entities/IsolationError.md": {
+      "entity_name": "IsolationError",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/isolation.py"
+    },
+    "entities/IsolationPolicy.md": {
+      "entity_name": "IsolationPolicy",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/isolation.py"
+    },
+    "entities/IsolationUnavailableError.md": {
+      "entity_name": "IsolationUnavailableError",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/isolation.py"
     },
     "entities/Iteration.md": {
       "entity_name": "Iteration",
@@ -9052,12 +9146,6 @@
       "scope": "entity",
       "source_path": "src/core/skill_manifest.py"
     },
-    "entities/UnsupportedCapabilityError.md": {
-      "entity_name": "UnsupportedCapabilityError",
-      "occurrence": 1,
-      "scope": "entity",
-      "source_path": "src/core/execution_contracts.py"
-    },
     "entities/Usage.md": {
       "entity_name": "Usage",
       "occurrence": 1,
@@ -9184,11 +9272,23 @@
       "scope": "entity",
       "source_path": "src/core/execution_contracts.py"
     },
+    "entities/execution_contracts_UnsupportedCapabilityError.md": {
+      "entity_name": "UnsupportedCapabilityError",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/execution_contracts.py"
+    },
     "entities/execution_request_ExecutionRequest.md": {
       "entity_name": "ExecutionRequest",
       "occurrence": 1,
       "scope": "entity",
       "source_path": "src/core/execution_request.py"
+    },
+    "entities/isolation_UnsupportedCapabilityError.md": {
+      "entity_name": "UnsupportedCapabilityError",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/isolation.py"
     },
     "entities/promotion_PromotionApproval.md": {
       "entity_name": "PromotionApproval",
@@ -9810,6 +9910,10 @@
       "scope": "module",
       "source_path": "src/core/insights_feedback.py"
     },
+    "modules/isolation.md": {
+      "scope": "module",
+      "source_path": "src/core/isolation.py"
+    },
     "modules/iteration_context.md": {
       "scope": "module",
       "source_path": "src/core/iteration_context.py"
@@ -10121,6 +10225,10 @@
     "modules/test_execution_contracts.md": {
       "scope": "module",
       "source_path": "tests/test_execution_contracts.py"
+    },
+    "modules/test_execution_isolation.md": {
+      "scope": "module",
+      "source_path": "tests/test_execution_isolation.py"
     },
     "modules/test_execution_ledger_validator.md": {
       "scope": "module",
@@ -11444,6 +11552,7 @@
               "default_quick_mode": "Quick mode by default (2 folds, 50k steps). Override per-session with quick_mode=false.",
               "demo_mode": "P0-3 demo mode: route all LLM calls to the zero-credential MockProvider. Never enable in production (refused by router).",
               "environment": "—",
+              "execution_isolation_mode": "Execution boundary policy for candidate-controlled subprocesses (skill plugins and governed commands). 'enforced' (default) runs them in the isolation backend with filesystem/network caps enforced at the OS boundary and refuses unenforceable capability requests or unavailable isolation (fail-closed). 'trusted_local_code' is the operator's explicitly retained local-code policy: subprocesses run unsandboxed, separately labeled, and are never advertised as sandboxed.",
               "experiment_timeout_s": "—",
               "global_stagnation_epsilon": "AR-7: Minimum metric improvement above the session best required to reset the stagnation window. Improvements <= epsilon are treated as stagnant.",
               "global_stagnation_window": "AR-7: Number of consecutive iterations with no metric improvement that triggers a GLOBAL_STAGNATION nudge demanding TERMINATE_REQUEST.",
@@ -11499,10 +11608,10 @@
           }
         }
       },
-      "hash": "sha256:53c51efb809ca564a2102a0b6372a67384303cc9ecb917e789805cfa4b12181a",
+      "hash": "sha256:c41b15437a009fc3740d00f21fef2b83de59596e53fea1922daa6afdf8a2e3e4",
       "language": "python",
       "module_page": "config",
-      "semantic_hash": "sha256:19e1755b5621d03e73138756254943c106c59e34d3b3a66bd8df94fdb008bd5d"
+      "semantic_hash": "sha256:2aaae793943f066cece48aca10aaa4e348b6eaa26b9fa0415e26fb6d98349e09"
     },
     "src/core/agent_tools.py": {
       "entities": [
@@ -11549,10 +11658,10 @@
           }
         }
       },
-      "hash": "sha256:8662b176e1a488578e052c0e4425b27293d2307befad812b6907d329ecb6db9f",
+      "hash": "sha256:51406864f48d82a66400c8f5a656c4be2d324ae492ccfa276e9c580cb6b56488",
       "language": "python",
       "module_page": "agent_tools",
-      "semantic_hash": "sha256:9bef472cefe22ec29f0c078a59432f63d5db1cadeb66ab0ef1886b9309e12c3a"
+      "semantic_hash": "sha256:01ec9163c4f86b1642c6f882f84348921cc40b044343ed4c71538813a18ce6c9"
     },
     "src/core/artifact_reference.py": {
       "entities": [],
@@ -11813,6 +11922,7 @@
           "CommandRunResult": {
             "attributes": {
               "decision": "—",
+              "execution_boundary": "—",
               "log_path": "—",
               "log_truncated": "—",
               "output": "—",
@@ -11884,10 +11994,10 @@
           }
         }
       },
-      "hash": "sha256:633c5226469760ee7e24496790217f128566ecb52996f6260d834523c52fbf56",
+      "hash": "sha256:f5513f3079127f339be0b19fdcd18eecfdc1174aefbe227c124e0514a2882083",
       "language": "python",
       "module_page": "command_runner",
-      "semantic_hash": "sha256:910b4e303602e14998fb19796399da56d1b6a7d5edc39de070411c1f12113cce"
+      "semantic_hash": "sha256:3e3c65876e1ae415c75b1c5544a3ab2ffba0eb41a0fdc4d17e0c29e7104fbaf9"
     },
     "src/core/config_promoter.py": {
       "entities": [
@@ -12346,7 +12456,7 @@
         {
           "name": "UnsupportedCapabilityError",
           "occurrence": 1,
-          "page": "UnsupportedCapabilityError"
+          "page": "execution_contracts_UnsupportedCapabilityError"
         },
         {
           "name": "ContractMigrationError",
@@ -12559,7 +12669,7 @@
         "SecretReference": "SecretReference",
         "SkillDefaults": "SkillDefaults",
         "SkillPackageRef": "SkillPackageRef",
-        "UnsupportedCapabilityError": "UnsupportedCapabilityError",
+        "UnsupportedCapabilityError": "execution_contracts_UnsupportedCapabilityError",
         "VerifiedResult": "VerifiedResult",
         "VersionedContract": "VersionedContract",
         "WorkspaceBounds": "WorkspaceBounds"
@@ -13412,6 +13522,108 @@
       "language": "python",
       "module_page": "insights_feedback",
       "semantic_hash": "sha256:4ec44ca0f8502b4b2bc9355fcccf642dec70f1f00690995a773a7340d4bbbf38"
+    },
+    "src/core/isolation.py": {
+      "entities": [
+        "IsolationError",
+        "IsolationUnavailableError",
+        "UnsupportedCapabilityError",
+        "IsolationPolicy",
+        "BwrapBackend"
+      ],
+      "entity_page_occurrences": [
+        {
+          "name": "IsolationError",
+          "occurrence": 1,
+          "page": "IsolationError"
+        },
+        {
+          "name": "IsolationUnavailableError",
+          "occurrence": 1,
+          "page": "IsolationUnavailableError"
+        },
+        {
+          "name": "UnsupportedCapabilityError",
+          "occurrence": 1,
+          "page": "isolation_UnsupportedCapabilityError"
+        },
+        {
+          "name": "IsolationPolicy",
+          "occurrence": 1,
+          "page": "IsolationPolicy"
+        },
+        {
+          "name": "BwrapBackend",
+          "occurrence": 1,
+          "page": "BwrapBackend"
+        }
+      ],
+      "entity_pages": {
+        "BwrapBackend": "BwrapBackend",
+        "IsolationError": "IsolationError",
+        "IsolationPolicy": "IsolationPolicy",
+        "IsolationUnavailableError": "IsolationUnavailableError",
+        "UnsupportedCapabilityError": "isolation_UnsupportedCapabilityError"
+      },
+      "generated_semantics": {
+        "entities": {
+          "BwrapBackend": {
+            "attributes": {
+              "name": "—"
+            },
+            "description": "The selected isolation backend (bubblewrap 0.11.1).",
+            "methods": {
+              "wrap": "Return the sandboxed command line enforcing ``policy``."
+            }
+          },
+          "IsolationError": {
+            "attributes": {},
+            "description": "Base class for isolation boundary failures (always fail-closed).",
+            "methods": {}
+          },
+          "IsolationPolicy": {
+            "attributes": {
+              "cwd": "—",
+              "fs_write": "—",
+              "masked_roots": "—",
+              "network_egress": "—",
+              "read_roots": "—",
+              "write_roots": "—"
+            },
+            "description": "The declared boundary for one candidate-controlled subprocess.\n\n``fs_write`` is enforced at the mount layer (``none`` = read-only\neverywhere, ``workspace`` = writable session workspace only);\n``network`` is enforced at the network namespace (``deny`` is the only\nenforceable mode — see the module docstring). Read roots are mounted\nread-only; nothing outside the declared roots is visible.",
+            "methods": {}
+          },
+          "IsolationUnavailableError": {
+            "attributes": {},
+            "description": "Host prerequisites for the isolation backend are missing.",
+            "methods": {}
+          },
+          "UnsupportedCapabilityError": {
+            "attributes": {},
+            "description": "A capability request the selected backend cannot enforce.",
+            "methods": {}
+          }
+        },
+        "module": {
+          "classes": {
+            "BwrapBackend": "The selected isolation backend (bubblewrap 0.11.1).",
+            "IsolationError": "Base class for isolation boundary failures (always fail-closed).",
+            "IsolationPolicy": "The declared boundary for one candidate-controlled subprocess.",
+            "IsolationUnavailableError": "Host prerequisites for the isolation backend are missing.",
+            "UnsupportedCapabilityError": "A capability request the selected backend cannot enforce."
+          },
+          "description": "Enforced process isolation: mounts, identity, and network at the OS boundary.\n\nThis module is the universal execution boundary for candidate-controlled\nsubprocesses. It wraps a command behind an OS-enforced sandbox (the\nselected Linux backend) instead of trusting in-process checks: filesystem\nwrites outside the declared write roots fail at the kernel, network access\nis default-deny at the namespace, and every child process inherits the\nsame policy.\n\nBackend spike (bounded, mount/identity/network/resource probes):\n\n* **Container deployment (first candidate, docker 28.4.0):** enforcement\n  demonstrated — ``--read-only`` refused writes at the mount layer,\n  ``--user`` changed the process identity, ``--network none`` made all\n  destinations unreachable, and resource flags bind through cgroups. It is\n  the outer deployment boundary, but it fails the per-execution contract:\n  the daemon is not available from inside the deployed service container,\n  and mapping the pinned workspace interpreter into an image cannot\n  preserve the interpreter pin across environments.\n* **bubblewrap 0.11.1 (selected):** the same enforcement demonstrated\n  with the exact pinned interpreter — read-only root and read-only\n  workspace refused writes (``fs_write: none``), a writable bind\n  permitted only workspace writes (``fs_write: workspace``), the shared\n  user/mount/pid/net namespace made every destination unreachable and\n  contained spawned children, and it runs unprivileged wherever user\n  namespaces are permitted.\n\nNetwork allowlists (``host:port`` egress) are **not enforceable** by\neither backend at the OS boundary (namespaces are all-or-nothing without\nhost firewall authority). Requests for allowed destinations are refused\nas unsupported capability requests — never silently widened — and full\nallowlist enforcement remains qualification WAITING_EXTERNAL on host\nfirewall authority.\n\nTrusted local-code mode is an operator policy, separately labeled and\nnever advertised as sandboxed: see ``TRUSTED_LOCAL_CODE``.",
+          "functions": {
+            "probe_host": "Probe the host features the selected backend requires (real checks).",
+            "select_backend": "Select the isolation backend or raise :class:`IsolationUnavailableError`.",
+            "wrap_command": "Wrap ``argv`` in the isolation boundary (selecting the backend if needed)."
+          }
+        }
+      },
+      "hash": "sha256:d057053c35be8a0cbb6a6ae7a484b7a1636d9f6ab161f4ae2cb4c2c0356083b6",
+      "language": "python",
+      "module_page": "isolation",
+      "semantic_hash": "sha256:4e07eb410f34441797c847dedc054dee1e76181226945abd0bc24f8d17cdbf8d"
     },
     "src/core/iteration_context.py": {
       "entities": [],
@@ -14330,6 +14542,7 @@
               "duration_s": "—",
               "error": "—",
               "extra": "—",
+              "isolation": "—",
               "kind": "—",
               "ok": "—",
               "output": "—",
@@ -14347,7 +14560,9 @@
             "description": "Execute one skill plugin in a confined governed subprocess (X-004 §6).\n\nParameters\n----------\nskills_root:\n    Read-only skills directory (``PluginRunner`` never writes here; D4).",
             "methods": {
               "__init__": "—",
+              "_isolation_plan": "Decide the execution boundary for one plugin run.",
               "_run_sync": "—",
+              "_run_sync_inner": "—",
               "run": "Run one plugin. See module docstring for the contract."
             }
           },
@@ -14356,9 +14571,11 @@
               "caps": "—",
               "cwd": "—",
               "input_json": "—",
+              "isolation": "—",
               "kind": "—",
               "plugin": "—",
               "plugin_path": "—",
+              "spawn_argv": "—",
               "timeout_s": "—"
             },
             "description": "Inputs bundled for the worker-thread sync body.",
@@ -14385,14 +14602,15 @@
           "description": "Governed subprocess runner for skill-supplied plugins (ARC-011 X-004 / P5-005).\n\nThis module implements the **plugin execution contract** recorded in the X-004\nsecurity spike (§6; design recorded in this module's docstring). Every skill-supplied\nPython file — ``bootstrap.py``, ``parser.py``, ``preflight.py``,\n``resolve_identity.py`` — runs in its own confined subprocess via this runner,\nnever ``import``-ed into the server process (X-004 D2).\n\nDesign contract (X-004 §6, verbatim where load-bearing):\n\n* **Invocation:** ``PluginRunner.run(skill_dir, plugin, kind, input_json, *,\n  caps, timeout_s) -> PluginResult``.\n* **Subprocess:** ``sys.executable <plugin>``, no shell, ``start_new_session=True``\n  (process-group for tree-kill). Mirrors ``GovernedCommandRunner``'s spawn shape.\n* **ABI:** JSON on stdin, JSON on stdout, exit 0/non-zero. The plugin module\n  exposes a pure function; the runner does the marshalling.\n* **Capability block (default-deny):** ``caps.fs_write`` / ``network_egress`` /\n  ``env`` / ``timeout_s`` / ``max_rss_mb`` / ``max_cpu_s``. Default per-kind\n  caps come from ``skill_loader._DEFAULT_CAPS_BY_KIND`` (X-004 §6).\n* **Env (X-004 §4.2 — strict):** ``PATH`` / ``LANG`` / ``HOME`` /\n  ``PYTHONUNBUFFERED`` / venv ``PYTHONPATH`` + only manifest-declared ``env``\n  keys. **No secrets, no ``AWS_*``, no service tokens.** This is strictly\n  narrower than ``command_runner._CHILD_ENV_ALLOWLIST`` (the agent path), by\n  design — plugins have no legitimate need for any of those.\n* **Failure semantics (fail-closed):** crash / timeout / invalid-JSON /\n  non-zero-exit ⇒ ``PluginResult(ok=False)`` + audit; **the exception never\n  propagates to the server process** (the single-instance W14 guarantee).\n* **Path confinement (D4):** the plugin's CWD is the session workspace;\n  ``skills/`` is reachable read-only; writes are confined to the workspace when\n  ``caps.fs_write == \"workspace\"``. Path confinement uses ``relative_to``\n  checks against the declared roots.\n\nThe ``BootstrapRunner`` (P5-005, ``bootstrap_runner.py``) is the first\nconsumer; ``parser`` / ``preflight`` / ``resolve_identity`` plugins follow the\nsame contract.\n\nDesign decisions (P1-007 house style):\n\n* **Sync subprocess + thread offload.** Like ``GovernedCommandRunner.run``,\n  the blocking ``Popen`` poll loop lives on a worker thread; the public\n  ``run()`` is ``async`` and wraps the body in ``asyncio.to_thread`` so a hard\n  timeout / cancel can reap the tree via ``_terminate_process_group_without_communicate``.\n* **No env inheritance.** The plugin child env is built fresh from the X-004\n  §4.2 strict allow-list — it does NOT call ``command_runner._build_child_env``\n  (that one is the agent path and carries experiment-legitimate creds plugins\n  must never see).\n* **Resource monitoring.** A psutil watcher thread enforces ``max_rss_mb`` /\n  ``max_cpu_s``; on breach the tree is killed and the result is fail-closed.\n* **Auditing is the caller's job.** ``PluginRunner`` returns a ``PluginResult``\n  with ``error``/``returncode``/``timed_out``; the caller (``BootstrapRunner``\n  / orchestrator) writes the ``audit_events`` row. Keeps the runner free of the\n  DB handle (X-004 D3 — plugins' execution context gets no server internals).",
           "functions": {
             "_build_plugin_env": "Build the env dict for a plugin subprocess (X-004 §4.2, strict).",
+            "_declared_input_paths": "Absolute path values in the input JSON that name existing host files.",
             "_tail": "Return the trailing slice of ``text`` for error context."
           }
         }
       },
-      "hash": "sha256:ca182f5830a5d15603333e28e3aa94b2813ab6ff6d8474df7554a1cf6bf853d8",
+      "hash": "sha256:e405986b00ff940dc7164106dcbbfa7f0c28175cfe77b218fbacc552ab7bd508",
       "language": "python",
       "module_page": "plugin_runner",
-      "semantic_hash": "sha256:5f7ea55f5424efce802579803863a205bab43dda7cb446c3046a178169e9429c"
+      "semantic_hash": "sha256:41f05cbf331d4eb7f1281a8c3d26f4c36136d343063f5bae7bcf029d59bc57fe"
     },
     "src/core/postgres_state_store.py": {
       "entities": [
@@ -19022,6 +19240,41 @@
       "language": "python",
       "module_page": "test_execution_contracts",
       "semantic_hash": "sha256:3f0f104535a8d5435484f0419e92592ab118a3b30cca4f8a963d0ff0dbd5656b"
+    },
+    "tests/test_execution_isolation.py": {
+      "entities": [],
+      "entity_page_occurrences": [],
+      "entity_pages": {},
+      "generated_semantics": {
+        "entities": {},
+        "module": {
+          "classes": {},
+          "description": "Execution isolation acceptance tests.\n\nReal filesystem/network denial probes, child-process containment, capability\nrefusal, host-prerequisite failure behavior, and trusted/untrusted mode\ncontract tests. The probes are gated on the host actually providing the\nisolation prerequisites (bubblewrap + user namespaces); the contract tests\nare host-independent.",
+          "functions": {
+            "_cmd_fixture": "Workspace/session + a pinned evaluator, mirroring the resolver tests.",
+            "_probe_script": "A python probe that runs each attempt and reports success/failure.",
+            "_run_sandboxed": "—",
+            "_write_probe_plugin": "—",
+            "test_child_process_attempts_cannot_escape": "Candidate-controlled subprocesses cannot escape the same policy.",
+            "test_command_runner_refuses_unenforceable_policy": "An unenforceable capability refuses the execution (no silent fallback).",
+            "test_command_runner_sandboxed_enforces_policy": "With an isolation policy the same boundary confines governed commands.",
+            "test_command_runner_trusted_boundary_labeled": "Without an isolation policy the command path is labeled local-code.",
+            "test_fs_write_none_denied_at_os_boundary": "``fs_write: none`` prevents writes at the OS boundary.",
+            "test_fs_write_workspace_confined": "``fs_write: workspace`` permits workspace writes and nothing else.",
+            "test_masked_evaluator_code_unreadable": "Plugins are isolated from evaluator code via masked mounts.",
+            "test_network_allowlist_capability_refused": "Unsupported capability requests are refused, never silently widened.",
+            "test_network_default_deny": "Disallowed network destinations are unreachable (default-deny).",
+            "test_plugin_runner_enforced_mode_sandboxed": "Untrusted plugin runs are sandboxed: caps enforced at the OS boundary.",
+            "test_plugin_runner_host_prereq_failure_fails_closed": "Unavailable isolation refuses execution instead of falling back.",
+            "test_plugin_runner_refuses_allowlist_request": "A plugin requesting network egress is refused and never executes.",
+            "test_trusted_local_code_mode_labeled_not_sandboxed": "The trusted local-code policy is separately labeled, never sandboxed."
+          }
+        }
+      },
+      "hash": "sha256:d74c28f9950d54060f18d3ca97bef388e87caa86e66df93ae411c3b0b207ebae",
+      "language": "python",
+      "module_page": "test_execution_isolation",
+      "semantic_hash": "sha256:9f62c4e63bd797060021322c14aad96b1e9120caf51f770adf11b0d1288170be"
     },
     "tests/test_execution_ledger_validator.py": {
       "entities": [],

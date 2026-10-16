@@ -32,7 +32,7 @@ flowchart TD
 |--------|--------|---------|
 | [results_store](modules/results_store.md) | 44 | 1 |
 | [orchestrator](modules/orchestrator.md) | 39 | 22 |
-| [config](modules/config.md) | 37 | 0 |
+| [config](modules/config.md) | 38 | 0 |
 | [skill_registry](modules/skill_registry.md) | 24 | 2 |
 | [client](modules/client.md) | 23 | 0 |
 | [llm_provider](modules/llm_provider.md) | 18 | 1 |
@@ -48,6 +48,7 @@ flowchart TD
 | [events](modules/events.md) | 12 | 1 |
 | [artifact_reference](modules/artifact_reference.md) | 11 | 0 |
 | [useResearch](modules/useResearch.md) | 11 | 2 |
+| [command_runner](modules/command_runner.md) | 10 | 3 |
 | [gate_status](modules/gate_status.md) | 10 | 0 |
 | [iteration_snapshot](modules/iteration_snapshot.md) | 10 | 2 |
 | [promotion_target](modules/promotion_target.md) | 10 | 1 |
@@ -55,7 +56,6 @@ flowchart TD
 | [primitives](modules/primitives.md) | 10 | 0 |
 | [promotion](modules/promotion.md) | 9 | 7 |
 | [research](modules/research.md) | 9 | 10 |
-| [command_runner](modules/command_runner.md) | 9 | 2 |
 | [fs_safety](modules/fs_safety.md) | 9 | 0 |
 | [auth](modules/auth.md) | 8 | 1 |
 | [results](modules/results.md) | 8 | 9 |
@@ -66,12 +66,12 @@ flowchart TD
 | [postgres_state_store](modules/postgres_state_store.md) | 7 | 5 |
 | [src_api_skills](modules/src_api_skills.md) | 6 | 8 |
 | [observability](modules/observability.md) | 6 | 0 |
+| [plugin_runner](modules/plugin_runner.md) | 6 | 3 |
 | [result_artifact](modules/result_artifact.md) | 6 | 2 |
 | [service_preflight](modules/service_preflight.md) | 6 | 2 |
 | [iteration_context](modules/iteration_context.md) | 5 | 2 |
 | [output_parser](modules/output_parser.md) | 5 | 2 |
 | [pagination](modules/pagination.md) | 5 | 0 |
-| [plugin_runner](modules/plugin_runner.md) | 5 | 2 |
 | [useWebSocket](modules/useWebSocket.md) | 5 | 1 |
 | [development_gate_bundle](modules/development_gate_bundle.md) | 4 | 2 |
 | [execution_contracts](modules/execution_contracts.md) | 4 | 1 |
@@ -82,6 +82,7 @@ flowchart TD
 | [audit](modules/audit.md) | 3 | 1 |
 | [subjects](modules/subjects.md) | 3 | 4 |
 | [blocker_classifier](modules/blocker_classifier.md) | 3 | 0 |
+| [isolation](modules/isolation.md) | 3 | 0 |
 | [log_writer](modules/log_writer.md) | 3 | 1 |
 | [preflight](modules/preflight.md) | 3 | 1 |
 | [skill_generator](modules/skill_generator.md) | 3 | 3 |
@@ -170,6 +171,7 @@ flowchart TD
 | [test_evidence_artifact_validation](modules/test_evidence_artifact_validation.md) | 0 | 2 |
 | [test_execution_concurrency](modules/test_execution_concurrency.md) | 0 | 3 |
 | [test_execution_contracts](modules/test_execution_contracts.md) | 0 | 1 |
+| [test_execution_isolation](modules/test_execution_isolation.md) | 0 | 4 |
 | [test_execution_ledger_validator](modules/test_execution_ledger_validator.md) | 0 | 0 |
 | [test_execution_request](modules/test_execution_request.md) | 0 | 8 |
 | [test_experiment_parser_calibration](modules/test_experiment_parser_calibration.md) | 0 | 1 |

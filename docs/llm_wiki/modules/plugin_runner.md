@@ -63,13 +63,14 @@ Design decisions (P1-007 house style):
 |--------|---------|
 | `__future__` | `annotations` |
 | `asyncio` | `asyncio` |
-| `dataclasses` | `dataclass`, `field` |
+| `dataclasses` | `dataclass`, `field`, `replace` |
 | `json` | `json` |
 | `logging` | `logging` |
 | `os` | `os` |
 | `pathlib` | `Path` |
 | `psutil` | `psutil` |
 | `src.core.command_runner` | `_terminate_process_group_without_communicate` |
+| `src.core.isolation` | `SANDBOXED_PREFIX`, `TRUSTED_LOCAL_CODE`, `IsolationPolicy`, `IsolationUnavailableError`, `UnsupportedCapabilityError`, `wrap_command` |
 | `src.core.skill_manifest` | `PluginCaps`, `PluginKind` |
 | `subprocess` | `subprocess` |
 | `sys` | `sys` |
@@ -86,30 +87,39 @@ flowchart LR
     n0["src/cli.py"]
     n1["src/core/bootstrap_runner.py"]
     n2["src/core/command_runner.py"]
-    n3["src/core/plugin_runner.py"]
-    n4["src/core/skill_manifest.py"]
-    n5["tests/test_plugin_runner.py"]
-    n6["tests/test_prompt_evaluator.py"]
-    n7["tests/test_skill_prompt_engineering_e2e.py"]
-    n0 --> n3
+    n3["src/core/isolation.py"]
+    n4["src/core/plugin_runner.py"]
+    n5["src/core/skill_manifest.py"]
+    n6["tests/test_execution_isolation.py"]
+    n7["tests/test_plugin_runner.py"]
+    n8["tests/test_prompt_evaluator.py"]
+    n9["tests/test_skill_prompt_engineering_e2e.py"]
     n0 --> n4
-    n1 --> n3
+    n0 --> n5
     n1 --> n4
-    n3 --> n2
-    n3 --> n4
-    n5 --> n3
-    n5 --> n4
-    n6 --> n1
+    n1 --> n5
+    n2 --> n3
+    n4 --> n2
+    n4 --> n3
+    n4 --> n5
+    n6 --> n2
     n6 --> n3
-    n7 --> n3
+    n6 --> n4
+    n7 --> n4
+    n7 --> n5
+    n8 --> n1
+    n8 --> n4
+    n9 --> n4
     click n0 "../modules/cli.md"
     click n1 "../modules/bootstrap_runner.md"
     click n2 "../modules/command_runner.md"
-    click n3 "../modules/plugin_runner.md"
-    click n4 "../modules/skill_manifest.md"
-    click n5 "../modules/test_plugin_runner.md"
-    click n6 "../modules/test_prompt_evaluator.md"
-    click n7 "../modules/test_skill_prompt_engineering_e2e.md"
+    click n3 "../modules/isolation.md"
+    click n4 "../modules/plugin_runner.md"
+    click n5 "../modules/skill_manifest.md"
+    click n6 "../modules/test_execution_isolation.md"
+    click n7 "../modules/test_plugin_runner.md"
+    click n8 "../modules/test_prompt_evaluator.md"
+    click n9 "../modules/test_skill_prompt_engineering_e2e.md"
 ```
 
 ### Internal neighbors
@@ -118,10 +128,12 @@ flowchart LR
 |---|---|
 | Inbound | [cli](../modules/cli.md) |
 | Inbound | [bootstrap_runner](../modules/bootstrap_runner.md) |
+| Inbound | [test_execution_isolation](../modules/test_execution_isolation.md) |
 | Inbound | [test_plugin_runner](../modules/test_plugin_runner.md) |
 | Inbound | [test_prompt_evaluator](../modules/test_prompt_evaluator.md) |
 | Inbound | [test_skill_prompt_engineering_e2e](../modules/test_skill_prompt_engineering_e2e.md) |
 | Outbound | [command_runner](../modules/command_runner.md) |
+| Outbound | [isolation](../modules/isolation.md) |
 | Outbound | [skill_manifest](../modules/skill_manifest.md) |
 
 ### External packages
@@ -134,14 +146,15 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [PluginResult](../entities/PluginResult.md) | 161 | — | Outcome of one plugin invocation (X-004 §6 failure semantics). |
-| [PluginRunner](../entities/PluginRunner.md) | 189 | — | Execute one skill plugin in a confined governed subprocess (X-004 §6). |
-| [_PluginRunBody](../entities/PluginRunBody.md) | 357 | — | Inputs bundled for the worker-thread sync body. |
-| [_ResourceWatcher](../entities/ResourceWatcher.md) | 381 | — | Polls a live plugin subprocess's RSS / CPU and flags cap breaches (D6). |
+| [PluginResult](../entities/PluginResult.md) | 195 | — | Outcome of one plugin invocation (X-004 §6 failure semantics). |
+| [PluginRunner](../entities/PluginRunner.md) | 227 | — | Execute one skill plugin in a confined governed subprocess (X-004 §6). |
+| [_PluginRunBody](../entities/PluginRunBody.md) | 481 | — | Inputs bundled for the worker-thread sync body. |
+| [_ResourceWatcher](../entities/ResourceWatcher.md) | 510 | — | Polls a live plugin subprocess's RSS / CPU and flags cap breaches (D6). |
 
 ## Functions
 
 | Function | Signature | Decorators | Description |
 |----------|-----------|------------|-------------|
 | `_build_plugin_env` | `(*, declared_env_keys: Mapping[str, str] \| None = None, source_env: Mapping[str, str] \| None = None) -> dict[str, str]` | — | Build the env dict for a plugin subprocess (X-004 §4.2, strict). |
+| `_declared_input_paths` | `(input_json: Mapping[str, Any]) -> tuple[str, ...]` | — | Absolute path values in the input JSON that name existing host files. |
 | `_tail` | `(text: str, *, max_chars: int = 2000) -> str` | — | Return the trailing slice of ``text`` for error context. |

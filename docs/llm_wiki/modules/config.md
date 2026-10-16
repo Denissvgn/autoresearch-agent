@@ -15,7 +15,7 @@ Configuration for the autoresearch-agent service.
 | `logging` | `logging` |
 | `pydantic` | `AliasChoices`, `Field`, `SecretStr` |
 | `pydantic_settings` | `BaseSettings`, `SettingsConfigDict` |
-| `typing` | `Any`, `List`, `Optional` |
+| `typing` | `Any`, `List`, `Literal`, `Optional` |
 
 ## Local dependency map
 
@@ -37,7 +37,7 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Inbound | `src` (16) |
-| Inbound | `tests` (21) |
+| Inbound | `tests` (22) |
 
 ### External packages
 
@@ -45,7 +45,7 @@ flowchart LR
 |---|---:|---:|
 | python | 2 | 0 |
 
-> All 37 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 38 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 

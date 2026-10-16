@@ -1,6 +1,6 @@
 # CommandRunResult
 
-**Location:** `src/core/command_runner.py:254`
+**Location:** `src/core/command_runner.py:257`
 **Kind:** Class
 **Bases:** —
 **Module:** [command_runner](../modules/command_runner.md)
@@ -21,6 +21,7 @@ _Auto-generated from `CommandRunResult` in `src/core/command_runner.py`._
 | `timed_out` | `bool` | `False` | — |
 | `log_path` | `str \| None` | `None` | — |
 | `log_truncated` | `bool` | `False` | — |
+| `execution_boundary` | `str` | `''` | — |
 
 ## Methods
 
@@ -50,13 +51,13 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [command_runner](../modules/command_runner.md) | 1 | `decision`, `log_path`, `log_truncated`, `output`, `returncode`, `timed_out` |
+| [command_runner](../modules/command_runner.md) | 1 | `decision`, `execution_boundary`, `log_path`, `log_truncated`, `output`, `returncode`, `timed_out` |
 
 ### References
 
 | Reference | Kind | Source | Call sites |
 |---|---|---|---:|
-| `GovernedCommandRunner.run` | call | [command_runner](../modules/command_runner.md) | 3 |
+| `GovernedCommandRunner.run` | call | [command_runner](../modules/command_runner.md) | 4 |
 | `GovernedCommandRunner.run` | type_reference | [command_runner](../modules/command_runner.md) | — |
 | `_CapturingRunner.run` | call | [test_orchestrator_timeout](../modules/test_orchestrator_timeout.md) | 1 |
 | `_CapturingRunner.run` | type_reference | [test_orchestrator_timeout](../modules/test_orchestrator_timeout.md) | — |

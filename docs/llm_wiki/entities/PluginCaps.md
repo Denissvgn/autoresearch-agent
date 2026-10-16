@@ -54,13 +54,13 @@ flowchart LR
     n3["BootstrapRunner._run_dry (src/core/bootstrap_runner.py)"]
     n4["BootstrapRunner.run (src/core/bootstrap_runner.py)"]
     n5["_ResourceWatcher.__init__ (src/core/plugin_runner.py)"]
-    n6["PluginRunner.run (src/core/plugin_runner.py)"]
-    n7["_resolve_caps (src/core/skill_loader.py)"]
-    n8["TestPluginCannotForgeVerifiedMetric.test_plugin_output_is_untrusted_data (tests/test_plugin_runner.py)"]
-    n9["TestPluginFailClosed.test_invalid_json_fails_closed (tests/test_plugin_runner.py)"]
-    n10["TestPluginFailClosed.test_missing_plugin_file (tests/test_plugin_runner.py)"]
-    n11["TestPluginFailClosed.test_non_object_json_fails_closed (tests/test_plugin_runner.py)"]
-    n12["TestPluginFailClosed.test_non_zero_exit_fails_closed (tests/test_plugin_runner.py)"]
+    n6["PluginRunner._isolation_plan (src/core/plugin_runner.py)"]
+    n7["PluginRunner.run (src/core/plugin_runner.py)"]
+    n8["_resolve_caps (src/core/skill_loader.py)"]
+    n9["test_plugin_runner_enforced_mode_sandboxed (tests/test_execution_isolation.py)"]
+    n10["test_plugin_runner_host_prereq_failure_fails_closed (tests/test_execution_isolation.py)"]
+    n11["test_plugin_runner_refuses_allowlist_request (tests/test_execution_isolation.py)"]
+    n12["test_trusted_local_code_mode_labeled_not_sandboxed (tests/test_execution_isolation.py)"]
     n0 --> n1
     n2 --> n0
     n3 --> n0
@@ -79,12 +79,12 @@ flowchart LR
     click n4 "../modules/bootstrap_runner.md"
     click n5 "../modules/plugin_runner.md"
     click n6 "../modules/plugin_runner.md"
-    click n7 "../modules/skill_loader.md"
-    click n8 "../modules/test_plugin_runner.md"
-    click n9 "../modules/test_plugin_runner.md"
-    click n10 "../modules/test_plugin_runner.md"
-    click n11 "../modules/test_plugin_runner.md"
-    click n12 "../modules/test_plugin_runner.md"
+    click n7 "../modules/plugin_runner.md"
+    click n8 "../modules/skill_loader.md"
+    click n9 "../modules/test_execution_isolation.md"
+    click n10 "../modules/test_execution_isolation.md"
+    click n11 "../modules/test_execution_isolation.md"
+    click n12 "../modules/test_execution_isolation.md"
 ```
 
 ### Summary
@@ -107,13 +107,13 @@ flowchart LR
 | `BootstrapRunner._run_dry` | type_reference | [bootstrap_runner](../modules/bootstrap_runner.md) | — |
 | `BootstrapRunner.run` | call | [bootstrap_runner](../modules/bootstrap_runner.md) | 1 |
 | `_ResourceWatcher.__init__` | type_reference | [plugin_runner](../modules/plugin_runner.md) | — |
+| `PluginRunner._isolation_plan` | type_reference | [plugin_runner](../modules/plugin_runner.md) | — |
 | `PluginRunner.run` | type_reference | [plugin_runner](../modules/plugin_runner.md) | — |
 | `_resolve_caps` | call | [skill_loader](../modules/skill_loader.md) | 1 |
 | `_resolve_caps` | type_reference | [skill_loader](../modules/skill_loader.md) | — |
-| `TestPluginCannotForgeVerifiedMetric.test_plugin_output_is_untrusted_data` | call | [test_plugin_runner](../modules/test_plugin_runner.md) | 1 |
-| `TestPluginFailClosed.test_invalid_json_fails_closed` | call | [test_plugin_runner](../modules/test_plugin_runner.md) | 1 |
-| `TestPluginFailClosed.test_missing_plugin_file` | call | [test_plugin_runner](../modules/test_plugin_runner.md) | 1 |
-| `TestPluginFailClosed.test_non_object_json_fails_closed` | call | [test_plugin_runner](../modules/test_plugin_runner.md) | 1 |
-| `TestPluginFailClosed.test_non_zero_exit_fails_closed` | call | [test_plugin_runner](../modules/test_plugin_runner.md) | 1 |
+| `test_plugin_runner_enforced_mode_sandboxed` | call | [test_execution_isolation](../modules/test_execution_isolation.md) | 1 |
+| `test_plugin_runner_host_prereq_failure_fails_closed` | call | [test_execution_isolation](../modules/test_execution_isolation.md) | 1 |
+| `test_plugin_runner_refuses_allowlist_request` | call | [test_execution_isolation](../modules/test_execution_isolation.md) | 1 |
+| `test_trusted_local_code_mode_labeled_not_sandboxed` | call | [test_execution_isolation](../modules/test_execution_isolation.md) | 1 |
 
-> References: showing 12 of 19 logical references; 7 omitted by the 12-row generated summary limit.
+> References: showing 12 of 24 logical references; 12 omitted by the 12-row generated summary limit.

@@ -6,11 +6,11 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 
 | Surface | Count | Start here |
 |---|---:|---|
-| Entities | 432 | [Open section](#entities) |
-| Modules | 252 | [Open section](#modules) |
+| Entities | 437 | [Open section](#entities) |
+| Modules | 254 | [Open section](#modules) |
 | Workflows | 14 | [Open section](#workflows) |
 | Guides | 0 | No pages |
-| Entry-point flows | 111 | [Open section](#entry-point-flows) |
+| Entry-point flows | 114 | [Open section](#entry-point-flows) |
 | Infrastructure | 3 | [Open section](#infrastructure) |
 | HTTP API contracts | 0 | No pages |
 | Dependency architecture | 2 | [Open section](#dependency-architecture) |
@@ -38,6 +38,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [BootstrapOutcome](entities/BootstrapOutcome.md)
 - [BootstrapRunner](entities/BootstrapRunner.md)
 - [BudgetDimensions](entities/BudgetDimensions.md)
+- [BwrapBackend](entities/BwrapBackend.md)
 - [CandidateData](entities/CandidateData.md)
 - [CandidateIdentity](entities/CandidateIdentity.md)
 - [CapabilityDescriptor](entities/CapabilityDescriptor.md)
@@ -111,6 +112,9 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [InsightsConfig](entities/InsightsConfig.md)
 - [IntegrationDirection](entities/IntegrationDirection.md)
 - [IsolationBoundary](entities/IsolationBoundary.md)
+- [IsolationError](entities/IsolationError.md)
+- [IsolationPolicy](entities/IsolationPolicy.md)
+- [IsolationUnavailableError](entities/IsolationUnavailableError.md)
 - [Iteration](entities/Iteration.md)
 - [IterationMetrics](entities/IterationMetrics.md)
 - [IterationRecord](entities/IterationRecord.md)
@@ -367,7 +371,6 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [Turn](entities/Turn.md)
 - [TurnTrialState](entities/TurnTrialState.md)
 - [UIConfig](entities/UIConfig.md)
-- [UnsupportedCapabilityError](entities/UnsupportedCapabilityError.md)
 - [Usage](entities/Usage.md)
 - [VariantDescriptor](entities/VariantDescriptor.md)
 - [VariantsConfig](entities/VariantsConfig.md)
@@ -389,7 +392,9 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [client_PromotionScopeRequest](entities/client_PromotionScopeRequest.md)
 - [client_StartResearchRequest](entities/client_StartResearchRequest.md)
 - [execution_contracts_ExecutionRequest](entities/execution_contracts_ExecutionRequest.md)
+- [execution_contracts_UnsupportedCapabilityError](entities/execution_contracts_UnsupportedCapabilityError.md)
 - [execution_request_ExecutionRequest](entities/execution_request_ExecutionRequest.md)
+- [isolation_UnsupportedCapabilityError](entities/isolation_UnsupportedCapabilityError.md)
 - [promotion_PromotionApproval](entities/promotion_PromotionApproval.md)
 - [promotion_PromotionPreviewRequest](entities/promotion_PromotionPreviewRequest.md)
 - [promotion_PromotionScopeRequest](entities/promotion_PromotionScopeRequest.md)
@@ -518,6 +523,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [http_headers](modules/http_headers.md) - Request-header binding for the autoresearch API.
 - [index](modules/index.md) - `ui/src/skill-plugins/index.ts`
 - [insights_feedback](modules/insights_feedback.md) - Insights feedback loop (ARC-011 P5-027 / P5-030).
+- [isolation](modules/isolation.md) - Enforced process isolation: mounts, identity, and network at the OS boundary.
 - [iteration_context](modules/iteration_context.md) - Compact iteration context digests for autoresearch agents.
 - [iteration_snapshot](modules/iteration_snapshot.md) - Server-owned immutable snapshots for autoresearch iteration attempts.
 - [legacy_phase_tables](modules/legacy_phase_tables.md) - Historical trading-skill phase tables (moved to src/compat — P1-2).
@@ -596,6 +602,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [test_evidence_artifact_validation](modules/test_evidence_artifact_validation.md) - AR-5: Tests for artifact-bound evidence-key validation for promotion-family phases.
 - [test_execution_concurrency](modules/test_execution_concurrency.md) - Execution-config plumbing tests (P1-4).
 - [test_execution_contracts](modules/test_execution_contracts.md) - Tests for the versioned research and execution contracts.
+- [test_execution_isolation](modules/test_execution_isolation.md) - Execution isolation acceptance tests.
 - [test_execution_ledger_validator](modules/test_execution_ledger_validator.md) - Tests for the execution-ledger validator (scripts/check_execution_ledger.py).
 - [test_execution_request](modules/test_execution_request.md) - One resolved execution request: policy/process parity regressions.
 - [test_experiment_parser_calibration](modules/test_experiment_parser_calibration.md) - Tests for experiment_parser _json suffix handling for phase 5 evidence keys.
@@ -754,6 +761,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [api-phases_for_model](flows/api-phases_for_model.md) - entry: `phases_for_model`
 - [api-preflight_check_from_target](flows/api-preflight_check_from_target.md) - entry: `preflight_check_from_target`
 - [api-prior_findings_path](flows/api-prior_findings_path.md) - entry: `prior_findings_path`
+- [api-probe_host](flows/api-probe_host.md) - entry: `probe_host`
 - [api-promotion_target_from_manifest](flows/api-promotion_target_from_manifest.md) - entry: `promotion_target_from_manifest`
 - [api-read_legacy_session_manifest](flows/api-read_legacy_session_manifest.md) - entry: `read_legacy_session_manifest`
 - [api-read_legacy_start_request](flows/api-read_legacy_start_request.md) - entry: `read_legacy_start_request`
@@ -763,6 +771,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [api-resolve_run_inputs](flows/api-resolve_run_inputs.md) - entry: `resolve_run_inputs`
 - [api-samples_from_rows](flows/api-samples_from_rows.md) - entry: `samples_from_rows`
 - [api-sanitize_path_segment](flows/api-sanitize_path_segment.md) - entry: `sanitize_path_segment`
+- [api-select_backend](flows/api-select_backend.md) - entry: `select_backend`
 - [api-selectable_for](flows/api-selectable_for.md) - entry: `selectable_for`
 - [api-session_workspace_path](flows/api-session_workspace_path.md) - entry: `session_workspace_path`
 - [api-significance_verdict](flows/api-significance_verdict.md) - entry: `significance_verdict`
@@ -773,6 +782,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [api-trial_marker_candidates](flows/api-trial_marker_candidates.md) - entry: `trial_marker_candidates`
 - [api-validate_path_template](flows/api-validate_path_template.md) - entry: `validate_path_template`
 - [api-validate_secret_list](flows/api-validate_secret_list.md) - entry: `validate_secret_list`
+- [api-wrap_command](flows/api-wrap_command.md) - entry: `wrap_command`
 
 **http**
 

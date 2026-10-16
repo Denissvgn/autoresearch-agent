@@ -18,18 +18,18 @@
     "by_kind": {
       "api-contracts": 0,
       "dependencies": 1,
-      "entities": 432,
-      "flows": 111,
+      "entities": 437,
+      "flows": 114,
       "guides": 0,
       "index": 1,
       "infrastructure": 3,
       "load-order": 1,
       "log": 1,
-      "modules": 252,
+      "modules": 254,
       "workflows": 14
     },
     "dependency_architecture": 2,
-    "total": 816
+    "total": 826
   },
   "dependency_pages": {
     "count": 2,
@@ -1309,6 +1309,50 @@
       "category": "api",
       "detector": "builtin",
       "entry_point": {
+        "label": "probe_host",
+        "source_path": "src/core/isolation.py",
+        "symbol": "probe_host"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [
+            {
+              "confidence": "unknown",
+              "kind": "process",
+              "line": 174,
+              "step": "probe_host",
+              "step_index": 1,
+              "target": "subprocess.run"
+            }
+          ],
+          "gaps": [
+            {
+              "kind": "external_call",
+              "line": 167,
+              "step": "probe_host",
+              "target": "shutil.which"
+            }
+          ],
+          "generated": true,
+          "step_count": 4,
+          "transfer_count": 3,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/isolation.py"
+          ],
+          "step_count": 4,
+          "truncated": false
+        }
+      },
+      "id": "api-probe_host",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
         "label": "promotion_target_from_manifest",
         "source_path": "src/core/promotion_target.py",
         "symbol": "promotion_target_from_manifest"
@@ -2095,6 +2139,62 @@
       "category": "api",
       "detector": "builtin",
       "entry_point": {
+        "label": "select_backend",
+        "source_path": "src/core/isolation.py",
+        "symbol": "select_backend"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [
+            {
+              "confidence": "unknown",
+              "kind": "process",
+              "line": 174,
+              "step": "probe_host",
+              "step_index": 2,
+              "target": "subprocess.run"
+            }
+          ],
+          "gaps": [
+            {
+              "kind": "external_call",
+              "line": 167,
+              "step": "probe_host",
+              "target": "shutil.which"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 197,
+              "step": "select_backend",
+              "target": "info.get"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 199,
+              "step": "select_backend",
+              "target": "info.get"
+            }
+          ],
+          "generated": true,
+          "step_count": 9,
+          "transfer_count": 8,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/isolation.py"
+          ],
+          "step_count": 9,
+          "truncated": false
+        }
+      },
+      "id": "api-select_backend",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
         "label": "selectable_for",
         "source_path": "src/core/skill_lifecycle.py",
         "symbol": "selectable_for"
@@ -2597,6 +2697,68 @@
         }
       },
       "id": "api-validate_secret_list",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
+        "label": "wrap_command",
+        "source_path": "src/core/isolation.py",
+        "symbol": "wrap_command"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [
+            {
+              "confidence": "unknown",
+              "kind": "process",
+              "line": 174,
+              "step": "probe_host",
+              "step_index": 4,
+              "target": "subprocess.run"
+            }
+          ],
+          "gaps": [
+            {
+              "kind": "unresolved_call",
+              "line": 208,
+              "step": "wrap_command",
+              "target": "(backend or select_backend()).wrap"
+            },
+            {
+              "kind": "external_call",
+              "line": 167,
+              "step": "probe_host",
+              "target": "shutil.which"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 197,
+              "step": "select_backend",
+              "target": "info.get"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 199,
+              "step": "select_backend",
+              "target": "info.get"
+            }
+          ],
+          "generated": true,
+          "step_count": 11,
+          "transfer_count": 10,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/isolation.py"
+          ],
+          "step_count": 11,
+          "truncated": false
+        }
+      },
+      "id": "api-wrap_command",
       "language": "python"
     },
     {
@@ -7882,6 +8044,7 @@
         "entities/BootstrapOutcome.md",
         "entities/BootstrapRunner.md",
         "entities/BudgetDimensions.md",
+        "entities/BwrapBackend.md",
         "entities/CandidateData.md",
         "entities/CandidateIdentity.md",
         "entities/CapabilityDescriptor.md",
@@ -7924,6 +8087,7 @@
         "entities/EstimateCostRequest.md",
         "entities/EventBroadcaster.md",
         "entities/execution_contracts_ExecutionRequest.md",
+        "entities/execution_contracts_UnsupportedCapabilityError.md",
         "entities/execution_request_ExecutionRequest.md",
         "entities/ExecutionConfig.md",
         "entities/FailureRecord.md",
@@ -7963,7 +8127,11 @@
         "entities/InferenceParitySummary.md",
         "entities/InsightsConfig.md",
         "entities/IntegrationDirection.md",
+        "entities/isolation_UnsupportedCapabilityError.md",
         "entities/IsolationBoundary.md",
+        "entities/IsolationError.md",
+        "entities/IsolationPolicy.md",
+        "entities/IsolationUnavailableError.md",
         "entities/Iteration.md",
         "entities/IterationMetrics.md",
         "entities/IterationRecord.md",
@@ -8280,7 +8448,6 @@
         "entities/Turn.md",
         "entities/TurnTrialState.md",
         "entities/UIConfig.md",
-        "entities/UnsupportedCapabilityError.md",
         "entities/Usage.md",
         "entities/VariantDescriptor.md",
         "entities/VariantsConfig.md",
@@ -8319,6 +8486,7 @@
         "flows/api-phases_for_model.md",
         "flows/api-preflight_check_from_target.md",
         "flows/api-prior_findings_path.md",
+        "flows/api-probe_host.md",
         "flows/api-promotion_target_from_manifest.md",
         "flows/api-read_legacy_session_manifest.md",
         "flows/api-read_legacy_start_request.md",
@@ -8328,6 +8496,7 @@
         "flows/api-resolve_run_inputs.md",
         "flows/api-samples_from_rows.md",
         "flows/api-sanitize_path_segment.md",
+        "flows/api-select_backend.md",
         "flows/api-selectable_for.md",
         "flows/api-session_workspace_path.md",
         "flows/api-significance_verdict.md",
@@ -8338,6 +8507,7 @@
         "flows/api-trial_marker_candidates.md",
         "flows/api-validate_path_template.md",
         "flows/api-validate_secret_list.md",
+        "flows/api-wrap_command.md",
         "flows/http-continue_research.md",
         "flows/http-delete_research.md",
         "flows/http-download_agent_log.md",
@@ -8458,6 +8628,7 @@
         "modules/http_headers.md",
         "modules/index.md",
         "modules/insights_feedback.md",
+        "modules/isolation.md",
         "modules/iteration_context.md",
         "modules/iteration_snapshot.md",
         "modules/IterationsTable.md",
@@ -8552,6 +8723,7 @@
         "modules/test_evidence_artifact_validation.md",
         "modules/test_execution_concurrency.md",
         "modules/test_execution_contracts.md",
+        "modules/test_execution_isolation.md",
         "modules/test_execution_ledger_validator.md",
         "modules/test_execution_request.md",
         "modules/test_experiment_parser_calibration.md",
@@ -8948,6 +9120,19 @@
       "role": "semantic",
       "source_path": "src/core/execution_contracts.py",
       "title": "BudgetDimensions"
+    },
+    {
+      "canonical_path": "entities/BwrapBackend.md",
+      "id": "BwrapBackend",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/BwrapBackend",
+      "outgoing_internal_links": [
+        "modules/isolation.md",
+        "modules/test_execution_isolation.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/isolation.py",
+      "title": "BwrapBackend"
     },
     {
       "canonical_path": "entities/CandidateData.md",
@@ -9504,6 +9689,18 @@
       "title": "ExecutionRequest"
     },
     {
+      "canonical_path": "entities/execution_contracts_UnsupportedCapabilityError.md",
+      "id": "execution_contracts_UnsupportedCapabilityError",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/execution_contracts_UnsupportedCapabilityError",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "UnsupportedCapabilityError"
+    },
+    {
       "canonical_path": "entities/execution_request_ExecutionRequest.md",
       "id": "execution_request_ExecutionRequest",
       "kind": "entities",
@@ -9778,9 +9975,8 @@
         "modules/command_runner.md",
         "modules/orchestrator.md",
         "modules/test_command_policy.md",
-        "modules/test_execution_request.md",
-        "modules/test_orchestrator_timeout.md",
-        "modules/test_pinned_evaluators.md"
+        "modules/test_execution_isolation.md",
+        "modules/test_execution_request.md"
       ],
       "role": "semantic",
       "source_path": "src/core/command_runner.py",
@@ -10001,6 +10197,20 @@
       "title": "IntegrationDirection"
     },
     {
+      "canonical_path": "entities/isolation_UnsupportedCapabilityError.md",
+      "id": "isolation_UnsupportedCapabilityError",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/isolation_UnsupportedCapabilityError",
+      "outgoing_internal_links": [
+        "modules/isolation.md",
+        "modules/plugin_runner.md",
+        "modules/test_execution_isolation.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/isolation.py",
+      "title": "UnsupportedCapabilityError"
+    },
+    {
       "canonical_path": "entities/IsolationBoundary.md",
       "id": "IsolationBoundary",
       "kind": "entities",
@@ -10012,6 +10222,47 @@
       "role": "semantic",
       "source_path": "src/core/execution_contracts.py",
       "title": "IsolationBoundary"
+    },
+    {
+      "canonical_path": "entities/IsolationError.md",
+      "id": "IsolationError",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/IsolationError",
+      "outgoing_internal_links": [
+        "modules/isolation.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/isolation.py",
+      "title": "IsolationError"
+    },
+    {
+      "canonical_path": "entities/IsolationPolicy.md",
+      "id": "IsolationPolicy",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/IsolationPolicy",
+      "outgoing_internal_links": [
+        "modules/command_runner.md",
+        "modules/isolation.md",
+        "modules/plugin_runner.md",
+        "modules/test_execution_isolation.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/isolation.py",
+      "title": "IsolationPolicy"
+    },
+    {
+      "canonical_path": "entities/IsolationUnavailableError.md",
+      "id": "IsolationUnavailableError",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/IsolationUnavailableError",
+      "outgoing_internal_links": [
+        "modules/isolation.md",
+        "modules/plugin_runner.md",
+        "modules/test_execution_isolation.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/isolation.py",
+      "title": "IsolationUnavailableError"
     },
     {
       "canonical_path": "entities/Iteration.md",
@@ -10677,7 +10928,7 @@
         "modules/plugin_runner.md",
         "modules/skill_loader.md",
         "modules/skill_manifest.md",
-        "modules/test_plugin_runner.md"
+        "modules/test_execution_isolation.md"
       ],
       "role": "semantic",
       "source_path": "src/core/skill_manifest.py",
@@ -10746,6 +10997,7 @@
         "modules/bootstrap_runner.md",
         "modules/cli.md",
         "modules/plugin_runner.md",
+        "modules/test_execution_isolation.md",
         "modules/test_plugin_runner.md"
       ],
       "role": "semantic",
@@ -14046,18 +14298,6 @@
       "title": "UIConfig"
     },
     {
-      "canonical_path": "entities/UnsupportedCapabilityError.md",
-      "id": "UnsupportedCapabilityError",
-      "kind": "entities",
-      "mcp_uri": "llm-wiki://entities/UnsupportedCapabilityError",
-      "outgoing_internal_links": [
-        "modules/execution_contracts.md"
-      ],
-      "role": "semantic",
-      "source_path": "src/core/execution_contracts.py",
-      "title": "UnsupportedCapabilityError"
-    },
-    {
       "canonical_path": "entities/Usage.md",
       "id": "Usage",
       "kind": "entities",
@@ -14582,18 +14822,7 @@
         "entities/OutputCallback.md",
         "entities/OutputStream.md",
         "entities/SessionOutputLog.md",
-        "modules/agent_tools.md",
-        "modules/command_policy.md",
-        "modules/command_runner.md",
-        "modules/orchestrator.md",
-        "modules/plugin_runner.md",
-        "modules/test_async_tool_path.md",
-        "modules/test_command_policy.md",
-        "modules/test_execution_request.md",
-        "modules/test_orchestrator_timeout.md",
-        "modules/test_pinned_evaluators.md",
-        "modules/test_trial_workspace.md",
-        "modules/tool_access.md"
+        "modules/command_runner.md"
       ],
       "role": "semantic",
       "source_path": "src/core/command_runner.py",
@@ -14869,6 +15098,7 @@
         "entities/ContractMigrationError.md",
         "entities/EnvironmentIdentity.md",
         "entities/execution_contracts_ExecutionRequest.md",
+        "entities/execution_contracts_UnsupportedCapabilityError.md",
         "entities/FailureRecord.md",
         "entities/HarnessConfig.md",
         "entities/HarnessPreferences.md",
@@ -14894,7 +15124,6 @@
         "entities/SecretReference.md",
         "entities/SkillDefaults.md",
         "entities/SkillPackageRef.md",
-        "entities/UnsupportedCapabilityError.md",
         "entities/VerifiedResult.md",
         "entities/VersionedContract.md",
         "entities/WorkspaceBounds.md",
@@ -15040,6 +15269,26 @@
       "role": "semantic",
       "source_path": "src/core/insights_feedback.py",
       "title": "insights_feedback Module"
+    },
+    {
+      "canonical_path": "modules/isolation.md",
+      "id": "isolation",
+      "kind": "modules",
+      "mcp_uri": "llm-wiki://modules/isolation",
+      "outgoing_internal_links": [
+        "entities/BwrapBackend.md",
+        "entities/isolation_UnsupportedCapabilityError.md",
+        "entities/IsolationError.md",
+        "entities/IsolationPolicy.md",
+        "entities/IsolationUnavailableError.md",
+        "modules/command_runner.md",
+        "modules/isolation.md",
+        "modules/plugin_runner.md",
+        "modules/test_execution_isolation.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/isolation.py",
+      "title": "isolation Module"
     },
     {
       "canonical_path": "modules/iteration_context.md",
@@ -15377,8 +15626,10 @@
         "modules/bootstrap_runner.md",
         "modules/cli.md",
         "modules/command_runner.md",
+        "modules/isolation.md",
         "modules/plugin_runner.md",
         "modules/skill_manifest.md",
+        "modules/test_execution_isolation.md",
         "modules/test_plugin_runner.md",
         "modules/test_prompt_evaluator.md",
         "modules/test_skill_prompt_engineering_e2e.md"
@@ -16615,6 +16866,22 @@
       "role": "semantic",
       "source_path": "tests/test_execution_contracts.py",
       "title": "test_execution_contracts Module"
+    },
+    {
+      "canonical_path": "modules/test_execution_isolation.md",
+      "id": "test_execution_isolation",
+      "kind": "modules",
+      "mcp_uri": "llm-wiki://modules/test_execution_isolation",
+      "outgoing_internal_links": [
+        "modules/command_runner.md",
+        "modules/config.md",
+        "modules/isolation.md",
+        "modules/plugin_runner.md",
+        "modules/test_execution_isolation.md"
+      ],
+      "role": "semantic",
+      "source_path": "tests/test_execution_isolation.py",
+      "title": "test_execution_isolation Module"
     },
     {
       "canonical_path": "modules/test_execution_ledger_validator.md",
@@ -18887,6 +19154,18 @@
       "title": "prior_findings_path"
     },
     {
+      "canonical_path": "flows/api-probe_host.md",
+      "id": "api-probe_host",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-probe_host",
+      "outgoing_internal_links": [
+        "modules/isolation.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/isolation.py",
+      "title": "probe_host"
+    },
+    {
       "canonical_path": "flows/api-promotion_target_from_manifest.md",
       "id": "api-promotion_target_from_manifest",
       "kind": "flows",
@@ -18995,6 +19274,18 @@
       "role": "mixed",
       "source_path": "src/core/skill_paths.py",
       "title": "sanitize_path_segment"
+    },
+    {
+      "canonical_path": "flows/api-select_backend.md",
+      "id": "api-select_backend",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-select_backend",
+      "outgoing_internal_links": [
+        "modules/isolation.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/isolation.py",
+      "title": "select_backend"
     },
     {
       "canonical_path": "flows/api-selectable_for.md",
@@ -19117,6 +19408,18 @@
       "role": "mixed",
       "source_path": "src/core/execution_contracts.py",
       "title": "validate_secret_list"
+    },
+    {
+      "canonical_path": "flows/api-wrap_command.md",
+      "id": "api-wrap_command",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-wrap_command",
+      "outgoing_internal_links": [
+        "modules/isolation.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/isolation.py",
+      "title": "wrap_command"
     },
     {
       "canonical_path": "flows/http-continue_research.md",
@@ -20091,6 +20394,7 @@
         "modules/http_headers.md",
         "modules/index.md",
         "modules/insights_feedback.md",
+        "modules/isolation.md",
         "modules/iteration_context.md",
         "modules/iteration_snapshot.md",
         "modules/IterationsTable.md",
@@ -20185,6 +20489,7 @@
         "modules/test_evidence_artifact_validation.md",
         "modules/test_execution_concurrency.md",
         "modules/test_execution_contracts.md",
+        "modules/test_execution_isolation.md",
         "modules/test_execution_ledger_validator.md",
         "modules/test_execution_request.md",
         "modules/test_experiment_parser_calibration.md",
@@ -20354,6 +20659,7 @@
         "modules/http_headers.md",
         "modules/index.md",
         "modules/insights_feedback.md",
+        "modules/isolation.md",
         "modules/iteration_context.md",
         "modules/iteration_snapshot.md",
         "modules/IterationsTable.md",
@@ -20448,6 +20754,7 @@
         "modules/test_evidence_artifact_validation.md",
         "modules/test_execution_concurrency.md",
         "modules/test_execution_contracts.md",
+        "modules/test_execution_isolation.md",
         "modules/test_execution_ledger_validator.md",
         "modules/test_execution_request.md",
         "modules/test_experiment_parser_calibration.md",
@@ -20565,5 +20872,5 @@
     }
   ],
   "schema_version": "llm-wiki-surface-index/v1",
-  "source_hash": "sha256:ca5b738b583247792a2c178b7b7e7044bcb89011fb272739aa8d2d468184b8c2"
+  "source_hash": "sha256:a256b027849575600f22eac70fd88832915c85af123c72631d258604de87dc12"
 }

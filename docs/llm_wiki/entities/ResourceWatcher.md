@@ -1,6 +1,6 @@
 # _ResourceWatcher
 
-**Location:** `src/core/plugin_runner.py:381`
+**Location:** `src/core/plugin_runner.py:510`
 **Kind:** Class
 **Bases:** —
 **Module:** [plugin_runner](../modules/plugin_runner.md)
@@ -34,7 +34,7 @@ per iteration).
 ```mermaid
 flowchart LR
     n0["_ResourceWatcher (src/core/plugin_runner.py)"]
-    n1["PluginRunner._run_sync (src/core/plugin_runner.py)"]
+    n1["PluginRunner._run_sync_inner (src/core/plugin_runner.py)"]
     n1 --> n0
     click n0 "../modules/plugin_runner.md"
     click n1 "../modules/plugin_runner.md"
@@ -50,4 +50,4 @@ flowchart LR
 
 | Reference | Kind | Source | Call sites |
 |---|---|---|---:|
-| `PluginRunner._run_sync` | call | [plugin_runner](../modules/plugin_runner.md) | 1 |
+| `PluginRunner._run_sync_inner` | call | [plugin_runner](../modules/plugin_runner.md) | 1 |
