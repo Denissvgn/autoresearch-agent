@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from functools import lru_cache
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 
 from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -416,6 +416,23 @@ class Settings(BaseSettings):
             "to candidates or evaluators. When unset, receipts use "
             "deterministic digest ids (tamper-evident and idempotent within "
             "the server's own records)."
+        ),
+    )
+    execution_isolation_mode: Literal["enforced", "trusted_local_code"] = Field(
+        default="enforced",
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_EXECUTION_ISOLATION_MODE",
+            "EXECUTION_ISOLATION_MODE",
+        ),
+        description=(
+            "Execution boundary policy for candidate-controlled subprocesses "
+            "(skill plugins and governed commands). 'enforced' (default) runs "
+            "them in the isolation backend with filesystem/network caps "
+            "enforced at the OS boundary and refuses unenforceable capability "
+            "requests or unavailable isolation (fail-closed). "
+            "'trusted_local_code' is the operator's explicitly retained "
+            "local-code policy: subprocesses run unsandboxed, separately "
+            "labeled, and are never advertised as sandboxed."
         ),
     )
     # --- Dependency Preflight ---

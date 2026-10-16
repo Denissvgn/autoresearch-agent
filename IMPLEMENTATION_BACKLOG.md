@@ -528,9 +528,9 @@ including mount, identity, network, and resource enforcement. If it fails, evalu
 one alternative Linux backend. Select only a demonstrated solution; unavailable host
 authority leaves qualification WAITING_EXTERNAL.
 
-- [ ] Perform a bounded backend spike and select one enforceable Linux isolation implementation, with required host features and failure behavior documented.
-- [ ] Isolate plugins/candidate execution from control-plane credentials, evaluator code, signing authority, sibling runs, and host services using enforced mounts/identities.
-- [ ] Enforce default-deny network access and explicit allowed destinations; refuse unsupported capability requests or unavailable isolation rather than falling back silently.
+- [x] Perform a bounded backend spike and select one enforceable Linux isolation implementation, with required host features and failure behavior documented.
+- [x] Isolate plugins/candidate execution from control-plane credentials, evaluator code, signing authority, sibling runs, and host services using enforced mounts/identities.
+- [x] Enforce default-deny network access and explicit allowed destinations; refuse unsupported capability requests or unavailable isolation rather than falling back silently.
 
 Acceptance: `fs_write: none` prevents writes at the OS boundary and disallowed
 network destinations are unreachable. Candidate-controlled subprocesses cannot

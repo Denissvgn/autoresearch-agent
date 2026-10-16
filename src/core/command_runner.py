@@ -16,10 +16,13 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Callable, Literal, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Literal, Mapping
 
 from src.core.command_policy import CommandDecision, evaluate_command_policy
 from src.core.tool_access import ToolAccessContext
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from src.core.isolation import IsolationPolicy
 
 try:
     import psutil
@@ -258,6 +261,11 @@ class CommandRunResult:
     timed_out: bool = False
     log_path: str | None = None
     log_truncated: bool = False
+    #: Execution boundary label: ``"sandboxed:bwrap"`` when the run was wrapped
+    #: in the isolation backend, ``"trusted_local_code"`` for the retained
+    #: trusted local-code path (pinned executables) — which is never advertised
+    #: as sandboxed — and ``"refused"`` when isolation refused the execution.
+    execution_boundary: str = ""
 
     @property
     def rejected(self) -> bool:
@@ -352,6 +360,7 @@ class GovernedCommandRunner:
         extra_env: Mapping[str, str] | None = None,
         cwd: str | None = None,
         resolved: CommandDecision | None = None,
+        isolation_policy: "IsolationPolicy | None" = None,
     ) -> CommandRunResult:
         """Validate and execute one approved command without invoking a shell.
 
@@ -364,6 +373,13 @@ class GovernedCommandRunner:
         The policy still validates against the session workspace (a trial
         dir lives inside it), so the override never widens what a command
         may touch.
+
+        ``isolation_policy`` wraps the spawn in the universal execution
+        boundary (:mod:`src.core.isolation`): filesystem/network policy is
+        then enforced at the OS and every child process inherits it. Without
+        it, the run is the retained trusted local-code path (pinned
+        executables) and is labeled ``trusted_local_code`` — never sandboxed.
+        Unenforceable policies or unavailable isolation refuse the execution.
         """
         if resolved is not None:
             decision = resolved
@@ -398,8 +414,31 @@ class GovernedCommandRunner:
         child_env = _build_child_env()
         if extra_env:
             child_env.update(extra_env)
+
+        spawn_argv = list(request.argv)
+        if isolation_policy is not None:
+            from dataclasses import replace as _dc_replace
+
+            from src.core.isolation import (
+                IsolationError,
+                wrap_command,
+            )
+
+            policy = _dc_replace(isolation_policy, cwd=isolation_policy.cwd or request.cwd)
+            try:
+                spawn_argv = wrap_command(spawn_argv, policy=policy)
+            except IsolationError as exc:
+                return CommandRunResult(
+                    output=f"Execution refused by isolation boundary: {exc}",
+                    decision=decision,
+                    execution_boundary="refused",
+                )
+            boundary = "sandboxed:bwrap"
+        else:
+            boundary = "trusted_local_code"
+
         proc = subprocess.Popen(
-            list(request.argv),
+            spawn_argv,
             cwd=request.cwd,
             env=child_env,
             stdout=subprocess.PIPE,
@@ -435,6 +474,7 @@ class GovernedCommandRunner:
                 timed_out=timed_out,
                 log_path=log_path,
                 log_truncated=log_truncated,
+                execution_boundary=boundary,
             )
         finally:
             if proc_registry is not None and research_id is not None:

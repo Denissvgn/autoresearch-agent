@@ -63,6 +63,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass, field
+from dataclasses import replace as _dataclass_replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Literal, Mapping, Optional
@@ -79,6 +80,14 @@ logger = logging.getLogger(__name__)
 # Re-export the kill helper so the bootstrap runner / tests reach it through
 # one module without a second import site.
 from src.core.command_runner import _terminate_process_group_without_communicate  # noqa: E402
+from src.core.isolation import (  # noqa: E402
+    SANDBOXED_PREFIX,
+    TRUSTED_LOCAL_CODE,
+    IsolationPolicy,
+    IsolationUnavailableError,
+    UnsupportedCapabilityError,
+    wrap_command,
+)
 
 # ---------------------------------------------------------------------------
 # X-004 §4.2 — strict plugin env contract
@@ -157,6 +166,31 @@ def _build_plugin_env(
 # ---------------------------------------------------------------------------
 
 
+def _declared_input_paths(input_json: Mapping[str, Any]) -> tuple[str, ...]:
+    """Absolute path values in the input JSON that name existing host files.
+
+    These are the run's declared input artifacts (e.g. the eval_set a
+    bootstrap consumes). The isolation boundary mounts each read-only so a
+    sandboxed plugin can read its inputs wherever the server staged them,
+    without exposing any sibling files.
+    """
+    found: list[str] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, str):
+            if node.startswith("/") and os.path.isfile(node):
+                found.append(node)
+        elif isinstance(node, Mapping):
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, (list, tuple)):
+            for value in node:
+                walk(value)
+
+    walk(input_json)
+    return tuple(dict.fromkeys(found))
+
+
 @dataclass(frozen=True)
 class PluginResult:
     """Outcome of one plugin invocation (X-004 §6 failure semantics).
@@ -182,6 +216,10 @@ class PluginResult:
     duration_s: float = 0.0
     #: Resolved capability grant the run used (for the bootstrap artifact).
     caps: Optional[PluginCaps] = None
+    #: Execution boundary label — ``"sandboxed:bwrap"`` only when the run was
+    #: actually wrapped by the isolation backend; ``"trusted_local_code"`` for
+    #: the operator's local-code policy, which is never advertised as sandboxed.
+    isolation: str = ""
     #: Extra structured fields the caller may attach to the audit row.
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -243,6 +281,21 @@ class PluginRunner:
             min(timeout_s, caps.timeout_s) if timeout_s is not None else caps.timeout_s
         )
         cwd = str(workspace) if workspace is not None else str(Path(skill_dir))
+        base_argv = [sys.executable, str(plugin_path)]
+
+        isolation_label, spawn_argv, refusal = self._isolation_plan(
+            skill_dir=Path(skill_dir),
+            caps=caps,
+            cwd=cwd,
+            base_argv=base_argv,
+            input_json=input_json,
+        )
+        if refusal is not None:
+            # Fail-closed: never fall back to unsandboxed execution silently.
+            return PluginResult(
+                ok=False, kind=kind, plugin_path=plugin,
+                error=refusal, caps=caps, isolation=isolation_label,
+            )
 
         body = _PluginRunBody(
             plugin_path=plugin_path,
@@ -252,17 +305,88 @@ class PluginRunner:
             caps=caps,
             cwd=cwd,
             timeout_s=effective_timeout,
+            spawn_argv=spawn_argv,
+            isolation=isolation_label,
         )
         return await asyncio.to_thread(self._run_sync, body)
 
+    def _isolation_plan(
+        self, *, skill_dir: Path, caps: PluginCaps, cwd: str, base_argv: list[str],
+        input_json: dict[str, Any],
+    ) -> tuple[str, list[str], Optional[str]]:
+        """Decide the execution boundary for one plugin run.
+
+        Returns ``(label, spawn_argv, refusal)``. In enforced mode (the
+        operator default) the plugin runs sandboxed with its declared caps
+        enforced at the OS boundary; an unenforceable capability request or
+        unavailable isolation returns a refusal instead of falling back to
+        unsandboxed execution. The operator's ``trusted_local_code`` policy is
+        separately labeled and never advertised as sandboxed.
+        """
+        from src.config import get_settings
+
+        mode = get_settings().execution_isolation_mode
+        if mode == "trusted_local_code":
+            logger.warning(
+                "plugin %s runs under the trusted local-code operator policy: "
+                "capability grants are NOT enforced at the OS boundary",
+                skill_dir,
+            )
+            return TRUSTED_LOCAL_CODE, list(base_argv), None
+
+        workspace_roots = tuple(
+            str(p) for p in (Path(cwd),) if p.is_dir()
+        )
+        # Read roots: the plugin's own skill package (its source and any
+        # skill-internal helpers it imports), the pinned interpreter, the
+        # session workspace, and every declared input artifact (absolute path
+        # values in the input JSON — e.g. the eval_set file) mounted read-only.
+        # Control-plane code (src/, server state), sibling runs (outside the
+        # session workspace), the signing authority env, and host sockets are
+        # not mounted / not passed (env allow-list + network default-deny).
+        # The skill's own eval/ helpers stay readable — some bootstrap plugins
+        # import them legitimately; ``masked_roots`` remains available for
+        # operators that want to hide a package subtree.
+        policy = IsolationPolicy(
+            fs_write=caps.fs_write,
+            network_egress=tuple(caps.network_egress),
+            read_roots=(
+                (str(skill_dir), sys.prefix, sys.base_prefix)
+                + workspace_roots
+                + _declared_input_paths(input_json)
+            ),
+            write_roots=workspace_roots if caps.fs_write == "workspace" else (),
+            cwd=cwd,
+        )
+        try:
+            spawn_argv = wrap_command(base_argv, policy=policy)
+        except UnsupportedCapabilityError as exc:
+            return (
+                "refused",
+                list(base_argv),
+                f"unsupported capability request: {exc}",
+            )
+        except IsolationUnavailableError as exc:
+            return (
+                "refused",
+                list(base_argv),
+                f"isolation unavailable; refusing to run plugin unsandboxed: {exc}",
+            )
+        return SANDBOXED_PREFIX + "bwrap", spawn_argv, None
+
     # ── sync body (worker thread) ──────────────────────────────────────────
     def _run_sync(self, body: "_PluginRunBody") -> PluginResult:
+        # Stamp the execution-boundary label on every exit path (the inner
+        # body builds results at many fail-closed points).
+        return _dataclass_replace(self._run_sync_inner(body), isolation=body.isolation)
+
+    def _run_sync_inner(self, body: "_PluginRunBody") -> PluginResult:
         started = time.monotonic()
         payload = json.dumps(body.input_json).encode("utf-8")
         child_env = _build_plugin_env()
         try:
             proc = subprocess.Popen(
-                [sys.executable, str(body.plugin_path)],
+                list(body.spawn_argv),
                 cwd=body.cwd,
                 env=child_env,
                 stdin=subprocess.PIPE,
@@ -364,6 +488,11 @@ class _PluginRunBody:
     caps: PluginCaps
     cwd: str
     timeout_s: float
+    #: The full spawn argv — already wrapped in the isolation boundary when
+    #: the run is sandboxed; plain ``[sys.executable, plugin]`` otherwise.
+    spawn_argv: list[str]
+    #: The boundary label for the run (see :attr:`PluginResult.isolation`).
+    isolation: str
 
 
 def _tail(text: str, *, max_chars: int = 2000) -> str:

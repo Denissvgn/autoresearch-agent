@@ -315,6 +315,7 @@ def _tool_bash(
     policy_extension: Mapping[str, Any] | None = None,
     cwd: str | None = None,
     resolved: Any = None,
+    isolation_policy: Any | None = None,
 ) -> ToolExecutionResult:
     command = input_data["command"]
     timeout = compute_bash_timeout(input_data, command_deadline_mono)
@@ -328,6 +329,7 @@ def _tool_bash(
         command, timeout_s=timeout, output_callback=output_callback,
         proc_registry=proc_registry, research_id=research_id,
         extra_env=extra_env, cwd=cwd, resolved=resolved,
+        **({"isolation_policy": isolation_policy} if isolation_policy is not None else {}),
     )
     # Preserve the existing orchestrator/output_digest integration and its
     # settings.agent_output_digest_max_chars (0 disables digesting). The runner
@@ -348,6 +350,9 @@ def _tool_bash(
             "timed_out": result.timed_out,
             "command_log_path": result.log_path,
             "command_log_truncated": result.log_truncated,
+            # Execution boundary honesty: "trusted_local_code" is the retained
+            # pinned-executable path and is never advertised as sandboxed.
+            "execution_boundary": result.execution_boundary or "trusted_local_code",
         },
     )
 
