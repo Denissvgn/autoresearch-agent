@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Mapping, Optional
+from typing import Any, Iterable, Mapping, Optional
 
+from src.core.fs_safety import FilesystemSafetyError, sha256_regular_file
 from src.core.tool_access import ToolAccessContext, build_tool_access_context
 
 _ALLOWED_PYTHON = (".venv/bin/python", "./.venv/bin/python")
@@ -57,6 +59,10 @@ class CommandDecision:
     normalized_command: str = ""
     operation: str = ""
     reason: str | None = None
+    # Server-computed identity of the pinned evaluator, interpreter,
+    # and evaluation data consumed by this launch. Recorded in attempt
+    # provenance; None for non-evaluator commands and rejections.
+    execution_identity: dict[str, Any] | None = None
 
 
 def evaluate_command_policy(
@@ -105,6 +111,14 @@ def evaluate_command_policy(
         {str(k): str(v) for k, v in dict(script_paths_raw).items()}
         if script_paths_raw else None
     )
+    # Declared-name → pinned sha256 of the packaged script. The
+    # evaluator runs only from digest-verified package assets.
+    script_digests_raw = ext.get("script_digests") or {}
+    script_digests: Mapping[str, str] | None = (
+        {str(k): str(v) for k, v in dict(script_digests_raw).items()}
+        if script_digests_raw else None
+    )
+    write_protected_files = set(ext.get("write_protected_files") or ())
     # ARC-012 P7-011: the skill's declared config-artifact flag (confinement
     # + copyable check + pre-run snapshot key on it; default --config).
     config_flag = str(ext.get("config_flag") or "--config")
@@ -138,6 +152,8 @@ def evaluate_command_policy(
             allowed_scripts=allowed_scripts,
             copyable_files=copyable_files,
             script_paths=script_paths,
+            script_digests=script_digests,
+            write_protected_files=write_protected_files,
             config_flag=config_flag,
             access=access,
         )
@@ -161,12 +177,18 @@ def _reject(reason: str) -> CommandDecision:
     return CommandDecision(allowed=False, reason=reason)
 
 
-def _allow(argv: list[str], *, operation: str) -> CommandDecision:
+def _allow(
+    argv: list[str],
+    *,
+    operation: str,
+    execution_identity: dict[str, Any] | None = None,
+) -> CommandDecision:
     return CommandDecision(
         allowed=True,
         argv=argv,
         normalized_command=shlex.join(argv),
         operation=operation,
+        execution_identity=execution_identity,
     )
 
 
@@ -206,6 +228,49 @@ def _is_allowed_python(executable: str, workspace_root: str) -> bool:
     return os.path.realpath(executable) == expected
 
 
+def _pinned_interpreter(workspace_root: str) -> str | None:
+    """Canonical absolute path of the sanctioned interpreter.
+
+    The venv interpreter beside the workspace root is the only interpreter
+    evaluator commands may use; resolving to the real path here means a
+    same-named relative executable planted under the session or trial tree
+    can never be what the governed subprocess actually launches.
+    """
+
+    expected = os.path.realpath(
+        os.path.join(workspace_root, ".venv", "bin", "python")
+    )
+    return expected if os.path.isfile(expected) else None
+
+
+def _evaluation_data_digests(
+    names: Iterable[str],
+    session_workspace: str | None,
+) -> dict[str, str]:
+    """Digest the skill-declared evaluation data a launch will consume.
+
+    Absence is recorded as ``missing`` (files may legitimately be rendered
+    later in a session); aliased or unreadable content raises so a tampered
+    dataset fails the command instead of feeding the evaluator.
+    """
+
+    digests: dict[str, str] = {}
+    if not session_workspace:
+        return digests
+    for name in sorted(set(names)):
+        path = os.path.join(session_workspace, name)
+        if not os.path.lexists(path):
+            digests[name] = "missing"
+            continue
+        try:
+            digests[name] = sha256_regular_file(path)
+        except (OSError, FilesystemSafetyError) as exc:
+            raise ValueError(
+                f"evaluation data {name!r} is not a digestible regular file: {exc}"
+            ) from exc
+    return digests
+
+
 def _evaluate_python(
     argv: list[str],
     workspace_root: str,
@@ -214,6 +279,8 @@ def _evaluate_python(
     allowed_scripts: set[str] | None = None,
     copyable_files: set[str] | None = None,
     script_paths: Mapping[str, str] | None = None,
+    script_digests: Mapping[str, str] | None = None,
+    write_protected_files: set[str] | None = None,
     config_flag: str = "--config",
     access: ToolAccessContext | None = None,
 ) -> CommandDecision:
@@ -221,28 +288,50 @@ def _evaluate_python(
     if len(argv) < 2:
         return _reject("Python commands must invoke a script the skill declares allowed")
     script = _workspace_relative(argv[1], workspace_root)
-    exec_argv = argv
-    # ARC-011 review C4 (P4-016): a skill manifest declares its scripts
-    # workspace-relative (e.g. ``eval/run.py``) and the extension unions the
-    # declared names into the allow-set — but the files live in the packaged
-    # ``skills/<id>/`` tree, not under the runtime workspace root. Whenever a
-    # declared entry is not present at its workspace-root-relative location,
-    # resolve it via the server-built ``script_paths`` map to the read-only
-    # packaged path (deliberately NOT the agent-writable session workspace,
-    # which would turn a name-based allow-list into arbitrary code execution)
-    # and rewrite argv so the governed subprocess executes the packaged file.
-    packaged = (script_paths or {}).get(script)
-    script_present = (
-        os.path.isfile(argv[1])
-        if os.path.isabs(argv[1])
-        else os.path.isfile(os.path.join(workspace_root, script))
-    )
     if script not in scripts:
-        if packaged is None or not os.path.isfile(packaged):
-            return _reject(f"Python script {argv[1]!r} is not approved")
-        exec_argv = [argv[0], packaged, *argv[2:]]
-    elif packaged and not script_present:
-        exec_argv = [argv[0], packaged, *argv[2:]]
+        return _reject(f"Python script {argv[1]!r} is not approved")
+    # Approved evaluator entrypoints resolve ONLY to their digest-pinned
+    # packaged asset. A same-named workspace file never runs — the old
+    # workspace-precedence (F01) let candidate files shadow trusted
+    # evaluators, and a declared entry with no packaged asset used to fall
+    # back to the workspace copy. Missing trusted assets now fail here,
+    # before launch, instead of invoking a workspace fallback.
+    packaged = (script_paths or {}).get(script)
+    pinned_digest = (script_digests or {}).get(script)
+    if packaged is None or pinned_digest is None:
+        return _reject(
+            f"Python script {script!r} has no pinned package asset; "
+            "workspace fallbacks are not allowed"
+        )
+    try:
+        evaluator_digest = sha256_regular_file(packaged)
+    except (OSError, FilesystemSafetyError) as exc:
+        return _reject(
+            f"pinned evaluator asset {script!r} is missing or unreadable: {exc}"
+        )
+    if evaluator_digest != pinned_digest:
+        return _reject(
+            f"pinned evaluator asset {script!r} changed since pinning"
+        )
+    interpreter = _pinned_interpreter(workspace_root)
+    if interpreter is None:
+        return _reject("pinned interpreter is missing from the workspace venv")
+    # The venv interpreter is a symlink to the real binary; hash the resolved
+    # file so the recorded environment identity describes what actually runs.
+    try:
+        interpreter_digest = hashlib.sha256(
+            Path(interpreter).read_bytes()
+        ).hexdigest()
+    except OSError as exc:
+        return _reject(f"pinned interpreter is unreadable: {exc}")
+    # Rewrite argv server-side: absolute pinned interpreter + absolute
+    # packaged script, with an isolated import environment. ``-E`` ignores
+    # PYTHON* variables (PYTHONPATH/PYTHONHOME shadowing) and ``-s`` disables
+    # user site-packages (a candidate-writable ~/.local cannot shadow
+    # evaluator dependencies). The candidate tree is only ever the argument
+    # list and the working directory — never the code, interpreter, or
+    # import path.
+    exec_argv = [interpreter, "-E", "-s", packaged, *argv[2:]]
     config_error = _validate_prepare_config(
         argv, script, workspace_root, session_workspace,
         copyable_files=copyable_files, config_flag=config_flag,
@@ -250,7 +339,31 @@ def _evaluate_python(
     )
     if config_error:
         return _reject(config_error)
-    return _allow(exec_argv, operation=f"python:{script}")
+    try:
+        evaluation_data = _evaluation_data_digests(
+            write_protected_files or (), session_workspace
+        )
+    except ValueError as exc:
+        return _reject(str(exc))
+    execution_identity: dict[str, Any] = {
+        "schema_version": "autoresearch_execution_identity.v1",
+        "evaluator": {
+            "name": script,
+            "path": packaged,
+            "sha256": evaluator_digest,
+        },
+        "interpreter": {
+            "path": interpreter,
+            "sha256": interpreter_digest,
+        },
+        "import_flags": ["-E", "-s"],
+        "evaluation_data": evaluation_data,
+    }
+    return _allow(
+        exec_argv,
+        operation=f"python:{script}",
+        execution_identity=execution_identity,
+    )
 
 
 def _validate_prepare_config(

@@ -102,3 +102,52 @@ def test_release_archives_contain_only_bundled_skills(archive_format):
         for asset in ("SKILL.yaml", "SKILL.md", "bootstrap.py", "eval/run.py"):
             assert f"skills/{skill_id}/{asset}" in skill_names
 
+
+def test_installed_package_resolves_pinned_evaluators_outside_checkout(tmp_path):
+    """Installed-layout smoke: with cwd outside the checkout and imports
+    resolving from an extracted wheel, the skill runtime discovers the
+    bundled skills beside the installed package and pins its evaluator
+    entrypoints (paths inside the installed tree, digests that verify)."""
+    import subprocess
+    import sys
+
+    dist_dir = os.environ.get("AUTORESEARCH_DIST_DIR")
+    if not dist_dir:
+        pytest.skip("Set AUTORESEARCH_DIST_DIR to freshly built release artifacts")
+    wheels = list(Path(dist_dir).glob("*.whl"))
+    assert len(wheels) == 1, wheels
+    installed = tmp_path / "installed"
+    with zipfile.ZipFile(wheels[0]) as archive:
+        archive.extractall(installed)
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    probe = (
+        "import hashlib, pathlib, sys\n"
+        f"sys.path.insert(0, {str(installed)!r})\n"
+        "import src.core\n"
+        "from src.core.skill_registry import DEFAULT_SKILLS_ROOT, SkillRegistry\n"
+        "from src.core.skill_runtime import ManifestSkillRuntime\n"
+        f"root = pathlib.Path({str(installed)!r})\n"
+        "assert pathlib.Path(src.core.__file__).resolve().is_relative_to(root)\n"
+        "assert DEFAULT_SKILLS_ROOT == root / 'skills', DEFAULT_SKILLS_ROOT\n"
+        "ext = ManifestSkillRuntime(\n"
+        "    SkillRegistry().get('prompt-engineering'), orchestrator=None\n"
+        ").command_policy_extension()\n"
+        "assert 'eval/run.py' in ext['script_paths']\n"
+        "for name, path in ext['script_paths'].items():\n"
+        "    p = pathlib.Path(path)\n"
+        "    assert p.is_file()\n"
+        "    assert p.resolve().is_relative_to(root), path\n"
+        "    assert ext['script_digests'][name] == "
+        "hashlib.sha256(p.read_bytes()).hexdigest()\n"
+        "print('installed-smoke-ok')\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=str(scratch),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "installed-smoke-ok" in result.stdout
+

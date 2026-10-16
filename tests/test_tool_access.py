@@ -9,6 +9,7 @@ declared evaluation data are not candidate-writable.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
 
@@ -363,12 +364,25 @@ def test_config_flag_path_faces_shared_authorization(tmp_path: Path) -> None:
     shared, session_a, _ = _setup(tmp_path)
     access = _access(shared, session_a)
 
+    # The declared evaluator must resolve to a digest-pinned packaged
+    # asset; pin one so the flow reaches the config-path authorization check.
+    packaged = tmp_path / "pkg" / "scripts" / "eval" / "run.py"
+    packaged.parent.mkdir(parents=True)
+    content = "print('eval')\n"
+    packaged.write_text(content, encoding="utf-8")
+
     decision = evaluate_command_policy(
         f".venv/bin/python scripts/eval/run.py --prompt {shared}/db/experiments.db",
         workspace_root=shared,
         session_workspace=session_a,
         policy_extension={
             "allowed_scripts": {"eval/run.py", "scripts/eval/run.py"},
+            "script_paths": {"scripts/eval/run.py": str(packaged)},
+            "script_digests": {
+                "scripts/eval/run.py": hashlib.sha256(
+                    content.encode("utf-8")
+                ).hexdigest(),
+            },
             "copyable_files": {"prompt.yaml", "experiments.db"},
             "config_flag": "--prompt",
         },

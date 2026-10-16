@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -45,6 +46,25 @@ def _workspace(tmp_path: Path) -> tuple[str, str]:
     return str(workspace), str(session)
 
 
+def _pin_script(tmp_path: Path, script_name: str, content: str) -> dict:
+    """Create a digest-pinned packaged script outside the workspace.
+
+    ``tmp_path/pkg`` stands in for the installed ``skills/<id>/`` tree: the
+    policy resolves declared entrypoints here (digest-verified before launch)
+    and never at a same-named agent-writable workspace copy.
+    """
+    pkg = tmp_path / "pkg"
+    script_path = pkg / script_name
+    script_path.parent.mkdir(parents=True, exist_ok=True)
+    script_path.write_text(content, encoding="utf-8")
+    digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    return {
+        "allowed_scripts": {script_name},
+        "script_paths": {script_name: str(script_path)},
+        "script_digests": {script_name: digest},
+    }
+
+
 def test_base_policy_is_default_deny_for_scripts(tmp_path: Path):
     workspace, session = _workspace(tmp_path)
 
@@ -58,9 +78,15 @@ def test_base_policy_is_default_deny_for_scripts(tmp_path: Path):
 
 def test_command_policy_allows_skill_declared_operations(tmp_path: Path):
     workspace, session = _workspace(tmp_path)
+    python_path = Path(workspace) / ".venv" / "bin" / "python"
+    python_path.parent.mkdir(parents=True)
+    python_path.symlink_to(sys.executable)
+    pin = _pin_script(
+        tmp_path, "scripts/autotuner/setup.py", "print('setup')\n"
+    )
 
     extension = {
-        "allowed_scripts": {"scripts/autotuner/setup.py"},
+        **pin,
         "copyable_files": {"train.yaml", "best_train.yaml"},
         "readable_files": {"results.json"},
     }
@@ -161,19 +187,16 @@ def test_governed_runner_executes_without_shell_and_redacts_output(tmp_path: Pat
     python_path = Path(workspace) / ".venv" / "bin" / "python"
     python_path.parent.mkdir(parents=True)
     python_path.symlink_to(sys.executable)
-    script = Path(workspace) / "scripts" / "autotuner" / "enrich_rl_dataset.py"
-    script.parent.mkdir(parents=True)
-    script.write_text(
+    extension = _pin_script(
+        tmp_path,
+        "scripts/autotuner/enrich_rl_dataset.py",
         "print('API_KEY=super-secret')\nprint('ready')\n",
-        encoding="utf-8",
     )
 
     runner = GovernedCommandRunner(
         workspace_root=workspace,
         session_workspace=session,
-        policy_extension={"allowed_scripts": {
-            "scripts/autotuner/enrich_rl_dataset.py",
-        }},
+        policy_extension=extension,
     )
     result = runner.run(
         ".venv/bin/python scripts/autotuner/enrich_rl_dataset.py "
@@ -193,23 +216,19 @@ def test_governed_runner_streams_redacted_output_chunks(tmp_path: Path):
     python_path = Path(workspace) / ".venv" / "bin" / "python"
     python_path.parent.mkdir(parents=True)
     python_path.symlink_to(sys.executable)
-    script = Path(workspace) / "scripts" / "autotuner" / "enrich_rl_dataset.py"
-    script.parent.mkdir(parents=True)
-    script.write_text(
+    streamed: list[tuple[str, str]] = []
+    extension = _pin_script(
+        tmp_path,
+        "scripts/autotuner/enrich_rl_dataset.py",
         "import sys\n"
         "print('TOKEN=top-secret', flush=True)\n"
         "print('progress 1', flush=True)\n"
         "print('warn password=bad', file=sys.stderr, flush=True)\n",
-        encoding="utf-8",
     )
-
-    streamed: list[tuple[str, str]] = []
     runner = GovernedCommandRunner(
         workspace_root=workspace,
         session_workspace=session,
-        policy_extension={"allowed_scripts": {
-            "scripts/autotuner/enrich_rl_dataset.py",
-        }},
+        policy_extension=extension,
     )
     result = runner.run(
         ".venv/bin/python scripts/autotuner/enrich_rl_dataset.py "
@@ -231,9 +250,9 @@ def test_governed_runner_timeout_cleans_process_group(tmp_path: Path):
     python_path.parent.mkdir(parents=True)
     python_path.symlink_to(sys.executable)
     child_pid_path = Path(workspace) / "child.pid"
-    script = Path(workspace) / "scripts" / "autotuner" / "enrich_rl_dataset.py"
-    script.parent.mkdir(parents=True)
-    script.write_text(
+    extension = _pin_script(
+        tmp_path,
+        "scripts/autotuner/enrich_rl_dataset.py",
         "\n".join(
             [
                 "import pathlib, subprocess, sys, time",
@@ -245,15 +264,12 @@ def test_governed_runner_timeout_cleans_process_group(tmp_path: Path):
                 "time.sleep(60)",
             ]
         ),
-        encoding="utf-8",
     )
 
     runner = GovernedCommandRunner(
         workspace_root=workspace,
         session_workspace=session,
-        policy_extension={"allowed_scripts": {
-            "scripts/autotuner/enrich_rl_dataset.py",
-        }},
+        policy_extension=extension,
     )
     result = runner.run(
         ".venv/bin/python scripts/autotuner/enrich_rl_dataset.py "
@@ -331,21 +347,18 @@ def test_governed_runner_strips_control_plane_secrets_from_child_env(
     python_path.parent.mkdir(parents=True)
     python_path.symlink_to(sys.executable)
     env_dump_path = Path(workspace) / "child_env.json"
-    script = Path(workspace) / "scripts" / "autotuner" / "enrich_rl_dataset.py"
-    script.parent.mkdir(parents=True)
-    script.write_text(
+    extension = _pin_script(
+        tmp_path,
+        "scripts/autotuner/enrich_rl_dataset.py",
         "import json, os, pathlib\n"
         f"pathlib.Path({str(env_dump_path)!r}).write_text("
         "json.dumps(dict(os.environ)))\n",
-        encoding="utf-8",
     )
 
     runner = GovernedCommandRunner(
         workspace_root=workspace,
         session_workspace=session,
-        policy_extension={"allowed_scripts": {
-            "scripts/autotuner/enrich_rl_dataset.py",
-        }},
+        policy_extension=extension,
     )
     result = runner.run(
         ".venv/bin/python scripts/autotuner/enrich_rl_dataset.py "
@@ -393,26 +406,28 @@ def test_build_child_env_allowlist_covers_approved_script_inventory():
 # ── ARC-011 P4-002: nonce delivery via extra_env (W11 anti-forgery) ─────────
 
 
-def _nonce_dump_script(workspace: Path) -> tuple[Path, Path]:
-    """Create a sanctioned script that dumps AUTORESEARCH_SESSION_NONCE to a
-    file, plus the .venv/bin/python symlink the policy expects.
+def _nonce_dump_script(tmp_path: Path, workspace: Path) -> tuple[dict, Path]:
+    """Create a digest-pinned packaged script that dumps
+    AUTORESEARCH_SESSION_NONCE to a file, plus the .venv/bin/python symlink
+    the policy expects.
 
-    Mirrors the env-dump pattern in ``test_governed_runner_strips_*`` but
-    asserts the nonce reaches the child via the ``extra_env`` channel.
+    The script lives in the pinned package tree, never in the
+    agent-writable workspace. Mirrors the env-dump pattern in
+    ``test_governed_runner_strips_*`` but asserts the nonce reaches the child
+    via the ``extra_env`` channel.
     """
     python_path = workspace / ".venv" / "bin" / "python"
     python_path.parent.mkdir(parents=True)
     python_path.symlink_to(sys.executable)
     dump_path = workspace / "nonce_seen.txt"
-    script = workspace / "scripts" / "autotuner" / "enrich_rl_dataset.py"
-    script.parent.mkdir(parents=True)
-    script.write_text(
+    extension = _pin_script(
+        tmp_path,
+        "scripts/autotuner/enrich_rl_dataset.py",
         "import os, pathlib\n"
         f"pathlib.Path({str(dump_path)!r}).write_text("
         "os.environ.get('AUTORESEARCH_SESSION_NONCE', ''))\n",
-        encoding="utf-8",
     )
-    return script, dump_path
+    return extension, dump_path
 
 
 def test_governed_runner_extra_env_delivers_nonce(tmp_path: Path):
@@ -422,14 +437,12 @@ def test_governed_runner_extra_env_delivers_nonce(tmp_path: Path):
     channel — without it the eval script always echoes an empty nonce.
     """
     workspace, session = _workspace(tmp_path)
-    script, dump_path = _nonce_dump_script(Path(workspace))
+    extension, dump_path = _nonce_dump_script(tmp_path, Path(workspace))
 
     runner = GovernedCommandRunner(
         workspace_root=workspace,
         session_workspace=session,
-        policy_extension={"allowed_scripts": {
-            "scripts/autotuner/enrich_rl_dataset.py",
-        }},
+        policy_extension=extension,
     )
     nonce = "deadbeef" * 8
     result = runner.run(
@@ -451,14 +464,12 @@ def test_governed_runner_without_extra_env_has_no_nonce(tmp_path: Path, monkeypa
     # Ensure the var is not inherited from the parent env accidentally.
     monkeypatch.delenv("AUTORESEARCH_SESSION_NONCE", raising=False)
     workspace, session = _workspace(tmp_path)
-    script, dump_path = _nonce_dump_script(Path(workspace))
+    extension, dump_path = _nonce_dump_script(tmp_path, Path(workspace))
 
     runner = GovernedCommandRunner(
         workspace_root=workspace,
         session_workspace=session,
-        policy_extension={"allowed_scripts": {
-            "scripts/autotuner/enrich_rl_dataset.py",
-        }},
+        policy_extension=extension,
     )
     result = runner.run(
         ".venv/bin/python scripts/autotuner/enrich_rl_dataset.py "
@@ -477,7 +488,7 @@ def test_execute_tool_threads_extra_env_to_bash(tmp_path: Path):
     full delivery chain the orchestrator relies on (the call site at
     orchestrator.py passes ``extra_env=nonce_extra_env``)."""
     workspace, session = _workspace(tmp_path)
-    script, dump_path = _nonce_dump_script(Path(workspace))
+    extension, dump_path = _nonce_dump_script(tmp_path, Path(workspace))
     access = build_tool_access_context(session, workspace_root=workspace)
 
     nonce = "cafebabe" * 8
@@ -487,9 +498,7 @@ def test_execute_tool_threads_extra_env_to_bash(tmp_path: Path):
                     "--instrument DOGE_USDT --timeframe 15m"},
         access,
         extra_env={"AUTORESEARCH_SESSION_NONCE": nonce},
-        policy_extension={"allowed_scripts": {
-            "scripts/autotuner/enrich_rl_dataset.py",
-        }},
+        policy_extension=extension,
     )
     assert result.meta["returncode"] == 0, result.content
     assert dump_path.read_text(encoding="utf-8") == nonce, (

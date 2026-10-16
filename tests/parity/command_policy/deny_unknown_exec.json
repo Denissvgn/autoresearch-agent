@@ -17,7 +17,8 @@
     "argv": [],
     "normalized_command": "",
     "operation": "",
-    "reason": "Executable 'rm' is not allowed"
+    "reason": "Executable 'rm' is not allowed",
+    "execution_identity": null
   },
-  "source_sha": "f2300939d6fb3252f2dd2f714dce0c4efcd0ec3e"
+  "source_sha": "c48cb8e742a3eb1dfc5fdcf32e4faf2e9573e723"
 }

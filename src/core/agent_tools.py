@@ -319,6 +319,7 @@ def _tool_bash(
             "policy_allowed": decision.allowed,
             "policy_reason": decision.reason,
             "policy_operation": decision.operation,
+            "execution_identity": decision.execution_identity,
             "normalized_command": decision.normalized_command,
             "returncode": result.returncode,
             "timed_out": result.timed_out,

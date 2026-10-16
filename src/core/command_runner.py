@@ -204,6 +204,15 @@ _FORBIDDEN_CHILD_ENV: frozenset[str] = frozenset(
     }
 )
 
+# PYTHON* variables that alter interpreter/module resolution. Removed
+# even though the PYTHON prefix keep-list would otherwise retain them.
+_PATH_AFFECTING_PYTHON_ENV: frozenset[str] = frozenset(
+    {
+        "PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "PYTHONUSERBASE",
+        "PYTHONEXECUTABLE",
+    }
+)
+
 
 def _build_child_env(
     environ: Mapping[str, str] | None = None,
@@ -226,6 +235,14 @@ def _build_child_env(
     }
     for forbidden in _FORBIDDEN_CHILD_ENV:
         kept.pop(forbidden, None)
+    # Import/search-path hygiene. The ``PYTHON*`` prefix keep exists for
+    # warning/locale knobs, but path-affecting variables would let anything
+    # that sets them shadow interpreter or evaluator dependencies, so they
+    # are subtracted and user site-packages is disabled outright. Evaluator
+    # commands additionally run with ``-E -s`` (see command_policy).
+    for name in _PATH_AFFECTING_PYTHON_ENV:
+        kept.pop(name, None)
+    kept["PYTHONNOUSERSITE"] = "1"
     return kept
 
 

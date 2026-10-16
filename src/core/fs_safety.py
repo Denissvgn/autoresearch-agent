@@ -32,6 +32,7 @@ component below it is opened ``O_NOFOLLOW | O_DIRECTORY``.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import secrets
 import stat as stat_mod
@@ -217,6 +218,21 @@ def _write_at(parent_fd: int, leaf: str, data: bytes, *, display: str) -> None:
     except BaseException:
         _unlink_quiet(parent_fd, tmp)
         raise
+
+
+def sha256_regular_file(path: str | os.PathLike[str]) -> str:
+    """Return the sha256 hex digest of a strict-regular file.
+
+    Integrity primitive for pinned assets: evaluator entrypoints and
+    evaluation data are digest-checked so content that is missing, aliased,
+    or changed fails instead of running. Refuses symlinked or hardlinked
+    paths like :func:`read_regular_file`.
+    """
+
+    absolute = os.path.abspath(os.fspath(path))
+    parent, leaf = os.path.split(absolute)
+    data = read_regular_file(parent or os.sep, leaf)
+    return hashlib.sha256(data).hexdigest()
 
 
 def safe_write_bytes(root: str, relative_path: str, data: bytes) -> str:

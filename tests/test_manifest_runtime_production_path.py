@@ -25,6 +25,7 @@ file target. These tests pin the C2 fixes:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import sys
@@ -255,17 +256,33 @@ def test_manifest_runtime_exposes_declared_primer_filename():
 # ============================================================================
 
 
-def test_policy_extension_adds_allowed_script():
+def test_policy_extension_adds_allowed_script(tmp_path: Path):
+    workspace = tmp_path / "w"
+    (workspace / ".venv" / "bin").mkdir(parents=True)
+    (workspace / ".venv" / "bin" / "python").symlink_to(sys.executable)
+    packaged = (
+        Path(__file__).resolve().parents[1]
+        / "skills" / "prompt-engineering" / "eval" / "run.py"
+    )
+    digest = hashlib.sha256(packaged.read_bytes()).hexdigest()
     command = ".venv/bin/python skills/prompt-engineering/eval/run.py --workspace /tmp/w"
-    base = evaluate_command_policy(command, workspace_root="/tmp/w")
+    base = evaluate_command_policy(command, workspace_root=str(workspace))
     assert not base.allowed, "unlisted script must be rejected by the base policy"
 
     extended = evaluate_command_policy(
         command,
-        workspace_root="/tmp/w",
-        policy_extension={"allowed_scripts": {"skills/prompt-engineering/eval/run.py"}},
+        workspace_root=str(workspace),
+        policy_extension={
+            "allowed_scripts": {"skills/prompt-engineering/eval/run.py"},
+            "script_paths": {
+                "skills/prompt-engineering/eval/run.py": str(packaged),
+            },
+            "script_digests": {
+                "skills/prompt-engineering/eval/run.py": digest,
+            },
+        },
     )
-    assert extended.allowed
+    assert extended.allowed, extended.reason
     assert extended.operation == "python:skills/prompt-engineering/eval/run.py"
 
 

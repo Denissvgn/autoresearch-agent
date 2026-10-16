@@ -460,9 +460,9 @@ Autonomy: Use installed, digest-pinned skill/evaluator assets and a controlled
 interpreter/import environment. Workspaces supply candidate inputs only; missing
 trusted assets fail preflight instead of invoking a workspace fallback.
 
-- [ ] Resolve approved evaluator entrypoints from the skill package and digest; remove precedence for same-named workspace files.
-- [ ] Protect evaluator dependencies, interpreter paths, evaluation datasets, and import/search paths from candidate mutation or shadowing.
-- [ ] Record evaluator/environment identity for attempts and fail before launch when pinned content is missing or changed.
+- [x] Resolve approved evaluator entrypoints from the skill package and digest; remove precedence for same-named workspace files.
+- [x] Protect evaluator dependencies, interpreter paths, evaluation datasets, and import/search paths from candidate mutation or shadowing.
+- [x] Record evaluator/environment identity for attempts and fail before launch when pinned content is missing or changed.
 
 Acceptance: creating `eval/run.py`, an import shadow, or a replacement interpreter
 under the candidate tree cannot change trusted evaluator execution. Candidate

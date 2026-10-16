@@ -19,6 +19,7 @@ the ``Popen`` handle.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import sys
 import time
 import types
@@ -114,34 +115,48 @@ def _fake_bash_tool_use(command: str, tool_id: str = "toolu_p006"):
     )
 
 
-def _make_hanging_workspace(tmp_path: Path) -> tuple[Path, Path]:
-    """A workspace with ``.venv/bin/python`` symlink + a hanging autotuner script.
+def _make_hanging_workspace(tmp_path: Path) -> tuple[Path, Path, dict]:
+    """A workspace with ``.venv/bin/python`` symlink + a digest-pinned hanging
+    autotuner script.
 
-    Mirrors ``tests/test_command_policy.py:207`` so the command is policy-
-    allowed. The script writes a grandchild pid then sleeps 60s.
+    The script also exists as a workspace copy, which the policy must never
+    execute — only the digest-pinned package copy runs. The script writes a
+    grandchild pid then sleeps 60s.
     """
     workspace = tmp_path / "ws"
     python_path = workspace / ".venv" / "bin" / "python"
     python_path.parent.mkdir(parents=True)
     python_path.symlink_to(sys.executable)
     child_pid_path = workspace / "child.pid"
+    content = "\n".join(
+        [
+            "import pathlib, subprocess, sys, time",
+            (
+                "child = subprocess.Popen([sys.executable, '-c', "
+                "'import time; time.sleep(60)'], start_new_session=True)"
+            ),
+            f"pathlib.Path({str(child_pid_path)!r}).write_text(str(child.pid))",
+            "time.sleep(60)",
+        ]
+    )
     script = workspace / "scripts" / "autotuner" / "enrich_rl_dataset.py"
     script.parent.mkdir(parents=True)
-    script.write_text(
-        "\n".join(
-            [
-                "import pathlib, subprocess, sys, time",
-                (
-                    "child = subprocess.Popen([sys.executable, '-c', "
-                    "'import time; time.sleep(60)'], start_new_session=True)"
-                ),
-                f"pathlib.Path({str(child_pid_path)!r}).write_text(str(child.pid))",
-                "time.sleep(60)",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    return workspace, child_pid_path
+    script.write_text(content, encoding="utf-8")
+    packaged = tmp_path / "pkg" / "scripts" / "autotuner" / "enrich_rl_dataset.py"
+    packaged.parent.mkdir(parents=True)
+    packaged.write_text(content, encoding="utf-8")
+    extension = {
+        "allowed_scripts": {"scripts/autotuner/enrich_rl_dataset.py"},
+        "script_paths": {
+            "scripts/autotuner/enrich_rl_dataset.py": str(packaged),
+        },
+        "script_digests": {
+            "scripts/autotuner/enrich_rl_dataset.py": hashlib.sha256(
+                content.encode("utf-8")
+            ).hexdigest(),
+        },
+    }
+    return workspace, child_pid_path, extension
 
 
 _HANGING_COMMAND = (
@@ -159,7 +174,7 @@ _HANGING_COMMAND = (
 async def test_capped_command_is_reaped_and_session_times_out(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    workspace, child_pid_path = _make_hanging_workspace(tmp_path)
+    workspace, child_pid_path, extension = _make_hanging_workspace(tmp_path)
     monkeypatch.setattr("src.config.settings.workspace_root", str(workspace))
 
     store = ResultsStore(str(tmp_path / "p0006.sqlite"))
@@ -174,9 +189,7 @@ async def test_capped_command_is_reaped_and_session_times_out(
     monkeypatch.setattr(
         ManifestSkillRuntime,
         "command_policy_extension",
-        lambda self: {
-            "allowed_scripts": {"scripts/autotuner/enrich_rl_dataset.py"},
-        },
+        lambda self: dict(extension),
     )
 
     with (
@@ -218,12 +231,10 @@ async def test_capped_command_is_reaped_and_session_times_out(
 
 @pytest.mark.asyncio
 async def test_registry_kill_all_reaps_in_flight_subprocess(tmp_path: Path) -> None:
-    workspace, child_pid_path = _make_hanging_workspace(tmp_path)
+    workspace, child_pid_path, extension = _make_hanging_workspace(tmp_path)
     runner = GovernedCommandRunner(
         workspace_root=str(workspace),
-        policy_extension={"allowed_scripts": {
-            "scripts/autotuner/enrich_rl_dataset.py",
-        }},
+        policy_extension=extension,
     )
     registry = CommandProcessRegistry()
     research_id = "res_p0006_killall"

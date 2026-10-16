@@ -52,6 +52,9 @@ def build_iteration_attempt_snapshot(
         "canonical_config_hash": config_hash,
         "trial_identity": marker.get("trial_identity"),
         "trial_identity_hash": marker.get("trial_identity_hash"),
+        # Server-computed pinned evaluator/interpreter/evaluation-data
+        # identity captured at launch (see command_policy._evaluate_python).
+        "execution_identity": marker.get("execution_identity"),
         "workspace": workspace,
         "data_hash": normalize_optional_artifact_ref(
             _first_present(

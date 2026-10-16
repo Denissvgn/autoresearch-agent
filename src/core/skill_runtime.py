@@ -45,6 +45,8 @@ from typing import (
     cast,
 )
 
+from src.core.fs_safety import sha256_regular_file as _sha256_file
+
 if TYPE_CHECKING:
     # Avoid a runtime circular import: orchestrator imports skill_runtime, and
     # ResearchConfig lives in orchestrator. The annotations are typing-only.
@@ -116,6 +118,10 @@ class CommandPolicyExtension(TypedDict, total=False):
     #: authorization on every candidate write.
     write_protected_files: list[str]
     script_paths: dict[str, str]
+    #: Declared-name → sha256 digest of the pinned packaged script. Computed
+    #: at load; re-verified before every launch so pinned content that is
+    #: missing or changed fails the command instead of running.
+    script_digests: dict[str, str]
     #: ARC-012 P7-011: the CLI flag carrying the skill's per-iteration config
     #: artifact (default ``--config`` when absent).
     config_flag: str
@@ -671,13 +677,16 @@ class ManifestSkillRuntime:
         ext: CommandPolicyExtension = {}
         if cp.allowed_scripts:
             ext["allowed_scripts"] = sorted(cp.allowed_scripts)
-            script_paths = {
-                script: str(self._skill_dir / script)
-                for script in cp.allowed_scripts
-                if (self._skill_dir / script).is_file()
-            }
+            script_paths = {}
+            script_digests = {}
+            for script in cp.allowed_scripts:
+                packaged = self._skill_dir / script
+                if packaged.is_file():
+                    script_paths[script] = str(packaged)
+                    script_digests[script] = _sha256_file(packaged)
             if script_paths:
                 ext["script_paths"] = script_paths
+                ext["script_digests"] = script_digests
         if cp.allowed_executables:
             ext["allowed_executables"] = sorted(cp.allowed_executables)
         if cp.copyable_files:

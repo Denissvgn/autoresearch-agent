@@ -5014,6 +5014,15 @@ class AgentOrchestrator:
         marker: Dict[str, Any],
         tool_meta: Dict[str, Any],
     ) -> None:
+        # The pinned evaluator/interpreter/evaluation-data identity is
+        # server-computed at launch and overwrites (or removes) anything a
+        # self-reported marker claims, so attempt provenance cannot be forged
+        # from model output.
+        execution_identity = tool_meta.get("execution_identity")
+        if execution_identity is not None:
+            marker["execution_identity"] = execution_identity
+        else:
+            marker.pop("execution_identity", None)
         runtime_command_id = tool_meta.get("runtime_command_id")
         if runtime_command_id is None:
             return
