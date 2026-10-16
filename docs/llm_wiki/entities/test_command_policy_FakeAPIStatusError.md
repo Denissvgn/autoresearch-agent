@@ -1,6 +1,6 @@
 # _FakeAPIStatusError
 
-**Location:** `tests/test_command_policy.py:26`
+**Location:** `tests/test_command_policy.py:27`
 **Kind:** Class
 **Bases:** `Exception`
 **Module:** [test_command_policy](../modules/test_command_policy.md)

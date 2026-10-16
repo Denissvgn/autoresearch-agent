@@ -40,6 +40,7 @@ component below it is opened ``O_NOFOLLOW | O_DIRECTORY``.
 | Source | Symbols |
 |--------|---------|
 | `__future__` | `annotations` |
+| `hashlib` | `hashlib` |
 | `os` | `os` |
 | `secrets` | `secrets` |
 | `stat` | `stat_mod` |
@@ -51,36 +52,44 @@ component below it is opened ``O_NOFOLLOW | O_DIRECTORY``.
 ```mermaid
 flowchart LR
     n0["src/core/agent_tools.py"]
-    n1["src/core/fs_safety.py"]
-    n2["src/core/iteration_snapshot.py"]
-    n3["src/core/orchestrator.py"]
-    n4["src/core/result_artifact.py"]
-    n5["src/core/session_manager.py"]
-    n6["src/core/trial_workspace.py"]
-    n7["tests/test_fs_safety.py"]
-    n0 --> n1
-    n2 --> n1
-    n3 --> n0
-    n3 --> n1
+    n1["src/core/command_policy.py"]
+    n2["src/core/fs_safety.py"]
+    n3["src/core/iteration_snapshot.py"]
+    n4["src/core/orchestrator.py"]
+    n5["src/core/result_artifact.py"]
+    n6["src/core/session_manager.py"]
+    n7["src/core/skill_runtime.py"]
+    n8["src/core/trial_workspace.py"]
+    n9["tests/test_fs_safety.py"]
+    n0 --> n2
+    n1 --> n2
     n3 --> n2
-    n3 --> n4
-    n3 --> n6
-    n4 --> n1
-    n5 --> n1
-    n5 --> n3
-    n6 --> n1
-    n7 --> n1
+    n4 --> n0
+    n4 --> n2
+    n4 --> n3
+    n4 --> n5
+    n4 --> n7
+    n4 --> n8
+    n5 --> n2
+    n6 --> n2
+    n6 --> n4
     n7 --> n2
     n7 --> n4
-    n7 --> n6
+    n8 --> n2
+    n9 --> n2
+    n9 --> n3
+    n9 --> n5
+    n9 --> n8
     click n0 "../modules/agent_tools.md"
-    click n1 "../modules/fs_safety.md"
-    click n2 "../modules/iteration_snapshot.md"
-    click n3 "../modules/orchestrator.md"
-    click n4 "../modules/result_artifact.md"
-    click n5 "../modules/session_manager.md"
-    click n6 "../modules/trial_workspace.md"
-    click n7 "../modules/test_fs_safety.md"
+    click n1 "../modules/command_policy.md"
+    click n2 "../modules/fs_safety.md"
+    click n3 "../modules/iteration_snapshot.md"
+    click n4 "../modules/orchestrator.md"
+    click n5 "../modules/result_artifact.md"
+    click n6 "../modules/session_manager.md"
+    click n7 "../modules/skill_runtime.md"
+    click n8 "../modules/trial_workspace.md"
+    click n9 "../modules/test_fs_safety.md"
 ```
 
 ### Internal neighbors
@@ -88,10 +97,12 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Inbound | [agent_tools](../modules/agent_tools.md) |
+| Inbound | [command_policy](../modules/command_policy.md) |
 | Inbound | [iteration_snapshot](../modules/iteration_snapshot.md) |
 | Inbound | [orchestrator](../modules/orchestrator.md) |
 | Inbound | [result_artifact](../modules/result_artifact.md) |
 | Inbound | [session_manager](../modules/session_manager.md) |
+| Inbound | [skill_runtime](../modules/skill_runtime.md) |
 | Inbound | [trial_workspace](../modules/trial_workspace.md) |
 | Inbound | [test_fs_safety](../modules/test_fs_safety.md) |
 
@@ -99,8 +110,8 @@ flowchart LR
 
 | Class | Kind | Line | Bases / Target | Description |
 |-------|------|------|----------------|-------------|
-| [SkipCallback](../entities/SkipCallback.md) | Type alias | 45 | `Callable[[str, str], None]` | — |
-| [FilesystemSafetyError](../entities/FilesystemSafetyError.md) | Class | 48 | `Exception` | A denied filesystem operation. |
+| [SkipCallback](../entities/SkipCallback.md) | Type alias | 46 | `Callable[[str, str], None]` | — |
+| [FilesystemSafetyError](../entities/FilesystemSafetyError.md) | Class | 49 | `Exception` | A denied filesystem operation. |
 
 ## Functions
 
@@ -114,6 +125,7 @@ flowchart LR
 | `_unlink_quiet` | `(parent_fd: int, name: str) -> None` | — | — |
 | `_leaf_denial_reason` | `(leaf: str, st: os.stat_result) -> Optional[str]` | — | Why this leaf cannot be written/imported, or ``None`` when allowed. |
 | `_write_at` | `(parent_fd: int, leaf: str, data: bytes, *, display: str) -> None` | — | Replace one leaf in a pinned parent directory, never following links. |
+| `sha256_regular_file` | `(path: str \| os.PathLike[str]) -> str` | — | Return the sha256 hex digest of a strict-regular file. |
 | `safe_write_bytes` | `(root: str, relative_path: str, data: bytes) -> str` | — | Write ``data`` to ``root/relative_path`` with no-follow safety. |
 | `safe_write_text` | `(root: str, relative_path: str, text: str, *, encoding: str = 'utf-8') -> str` | — | Text convenience wrapper over :func:`safe_write_bytes`. |
 | `read_regular_file` | `(root: str, relative_path: str, *, max_bytes: Optional[int] = None) -> bytes` | — | Read a file for import: regular, single-link, never through a link. |

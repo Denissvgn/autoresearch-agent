@@ -1,6 +1,6 @@
 # FilesystemSafetyError
 
-**Location:** `src/core/fs_safety.py:48`
+**Location:** `src/core/fs_safety.py:49`
 **Kind:** Class
 **Bases:** `Exception`
 **Module:** [fs_safety](../modules/fs_safety.md)
@@ -30,13 +30,14 @@ reason so callers and logs identify exactly what was refused.
 flowchart LR
     n0["FilesystemSafetyError (src/core/fs_safety.py)"]
     n1["Exception"]
-    n2["_copy_entry_at (src/core/fs_safety.py)"]
-    n3["_open_parent_chain (src/core/fs_safety.py)"]
-    n4["_open_root (src/core/fs_safety.py)"]
-    n5["_relative_components (src/core/fs_safety.py)"]
-    n6["_write_at (src/core/fs_safety.py)"]
-    n7["read_regular_file (src/core/fs_safety.py)"]
-    n8["tests/test_fs_safety.py"]
+    n2["src/core/command_policy.py"]
+    n3["_copy_entry_at (src/core/fs_safety.py)"]
+    n4["_open_parent_chain (src/core/fs_safety.py)"]
+    n5["_open_root (src/core/fs_safety.py)"]
+    n6["_relative_components (src/core/fs_safety.py)"]
+    n7["_write_at (src/core/fs_safety.py)"]
+    n8["read_regular_file (src/core/fs_safety.py)"]
+    n9["tests/test_fs_safety.py"]
     n0 --> n1
     n2 --> n0
     n3 --> n0
@@ -45,14 +46,16 @@ flowchart LR
     n6 --> n0
     n7 --> n0
     n8 --> n0
+    n9 --> n0
     click n0 "../modules/fs_safety.md"
-    click n2 "../modules/fs_safety.md"
+    click n2 "../modules/command_policy.md"
     click n3 "../modules/fs_safety.md"
     click n4 "../modules/fs_safety.md"
     click n5 "../modules/fs_safety.md"
     click n6 "../modules/fs_safety.md"
     click n7 "../modules/fs_safety.md"
-    click n8 "../modules/test_fs_safety.md"
+    click n8 "../modules/fs_safety.md"
+    click n9 "../modules/test_fs_safety.md"
 ```
 
 ### Summary
@@ -71,6 +74,7 @@ flowchart LR
 
 | Reference | Kind | Source | Call sites |
 |---|---|---|---:|
+| `command_policy` | import | [command_policy](../modules/command_policy.md) | — |
 | `_copy_entry_at` | call | [fs_safety](../modules/fs_safety.md) | 3 |
 | `_open_parent_chain` | call | [fs_safety](../modules/fs_safety.md) | 2 |
 | `_open_root` | call | [fs_safety](../modules/fs_safety.md) | 1 |

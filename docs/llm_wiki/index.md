@@ -7,7 +7,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 | Surface | Count | Start here |
 |---|---:|---|
 | Entities | 428 | [Open section](#entities) |
-| Modules | 247 | [Open section](#modules) |
+| Modules | 248 | [Open section](#modules) |
 | Workflows | 13 | [Open section](#workflows) |
 | Guides | 0 | No pages |
 | Entry-point flows | 111 | [Open section](#entry-point-flows) |
@@ -645,6 +645,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [test_phase_evidence_dedup_inherit](modules/test_phase_evidence_dedup_inherit.md) - Issue 5 — noop-phase evidence inheritance on a dedup hit.
 - [test_phase_genuine_dwell](modules/test_phase_genuine_dwell.md) - Fix 8 — phases gated by ``auto_phase_evidence`` must still require ``min_iterations`` of phase-tagged iterations (or an explicit agent key).
 - [test_phase_state_broadcast](modules/test_phase_state_broadcast.md) - `tests/test_phase_state_broadcast.py`
+- [test_pinned_evaluators](modules/test_pinned_evaluators.md) - Pinned-evaluator and interpreter-environment regressions.
 - [test_plugin_runner](modules/test_plugin_runner.md) - PluginRunner tests (ARC-011 P5-005 / X-004).
 - [test_postgres_sqlite_parity](modules/test_postgres_sqlite_parity.md) - ARC-011 P6-002b — dual-backend parity sweep.
 - [test_postgres_state_store](modules/test_postgres_state_store.md) - ARC-011 P6-002a — PostgresStateStore write-path tests.

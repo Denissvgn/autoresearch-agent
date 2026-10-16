@@ -18,6 +18,8 @@ archive contents. Ordinary unit runs do not build or install anything.
 | `pathlib` | `Path` |
 | `pytest` | `pytest` |
 | `src.core.skill_registry` | `DEFAULT_SKILLS_ROOT` |
+| `subprocess` | `subprocess` |
+| `sys` | `sys` |
 | `tarfile` | `tarfile` |
 | `tomllib` | `tomllib` |
 | `yaml` | `yaml` |
@@ -57,3 +59,4 @@ flowchart LR
 | `test_bundled_skill_dirs_each_carry_a_loadable_manifest` | `()` | — | — |
 | `test_default_skills_root_is_sibling_of_installed_src_package` | `()` | — | Conceptual pin for the installed-layout contract (Dockerfile parity). |
 | `test_release_archives_contain_only_bundled_skills` | `(archive_format)` | `@pytest.mark.parametrize('archive_format', ['wheel', 'sdist'])` | — |
+| `test_installed_package_resolves_pinned_evaluators_outside_checkout` | `(tmp_path)` | — | Installed-layout smoke: with cwd outside the checkout and imports |

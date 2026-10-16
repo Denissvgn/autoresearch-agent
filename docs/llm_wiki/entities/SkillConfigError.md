@@ -1,6 +1,6 @@
 # SkillConfigError
 
-**Location:** `src/core/skill_runtime.py:58`
+**Location:** `src/core/skill_runtime.py:60`
 **Kind:** Class
 **Bases:** `ValueError`
 **Module:** [skill_runtime](../modules/skill_runtime.md)

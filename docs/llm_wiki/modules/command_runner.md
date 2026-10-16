@@ -44,7 +44,8 @@ flowchart LR
     n6["tests/test_async_tool_path.py"]
     n7["tests/test_command_policy.py"]
     n8["tests/test_orchestrator_timeout.py"]
-    n9["tests/test_trial_workspace.py"]
+    n9["tests/test_pinned_evaluators.py"]
+    n10["tests/test_trial_workspace.py"]
     n0 --> n2
     n0 --> n5
     n1 --> n5
@@ -65,8 +66,13 @@ flowchart LR
     n8 --> n3
     n8 --> n5
     n9 --> n0
+    n9 --> n1
     n9 --> n2
+    n9 --> n3
     n9 --> n5
+    n10 --> n0
+    n10 --> n2
+    n10 --> n5
     click n0 "../modules/agent_tools.md"
     click n1 "../modules/command_policy.md"
     click n2 "../modules/command_runner.md"
@@ -76,7 +82,8 @@ flowchart LR
     click n6 "../modules/test_async_tool_path.md"
     click n7 "../modules/test_command_policy.md"
     click n8 "../modules/test_orchestrator_timeout.md"
-    click n9 "../modules/test_trial_workspace.md"
+    click n9 "../modules/test_pinned_evaluators.md"
+    click n10 "../modules/test_trial_workspace.md"
 ```
 
 ### Internal neighbors
@@ -89,6 +96,7 @@ flowchart LR
 | Inbound | [test_async_tool_path](../modules/test_async_tool_path.md) |
 | Inbound | [test_command_policy](../modules/test_command_policy.md) |
 | Inbound | [test_orchestrator_timeout](../modules/test_orchestrator_timeout.md) |
+| Inbound | [test_pinned_evaluators](../modules/test_pinned_evaluators.md) |
 | Inbound | [test_trial_workspace](../modules/test_trial_workspace.md) |
 | Outbound | [command_policy](../modules/command_policy.md) |
 | Outbound | [tool_access](../modules/tool_access.md) |
@@ -105,11 +113,11 @@ flowchart LR
 |-------|------|------|----------------|-------------|
 | [_HeadTailBuffer](../entities/HeadTailBuffer.md) | Class | 36 | — | Retain a fixed-size head and rolling tail, including for newline-free data. |
 | [_SessionOutputLog](../entities/SessionOutputLog.md) | Class | 70 | — | Append child output under a shared session logs byte quota. |
-| [OutputStream](../entities/OutputStream.md) | Type alias | 232 | `Literal['stdout', 'stderr']` | — |
-| [OutputCallback](../entities/OutputCallback.md) | Type alias | 233 | `Callable[[OutputStream, str], None]` | — |
-| [CommandRunResult](../entities/CommandRunResult.md) | Class | 237 | — | — |
-| [CommandProcessRegistry](../entities/CommandProcessRegistry.md) | Class | 250 | — | Thread-safe registry of in-flight governed subprocesses, keyed by session. |
-| [GovernedCommandRunner](../entities/GovernedCommandRunner.md) | Class | 306 | — | Validate and execute one approved command without invoking a shell. |
+| [OutputStream](../entities/OutputStream.md) | Type alias | 249 | `Literal['stdout', 'stderr']` | — |
+| [OutputCallback](../entities/OutputCallback.md) | Type alias | 250 | `Callable[[OutputStream, str], None]` | — |
+| [CommandRunResult](../entities/CommandRunResult.md) | Class | 254 | — | — |
+| [CommandProcessRegistry](../entities/CommandProcessRegistry.md) | Class | 267 | — | Thread-safe registry of in-flight governed subprocesses, keyed by session. |
+| [GovernedCommandRunner](../entities/GovernedCommandRunner.md) | Class | 323 | — | Validate and execute one approved command without invoking a shell. |
 
 ## Functions
 

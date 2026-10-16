@@ -124,3 +124,19 @@ Append-only chronological log.
 - Pages deprecated: 0
 - Semantic fields preserved: 0
 - Moved entities: none
+
+## 2026-10-16
+
+### Wiki sync
+- Source: `.`
+- Generator version: `2.5.0`
+- Source selection profile: none (default discovery)
+- Source selection fingerprint: none
+- Source snapshot digest: `sha256:53de49810a960390bafcbbd0ad374de40c003fa37da4c0eaec4a87f0f632aad7`
+- Pages created: 1
+- Pages updated: 49
+- Pages metadata-only: 1
+- Pages skipped (unchanged): 752
+- Pages deprecated: 0
+- Semantic fields preserved: 0
+- Moved entities: none

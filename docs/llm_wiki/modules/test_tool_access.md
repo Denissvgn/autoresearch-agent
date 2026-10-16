@@ -18,6 +18,7 @@ declared evaluation data are not candidate-writable.
 | Source | Symbols |
 |--------|---------|
 | `__future__` | `annotations` |
+| `hashlib` | `hashlib` |
 | `os` | `os` |
 | `pathlib` | `Path` |
 | `pytest` | `pytest` |

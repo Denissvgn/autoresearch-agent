@@ -28,70 +28,32 @@ Server-owned immutable snapshots for autoresearch iteration attempts.
 <!-- Auto-generated local dependency summary. Do not edit by hand. -->
 ```mermaid
 flowchart LR
-    n0["src/core/artifact_reference.py"]
-    n1["src/core/fs_safety.py"]
-    n2["src/core/iteration_snapshot.py"]
-    n3["src/core/orchestrator.py"]
-    n4["tests/test_baseline_capture_dedup_bypass.py"]
-    n5["tests/test_fs_safety.py"]
-    n6["tests/test_iteration_snapshot.py"]
-    n7["tests/test_iteration_snapshot_canonical_payload.py"]
-    n8["tests/test_mlflow_run_id_contract.py"]
-    n9["tests/test_orchestrator_evidence_replay.py"]
-    n10["tests/test_phase_evidence_dedup_inherit.py"]
-    n11["tests/test_results_store_manifest_snapshots.py"]
-    n2 --> n0
+    n0["src"]
+    n1["src/core/iteration_snapshot.py"]
+    n2["tests"]
+    n0 --> n1
+    n1 --> n0
     n2 --> n1
-    n3 --> n0
-    n3 --> n1
-    n3 --> n2
-    n4 --> n2
-    n4 --> n3
-    n5 --> n1
-    n5 --> n2
-    n6 --> n2
-    n7 --> n2
-    n8 --> n2
-    n9 --> n2
-    n9 --> n3
-    n10 --> n2
-    n10 --> n3
-    n11 --> n2
-    click n0 "../modules/artifact_reference.md"
-    click n1 "../modules/fs_safety.md"
-    click n2 "../modules/iteration_snapshot.md"
-    click n3 "../modules/orchestrator.md"
-    click n4 "../modules/test_baseline_capture_dedup_bypass.md"
-    click n5 "../modules/test_fs_safety.md"
-    click n6 "../modules/test_iteration_snapshot.md"
-    click n7 "../modules/test_iteration_snapshot_canonical_payload.md"
-    click n8 "../modules/test_mlflow_run_id_contract.md"
-    click n9 "../modules/test_orchestrator_evidence_replay.md"
-    click n10 "../modules/test_phase_evidence_dedup_inherit.md"
-    click n11 "../modules/test_results_store_manifest_snapshots.md"
+    click n1 "../modules/iteration_snapshot.md"
 ```
+
+> Module-level dependencies exceed the generated-diagram limits, so the diagram and table below group them by top-level package. Counts report the number of module neighbors in each package.
 
 ### Internal neighbors
 
 | Direction | Module |
 |---|---|
-| Inbound | [orchestrator](../modules/orchestrator.md) |
-| Inbound | [test_baseline_capture_dedup_bypass](../modules/test_baseline_capture_dedup_bypass.md) |
-| Inbound | [test_fs_safety](../modules/test_fs_safety.md) |
-| Inbound | [test_iteration_snapshot](../modules/test_iteration_snapshot.md) |
-| Inbound | [test_iteration_snapshot_canonical_payload](../modules/test_iteration_snapshot_canonical_payload.md) |
-| Inbound | [test_mlflow_run_id_contract](../modules/test_mlflow_run_id_contract.md) |
-| Inbound | [test_orchestrator_evidence_replay](../modules/test_orchestrator_evidence_replay.md) |
-| Inbound | [test_phase_evidence_dedup_inherit](../modules/test_phase_evidence_dedup_inherit.md) |
-| Inbound | [test_results_store_manifest_snapshots](../modules/test_results_store_manifest_snapshots.md) |
-| Outbound | [artifact_reference](../modules/artifact_reference.md) |
-| Outbound | [fs_safety](../modules/fs_safety.md) |
+| Inbound | `src` (1) |
+| Inbound | `tests` (9) |
+| Outbound | `src` (2) |
 
 ### External packages
 
 | Language | Used packages | Undeclared packages |
 |---|---:|---:|
 | python | 1 | 0 |
+
+> All 12 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Functions
 

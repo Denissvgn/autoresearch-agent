@@ -1,6 +1,6 @@
 # _FakeAsyncAnthropic
 
-**Location:** `tests/test_command_policy.py:22`
+**Location:** `tests/test_command_policy.py:23`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_command_policy](../modules/test_command_policy.md)

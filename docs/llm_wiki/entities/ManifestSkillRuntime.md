@@ -1,6 +1,6 @@
 # ManifestSkillRuntime
 
-**Location:** `src/core/skill_runtime.py:350`
+**Location:** `src/core/skill_runtime.py:356`
 **Kind:** Class
 **Bases:** —
 **Module:** [skill_runtime](../modules/skill_runtime.md)
@@ -70,9 +70,9 @@ flowchart LR
     n7["test_manifest_runtime_registry_api_kind_raises_loudly (tests/test_manifest_runtime_production_path.py)"]
     n8["test_requires_signed_metrics_capability_properties (tests/test_metrics_forgery_c3.py)"]
     n9["tests/test_orchestrator_timeout.py"]
-    n10["test_command_wiring_is_explicit (tests/test_prompt_evaluator.py)"]
-    n11["TestManifestSkillRuntimeNonceValidation.runtime (tests/test_skill_prompt_engineering_e2e.py)"]
-    n12["TestPromptEngineeringSkillManifest.test_demo_experiment_command_declared_and_renders (tests/test_skill_prompt_engineering_e2e.py)"]
+    n10["test_manifest_runtime_extension_pins_packaged_scripts_with_digests (tests/test_pinned_evaluators.py)"]
+    n11["test_command_wiring_is_explicit (tests/test_prompt_evaluator.py)"]
+    n12["TestManifestSkillRuntimeNonceValidation.runtime (tests/test_skill_prompt_engineering_e2e.py)"]
     n1 --> n0
     n2 --> n0
     n3 --> n0
@@ -95,8 +95,8 @@ flowchart LR
     click n7 "../modules/test_manifest_runtime_production_path.md"
     click n8 "../modules/test_metrics_forgery_c3.md"
     click n9 "../modules/test_orchestrator_timeout.md"
-    click n10 "../modules/test_prompt_evaluator.md"
-    click n11 "../modules/test_skill_prompt_engineering_e2e.md"
+    click n10 "../modules/test_pinned_evaluators.md"
+    click n11 "../modules/test_prompt_evaluator.md"
     click n12 "../modules/test_skill_prompt_engineering_e2e.md"
 ```
 
@@ -119,8 +119,8 @@ flowchart LR
 | `test_manifest_runtime_registry_api_kind_raises_loudly` | call | [test_manifest_runtime_production_path](../modules/test_manifest_runtime_production_path.md) | 2 |
 | `test_requires_signed_metrics_capability_properties` | call | [test_metrics_forgery_c3](../modules/test_metrics_forgery_c3.md) | 1 |
 | `test_orchestrator_timeout` | import | [test_orchestrator_timeout](../modules/test_orchestrator_timeout.md) | — |
+| `test_manifest_runtime_extension_pins_packaged_scripts_with_digests` | call | [test_pinned_evaluators](../modules/test_pinned_evaluators.md) | 1 |
 | `test_command_wiring_is_explicit` | call | [test_prompt_evaluator](../modules/test_prompt_evaluator.md) | 1 |
 | `TestManifestSkillRuntimeNonceValidation.runtime` | call | [test_skill_prompt_engineering_e2e](../modules/test_skill_prompt_engineering_e2e.md) | 1 |
-| `TestPromptEngineeringSkillManifest.test_demo_experiment_command_declared_and_renders` | call | [test_skill_prompt_engineering_e2e](../modules/test_skill_prompt_engineering_e2e.md) | 1 |
 
-> References: showing 12 of 15 logical references; 3 omitted by the 12-row generated summary limit.
+> References: showing 12 of 16 logical references; 4 omitted by the 12-row generated summary limit.

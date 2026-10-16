@@ -49,8 +49,9 @@ flowchart LR
     n5["src/core/skill_registry.py"]
     n6["src/core/tool_access.py"]
     n7["tests/test_async_tool_path.py"]
-    n8["tests/test_tool_access.py"]
-    n9["tests/test_trial_workspace.py"]
+    n8["tests/test_pinned_evaluators.py"]
+    n9["tests/test_tool_access.py"]
+    n10["tests/test_trial_workspace.py"]
     n0 --> n1
     n0 --> n2
     n0 --> n3
@@ -66,11 +67,16 @@ flowchart LR
     n7 --> n4
     n7 --> n6
     n8 --> n0
+    n8 --> n1
+    n8 --> n4
     n8 --> n5
     n8 --> n6
     n9 --> n0
-    n9 --> n1
+    n9 --> n5
     n9 --> n6
+    n10 --> n0
+    n10 --> n1
+    n10 --> n6
     click n0 "../modules/agent_tools.md"
     click n1 "../modules/command_runner.md"
     click n2 "../modules/fs_safety.md"
@@ -79,8 +85,9 @@ flowchart LR
     click n5 "../modules/skill_registry.md"
     click n6 "../modules/tool_access.md"
     click n7 "../modules/test_async_tool_path.md"
-    click n8 "../modules/test_tool_access.md"
-    click n9 "../modules/test_trial_workspace.md"
+    click n8 "../modules/test_pinned_evaluators.md"
+    click n9 "../modules/test_tool_access.md"
+    click n10 "../modules/test_trial_workspace.md"
 ```
 
 ### Internal neighbors
@@ -89,6 +96,7 @@ flowchart LR
 |---|---|
 | Inbound | [orchestrator](../modules/orchestrator.md) |
 | Inbound | [test_async_tool_path](../modules/test_async_tool_path.md) |
+| Inbound | [test_pinned_evaluators](../modules/test_pinned_evaluators.md) |
 | Inbound | [test_tool_access](../modules/test_tool_access.md) |
 | Inbound | [test_trial_workspace](../modules/test_trial_workspace.md) |
 | Outbound | [command_runner](../modules/command_runner.md) |

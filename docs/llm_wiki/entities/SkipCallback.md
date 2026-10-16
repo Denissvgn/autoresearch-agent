@@ -1,6 +1,6 @@
 # SkipCallback
 
-**Location:** `src/core/fs_safety.py:45`
+**Location:** `src/core/fs_safety.py:46`
 **Kind:** Type alias
 **Bases:** —
 **Module:** [fs_safety](../modules/fs_safety.md)

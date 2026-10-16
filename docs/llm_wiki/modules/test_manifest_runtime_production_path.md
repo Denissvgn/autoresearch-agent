@@ -35,6 +35,7 @@ file target. These tests pin the C2 fixes:
 | `__future__` | `annotations` |
 | `anthropic` | `anthropic` |
 | `asyncio` | `asyncio` |
+| `hashlib` | `hashlib` |
 | `json` | `json` |
 | `os` | `os` |
 | `pathlib` | `Path` |
@@ -118,12 +119,12 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [_FakePlanStore](../entities/FakePlanStore.md) | 174 | — | Minimal store surface for ``_refresh_phase_state``. |
-| [_GenuinenessStore](../entities/GenuinenessStore.md) | 314 | — | — |
-| [_ProbeBlockerSkill](../entities/ProbeBlockerSkill.md) | 325 | — | — |
-| [_AutoPromoteStore](../entities/AutoPromoteStore.md) | 397 | — | — |
-| [_FakeAgentLog](../entities/test_manifest_runtime_production_path_FakeAgentLog.md) | 434 | — | — |
-| [_RegistryApiSkill](../entities/RegistryApiSkill.md) | 442 | — | — |
+| [_FakePlanStore](../entities/FakePlanStore.md) | 175 | — | Minimal store surface for ``_refresh_phase_state``. |
+| [_GenuinenessStore](../entities/GenuinenessStore.md) | 331 | — | — |
+| [_ProbeBlockerSkill](../entities/ProbeBlockerSkill.md) | 342 | — | — |
+| [_AutoPromoteStore](../entities/AutoPromoteStore.md) | 414 | — | — |
+| [_FakeAgentLog](../entities/test_manifest_runtime_production_path_FakeAgentLog.md) | 451 | — | — |
+| [_RegistryApiSkill](../entities/RegistryApiSkill.md) | 459 | — | — |
 
 ## Functions
 
@@ -140,7 +141,7 @@ flowchart LR
 | `test_load_packaged_skill_md_missing_primer_degrades_to_empty` | `()` | — | — |
 | `test_load_packaged_skill_md_honors_declared_primer_filename` | `(monkeypatch, tmp_path)` | — | C2-2: the primer filename comes from the manifest |
 | `test_manifest_runtime_exposes_declared_primer_filename` | `()` | — | — |
-| `test_policy_extension_adds_allowed_script` | `()` | — | — |
+| `test_policy_extension_adds_allowed_script` | `(tmp_path: Path)` | — | — |
 | `test_policy_extension_cannot_widen_executables` | `()` | — | Additive-only: the extension unions allow-*sets*; it cannot introduce |
 | `test_policy_extension_cannot_reallow_rejected_config_target` | `()` | — | A base restriction (prepare.py --config must stay inside the session |
 | `test_manifest_runtime_policy_extension_carries_manifest_scripts` | `()` | — | — |

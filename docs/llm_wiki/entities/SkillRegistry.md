@@ -101,4 +101,4 @@ flowchart LR
 | `TestClassifyRanking.test_scores_in_unit_interval` | type_reference | [test_domain_classifier](../modules/test_domain_classifier.md) | — |
 | `TestEmbeddingCache.test_cache_persists_to_disk` | type_reference | [test_domain_classifier](../modules/test_domain_classifier.md) | — |
 
-> References: showing 12 of 32 logical references; 20 omitted by the 12-row generated summary limit.
+> References: showing 12 of 33 logical references; 21 omitted by the 12-row generated summary limit.

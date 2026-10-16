@@ -1,6 +1,6 @@
 # _RegistryApiSkill
 
-**Location:** `tests/test_manifest_runtime_production_path.py:442`
+**Location:** `tests/test_manifest_runtime_production_path.py:459`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_manifest_runtime_production_path](../modules/test_manifest_runtime_production_path.md)

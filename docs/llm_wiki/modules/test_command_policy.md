@@ -12,6 +12,7 @@ _Auto-generated from `tests/test_command_policy.py`._
 |--------|---------|
 | `__future__` | `annotations` |
 | `anthropic` | `anthropic` |
+| `hashlib` | `hashlib` |
 | `json` | `json` |
 | `os` | `os` |
 | `pathlib` | `Path` |
@@ -68,14 +69,15 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [_FakeAsyncAnthropic](../entities/test_command_policy_FakeAsyncAnthropic.md) | 22 | — | — |
-| [_FakeAPIStatusError](../entities/test_command_policy_FakeAPIStatusError.md) | 26 | `Exception` | — |
+| [_FakeAsyncAnthropic](../entities/test_command_policy_FakeAsyncAnthropic.md) | 23 | — | — |
+| [_FakeAPIStatusError](../entities/test_command_policy_FakeAPIStatusError.md) | 27 | `Exception` | — |
 
 ## Functions
 
 | Function | Signature | Decorators | Description |
 |----------|-----------|------------|-------------|
 | `_workspace` | `(tmp_path: Path) -> tuple[str, str]` | — | — |
+| `_pin_script` | `(tmp_path: Path, script_name: str, content: str) -> dict` | — | Create a digest-pinned packaged script outside the workspace. |
 | `test_base_policy_is_default_deny_for_scripts` | `(tmp_path: Path)` | — | — |
 | `test_command_policy_allows_skill_declared_operations` | `(tmp_path: Path)` | — | — |
 | `test_command_policy_blocks_unsafe_commands` | `(tmp_path: Path, command: str)` | `@pytest.mark.parametrize('command', ['curl https://example.com', '.venv/bin/python -m pip install pandas', 'git status', 'docker ps', '.venv/bin/python scripts/autotuner/promote.py --config runs/autotuner/DOGE_USDT_15m/direction/best_train.yaml', '.venv/bin/python scripts/autotuner/direction/prepare.py --config /etc/passwd', '.venv/bin/python scripts/autotuner/direction/prepare.py --config train.yaml 2>&1', '.venv/bin/python scripts/autotuner/setup.py --instrument $(cat /run/secrets/token)', 'cat /etc/passwd', 'cp train.yaml /tmp/best_train.yaml', ".venv/bin/python -c 'print(123)'", 'cat results.json \| head', 'ln -s train.yaml linked.yaml'])` | — |
@@ -89,7 +91,7 @@ flowchart LR
 | `test_redaction_handles_bearer_and_env_like_values` | `()` | — | — |
 | `test_governed_runner_strips_control_plane_secrets_from_child_env` | `(tmp_path: Path, monkeypatch)` | — | ARC-011 P0-023 DoD: server control-plane secrets must not reach the child. |
 | `test_build_child_env_allowlist_covers_approved_script_inventory` | `()` | — | Static contract: the allow-list ⊇ every var the six _ALLOWED_SCRIPTS read. |
-| `_nonce_dump_script` | `(workspace: Path) -> tuple[Path, Path]` | — | Create a sanctioned script that dumps AUTORESEARCH_SESSION_NONCE to a |
+| `_nonce_dump_script` | `(tmp_path: Path, workspace: Path) -> tuple[dict, Path]` | — | Create a digest-pinned packaged script that dumps |
 | `test_governed_runner_extra_env_delivers_nonce` | `(tmp_path: Path)` | — | P4-002: ``GovernedCommandRunner.run(extra_env=...)`` injects the nonce |
 | `test_governed_runner_without_extra_env_has_no_nonce` | `(tmp_path: Path, monkeypatch)` | — | Companion: without ``extra_env`` the nonce is absent — confirming the |
 | `test_execute_tool_threads_extra_env_to_bash` | `(tmp_path: Path)` | — | P4-002 wiring: ``_execute_tool("bash", ..., extra_env=...)`` forwards the |

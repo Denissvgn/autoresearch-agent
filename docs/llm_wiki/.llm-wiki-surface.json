@@ -25,11 +25,11 @@
       "infrastructure": 3,
       "load-order": 1,
       "log": 1,
-      "modules": 247,
+      "modules": 248,
       "workflows": 13
     },
     "dependency_architecture": 2,
-    "total": 806
+    "total": 807
   },
   "dependency_pages": {
     "count": 2,
@@ -1083,7 +1083,7 @@
           "gaps": [
             {
               "kind": "unresolved_call",
-              "line": 950,
+              "line": 959,
               "step": "materialize_skill_runtime",
               "target": "default_registry.get"
             }
@@ -2304,19 +2304,19 @@
             },
             {
               "kind": "external_call",
-              "line": 378,
+              "line": 394,
               "step": "copy_tree_regular_files",
               "target": "os.makedirs"
             },
             {
               "kind": "external_call",
-              "line": 80,
+              "line": 81,
               "step": "_open_root",
               "target": "os.open"
             },
             {
               "kind": "external_call",
-              "line": 384,
+              "line": 400,
               "step": "copy_tree_regular_files",
               "target": "sorted"
             },
@@ -2364,25 +2364,25 @@
             },
             {
               "kind": "external_call",
-              "line": 378,
+              "line": 394,
               "step": "copy_tree_regular_files",
               "target": "os.makedirs"
             },
             {
               "kind": "external_call",
-              "line": 80,
+              "line": 81,
               "step": "_open_root",
               "target": "os.open"
             },
             {
               "kind": "external_call",
-              "line": 384,
+              "line": 400,
               "step": "copy_tree_regular_files",
               "target": "sorted"
             },
             {
               "kind": "external_call",
-              "line": 384,
+              "line": 400,
               "step": "copy_tree_regular_files",
               "target": "os.listdir"
             },
@@ -8601,6 +8601,7 @@
         "modules/test_phase_evidence_dedup_inherit.md",
         "modules/test_phase_genuine_dwell.md",
         "modules/test_phase_state_broadcast.md",
+        "modules/test_pinned_evaluators.md",
         "modules/test_plugin_runner.md",
         "modules/test_postgres_sqlite_parity.md",
         "modules/test_postgres_state_store.md",
@@ -9646,6 +9647,7 @@
       "kind": "entities",
       "mcp_uri": "llm-wiki://entities/FilesystemSafetyError",
       "outgoing_internal_links": [
+        "modules/command_policy.md",
         "modules/fs_safety.md",
         "modules/test_fs_safety.md"
       ],
@@ -9753,7 +9755,8 @@
         "modules/command_runner.md",
         "modules/orchestrator.md",
         "modules/test_command_policy.md",
-        "modules/test_orchestrator_timeout.md"
+        "modules/test_orchestrator_timeout.md",
+        "modules/test_pinned_evaluators.md"
       ],
       "role": "semantic",
       "source_path": "src/core/command_runner.py",
@@ -10180,6 +10183,7 @@
         "modules/test_manifest_runtime_production_path.md",
         "modules/test_metrics_forgery_c3.md",
         "modules/test_orchestrator_timeout.md",
+        "modules/test_pinned_evaluators.md",
         "modules/test_prompt_evaluator.md",
         "modules/test_skill_prompt_engineering_e2e.md"
       ],
@@ -14196,6 +14200,7 @@
         "modules/orchestrator.md",
         "modules/skill_registry.md",
         "modules/test_async_tool_path.md",
+        "modules/test_pinned_evaluators.md",
         "modules/test_tool_access.md",
         "modules/test_trial_workspace.md",
         "modules/tool_access.md"
@@ -14502,8 +14507,10 @@
         "modules/_engine.md",
         "modules/command_policy.md",
         "modules/command_runner.md",
+        "modules/fs_safety.md",
         "modules/test_command_policy.md",
         "modules/test_manifest_runtime_production_path.md",
+        "modules/test_pinned_evaluators.md",
         "modules/test_tool_access.md",
         "modules/tool_access.md"
       ],
@@ -14532,6 +14539,7 @@
         "modules/test_async_tool_path.md",
         "modules/test_command_policy.md",
         "modules/test_orchestrator_timeout.md",
+        "modules/test_pinned_evaluators.md",
         "modules/test_trial_workspace.md",
         "modules/tool_access.md"
       ],
@@ -14871,11 +14879,13 @@
         "entities/FilesystemSafetyError.md",
         "entities/SkipCallback.md",
         "modules/agent_tools.md",
+        "modules/command_policy.md",
         "modules/fs_safety.md",
         "modules/iteration_snapshot.md",
         "modules/orchestrator.md",
         "modules/result_artifact.md",
         "modules/session_manager.md",
+        "modules/skill_runtime.md",
         "modules/test_fs_safety.md",
         "modules/trial_workspace.md"
       ],
@@ -14984,18 +14994,7 @@
       "kind": "modules",
       "mcp_uri": "llm-wiki://modules/iteration_snapshot",
       "outgoing_internal_links": [
-        "modules/artifact_reference.md",
-        "modules/fs_safety.md",
-        "modules/iteration_snapshot.md",
-        "modules/orchestrator.md",
-        "modules/test_baseline_capture_dedup_bypass.md",
-        "modules/test_fs_safety.md",
-        "modules/test_iteration_snapshot.md",
-        "modules/test_iteration_snapshot_canonical_payload.md",
-        "modules/test_mlflow_run_id_contract.md",
-        "modules/test_orchestrator_evidence_replay.md",
-        "modules/test_phase_evidence_dedup_inherit.md",
-        "modules/test_results_store_manifest_snapshots.md"
+        "modules/iteration_snapshot.md"
       ],
       "role": "semantic",
       "source_path": "src/core/iteration_snapshot.py",
@@ -17356,6 +17355,26 @@
       "title": "test_phase_state_broadcast Module"
     },
     {
+      "canonical_path": "modules/test_pinned_evaluators.md",
+      "id": "test_pinned_evaluators",
+      "kind": "modules",
+      "mcp_uri": "llm-wiki://modules/test_pinned_evaluators",
+      "outgoing_internal_links": [
+        "modules/agent_tools.md",
+        "modules/command_policy.md",
+        "modules/command_runner.md",
+        "modules/iteration_snapshot.md",
+        "modules/orchestrator.md",
+        "modules/skill_registry.md",
+        "modules/skill_runtime.md",
+        "modules/test_pinned_evaluators.md",
+        "modules/tool_access.md"
+      ],
+      "role": "semantic",
+      "source_path": "tests/test_pinned_evaluators.py",
+      "title": "test_pinned_evaluators Module"
+    },
+    {
       "canonical_path": "modules/test_plugin_runner.md",
       "id": "test_plugin_runner",
       "kind": "modules",
@@ -18048,6 +18067,7 @@
         "modules/test_command_policy.md",
         "modules/test_fs_safety.md",
         "modules/test_orchestrator_timeout.md",
+        "modules/test_pinned_evaluators.md",
         "modules/test_tool_access.md",
         "modules/test_trial_workspace.md",
         "modules/tool_access.md"
@@ -20080,6 +20100,7 @@
         "modules/test_phase_evidence_dedup_inherit.md",
         "modules/test_phase_genuine_dwell.md",
         "modules/test_phase_state_broadcast.md",
+        "modules/test_pinned_evaluators.md",
         "modules/test_plugin_runner.md",
         "modules/test_postgres_sqlite_parity.md",
         "modules/test_postgres_state_store.md",
@@ -20338,6 +20359,7 @@
         "modules/test_phase_evidence_dedup_inherit.md",
         "modules/test_phase_genuine_dwell.md",
         "modules/test_phase_state_broadcast.md",
+        "modules/test_pinned_evaluators.md",
         "modules/test_plugin_runner.md",
         "modules/test_postgres_sqlite_parity.md",
         "modules/test_postgres_state_store.md",
@@ -20397,5 +20419,5 @@
     }
   ],
   "schema_version": "llm-wiki-surface-index/v1",
-  "source_hash": "sha256:cb22aac61e5f3bb9283bf749f40a8f6636d1cfa04efbd79aff67acc554ebcee6"
+  "source_hash": "sha256:0081b21564b59abb50d94bb5eeec3f3f2dce3e5eac2b7f6785de4daf02e88def"
 }

@@ -1,6 +1,6 @@
 # AdvancementRule
 
-**Location:** `src/core/skill_runtime.py:138`
+**Location:** `src/core/skill_runtime.py:144`
 **Kind:** Class
 **Bases:** `TypedDict`
 **Module:** [skill_runtime](../modules/skill_runtime.md)

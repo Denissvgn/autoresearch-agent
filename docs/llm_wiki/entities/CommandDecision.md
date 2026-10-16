@@ -1,6 +1,6 @@
 # CommandDecision
 
-**Location:** `src/core/command_policy.py:54`
+**Location:** `src/core/command_policy.py:56`
 **Kind:** Class
 **Bases:** —
 **Module:** [command_policy](../modules/command_policy.md)
@@ -20,6 +20,7 @@ _Auto-generated from `CommandDecision` in `src/core/command_policy.py`._
 | `normalized_command` | `str` | `''` | — |
 | `operation` | `str` | `''` | — |
 | `reason` | `str \| None` | `None` | — |
+| `execution_identity` | `dict[str, Any] \| None` | `None` | — |
 
 ## Methods
 
@@ -59,7 +60,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [command_policy](../modules/command_policy.md) | 0 | `allowed`, `argv`, `normalized_command`, `operation`, `reason` |
+| [command_policy](../modules/command_policy.md) | 0 | `allowed`, `argv`, `execution_identity`, `normalized_command`, `operation`, `reason` |
 
 ### References
 

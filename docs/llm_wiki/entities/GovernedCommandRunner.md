@@ -1,6 +1,6 @@
 # GovernedCommandRunner
 
-**Location:** `src/core/command_runner.py:306`
+**Location:** `src/core/command_runner.py:323`
 **Kind:** Class
 **Bases:** —
 **Module:** [command_runner](../modules/command_runner.md)
@@ -35,6 +35,8 @@ flowchart LR
     n7["test_governed_runner_timeout_cleans_process_group (tests/test_command_policy.py)"]
     n8["test_governed_runner_without_extra_env_has_no_nonce (tests/test_command_policy.py)"]
     n9["test_registry_kill_all_reaps_in_flight_subprocess (tests/test_orchestrator_timeout.py)"]
+    n10["test_import_and_search_path_shadowing_cannot_change_evaluator_imports (tests/test_pinned_evaluators.py)"]
+    n11["test_planted_interpreter_under_candidate_tree_is_never_launched (tests/test_pinned_evaluators.py)"]
     n1 --> n0
     n2 --> n0
     n3 --> n0
@@ -44,6 +46,8 @@ flowchart LR
     n7 --> n0
     n8 --> n0
     n9 --> n0
+    n10 --> n0
+    n11 --> n0
     click n0 "../modules/command_runner.md"
     click n1 "../modules/agent_tools.md"
     click n2 "../modules/orchestrator.md"
@@ -54,6 +58,8 @@ flowchart LR
     click n7 "../modules/test_command_policy.md"
     click n8 "../modules/test_command_policy.md"
     click n9 "../modules/test_orchestrator_timeout.md"
+    click n10 "../modules/test_pinned_evaluators.md"
+    click n11 "../modules/test_pinned_evaluators.md"
 ```
 
 ### Summary
@@ -75,3 +81,5 @@ flowchart LR
 | `test_governed_runner_timeout_cleans_process_group` | call | [test_command_policy](../modules/test_command_policy.md) | 1 |
 | `test_governed_runner_without_extra_env_has_no_nonce` | call | [test_command_policy](../modules/test_command_policy.md) | 1 |
 | `test_registry_kill_all_reaps_in_flight_subprocess` | call | [test_orchestrator_timeout](../modules/test_orchestrator_timeout.md) | 1 |
+| `test_import_and_search_path_shadowing_cannot_change_evaluator_imports` | call | [test_pinned_evaluators](../modules/test_pinned_evaluators.md) | 1 |
+| `test_planted_interpreter_under_candidate_tree_is_never_launched` | call | [test_pinned_evaluators](../modules/test_pinned_evaluators.md) | 1 |

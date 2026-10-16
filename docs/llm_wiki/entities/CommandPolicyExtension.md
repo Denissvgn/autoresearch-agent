@@ -1,6 +1,6 @@
 # CommandPolicyExtension
 
-**Location:** `src/core/skill_runtime.py:94`
+**Location:** `src/core/skill_runtime.py:96`
 **Kind:** Class
 **Bases:** `TypedDict`
 **Module:** [skill_runtime](../modules/skill_runtime.md)
@@ -31,6 +31,7 @@ session workspace is deliberately NOT used — it is agent-writable).
 | `readable_files` | `list[str]` | *optional* | — |
 | `write_protected_files` | `list[str]` | *optional* | — |
 | `script_paths` | `dict[str, str]` | *optional* | — |
+| `script_digests` | `dict[str, str]` | *optional* | — |
 | `config_flag` | `str` | *optional* | — |
 
 ## Methods
@@ -58,7 +59,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [skill_runtime](../modules/skill_runtime.md) | 0 | `allowed_executables`, `allowed_scripts`, `config_flag`, `copyable_files`, `readable_files`, `script_paths`, `write_protected_files` |
+| [skill_runtime](../modules/skill_runtime.md) | 0 | `allowed_executables`, `allowed_scripts`, `config_flag`, `copyable_files`, `readable_files`, `script_digests`, `script_paths`, `write_protected_files` |
 
 ### Structure
 

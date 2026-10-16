@@ -28,6 +28,7 @@ the ``Popen`` handle.
 | `__future__` | `annotations` |
 | `anthropic` | `anthropic` |
 | `asyncio` | `asyncio` |
+| `hashlib` | `hashlib` |
 | `os` | `os` |
 | `pathlib` | `Path` |
 | `psutil` | `psutil` |
@@ -97,7 +98,7 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [_CapturingRunner](../entities/test_orchestrator_timeout_CapturingRunner.md) | 277 | — | Stand-in for GovernedCommandRunner that records the resolved timeout_s. |
+| [_CapturingRunner](../entities/test_orchestrator_timeout_CapturingRunner.md) | 288 | — | Stand-in for GovernedCommandRunner that records the resolved timeout_s. |
 
 ## Functions
 
@@ -107,7 +108,7 @@ flowchart LR
 | `_make_config` | `(research_id: str, workspace: str, *, timeout_s: int = 2) -> ResearchConfig` | — | — |
 | `_seed_session` | *(async)* `(store: ResultsStore, config: ResearchConfig) -> None` | — | — |
 | `_fake_bash_tool_use` | `(command: str, tool_id: str = 'toolu_p006')` | — | A minimal ProviderResponse containing one bash tool_use block. |
-| `_make_hanging_workspace` | `(tmp_path: Path) -> tuple[Path, Path]` | — | A workspace with ``.venv/bin/python`` symlink + a hanging autotuner script. |
+| `_make_hanging_workspace` | `(tmp_path: Path) -> tuple[Path, Path, dict]` | — | A workspace with ``.venv/bin/python`` symlink + a digest-pinned hanging |
 | `test_capped_command_is_reaped_and_session_times_out` | *(async)* `(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None` | `@pytest.mark.asyncio` | — |
 | `test_registry_kill_all_reaps_in_flight_subprocess` | *(async)* `(tmp_path: Path) -> None` | `@pytest.mark.asyncio` | — |
 | `_ws_access` | `() -> ToolAccessContext` | — | — |

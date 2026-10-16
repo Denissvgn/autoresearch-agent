@@ -143,4 +143,4 @@ flowchart LR
 | `test_baseline_capture_inherits_cross_session_baseline` | call | [test_baseline_capture_dedup_bypass](../modules/test_baseline_capture_dedup_bypass.md) | 1 |
 | `test_baseline_capture_no_prior_returns_none` | call | [test_baseline_capture_dedup_bypass](../modules/test_baseline_capture_dedup_bypass.md) | 1 |
 
-> References: showing 12 of 103 logical references; 91 omitted by the 12-row generated summary limit.
+> References: showing 12 of 104 logical references; 92 omitted by the 12-row generated summary limit.
