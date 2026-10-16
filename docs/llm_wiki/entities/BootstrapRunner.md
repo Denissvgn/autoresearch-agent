@@ -26,8 +26,8 @@ skills_root:
 | Method | Signature | Decorators | Description |
 |--------|-----------|------------|-------------|
 | `__init__` | `(*, plugin_runner: Optional[PluginRunner] = None, skills_root: Optional[Path] = None) -> None` | — | — |
-| `run` | *(async)* `(*, skill_dir: Path, layout: SkillLayout, manifest: ResearchSkillManifest, workspace: Path, skill_params: Optional[dict[str, Any]] = None, system_prompt: Optional[str] = None, tool_config: Optional[dict[str, Any]] = None, seed_search: Optional[dict[str, Any]] = None, dry: bool = False, timeout_s: Optional[float] = None) -> BootstrapOutcome` | — | Execute the skill's ``bootstrap.py`` and write the artifact. |
-| `_run_dry` | *(async)* `(*, skill_dir: Path, plugin: str, manifest: ResearchSkillManifest, workspace: Path, caps: PluginCaps, skill_params: Optional[dict[str, Any]], system_prompt: Optional[str], tool_config: Optional[dict[str, Any]], seed_search: Optional[dict[str, Any]], timeout_s: Optional[float]) -> BootstrapOutcome` | — | X-004 D5(b) overlay dry mode (P5-008). |
+| `run` | *(async)* `(*, skill_dir: Path, layout: SkillLayout, manifest: ResearchSkillManifest, workspace: Path, skill_params: Optional[dict[str, Any]] = None, system_prompt: Optional[str] = None, tool_config: Optional[dict[str, Any]] = None, seed_search: Optional[dict[str, Any]] = None, dry: bool = False, timeout_s: Optional[float] = None, proc_registry: Any = None, research_id: Optional[str] = None) -> BootstrapOutcome` | — | Execute the skill's ``bootstrap.py`` and write the artifact. |
+| `_run_dry` | *(async)* `(*, skill_dir: Path, plugin: str, manifest: ResearchSkillManifest, workspace: Path, caps: PluginCaps, skill_params: Optional[dict[str, Any]], system_prompt: Optional[str], tool_config: Optional[dict[str, Any]], seed_search: Optional[dict[str, Any]], timeout_s: Optional[float], proc_registry: Any = None, research_id: Optional[str] = None) -> BootstrapOutcome` | — | X-004 D5(b) overlay dry mode (P5-008). |
 | `is_idempotent` | `(*, existing_artifact: SessionBootstrapArtifact, workspace: Path) -> bool` | — | P5-009 idempotency: True if the workspace's current hashes match the |
 
 ## Relationships

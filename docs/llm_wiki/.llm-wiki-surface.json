@@ -18,18 +18,18 @@
     "by_kind": {
       "api-contracts": 0,
       "dependencies": 1,
-      "entities": 437,
-      "flows": 114,
+      "entities": 441,
+      "flows": 118,
       "guides": 0,
       "index": 1,
       "infrastructure": 3,
       "load-order": 1,
       "log": 1,
-      "modules": 254,
-      "workflows": 14
+      "modules": 256,
+      "workflows": 15
     },
     "dependency_architecture": 2,
-    "total": 826
+    "total": 837
   },
   "dependency_pages": {
     "count": 2,
@@ -333,6 +333,116 @@
         }
       },
       "id": "api-best_config_hash",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
+        "label": "bounded_drain",
+        "source_path": "src/core/process_limits.py",
+        "symbol": "bounded_drain"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 336,
+              "step": "bounded_drain",
+              "step_index": 1,
+              "target": "buf.extend"
+            }
+          ],
+          "gaps": [
+            {
+              "kind": "external_call",
+              "line": 277,
+              "step": "bounded_drain",
+              "target": "bytearray"
+            },
+            {
+              "kind": "external_call",
+              "line": 278,
+              "step": "bounded_drain",
+              "target": "bytearray"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 288,
+              "step": "bounded_drain",
+              "target": "proc.stdin.write"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 289,
+              "step": "bounded_drain",
+              "target": "proc.stdin.close"
+            },
+            {
+              "kind": "external_call",
+              "line": 293,
+              "step": "bounded_drain",
+              "target": "selectors.DefaultSelector"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 296,
+              "step": "bounded_drain",
+              "target": "sel.register"
+            },
+            {
+              "kind": "external_call",
+              "line": 298,
+              "step": "bounded_drain",
+              "target": "time.monotonic"
+            },
+            {
+              "kind": "external_call",
+              "line": 305,
+              "step": "bounded_drain",
+              "target": "time.monotonic"
+            },
+            {
+              "kind": "external_call",
+              "line": 312,
+              "step": "bounded_drain",
+              "target": "min"
+            },
+            {
+              "kind": "external_call",
+              "line": 312,
+              "step": "bounded_drain",
+              "target": "max"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 313,
+              "step": "bounded_drain",
+              "target": "sel.select"
+            },
+            {
+              "kind": "step_limit",
+              "line": 0,
+              "step": "bounded_drain",
+              "target": "first 12 steps"
+            }
+          ],
+          "generated": true,
+          "step_count": 12,
+          "transfer_count": 11,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/process_limits.py"
+          ],
+          "step_count": 45,
+          "truncated": false
+        }
+      },
+      "id": "api-bounded_drain",
       "language": "python"
     },
     {
@@ -2036,6 +2146,47 @@
       "category": "api",
       "detector": "builtin",
       "entry_point": {
+        "label": "rlimit_prefix",
+        "source_path": "src/core/process_limits.py",
+        "symbol": "rlimit_prefix"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [],
+          "gaps": [
+            {
+              "kind": "external_call",
+              "line": 154,
+              "step": "rlimit_prefix",
+              "target": "shutil.which"
+            },
+            {
+              "kind": "external_call",
+              "line": 164,
+              "step": "rlimit_prefix",
+              "target": "max"
+            }
+          ],
+          "generated": true,
+          "step_count": 6,
+          "transfer_count": 5,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/process_limits.py"
+          ],
+          "step_count": 6,
+          "truncated": false
+        }
+      },
+      "id": "api-rlimit_prefix",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
         "label": "samples_from_rows",
         "source_path": "src/core/significance.py",
         "symbol": "samples_from_rows"
@@ -2306,6 +2457,47 @@
       "category": "api",
       "detector": "builtin",
       "entry_point": {
+        "label": "signal_violation",
+        "source_path": "src/core/process_limits.py",
+        "symbol": "signal_violation"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [],
+          "gaps": [
+            {
+              "kind": "external_call",
+              "line": 380,
+              "step": "signal_violation",
+              "target": "getattr"
+            },
+            {
+              "kind": "external_call",
+              "line": 382,
+              "step": "signal_violation",
+              "target": "getattr"
+            }
+          ],
+          "generated": true,
+          "step_count": 3,
+          "transfer_count": 2,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/process_limits.py"
+          ],
+          "step_count": 3,
+          "truncated": false
+        }
+      },
+      "id": "api-signal_violation",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
         "label": "significance_verdict",
         "source_path": "src/core/significance.py",
         "symbol": "significance_verdict"
@@ -2543,6 +2735,107 @@
         }
       },
       "id": "api-target_state",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
+        "label": "terminate_process_tree",
+        "source_path": "src/core/process_limits.py",
+        "symbol": "terminate_process_tree"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [],
+          "gaps": [
+            {
+              "kind": "unresolved_call",
+              "line": 96,
+              "step": "terminate_process_tree",
+              "target": "proc.terminate"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 97,
+              "step": "terminate_process_tree",
+              "target": "proc.wait"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 101,
+              "step": "terminate_process_tree",
+              "target": "proc.kill"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 106,
+              "step": "terminate_process_tree",
+              "target": "psutil.Process"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 107,
+              "step": "terminate_process_tree",
+              "target": "root.children"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 110,
+              "step": "terminate_process_tree",
+              "target": "proc.wait"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 116,
+              "step": "terminate_process_tree",
+              "target": "process.terminate"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 123,
+              "step": "terminate_process_tree",
+              "target": "proc.wait"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 126,
+              "step": "terminate_process_tree",
+              "target": "psutil.wait_procs"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 129,
+              "step": "terminate_process_tree",
+              "target": "process.kill"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 133,
+              "step": "terminate_process_tree",
+              "target": "psutil.wait_procs"
+            },
+            {
+              "kind": "step_limit",
+              "line": 0,
+              "step": "terminate_process_tree",
+              "target": "first 12 steps"
+            }
+          ],
+          "generated": true,
+          "step_count": 12,
+          "transfer_count": 11,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/process_limits.py"
+          ],
+          "step_count": 16,
+          "truncated": false
+        }
+      },
+      "id": "api-terminate_process_tree",
       "language": "python"
     },
     {
@@ -8080,6 +8373,7 @@
         "entities/DetailEntry.md",
         "entities/DiffLine.md",
         "entities/DomainClassifier.md",
+        "entities/DrainOutcome.md",
         "entities/DynamicFormFields_Props.md",
         "entities/EmbeddingBackend.md",
         "entities/EnvironmentIdentity.md",
@@ -8197,6 +8491,7 @@
         "entities/PreflightKind.md",
         "entities/PrimaryMetric.md",
         "entities/ProbeBlockerSkill.md",
+        "entities/ProcessResourceCaps.md",
         "entities/ProductionAuditEvent.md",
         "entities/ProductionCandidate.md",
         "entities/ProductionOperations.md",
@@ -8443,11 +8738,13 @@
         "entities/TopbarProps.md",
         "entities/TransitionResult.md",
         "entities/TransitionSpec.md",
+        "entities/TreeResourceGuard.md",
         "entities/TrialContext.md",
         "entities/TrialIdentityConfig.md",
         "entities/Turn.md",
         "entities/TurnTrialState.md",
         "entities/UIConfig.md",
+        "entities/UnenforceableResourceCapabilityError.md",
         "entities/Usage.md",
         "entities/VariantDescriptor.md",
         "entities/VariantsConfig.md",
@@ -8465,6 +8762,7 @@
         "flows/api-append_findings.md",
         "flows/api-audit_command_policy.md",
         "flows/api-best_config_hash.md",
+        "flows/api-bounded_drain.md",
         "flows/api-build_generation_prompt.md",
         "flows/api-build_provider.md",
         "flows/api-build_trial_context.md",
@@ -8494,16 +8792,19 @@
         "flows/api-render_findings_markdown.md",
         "flows/api-render_path_template.md",
         "flows/api-resolve_run_inputs.md",
+        "flows/api-rlimit_prefix.md",
         "flows/api-samples_from_rows.md",
         "flows/api-sanitize_path_segment.md",
         "flows/api-select_backend.md",
         "flows/api-selectable_for.md",
         "flows/api-session_workspace_path.md",
+        "flows/api-signal_violation.md",
         "flows/api-significance_verdict.md",
         "flows/api-skill_id_to_model_type.md",
         "flows/api-stage_trial_or_none.md",
         "flows/api-stage_trial_workspace.md",
         "flows/api-target_state.md",
+        "flows/api-terminate_process_tree.md",
         "flows/api-trial_marker_candidates.md",
         "flows/api-validate_path_template.md",
         "flows/api-validate_secret_list.md",
@@ -8654,6 +8955,7 @@
         "modules/postgres_state_store.md",
         "modules/preflight.md",
         "modules/primitives.md",
+        "modules/process_limits.md",
         "modules/productionOps.md",
         "modules/ProductionOpsPanel.md",
         "modules/Promote.md",
@@ -8785,6 +9087,7 @@
         "modules/test_postgres_sqlite_parity.md",
         "modules/test_postgres_state_store.md",
         "modules/test_preflight.md",
+        "modules/test_process_limits.md",
         "modules/test_promotion_approval.md",
         "modules/test_promotion_diagnostics.md",
         "modules/test_promotion_target.md",
@@ -8844,6 +9147,7 @@
         "workflows/ConfigPromoter_preview.md",
         "workflows/enrich_iteration.md",
         "workflows/evaluate_command_policy.md",
+        "workflows/GovernedCommandRunner_run.md",
         "workflows/lifespan.md",
         "workflows/PostgresStateStore_add_iteration.md",
         "workflows/promoter_for_session.md",
@@ -9380,7 +9684,9 @@
         "modules/agent_tools.md",
         "modules/command_runner.md",
         "modules/orchestrator.md",
-        "modules/test_orchestrator_timeout.md"
+        "modules/session_manager.md",
+        "modules/test_orchestrator_timeout.md",
+        "modules/test_process_limits.md"
       ],
       "role": "semantic",
       "source_path": "src/core/command_runner.py",
@@ -9591,6 +9897,18 @@
       "role": "semantic",
       "source_path": "src/core/domain_classifier.py",
       "title": "DomainClassifier"
+    },
+    {
+      "canonical_path": "entities/DrainOutcome.md",
+      "id": "DrainOutcome",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/DrainOutcome",
+      "outgoing_internal_links": [
+        "modules/process_limits.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/process_limits.py",
+      "title": "DrainOutcome"
     },
     {
       "canonical_path": "entities/DynamicFormFields_Props.md",
@@ -10928,7 +11246,8 @@
         "modules/plugin_runner.md",
         "modules/skill_loader.md",
         "modules/skill_manifest.md",
-        "modules/test_execution_isolation.md"
+        "modules/test_execution_isolation.md",
+        "modules/test_plugin_runner.md"
       ],
       "role": "semantic",
       "source_path": "src/core/skill_manifest.py",
@@ -11106,6 +11425,21 @@
       "role": "semantic",
       "source_path": "tests/test_manifest_runtime_production_path.py",
       "title": "_ProbeBlockerSkill"
+    },
+    {
+      "canonical_path": "entities/ProcessResourceCaps.md",
+      "id": "ProcessResourceCaps",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/ProcessResourceCaps",
+      "outgoing_internal_links": [
+        "modules/command_runner.md",
+        "modules/plugin_runner.md",
+        "modules/process_limits.md",
+        "modules/test_process_limits.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/process_limits.py",
+      "title": "ProcessResourceCaps"
     },
     {
       "canonical_path": "entities/ProductionAuditEvent.md",
@@ -11720,7 +12054,7 @@
         "modules/plugin_runner.md"
       ],
       "role": "semantic",
-      "source_path": "src/core/plugin_runner.py",
+      "source_path": null,
       "title": "_ResourceWatcher"
     },
     {
@@ -14236,6 +14570,21 @@
       "title": "_TransitionSpec"
     },
     {
+      "canonical_path": "entities/TreeResourceGuard.md",
+      "id": "TreeResourceGuard",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/TreeResourceGuard",
+      "outgoing_internal_links": [
+        "modules/command_runner.md",
+        "modules/plugin_runner.md",
+        "modules/process_limits.md",
+        "modules/test_process_limits.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/process_limits.py",
+      "title": "TreeResourceGuard"
+    },
+    {
       "canonical_path": "entities/TrialContext.md",
       "id": "TrialContext",
       "kind": "entities",
@@ -14296,6 +14645,20 @@
       "role": "semantic",
       "source_path": "src/core/skill_manifest.py",
       "title": "UIConfig"
+    },
+    {
+      "canonical_path": "entities/UnenforceableResourceCapabilityError.md",
+      "id": "UnenforceableResourceCapabilityError",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/UnenforceableResourceCapabilityError",
+      "outgoing_internal_links": [
+        "modules/plugin_runner.md",
+        "modules/process_limits.md",
+        "modules/test_process_limits.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/process_limits.py",
+      "title": "UnenforceableResourceCapabilityError"
     },
     {
       "canonical_path": "entities/Usage.md",
@@ -15622,15 +15985,15 @@
         "entities/PluginResult.md",
         "entities/PluginRunBody.md",
         "entities/PluginRunner.md",
-        "entities/ResourceWatcher.md",
         "modules/bootstrap_runner.md",
         "modules/cli.md",
-        "modules/command_runner.md",
         "modules/isolation.md",
         "modules/plugin_runner.md",
+        "modules/process_limits.md",
         "modules/skill_manifest.md",
         "modules/test_execution_isolation.md",
         "modules/test_plugin_runner.md",
+        "modules/test_process_limits.md",
         "modules/test_prompt_evaluator.md",
         "modules/test_skill_prompt_engineering_e2e.md"
       ],
@@ -15711,6 +16074,25 @@
       "role": "semantic",
       "source_path": "ui/src/components/hifi/primitives.tsx",
       "title": "primitives Module"
+    },
+    {
+      "canonical_path": "modules/process_limits.md",
+      "id": "process_limits",
+      "kind": "modules",
+      "mcp_uri": "llm-wiki://modules/process_limits",
+      "outgoing_internal_links": [
+        "entities/DrainOutcome.md",
+        "entities/ProcessResourceCaps.md",
+        "entities/TreeResourceGuard.md",
+        "entities/UnenforceableResourceCapabilityError.md",
+        "modules/command_runner.md",
+        "modules/plugin_runner.md",
+        "modules/process_limits.md",
+        "modules/test_process_limits.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/process_limits.py",
+      "title": "process_limits Module"
     },
     {
       "canonical_path": "modules/productionOps.md",
@@ -17810,6 +18192,22 @@
       "title": "test_preflight Module"
     },
     {
+      "canonical_path": "modules/test_process_limits.md",
+      "id": "test_process_limits",
+      "kind": "modules",
+      "mcp_uri": "llm-wiki://modules/test_process_limits",
+      "outgoing_internal_links": [
+        "modules/command_runner.md",
+        "modules/config.md",
+        "modules/plugin_runner.md",
+        "modules/process_limits.md",
+        "modules/test_process_limits.md"
+      ],
+      "role": "semantic",
+      "source_path": "tests/test_process_limits.py",
+      "title": "test_process_limits Module"
+    },
+    {
       "canonical_path": "modules/test_promotion_approval.md",
       "id": "test_promotion_approval",
       "kind": "modules",
@@ -18784,6 +19182,22 @@
       "title": "evaluate_command_policy"
     },
     {
+      "canonical_path": "workflows/GovernedCommandRunner_run.md",
+      "id": "GovernedCommandRunner_run",
+      "kind": "workflows",
+      "mcp_uri": "llm-wiki://workflows/GovernedCommandRunner_run",
+      "outgoing_internal_links": [
+        "modules/command_policy.md",
+        "modules/command_runner.md",
+        "modules/config.md",
+        "modules/isolation.md",
+        "modules/process_limits.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/command_runner.py",
+      "title": "GovernedCommandRunner_run"
+    },
+    {
       "canonical_path": "workflows/lifespan.md",
       "id": "lifespan",
       "kind": "workflows",
@@ -18841,6 +19255,7 @@
       "mcp_uri": "llm-wiki://workflows/SessionManager__run_skill_bootstrap",
       "outgoing_internal_links": [
         "modules/bootstrap_runner.md",
+        "modules/command_runner.md",
         "modules/session_manager.md",
         "modules/skill_loader.md",
         "modules/skill_runtime.md"
@@ -18896,6 +19311,18 @@
       "role": "mixed",
       "source_path": "src/core/significance.py",
       "title": "best_config_hash"
+    },
+    {
+      "canonical_path": "flows/api-bounded_drain.md",
+      "id": "api-bounded_drain",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-bounded_drain",
+      "outgoing_internal_links": [
+        "modules/process_limits.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/process_limits.py",
+      "title": "bounded_drain"
     },
     {
       "canonical_path": "flows/api-build_generation_prompt.md",
@@ -19252,6 +19679,18 @@
       "title": "resolve_run_inputs"
     },
     {
+      "canonical_path": "flows/api-rlimit_prefix.md",
+      "id": "api-rlimit_prefix",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-rlimit_prefix",
+      "outgoing_internal_links": [
+        "modules/process_limits.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/process_limits.py",
+      "title": "rlimit_prefix"
+    },
+    {
       "canonical_path": "flows/api-samples_from_rows.md",
       "id": "api-samples_from_rows",
       "kind": "flows",
@@ -19310,6 +19749,18 @@
       "role": "mixed",
       "source_path": "src/core/skill_paths.py",
       "title": "session_workspace_path"
+    },
+    {
+      "canonical_path": "flows/api-signal_violation.md",
+      "id": "api-signal_violation",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-signal_violation",
+      "outgoing_internal_links": [
+        "modules/process_limits.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/process_limits.py",
+      "title": "signal_violation"
     },
     {
       "canonical_path": "flows/api-significance_verdict.md",
@@ -19372,6 +19823,18 @@
       "role": "mixed",
       "source_path": "src/core/skill_lifecycle.py",
       "title": "target_state"
+    },
+    {
+      "canonical_path": "flows/api-terminate_process_tree.md",
+      "id": "api-terminate_process_tree",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-terminate_process_tree",
+      "outgoing_internal_links": [
+        "modules/process_limits.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/process_limits.py",
+      "title": "terminate_process_tree"
     },
     {
       "canonical_path": "flows/api-trial_marker_candidates.md",
@@ -20420,6 +20883,7 @@
         "modules/postgres_state_store.md",
         "modules/preflight.md",
         "modules/primitives.md",
+        "modules/process_limits.md",
         "modules/productionOps.md",
         "modules/ProductionOpsPanel.md",
         "modules/Promote.md",
@@ -20551,6 +21015,7 @@
         "modules/test_postgres_sqlite_parity.md",
         "modules/test_postgres_state_store.md",
         "modules/test_preflight.md",
+        "modules/test_process_limits.md",
         "modules/test_promotion_approval.md",
         "modules/test_promotion_diagnostics.md",
         "modules/test_promotion_target.md",
@@ -20685,6 +21150,7 @@
         "modules/postgres_state_store.md",
         "modules/preflight.md",
         "modules/primitives.md",
+        "modules/process_limits.md",
         "modules/productionOps.md",
         "modules/ProductionOpsPanel.md",
         "modules/Promote.md",
@@ -20816,6 +21282,7 @@
         "modules/test_postgres_sqlite_parity.md",
         "modules/test_postgres_state_store.md",
         "modules/test_preflight.md",
+        "modules/test_process_limits.md",
         "modules/test_promotion_approval.md",
         "modules/test_promotion_diagnostics.md",
         "modules/test_promotion_target.md",
@@ -20872,5 +21339,5 @@
     }
   ],
   "schema_version": "llm-wiki-surface-index/v1",
-  "source_hash": "sha256:a256b027849575600f22eac70fd88832915c85af123c72631d258604de87dc12"
+  "source_hash": "sha256:f5d18db0afdc2fbfeaa027203349d1cd5c8896f9d2a3641e3fd85f46c1909448"
 }

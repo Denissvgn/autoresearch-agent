@@ -1,8 +1,8 @@
 {
   "artifact_hashes": {
-    "evaluated_envelope_hash": "sha256:f585ac5d8ff768a28568a40c7b3f1912ab1ed9856fc9c6fbf9982df3d38010a3",
-    "knowledge_index_hash": "sha256:aea12c3fd900a65c775a77c2b9f15c6d4d7318f0b305de5f25a2273007b36cc1",
-    "surface_index_hash": "sha256:364767324ba9d2f21082b494dd1dc85f49c03ab1e4ee133bb347fe81d4e2a231"
+    "evaluated_envelope_hash": "sha256:01b8ebe0120a424c44b0d71148ebb9a66c511a8b0ff767fcf1fda7378dc9cd2d",
+    "knowledge_index_hash": "sha256:3ce2e0ce4d0bc0733a89295af1bfc96a6234e45bc3755d5ac09c93e97927ec24",
+    "surface_index_hash": "sha256:3d96242ab06bcbeb85f2aca41323c7f43a4d429907ebf5ba80aa7b36486ac824"
   },
   "evidence_baselines": {
     "entities/AccentName.md": {
@@ -20,7 +20,7 @@
         "concept_observation_hash": "sha256:ce14b02a1dd6f96c61bca3be42156a0e0443c6935253d390e6e0f0becca48f39",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:183cecfa5fd57115e01ce9e855853839731d9b97e426f63345cc6b7f9bb690e7",
+        "source_content_hash": "sha256:fff6edafe9a541ce7d599e663d394eee86ab8fac26df87d4478368a4fefbab5d",
         "source_path": "src/core/session_manager.py"
       },
       "state": "known"
@@ -180,17 +180,17 @@
         "concept_observation_hash": "sha256:cc2000862bf1d255c3aa5b9c34b12911dd0410c3e41823b5b4645acf1369ec34",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:b25973ed83e8db9a64ee4bcec2f1c6b5d9cc99ad21801c9699d0c220a49f093a",
+        "source_content_hash": "sha256:26d72bef00deac1a5c117c3dc5c651a47c13157c27c2ef3bd1def2325c649591",
         "source_path": "src/core/bootstrap_runner.py"
       },
       "state": "known"
     },
     "entities/BootstrapRunner.md": {
       "basis": {
-        "concept_observation_hash": "sha256:b0ace82373aba595b300189cfdba9b10d3c06793d13a9f913f6af0ec29e3176e",
+        "concept_observation_hash": "sha256:e95d3e1dec8988c500676c682cdf17de86795a7af6b750f2ebc99145958f6be3",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:b25973ed83e8db9a64ee4bcec2f1c6b5d9cc99ad21801c9699d0c220a49f093a",
+        "source_content_hash": "sha256:26d72bef00deac1a5c117c3dc5c651a47c13157c27c2ef3bd1def2325c649591",
         "source_path": "src/core/bootstrap_runner.py"
       },
       "state": "known"
@@ -327,20 +327,20 @@
     },
     "entities/CommandProcessRegistry.md": {
       "basis": {
-        "concept_observation_hash": "sha256:0dbd50fc51c9e62ca0556c889984f3cb60d6d91b90f4ec974780bff8c1bb39ad",
+        "concept_observation_hash": "sha256:cb968acedd661ecdec1a28375cfa8866ddf04c40d23eb9e68eb0f54cfd744d77",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:f5513f3079127f339be0b19fdcd18eecfdc1174aefbe227c124e0514a2882083",
+        "source_content_hash": "sha256:40eee6a670bdfa4d96f9ccf7abdf4f9ab675bdfd215e764ae24b266143744d39",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
     },
     "entities/CommandRunResult.md": {
       "basis": {
-        "concept_observation_hash": "sha256:4bc8fac485db593df457ca85096f5c70d4dab2347b209e0ac331fa95228683a5",
+        "concept_observation_hash": "sha256:786550eb305f8bee840edc3a81a81b4807f4fac5f65a7f8a9d9446a5d1a1c43e",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:f5513f3079127f339be0b19fdcd18eecfdc1174aefbe227c124e0514a2882083",
+        "source_content_hash": "sha256:40eee6a670bdfa4d96f9ccf7abdf4f9ab675bdfd215e764ae24b266143744d39",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -492,6 +492,16 @@
         "scope": "entity",
         "source_content_hash": "sha256:52da221c639ef6cd9250de9c78550e9dd8c6e30427716844e9ff7ea73c83577e",
         "source_path": "src/core/domain_classifier.py"
+      },
+      "state": "known"
+    },
+    "entities/DrainOutcome.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:860a7a6d05305de9dcfdb098c211e6b676722397355ae8e3d49819fe04fc05e5",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:b7c8ae00ad348ca0ca08ea15d655d1c6f780d10b164d549bce22ea7f9dd49ad8",
+        "source_path": "src/core/process_limits.py"
       },
       "state": "known"
     },
@@ -760,7 +770,7 @@
         "concept_observation_hash": "sha256:f5a9ce383fd07e2213e07228fdec35c96fa45719b3d023b28c9dae3839bea1e7",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:f5513f3079127f339be0b19fdcd18eecfdc1174aefbe227c124e0514a2882083",
+        "source_content_hash": "sha256:40eee6a670bdfa4d96f9ccf7abdf4f9ab675bdfd215e764ae24b266143744d39",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -800,7 +810,7 @@
         "concept_observation_hash": "sha256:a198573250d9e2accccdb70c149ae0d40ebc0321b0b9650027dd4642cefda038",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:f5513f3079127f339be0b19fdcd18eecfdc1174aefbe227c124e0514a2882083",
+        "source_content_hash": "sha256:40eee6a670bdfa4d96f9ccf7abdf4f9ab675bdfd215e764ae24b266143744d39",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -1340,7 +1350,7 @@
         "concept_observation_hash": "sha256:8a7b62ee9480ecdc54f64dee9c7150d3b57b710989c31ed158c0da87e527c6ff",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:f5513f3079127f339be0b19fdcd18eecfdc1174aefbe227c124e0514a2882083",
+        "source_content_hash": "sha256:40eee6a670bdfa4d96f9ccf7abdf4f9ab675bdfd215e764ae24b266143744d39",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -1380,7 +1390,7 @@
         "concept_observation_hash": "sha256:b6887e98ea87434a72b3f6f1114a89cb14bcb9c8542fd8be7f3491aecf50fc1d",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:f5513f3079127f339be0b19fdcd18eecfdc1174aefbe227c124e0514a2882083",
+        "source_content_hash": "sha256:40eee6a670bdfa4d96f9ccf7abdf4f9ab675bdfd215e764ae24b266143744d39",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -1517,30 +1527,30 @@
     },
     "entities/PluginResult.md": {
       "basis": {
-        "concept_observation_hash": "sha256:aad0aa059594e1901b2053bba54541ad334a64834a8a780922e5a3768c520322",
+        "concept_observation_hash": "sha256:ccf7c416467b581dff5add1b8f31dc8dc36b5d4ece158a6df093b29da7b5d08b",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:e405986b00ff940dc7164106dcbbfa7f0c28175cfe77b218fbacc552ab7bd508",
+        "source_content_hash": "sha256:30b6689808383166866c583181dbf9e7b5b1b14f4e26e4f70658dd4acb707fe0",
         "source_path": "src/core/plugin_runner.py"
       },
       "state": "known"
     },
     "entities/PluginRunBody.md": {
       "basis": {
-        "concept_observation_hash": "sha256:efee188a817034925ab061af5187c616fa79956fc01b093d680eabc2434b6a5c",
+        "concept_observation_hash": "sha256:672e6d93f5981182f8672a944adcedc62ffec670608d6531d0a88be71fad2c8d",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:e405986b00ff940dc7164106dcbbfa7f0c28175cfe77b218fbacc552ab7bd508",
+        "source_content_hash": "sha256:30b6689808383166866c583181dbf9e7b5b1b14f4e26e4f70658dd4acb707fe0",
         "source_path": "src/core/plugin_runner.py"
       },
       "state": "known"
     },
     "entities/PluginRunner.md": {
       "basis": {
-        "concept_observation_hash": "sha256:c61fe0b68bea22aec6e0181ce815920c0d22aff77ac6831f179b4d0c92ff3700",
+        "concept_observation_hash": "sha256:1aa3108090ae5106139126bb7b681900757c0c4b29c98bacad0f07d8f111943e",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:e405986b00ff940dc7164106dcbbfa7f0c28175cfe77b218fbacc552ab7bd508",
+        "source_content_hash": "sha256:30b6689808383166866c583181dbf9e7b5b1b14f4e26e4f70658dd4acb707fe0",
         "source_path": "src/core/plugin_runner.py"
       },
       "state": "known"
@@ -1622,6 +1632,16 @@
         "scope": "entity",
         "source_content_hash": "sha256:70117379acfa08fad0b4aa22f99350a72cb413b7df1d16bb06da2d2fddd70b5c",
         "source_path": "tests/test_manifest_runtime_production_path.py"
+      },
+      "state": "known"
+    },
+    "entities/ProcessResourceCaps.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:e040b2485b426d147e952f66f99f52d4dd157fb8c525b761986235f49b48eb20",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:b7c8ae00ad348ca0ca08ea15d655d1c6f780d10b164d549bce22ea7f9dd49ad8",
+        "source_path": "src/core/process_limits.py"
       },
       "state": "known"
     },
@@ -2035,16 +2055,6 @@
       },
       "state": "known"
     },
-    "entities/ResourceWatcher.md": {
-      "basis": {
-        "concept_observation_hash": "sha256:ddd13b498a6b607f89d8f7e65491086fd4c277e674ee53fc3fa981843694fc64",
-        "extractor_ref": "llm-wiki/extractor/python",
-        "scope": "entity",
-        "source_content_hash": "sha256:e405986b00ff940dc7164106dcbbfa7f0c28175cfe77b218fbacc552ab7bd508",
-        "source_path": "src/core/plugin_runner.py"
-      },
-      "state": "known"
-    },
     "entities/ResultReceipt.md": {
       "basis": {
         "concept_observation_hash": "sha256:90e92ba59511a4c2146b0d7a0c3195ddc94463de1beed17004f8d6b211b65228",
@@ -2250,7 +2260,7 @@
         "concept_observation_hash": "sha256:958cb6cccfe3f5690aac38119ca17d668812119a0050c115ac4068c89c5b247f",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:b25973ed83e8db9a64ee4bcec2f1c6b5d9cc99ad21801c9699d0c220a49f093a",
+        "source_content_hash": "sha256:26d72bef00deac1a5c117c3dc5c651a47c13157c27c2ef3bd1def2325c649591",
         "source_path": "src/core/bootstrap_runner.py"
       },
       "state": "known"
@@ -2280,7 +2290,7 @@
         "concept_observation_hash": "sha256:725dc0a95869a7f876b6f3467c8aff66da9e8bc4d1e6311f068aafd1f4c0641a",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:183cecfa5fd57115e01ce9e855853839731d9b97e426f63345cc6b7f9bb690e7",
+        "source_content_hash": "sha256:fff6edafe9a541ce7d599e663d394eee86ab8fac26df87d4478368a4fefbab5d",
         "source_path": "src/core/session_manager.py"
       },
       "state": "known"
@@ -2290,7 +2300,7 @@
         "concept_observation_hash": "sha256:213352ff5b4781bc17751f3e7aef56d85e1f068639c3b353e869258023cd4319",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:f5513f3079127f339be0b19fdcd18eecfdc1174aefbe227c124e0514a2882083",
+        "source_content_hash": "sha256:40eee6a670bdfa4d96f9ccf7abdf4f9ab675bdfd215e764ae24b266143744d39",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -2327,10 +2337,10 @@
     },
     "entities/Settings.md": {
       "basis": {
-        "concept_observation_hash": "sha256:07d3090815a0ba3c8053c4def891e97d30d00431e94446f620caebf4f5b00563",
+        "concept_observation_hash": "sha256:c6202d24165c74f206c0260a81e5a14b9c48bb736f09a9e4df75448d5c5b90e6",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:c41b15437a009fc3740d00f21fef2b83de59596e53fea1922daa6afdf8a2e3e4",
+        "source_content_hash": "sha256:ced3de9522aeef68d04849985e13227f84bb2b50363d46a49dc3019767370e09",
         "source_path": "src/config.py"
       },
       "state": "known"
@@ -3430,7 +3440,7 @@
         "concept_observation_hash": "sha256:0cb9ae70f7da2292ab87a6aea2d7e4e2a3eee4530b5fabdb24c922876cccf149",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:51406864f48d82a66400c8f5a656c4be2d324ae492ccfa276e9c580cb6b56488",
+        "source_content_hash": "sha256:9e9c40a747d2be2dce8dc98f73f02ca6918446e7bdacacfd1398a0127abd090e",
         "source_path": "src/core/agent_tools.py"
       },
       "state": "known"
@@ -3485,6 +3495,16 @@
       },
       "state": "known"
     },
+    "entities/TreeResourceGuard.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:dedb9944936c975e424c56dbc8b78047c98a827757cc6927b34b6a926a8d0646",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:b7c8ae00ad348ca0ca08ea15d655d1c6f780d10b164d549bce22ea7f9dd49ad8",
+        "source_path": "src/core/process_limits.py"
+      },
+      "state": "known"
+    },
     "entities/TrialContext.md": {
       "basis": {
         "concept_observation_hash": "sha256:8acfc557dbf17fef351ccffa08ca1351f94bf47447714b3b5aa73a3e340c1cf1",
@@ -3532,6 +3552,16 @@
         "scope": "entity",
         "source_content_hash": "sha256:94f046c0d7e3cb8b5d4577b0c83d20e5c0965839deb0ef86e5fcdeab30102411",
         "source_path": "src/core/skill_manifest.py"
+      },
+      "state": "known"
+    },
+    "entities/UnenforceableResourceCapabilityError.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:8722cc7f41faea1826638c60775be2f18188eb7e2bf04e2e3e810a6277d4f42d",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:b7c8ae00ad348ca0ca08ea15d655d1c6f780d10b164d549bce22ea7f9dd49ad8",
+        "source_path": "src/core/process_limits.py"
       },
       "state": "known"
     },
@@ -4640,7 +4670,7 @@
         "concept_observation_hash": "sha256:02cbc599faaf4dc5f000c408270e156565c3df1d8ef7fa8964c6e8cd5d4ce767",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:51406864f48d82a66400c8f5a656c4be2d324ae492ccfa276e9c580cb6b56488",
+        "source_content_hash": "sha256:9e9c40a747d2be2dce8dc98f73f02ca6918446e7bdacacfd1398a0127abd090e",
         "source_path": "src/core/agent_tools.py"
       },
       "state": "known"
@@ -4690,7 +4720,7 @@
         "concept_observation_hash": "sha256:45a04735430ce05fcf2ee2a906f2be9211040bbb942317b4d5c06a1c20c8cadc",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:b25973ed83e8db9a64ee4bcec2f1c6b5d9cc99ad21801c9699d0c220a49f093a",
+        "source_content_hash": "sha256:26d72bef00deac1a5c117c3dc5c651a47c13157c27c2ef3bd1def2325c649591",
         "source_path": "src/core/bootstrap_runner.py"
       },
       "state": "known"
@@ -4797,10 +4827,10 @@
     },
     "modules/command_runner.md": {
       "basis": {
-        "concept_observation_hash": "sha256:fda22584ab88c9967cb9e1910f3eada5fb6fc4ff4ba9c8069fa8586cdb641e2b",
+        "concept_observation_hash": "sha256:0e09e61739b953294320d511e5355df75f81cd19eb12c64a5dcec3d5d8898100",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:f5513f3079127f339be0b19fdcd18eecfdc1174aefbe227c124e0514a2882083",
+        "source_content_hash": "sha256:40eee6a670bdfa4d96f9ccf7abdf4f9ab675bdfd215e764ae24b266143744d39",
         "source_path": "src/core/command_runner.py"
       },
       "state": "known"
@@ -4820,7 +4850,7 @@
         "concept_observation_hash": "sha256:20ba6a67cd1cec7350aa3d25f3568c2776165d62899ed310e41182bd086b5bf4",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:c41b15437a009fc3740d00f21fef2b83de59596e53fea1922daa6afdf8a2e3e4",
+        "source_content_hash": "sha256:ced3de9522aeef68d04849985e13227f84bb2b50363d46a49dc3019767370e09",
         "source_path": "src/config.py"
       },
       "state": "known"
@@ -5167,10 +5197,10 @@
     },
     "modules/plugin_runner.md": {
       "basis": {
-        "concept_observation_hash": "sha256:faf5437e1431ae10082e8f5493004da0b058bcba3bfb83a5d59b64325066aa44",
+        "concept_observation_hash": "sha256:6fd03ac4b62a1e0d5ab2b07930c91e7ec9c43347f91af763d1207bfb2431c200",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:e405986b00ff940dc7164106dcbbfa7f0c28175cfe77b218fbacc552ab7bd508",
+        "source_content_hash": "sha256:30b6689808383166866c583181dbf9e7b5b1b14f4e26e4f70658dd4acb707fe0",
         "source_path": "src/core/plugin_runner.py"
       },
       "state": "known"
@@ -5212,6 +5242,16 @@
         "scope": "module",
         "source_content_hash": "sha256:9e5ad39b1d5325dffc3c01cd8e2eec535004d5bce782d777de734cf156aa81ae",
         "source_path": "ui/src/components/hifi/primitives.tsx"
+      },
+      "state": "known"
+    },
+    "modules/process_limits.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:bc92ead6da3a9e79f549d15196ddc704ff2b28c0a160a44bca1418d61271ea1a",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "module",
+        "source_content_hash": "sha256:b7c8ae00ad348ca0ca08ea15d655d1c6f780d10b164d549bce22ea7f9dd49ad8",
+        "source_path": "src/core/process_limits.py"
       },
       "state": "known"
     },
@@ -5390,7 +5430,7 @@
         "concept_observation_hash": "sha256:5c5bbd0b1ea3c4839d9b7131682eb4b0438fe707b6ea476e688c5a0e896e8b22",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:183cecfa5fd57115e01ce9e855853839731d9b97e426f63345cc6b7f9bb690e7",
+        "source_content_hash": "sha256:fff6edafe9a541ce7d599e663d394eee86ab8fac26df87d4478368a4fefbab5d",
         "source_path": "src/core/session_manager.py"
       },
       "state": "known"
@@ -6435,6 +6475,16 @@
       },
       "state": "known"
     },
+    "modules/test_process_limits.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:d80078af85af961d528d6cf07ce1536f7c6b98810d00e7b882eac48ee4cce07f",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "module",
+        "source_content_hash": "sha256:a329ca889a1887fcb32262b221563acd4c6471bbaa11a762ddf9b158c0b47c15",
+        "source_path": "tests/test_process_limits.py"
+      },
+      "state": "known"
+    },
     "modules/test_promotion_approval.md": {
       "basis": {
         "concept_observation_hash": "sha256:f1f1c8e381fef6e72557eb01c329dd8e73d6e5e3ccaefbbcf618fcceed3aae3c",
@@ -6917,6 +6967,29 @@
     }
   },
   "generation_inputs": {
+    "entity_retirement": {
+      "generated_semantics": {
+        "entities/ResourceWatcher.md": {
+          "attributes": {},
+          "description": "Polls a live plugin subprocess's RSS / CPU and flags cap breaches (D6).\n\nThe runner checks ``rss_exceeded`` / ``cpu_exceeded`` after ``communicate``\nreturns; if a cap was breached the tree is killed and the result fails\nclosed. Sampling cadence (0.1s) balances responsiveness against overhead —\nplugins are short-lived (bootstrap/preflight once per session; parser once\nper iteration).",
+          "methods": {
+            "__init__": "—",
+            "_loop": "—",
+            "start": "—",
+            "stop": "—"
+          }
+        }
+      },
+      "pages": {
+        "entities/ResourceWatcher.md": {
+          "entity_name": "_ResourceWatcher",
+          "occurrence": 1,
+          "scope": "entity",
+          "source_path": "src/core/plugin_runner.py"
+        }
+      },
+      "schema_version": "llm-wiki-entity-retirement/v1"
+    },
     "infrastructure": {
       "discovery": {
         "candidate_count": 11,
@@ -7321,6 +7394,12 @@
       "occurrence": 1,
       "scope": "entity",
       "source_path": "src/core/domain_classifier.py"
+    },
+    "entities/DrainOutcome.md": {
+      "entity_name": "DrainOutcome",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/process_limits.py"
     },
     "entities/DynamicFormFields_Props.md": {
       "entity_name": "Props",
@@ -7999,6 +8078,12 @@
       "occurrence": 1,
       "scope": "entity",
       "source_path": "tests/test_manifest_runtime_production_path.py"
+    },
+    "entities/ProcessResourceCaps.md": {
+      "entity_name": "ProcessResourceCaps",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/process_limits.py"
     },
     "entities/ProductionAuditEvent.md": {
       "entity_name": "ProductionAuditEvent",
@@ -9116,6 +9201,12 @@
       "scope": "entity",
       "source_path": "src/core/state_machine.py"
     },
+    "entities/TreeResourceGuard.md": {
+      "entity_name": "TreeResourceGuard",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/process_limits.py"
+    },
     "entities/TrialContext.md": {
       "entity_name": "TrialContext",
       "occurrence": 1,
@@ -9145,6 +9236,12 @@
       "occurrence": 1,
       "scope": "entity",
       "source_path": "src/core/skill_manifest.py"
+    },
+    "entities/UnenforceableResourceCapabilityError.md": {
+      "entity_name": "UnenforceableResourceCapabilityError",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "src/core/process_limits.py"
     },
     "entities/Usage.md": {
       "entity_name": "Usage",
@@ -9986,6 +10083,10 @@
       "scope": "module",
       "source_path": "ui/src/components/hifi/primitives.tsx"
     },
+    "modules/process_limits.md": {
+      "scope": "module",
+      "source_path": "src/core/process_limits.py"
+    },
     "modules/productionOps.md": {
       "scope": "module",
       "source_path": "ui/src/utils/productionOps.ts"
@@ -10473,6 +10574,10 @@
     "modules/test_preflight.md": {
       "scope": "module",
       "source_path": "tests/test_preflight.py"
+    },
+    "modules/test_process_limits.md": {
+      "scope": "module",
+      "source_path": "tests/test_process_limits.py"
     },
     "modules/test_promotion_approval.md": {
       "scope": "module",
@@ -11546,6 +11651,8 @@
               "autoresearch_api_token": "Bearer token required for autoresearch API and WebSocket access.",
               "autoresearch_cross_session_duplicate_check": "Reject duplicate config/seed/mode/split attempts across prior sessions for the same instrument, timeframe, and model type. Phase 3.4: default flipped to True so wasted compute on already-explored points is the opt-out, not the opt-in.",
               "autoresearch_prometheus_token": "Optional bearer token required to scrape /metrics. When set, callers must present 'Authorization: Bearer <token>' or the scrape is rejected with HTTP 401. Phase 5.2 hardening.",
+              "command_max_cpu_s": "Cumulative CPU cap in seconds for governed evaluator commands (plugin runs use their manifest caps).",
+              "command_max_rss_mb": "Process-tree RSS cap in MB for governed evaluator commands (plugin runs use their manifest caps).",
               "context_compaction_threshold": "Number of messages before old tool results are compacted.",
               "cors_origins_raw": "—",
               "database_url": "Optional Postgres DSN enabling the PostgresStateStore backend (ARC-011 Phase 6 / R6). When unset (or when the DSN is a sqlite URL), the service uses SQLiteStateStore and the WEB_CONCURRENCY>1 guard stays active (W14). Set to a postgresql:// (or postgresql+asyncpg://) DSN to enable horizontal scaling.",
@@ -11553,6 +11660,9 @@
               "demo_mode": "P0-3 demo mode: route all LLM calls to the zero-credential MockProvider. Never enable in production (refused by router).",
               "environment": "—",
               "execution_isolation_mode": "Execution boundary policy for candidate-controlled subprocesses (skill plugins and governed commands). 'enforced' (default) runs them in the isolation backend with filesystem/network caps enforced at the OS boundary and refuses unenforceable capability requests or unavailable isolation (fail-closed). 'trusted_local_code' is the operator's explicitly retained local-code policy: subprocesses run unsandboxed, separately labeled, and are never advertised as sandboxed.",
+              "execution_max_file_write_bytes": "Kernel per-file write quota (RLIMIT_FSIZE) for candidate-controlled subprocesses. When set and prlimit is unavailable the capability is rejected rather than run unbounded.",
+              "execution_max_output_bytes": "Maximum total stdout+stderr bytes one candidate-controlled run may deliver before the tree is terminated; capture itself stays bounded regardless.",
+              "execution_max_processes": "Maximum live processes in one candidate-controlled process tree. Breaches terminate the tree immediately (resource guard).",
               "experiment_timeout_s": "—",
               "global_stagnation_epsilon": "AR-7: Minimum metric improvement above the session best required to reset the stagnation window. Improvements <= epsilon are treated as stagnant.",
               "global_stagnation_window": "AR-7: Number of consecutive iterations with no metric improvement that triggers a GLOBAL_STAGNATION nudge demanding TERMINATE_REQUEST.",
@@ -11608,10 +11718,10 @@
           }
         }
       },
-      "hash": "sha256:c41b15437a009fc3740d00f21fef2b83de59596e53fea1922daa6afdf8a2e3e4",
+      "hash": "sha256:ced3de9522aeef68d04849985e13227f84bb2b50363d46a49dc3019767370e09",
       "language": "python",
       "module_page": "config",
-      "semantic_hash": "sha256:2aaae793943f066cece48aca10aaa4e348b6eaa26b9fa0415e26fb6d98349e09"
+      "semantic_hash": "sha256:c35eab7900c380af9c8a1f21143f0b7f4929512807426f310e1eecf9df8fe2dd"
     },
     "src/core/agent_tools.py": {
       "entities": [
@@ -11658,10 +11768,10 @@
           }
         }
       },
-      "hash": "sha256:51406864f48d82a66400c8f5a656c4be2d324ae492ccfa276e9c580cb6b56488",
+      "hash": "sha256:9e9c40a747d2be2dce8dc98f73f02ca6918446e7bdacacfd1398a0127abd090e",
       "language": "python",
       "module_page": "agent_tools",
-      "semantic_hash": "sha256:01ec9163c4f86b1642c6f882f84348921cc40b044343ed4c71538813a18ce6c9"
+      "semantic_hash": "sha256:82023cfc84da884711cc2ee881237a582385b78e140d3824168b42d50de07575"
     },
     "src/core/artifact_reference.py": {
       "entities": [],
@@ -11795,10 +11905,10 @@
           }
         }
       },
-      "hash": "sha256:b25973ed83e8db9a64ee4bcec2f1c6b5d9cc99ad21801c9699d0c220a49f093a",
+      "hash": "sha256:26d72bef00deac1a5c117c3dc5c651a47c13157c27c2ef3bd1def2325c649591",
       "language": "python",
       "module_page": "bootstrap_runner",
-      "semantic_hash": "sha256:aedc1a436bf4be7159ea7ee1effcc9cf944db4bffec325d79633c23fa456444a"
+      "semantic_hash": "sha256:603f0a8dd39dfb81d00ff7078222ce9fb2de3f97ed9a8c3d3f08eb67b2b0ac27"
     },
     "src/core/command_policy.py": {
       "entities": [
@@ -11921,11 +12031,13 @@
           },
           "CommandRunResult": {
             "attributes": {
+              "cleanup_incomplete": "—",
               "decision": "—",
               "execution_boundary": "—",
               "log_path": "—",
               "log_truncated": "—",
               "output": "—",
+              "resource_violation": "—",
               "returncode": "—",
               "timed_out": "—"
             },
@@ -11994,10 +12106,10 @@
           }
         }
       },
-      "hash": "sha256:f5513f3079127f339be0b19fdcd18eecfdc1174aefbe227c124e0514a2882083",
+      "hash": "sha256:40eee6a670bdfa4d96f9ccf7abdf4f9ab675bdfd215e764ae24b266143744d39",
       "language": "python",
       "module_page": "command_runner",
-      "semantic_hash": "sha256:3e3c65876e1ae415c75b1c5544a3ab2ffba0eb41a0fdc4d17e0c29e7104fbaf9"
+      "semantic_hash": "sha256:1a471f247f72dc84fc3086ce207301a41f06ec95c3f66ded6798033e35b374fd"
     },
     "src/core/config_promoter.py": {
       "entities": [
@@ -14502,8 +14614,7 @@
       "entities": [
         "PluginResult",
         "PluginRunner",
-        "_PluginRunBody",
-        "_ResourceWatcher"
+        "_PluginRunBody"
       ],
       "entity_page_occurrences": [
         {
@@ -14520,37 +14631,36 @@
           "name": "_PluginRunBody",
           "occurrence": 1,
           "page": "PluginRunBody"
-        },
-        {
-          "name": "_ResourceWatcher",
-          "occurrence": 1,
-          "page": "ResourceWatcher"
         }
       ],
       "entity_pages": {
         "PluginResult": "PluginResult",
         "PluginRunner": "PluginRunner",
-        "_PluginRunBody": "PluginRunBody",
-        "_ResourceWatcher": "ResourceWatcher"
+        "_PluginRunBody": "PluginRunBody"
       },
       "generated_semantics": {
         "entities": {
           "PluginResult": {
             "attributes": {
               "caps": "—",
+              "cleanup_incomplete": "—",
               "cpu_exceeded": "—",
               "duration_s": "—",
               "error": "—",
               "extra": "—",
+              "fsize_exceeded": "—",
               "isolation": "—",
               "kind": "—",
               "ok": "—",
               "output": "—",
+              "output_exceeded": "—",
               "plugin_path": "—",
+              "processes_exceeded": "—",
               "raw_output": "—",
               "returncode": "—",
               "rss_exceeded": "—",
-              "timed_out": "—"
+              "timed_out": "—",
+              "violation": "—"
             },
             "description": "Outcome of one plugin invocation (X-004 §6 failure semantics).\n\n``ok=True`` ⇒ the plugin exited 0 and emitted valid JSON on stdout; the\nparsed object is in ``output``. ``ok=False`` ⇒ crash / timeout / bad JSON /\nnon-zero exit; ``error`` carries the human-readable cause and the caller\nwrites a fail-closed ``audit_events`` row. The exception never propagates.",
             "methods": {}
@@ -14575,42 +14685,35 @@
               "kind": "—",
               "plugin": "—",
               "plugin_path": "—",
+              "proc_registry": "—",
+              "research_id": "—",
+              "resource_caps": "—",
               "spawn_argv": "—",
               "timeout_s": "—"
             },
             "description": "Inputs bundled for the worker-thread sync body.",
             "methods": {}
-          },
-          "_ResourceWatcher": {
-            "attributes": {},
-            "description": "Polls a live plugin subprocess's RSS / CPU and flags cap breaches (D6).\n\nThe runner checks ``rss_exceeded`` / ``cpu_exceeded`` after ``communicate``\nreturns; if a cap was breached the tree is killed and the result fails\nclosed. Sampling cadence (0.1s) balances responsiveness against overhead —\nplugins are short-lived (bootstrap/preflight once per session; parser once\nper iteration).",
-            "methods": {
-              "__init__": "—",
-              "_loop": "—",
-              "start": "—",
-              "stop": "—"
-            }
           }
         },
         "module": {
           "classes": {
             "PluginResult": "Outcome of one plugin invocation (X-004 §6 failure semantics).",
             "PluginRunner": "Execute one skill plugin in a confined governed subprocess (X-004 §6).",
-            "_PluginRunBody": "Inputs bundled for the worker-thread sync body.",
-            "_ResourceWatcher": "Polls a live plugin subprocess's RSS / CPU and flags cap breaches (D6)."
+            "_PluginRunBody": "Inputs bundled for the worker-thread sync body."
           },
-          "description": "Governed subprocess runner for skill-supplied plugins (ARC-011 X-004 / P5-005).\n\nThis module implements the **plugin execution contract** recorded in the X-004\nsecurity spike (§6; design recorded in this module's docstring). Every skill-supplied\nPython file — ``bootstrap.py``, ``parser.py``, ``preflight.py``,\n``resolve_identity.py`` — runs in its own confined subprocess via this runner,\nnever ``import``-ed into the server process (X-004 D2).\n\nDesign contract (X-004 §6, verbatim where load-bearing):\n\n* **Invocation:** ``PluginRunner.run(skill_dir, plugin, kind, input_json, *,\n  caps, timeout_s) -> PluginResult``.\n* **Subprocess:** ``sys.executable <plugin>``, no shell, ``start_new_session=True``\n  (process-group for tree-kill). Mirrors ``GovernedCommandRunner``'s spawn shape.\n* **ABI:** JSON on stdin, JSON on stdout, exit 0/non-zero. The plugin module\n  exposes a pure function; the runner does the marshalling.\n* **Capability block (default-deny):** ``caps.fs_write`` / ``network_egress`` /\n  ``env`` / ``timeout_s`` / ``max_rss_mb`` / ``max_cpu_s``. Default per-kind\n  caps come from ``skill_loader._DEFAULT_CAPS_BY_KIND`` (X-004 §6).\n* **Env (X-004 §4.2 — strict):** ``PATH`` / ``LANG`` / ``HOME`` /\n  ``PYTHONUNBUFFERED`` / venv ``PYTHONPATH`` + only manifest-declared ``env``\n  keys. **No secrets, no ``AWS_*``, no service tokens.** This is strictly\n  narrower than ``command_runner._CHILD_ENV_ALLOWLIST`` (the agent path), by\n  design — plugins have no legitimate need for any of those.\n* **Failure semantics (fail-closed):** crash / timeout / invalid-JSON /\n  non-zero-exit ⇒ ``PluginResult(ok=False)`` + audit; **the exception never\n  propagates to the server process** (the single-instance W14 guarantee).\n* **Path confinement (D4):** the plugin's CWD is the session workspace;\n  ``skills/`` is reachable read-only; writes are confined to the workspace when\n  ``caps.fs_write == \"workspace\"``. Path confinement uses ``relative_to``\n  checks against the declared roots.\n\nThe ``BootstrapRunner`` (P5-005, ``bootstrap_runner.py``) is the first\nconsumer; ``parser`` / ``preflight`` / ``resolve_identity`` plugins follow the\nsame contract.\n\nDesign decisions (P1-007 house style):\n\n* **Sync subprocess + thread offload.** Like ``GovernedCommandRunner.run``,\n  the blocking ``Popen`` poll loop lives on a worker thread; the public\n  ``run()`` is ``async`` and wraps the body in ``asyncio.to_thread`` so a hard\n  timeout / cancel can reap the tree via ``_terminate_process_group_without_communicate``.\n* **No env inheritance.** The plugin child env is built fresh from the X-004\n  §4.2 strict allow-list — it does NOT call ``command_runner._build_child_env``\n  (that one is the agent path and carries experiment-legitimate creds plugins\n  must never see).\n* **Resource monitoring.** A psutil watcher thread enforces ``max_rss_mb`` /\n  ``max_cpu_s``; on breach the tree is killed and the result is fail-closed.\n* **Auditing is the caller's job.** ``PluginRunner`` returns a ``PluginResult``\n  with ``error``/``returncode``/``timed_out``; the caller (``BootstrapRunner``\n  / orchestrator) writes the ``audit_events`` row. Keeps the runner free of the\n  DB handle (X-004 D3 — plugins' execution context gets no server internals).",
+          "description": "Governed subprocess runner for skill-supplied plugins (ARC-011 X-004 / P5-005).\n\nThis module implements the **plugin execution contract** recorded in the X-004\nsecurity spike (§6; design recorded in this module's docstring). Every skill-supplied\nPython file — ``bootstrap.py``, ``parser.py``, ``preflight.py``,\n``resolve_identity.py`` — runs in its own confined subprocess via this runner,\nnever ``import``-ed into the server process (X-004 D2).\n\nDesign contract (X-004 §6, verbatim where load-bearing):\n\n* **Invocation:** ``PluginRunner.run(skill_dir, plugin, kind, input_json, *,\n  caps, timeout_s) -> PluginResult``.\n* **Subprocess:** ``sys.executable <plugin>``, no shell, ``start_new_session=True``\n  (process-group for tree-kill). Mirrors ``GovernedCommandRunner``'s spawn shape.\n* **ABI:** JSON on stdin, JSON on stdout, exit 0/non-zero. The plugin module\n  exposes a pure function; the runner does the marshalling.\n* **Capability block (default-deny):** ``caps.fs_write`` / ``network_egress`` /\n  ``env`` / ``timeout_s`` / ``max_rss_mb`` / ``max_cpu_s``. Default per-kind\n  caps come from ``skill_loader._DEFAULT_CAPS_BY_KIND`` (X-004 §6).\n* **Env (X-004 §4.2 — strict):** ``PATH`` / ``LANG`` / ``HOME`` /\n  ``PYTHONUNBUFFERED`` / venv ``PYTHONPATH`` + only manifest-declared ``env``\n  keys. **No secrets, no ``AWS_*``, no service tokens.** This is strictly\n  narrower than ``command_runner._CHILD_ENV_ALLOWLIST`` (the agent path), by\n  design — plugins have no legitimate need for any of those.\n* **Failure semantics (fail-closed):** crash / timeout / invalid-JSON /\n  non-zero-exit ⇒ ``PluginResult(ok=False)`` + audit; **the exception never\n  propagates to the server process** (the single-instance W14 guarantee).\n* **Path confinement (D4):** the plugin's CWD is the session workspace;\n  ``skills/`` is reachable read-only; writes are confined to the workspace when\n  ``caps.fs_write == \"workspace\"``. Path confinement uses ``relative_to``\n  checks against the declared roots.\n\nThe ``BootstrapRunner`` (P5-005, ``bootstrap_runner.py``) is the first\nconsumer; ``parser`` / ``preflight`` / ``resolve_identity`` plugins follow the\nsame contract.\n\nDesign decisions (P1-007 house style):\n\n* **Sync subprocess + thread offload.** Like ``GovernedCommandRunner.run``,\n  the blocking drain lives on a worker thread; the public ``run()`` is\n  ``async`` and wraps the body in ``asyncio.to_thread`` so stop/cancel can\n  reap the tree through the process registry and the bounded cleanup path.\n* **No env inheritance.** The plugin child env is built fresh from the X-004\n  §4.2 strict allow-list — it does NOT call ``command_runner._build_child_env``\n  (that one is the agent path and carries experiment-legitimate creds plugins\n  must never see).\n* **Resource bounds.** ``src.core.process_limits`` enforces cumulative CPU,\n  process-tree RSS, wall time, process count, and the configured output and\n  filesystem quotas over the whole tree; breaches terminate immediately and\n  the result is an attributed fail-closed record with explicit cleanup status.\n* **Auditing is the caller's job.** ``PluginRunner`` returns a ``PluginResult``\n  with ``error``/``returncode``/``timed_out``; the caller (``BootstrapRunner``\n  / orchestrator) writes the ``audit_events`` row. Keeps the runner free of the\n  DB handle (X-004 D3 — plugins' execution context gets no server internals).",
           "functions": {
             "_build_plugin_env": "Build the env dict for a plugin subprocess (X-004 §4.2, strict).",
             "_declared_input_paths": "Absolute path values in the input JSON that name existing host files.",
-            "_tail": "Return the trailing slice of ``text`` for error context."
+            "_tail": "Return the trailing slice of ``text`` for error context.",
+            "_violation_result": "Build the attributed failed result for one resource-cap breach."
           }
         }
       },
-      "hash": "sha256:e405986b00ff940dc7164106dcbbfa7f0c28175cfe77b218fbacc552ab7bd508",
+      "hash": "sha256:30b6689808383166866c583181dbf9e7b5b1b14f4e26e4f70658dd4acb707fe0",
       "language": "python",
       "module_page": "plugin_runner",
-      "semantic_hash": "sha256:41f05cbf331d4eb7f1281a8c3d26f4c36136d343063f5bae7bcf029d59bc57fe"
+      "semantic_hash": "sha256:3d88615bf9bdeb2f144ed14cfd6b12dee6b594129f0e28474b987c79f4ee729f"
     },
     "src/core/postgres_state_store.py": {
       "entities": [
@@ -14787,6 +14890,105 @@
       "language": "python",
       "module_page": "preflight",
       "semantic_hash": "sha256:4b92b8483533354dd1d1a3463eac37bae22ebf3658325c26ac9e1b3d3824cf90"
+    },
+    "src/core/process_limits.py": {
+      "entities": [
+        "UnenforceableResourceCapabilityError",
+        "ProcessResourceCaps",
+        "TreeResourceGuard",
+        "DrainOutcome"
+      ],
+      "entity_page_occurrences": [
+        {
+          "name": "UnenforceableResourceCapabilityError",
+          "occurrence": 1,
+          "page": "UnenforceableResourceCapabilityError"
+        },
+        {
+          "name": "ProcessResourceCaps",
+          "occurrence": 1,
+          "page": "ProcessResourceCaps"
+        },
+        {
+          "name": "TreeResourceGuard",
+          "occurrence": 1,
+          "page": "TreeResourceGuard"
+        },
+        {
+          "name": "DrainOutcome",
+          "occurrence": 1,
+          "page": "DrainOutcome"
+        }
+      ],
+      "entity_pages": {
+        "DrainOutcome": "DrainOutcome",
+        "ProcessResourceCaps": "ProcessResourceCaps",
+        "TreeResourceGuard": "TreeResourceGuard",
+        "UnenforceableResourceCapabilityError": "UnenforceableResourceCapabilityError"
+      },
+      "generated_semantics": {
+        "entities": {
+          "DrainOutcome": {
+            "attributes": {
+              "cleanup_incomplete": "—",
+              "stderr": "—",
+              "stdout": "—",
+              "timed_out": "—",
+              "violation": "—"
+            },
+            "description": "Result of one bounded drain: captured bytes plus attributed status.",
+            "methods": {}
+          },
+          "ProcessResourceCaps": {
+            "attributes": {
+              "cpu_s": "—",
+              "max_file_write_bytes": "—",
+              "max_output_bytes": "—",
+              "max_processes": "—",
+              "rss_mb": "—",
+              "wall_s": "—"
+            },
+            "description": "Finite resource caps for one candidate-controlled subprocess tree.\n\n``None`` means the cap is not requested for this run. Every configured\nvalue is enforced at the OS boundary or the parent boundary as described\nin the module docstring; unenforceable configured caps raise\n:class:`UnenforceableResourceCapabilityError` at spawn time.",
+            "methods": {}
+          },
+          "TreeResourceGuard": {
+            "attributes": {},
+            "description": "Polls one subprocess tree and terminates it the moment a cap is breached.\n\nCumulative CPU is summed across the whole tree and compared against the\ncap directly (never per-interval deltas); RSS is summed across the tree;\nprocess count includes the root. On the first breach the guard terminates\nthe tree itself — there is no flag-for-later-check phase — and records the\nattributed violation kind.",
+            "methods": {
+              "__init__": "—",
+              "_loop": "—",
+              "_record": "—",
+              "start": "—",
+              "stop": "—"
+            }
+          },
+          "UnenforceableResourceCapabilityError": {
+            "attributes": {},
+            "description": "A configured resource cap cannot be enforced on this host (fail-closed).",
+            "methods": {}
+          }
+        },
+        "module": {
+          "classes": {
+            "DrainOutcome": "Result of one bounded drain: captured bytes plus attributed status.",
+            "ProcessResourceCaps": "Finite resource caps for one candidate-controlled subprocess tree.",
+            "TreeResourceGuard": "Polls one subprocess tree and terminates it the moment a cap is breached.",
+            "UnenforceableResourceCapabilityError": "A configured resource cap cannot be enforced on this host (fail-closed)."
+          },
+          "description": "Bounded resource use, output, and cancellation for candidate subprocesses.\n\nThis module is the resource layer of the universal execution boundary. Every\ncandidate-controlled subprocess (skill plugins, governed evaluator commands)\nruns under finite, configurable caps and is stopped as a whole process tree the\nmoment a cap is breached — the parent never waits for the child to finish\nbefore reacting, and never buffers output without a bound.\n\nEnforcement map (kernel where available, parent-side where not):\n\n* **cumulative CPU** — the tree guard sums CPU across the whole process tree\n  against the cap (true cumulative accounting, not per-interval deltas) and\n  terminates immediately; ``prlimit --cpu`` adds a per-process kernel backstop.\n* **process-tree memory** — the tree guard sums RSS across the tree and\n  terminates immediately on breach.\n* **wall time** — the drain loop enforces the deadline and terminates\n  immediately on expiry.\n* **process count** — the tree guard counts descendants and terminates\n  immediately above the cap.\n* **filesystem quota** — ``prlimit --fsize`` (kernel, per-file). This is the\n  one cap with no parent-side enforcement: when it is configured and the\n  ``prlimit`` binary is unavailable the capability is **rejected** rather than\n  run unbounded.\n* **output quota** — the drain loop counts delivered bytes and terminates\n  immediately past the configured bound; capture itself is chunk-bounded.\n\nTermination is bounded: :data:`TERMINATION_BOUND_S` is the documented tested\nbound from the moment a violation is observed to the moment the process tree\nis gone (SIGTERM, short bounded wait, SIGKILL, short bounded wait). Callers\nreceive an explicit ``cleanup_incomplete`` status when descendants survive\nthat window; successful cleanup leaves no orphaned child.",
+          "functions": {
+            "_has_pending": "True while any stream is still registered (pipes may be idle but open).",
+            "bounded_drain": "Run one subprocess to completion under bounded capture and caps.",
+            "rlimit_prefix": "Spawn prefix applying kernel rlimits, or a refusal for unenforceable caps.",
+            "signal_violation": "Attribute a signal death to its resource cap (kernel enforcement path).",
+            "terminate_process_tree": "Terminate one subprocess tree within a bounded cleanup window."
+          }
+        }
+      },
+      "hash": "sha256:b7c8ae00ad348ca0ca08ea15d655d1c6f780d10b164d549bce22ea7f9dd49ad8",
+      "language": "python",
+      "module_page": "process_limits",
+      "semantic_hash": "sha256:4b8273fb553de3cf9fc13648a1cf2ae44c59c5bba902a3baa5f2d62ce65d53e8"
     },
     "src/core/promotion_approval.py": {
       "entities": [],
@@ -15390,10 +15592,10 @@
           }
         }
       },
-      "hash": "sha256:183cecfa5fd57115e01ce9e855853839731d9b97e426f63345cc6b7f9bb690e7",
+      "hash": "sha256:fff6edafe9a541ce7d599e663d394eee86ab8fac26df87d4478368a4fefbab5d",
       "language": "python",
       "module_page": "session_manager",
-      "semantic_hash": "sha256:1ccfed2a9b1152f5a053c383bde3f92235a15f3fe66222f8fc7d516a73f4bf0a"
+      "semantic_hash": "sha256:06cae5be50bb69072d9d433f68aeb694ebf370e98c47dbe00760e21b49f2b98d"
     },
     "src/core/significance.py": {
       "entities": [],
@@ -21755,6 +21957,40 @@
       "module_page": "test_preflight",
       "semantic_hash": "sha256:a5cdaddff7f03b2dbaaf5d530e9b4ea1a358c54513c453cedbbd62f5d961c4b7"
     },
+    "tests/test_process_limits.py": {
+      "entities": [],
+      "entity_page_occurrences": [],
+      "entity_pages": {},
+      "generated_semantics": {
+        "entities": {},
+        "module": {
+          "classes": {},
+          "description": "Bounded resource use, output, and cancellation acceptance tests.\n\nSynthetic CPU/memory/output/process workloads assert that a breach stops the\nprocess tree within the documented tested termination bound and produces an\nattributed failed record; independent psutil inspection after teardown finds\nno orphaned child; unenforceable required caps reject the capability.",
+          "functions": {
+            "_assert_no_orphans": "Independent process inspection after teardown.",
+            "_cmd_fixture": "—",
+            "_guarded_run": "Run one python probe under caps; return (outcome, proc, elapsed).",
+            "_write_probe_plugin": "—",
+            "test_command_output_quota_attributed": "The evaluator channel enforces the output quota and attributes it.",
+            "test_cpu_breach_stops_tree_within_bound": "Cumulative CPU breach stops the tree within the documented bound.",
+            "test_file_write_quota_enforced_at_kernel": "Per-file write quota (RLIMIT_FSIZE) stops oversized writes.",
+            "test_memory_breach_stops_tree_within_bound": "Process-tree RSS breach stops the tree.",
+            "test_output_breach_stops_tree_and_capture_stays_bounded": "Output quota breach terminates; capture itself never grows unbounded.",
+            "test_plugin_result_is_attributed_and_failed": "A plugin resource breach is an attributed failed record.",
+            "test_process_count_breach_stops_tree_with_no_orphans": "Process-count breach stops the whole tree; no child survives teardown.",
+            "test_registry_cancel_reaps_evaluator_tree": "Stop/cancel propagates through the evaluator (command) channel.",
+            "test_registry_cancel_reaps_plugin_tree": "Stop/cancel propagates through the plugin (bootstrap) channel.",
+            "test_termination_latency_within_documented_bound": "Record the tested termination bound: breach to tree-gone latency.",
+            "test_unenforceable_required_cap_rejects_capability": "A required cap that cannot be enforced rejects the capability.",
+            "test_wall_timeout_stops_tree": "Wall-time breach terminates immediately and is attributed."
+          }
+        }
+      },
+      "hash": "sha256:a329ca889a1887fcb32262b221563acd4c6471bbaa11a762ddf9b158c0b47c15",
+      "language": "python",
+      "module_page": "test_process_limits",
+      "semantic_hash": "sha256:7bcc6bd30dfc87a3ed29aaa7c4bb55ad3fb9388387cee19588a9db7d7d41cce0"
+    },
     "tests/test_promotion_approval.py": {
       "entities": [
         "FakeStore",
@@ -26490,6 +26726,17 @@
       "exclude_tests": false
     }
   },
-  "tombstones": {},
+  "tombstones": {
+    "entities/ResourceWatcher.md": {
+      "last_valid_basis": {
+        "concept_observation_hash": "sha256:ddd13b498a6b607f89d8f7e65491086fd4c277e674ee53fc3fa981843694fc64",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:e405986b00ff940dc7164106dcbbfa7f0c28175cfe77b218fbacc552ab7bd508",
+        "source_path": "src/core/plugin_runner.py"
+      },
+      "reason": "source-missing"
+    }
+  },
   "version": 5
 }

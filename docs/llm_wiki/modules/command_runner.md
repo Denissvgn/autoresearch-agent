@@ -22,6 +22,7 @@ Governed subprocess runner for autoresearch agent commands.
 | `signal` | `signal` |
 | `src.core.command_policy` | `CommandDecision`, `evaluate_command_policy` |
 | `src.core.isolation` | `IsolationPolicy` |
+| `src.core.process_limits` | `TreeResourceGuard`, `terminate_process_tree` |
 | `src.core.tool_access` | `ToolAccessContext` |
 | `stat` | `stat` |
 | `subprocess` | `subprocess` |
@@ -51,9 +52,9 @@ flowchart LR
 
 | Direction | Module |
 |---|---|
-| Inbound | `src` (3) |
-| Inbound | `tests` (7) |
-| Outbound | `src` (3) |
+| Inbound | `src` (2) |
+| Inbound | `tests` (8) |
+| Outbound | `src` (4) |
 
 ### External packages
 
@@ -61,19 +62,19 @@ flowchart LR
 |---|---:|---:|
 | python | 1 | 1 |
 
-> All 13 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 14 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
 | Class | Kind | Line | Bases / Target | Description |
 |-------|------|------|----------------|-------------|
-| [_HeadTailBuffer](../entities/HeadTailBuffer.md) | Class | 39 | — | Retain a fixed-size head and rolling tail, including for newline-free data. |
-| [_SessionOutputLog](../entities/SessionOutputLog.md) | Class | 73 | — | Append child output under a shared session logs byte quota. |
-| [OutputStream](../entities/OutputStream.md) | Type alias | 252 | `Literal['stdout', 'stderr']` | — |
-| [OutputCallback](../entities/OutputCallback.md) | Type alias | 253 | `Callable[[OutputStream, str], None]` | — |
-| [CommandRunResult](../entities/CommandRunResult.md) | Class | 257 | — | — |
-| [CommandProcessRegistry](../entities/CommandProcessRegistry.md) | Class | 275 | — | Thread-safe registry of in-flight governed subprocesses, keyed by session. |
-| [GovernedCommandRunner](../entities/GovernedCommandRunner.md) | Class | 331 | — | Validate and execute one approved command without invoking a shell. |
+| [_HeadTailBuffer](../entities/HeadTailBuffer.md) | Class | 40 | — | Retain a fixed-size head and rolling tail, including for newline-free data. |
+| [_SessionOutputLog](../entities/SessionOutputLog.md) | Class | 74 | — | Append child output under a shared session logs byte quota. |
+| [OutputStream](../entities/OutputStream.md) | Type alias | 253 | `Literal['stdout', 'stderr']` | — |
+| [OutputCallback](../entities/OutputCallback.md) | Type alias | 254 | `Callable[[OutputStream, str], None]` | — |
+| [CommandRunResult](../entities/CommandRunResult.md) | Class | 258 | — | — |
+| [CommandProcessRegistry](../entities/CommandProcessRegistry.md) | Class | 282 | — | Thread-safe registry of in-flight governed subprocesses, keyed by session. |
+| [GovernedCommandRunner](../entities/GovernedCommandRunner.md) | Class | 344 | — | Validate and execute one approved command without invoking a shell. |
 
 ## Functions
 
@@ -83,6 +84,6 @@ flowchart LR
 | `redact_sensitive_text` | `(text: str) -> str` | — | Redact token-like values from command text and subprocess output. |
 | `_combine_output` | `(stdout: str \| bytes \| None, stderr: str \| bytes \| None) -> str` | — | — |
 | `_to_text` | `(value: str \| bytes) -> str` | — | — |
-| `_collect_process_output` | `(proc: subprocess.Popen, *, timeout_s: float, workspace: str, output_callback: OutputCallback \| None = None, log: _SessionOutputLog \| None = None) -> tuple[str, str, bool, str \| None, bool]` | — | Drain both pipes incrementally, without communicate(), threads or queues. |
+| `_collect_process_output` | `(proc: subprocess.Popen, *, timeout_s: float, workspace: str, output_callback: OutputCallback \| None = None, log: _SessionOutputLog \| None = None, resource_guard: 'TreeResourceGuard \| None' = None, max_output_bytes: int \| None = None) -> tuple[str, str, bool, str \| None, bool, str \| None, bool]` | — | Drain both pipes incrementally, without communicate(), threads or queues. |
 | `_truncate_output` | `(output: str) -> str` | — | — |
-| `_terminate_process_group_without_communicate` | `(proc: subprocess.Popen[str]) -> None` | — | Terminate a timed-out process tree without accumulating pipe output. |
+| `_terminate_process_group_without_communicate` | `(proc: subprocess.Popen[str]) -> bool` | — | Terminate a timed-out process tree without accumulating pipe output. |

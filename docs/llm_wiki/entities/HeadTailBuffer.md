@@ -1,6 +1,6 @@
 # _HeadTailBuffer
 
-**Location:** `src/core/command_runner.py:39`
+**Location:** `src/core/command_runner.py:40`
 **Kind:** Class
 **Bases:** —
 **Module:** [command_runner](../modules/command_runner.md)

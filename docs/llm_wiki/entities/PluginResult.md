@@ -1,6 +1,6 @@
 # PluginResult
 
-**Location:** `src/core/plugin_runner.py:195`
+**Location:** `src/core/plugin_runner.py:197`
 **Kind:** Class
 **Bases:** —
 **Module:** [plugin_runner](../modules/plugin_runner.md)
@@ -29,6 +29,11 @@ writes a fail-closed ``audit_events`` row. The exception never propagates.
 | `timed_out` | `bool` | `False` | — |
 | `rss_exceeded` | `bool` | `False` | — |
 | `cpu_exceeded` | `bool` | `False` | — |
+| `processes_exceeded` | `bool` | `False` | — |
+| `output_exceeded` | `bool` | `False` | — |
+| `fsize_exceeded` | `bool` | `False` | — |
+| `violation` | `Optional[str]` | `None` | — |
+| `cleanup_incomplete` | `bool` | `False` | — |
 | `error` | `Optional[str]` | `None` | — |
 | `duration_s` | `float` | `0.0` | — |
 | `caps` | `Optional[PluginCaps]` | `None` | — |
@@ -46,39 +51,44 @@ writes a fail-closed ``audit_events`` row. The exception never propagates.
 flowchart LR
     n0["PluginResult (src/core/plugin_runner.py)"]
     n1["src/core/bootstrap_runner.py"]
-    n2["PluginRunner._run_sync (src/core/plugin_runner.py)"]
-    n3["PluginRunner._run_sync_inner (src/core/plugin_runner.py)"]
-    n4["PluginRunner.run (src/core/plugin_runner.py)"]
-    n5["tests/test_plugin_runner.py"]
-    n6["tests/test_prompt_evaluator.py"]
+    n2["_violation_result (src/core/plugin_runner.py)"]
+    n3["PluginRunner._run_sync (src/core/plugin_runner.py)"]
+    n4["PluginRunner._run_sync_inner (src/core/plugin_runner.py)"]
+    n5["PluginRunner.run (src/core/plugin_runner.py)"]
+    n6["tests/test_plugin_runner.py"]
+    n7["tests/test_prompt_evaluator.py"]
     n1 --> n0
     n2 --> n0
     n3 --> n0
     n4 --> n0
     n5 --> n0
     n6 --> n0
+    n7 --> n0
     click n0 "../modules/plugin_runner.md"
     click n1 "../modules/bootstrap_runner.md"
     click n2 "../modules/plugin_runner.md"
     click n3 "../modules/plugin_runner.md"
     click n4 "../modules/plugin_runner.md"
-    click n5 "../modules/test_plugin_runner.md"
-    click n6 "../modules/test_prompt_evaluator.md"
+    click n5 "../modules/plugin_runner.md"
+    click n6 "../modules/test_plugin_runner.md"
+    click n7 "../modules/test_prompt_evaluator.md"
 ```
 
 ### Summary
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [plugin_runner](../modules/plugin_runner.md) | 0 | `caps`, `cpu_exceeded`, `duration_s`, `error`, `extra`, `isolation`, `kind`, `ok`, `output`, `plugin_path`, `raw_output`, `returncode` |
+| [plugin_runner](../modules/plugin_runner.md) | 0 | `caps`, `cleanup_incomplete`, `cpu_exceeded`, `duration_s`, `error`, `extra`, `fsize_exceeded`, `isolation`, `kind`, `ok`, `output`, `output_exceeded` |
 
 ### References
 
 | Reference | Kind | Source | Call sites |
 |---|---|---|---:|
 | `bootstrap_runner` | import | [bootstrap_runner](../modules/bootstrap_runner.md) | — |
+| `_violation_result` | call | [plugin_runner](../modules/plugin_runner.md) | 1 |
+| `_violation_result` | type_reference | [plugin_runner](../modules/plugin_runner.md) | — |
 | `PluginRunner._run_sync` | type_reference | [plugin_runner](../modules/plugin_runner.md) | — |
-| `PluginRunner._run_sync_inner` | call | [plugin_runner](../modules/plugin_runner.md) | 7 |
+| `PluginRunner._run_sync_inner` | call | [plugin_runner](../modules/plugin_runner.md) | 6 |
 | `PluginRunner._run_sync_inner` | type_reference | [plugin_runner](../modules/plugin_runner.md) | — |
 | `PluginRunner.run` | call | [plugin_runner](../modules/plugin_runner.md) | 4 |
 | `PluginRunner.run` | type_reference | [plugin_runner](../modules/plugin_runner.md) | — |

@@ -6,11 +6,11 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 
 | Surface | Count | Start here |
 |---|---:|---|
-| Entities | 437 | [Open section](#entities) |
-| Modules | 254 | [Open section](#modules) |
-| Workflows | 14 | [Open section](#workflows) |
+| Entities | 441 | [Open section](#entities) |
+| Modules | 256 | [Open section](#modules) |
+| Workflows | 15 | [Open section](#workflows) |
 | Guides | 0 | No pages |
-| Entry-point flows | 114 | [Open section](#entry-point-flows) |
+| Entry-point flows | 118 | [Open section](#entry-point-flows) |
 | Infrastructure | 3 | [Open section](#infrastructure) |
 | HTTP API contracts | 0 | No pages |
 | Dependency architecture | 2 | [Open section](#dependency-architecture) |
@@ -67,6 +67,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [DetailEntry](entities/DetailEntry.md)
 - [DiffLine](entities/DiffLine.md)
 - [DomainClassifier](entities/DomainClassifier.md)
+- [DrainOutcome](entities/DrainOutcome.md)
 - [DynamicFormFields_Props](entities/DynamicFormFields_Props.md)
 - [EmbeddingBackend](entities/EmbeddingBackend.md)
 - [EnvironmentIdentity](entities/EnvironmentIdentity.md)
@@ -180,6 +181,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [PreflightKind](entities/PreflightKind.md)
 - [PrimaryMetric](entities/PrimaryMetric.md)
 - [ProbeBlockerSkill](entities/ProbeBlockerSkill.md)
+- [ProcessResourceCaps](entities/ProcessResourceCaps.md)
 - [ProductionAuditEvent](entities/ProductionAuditEvent.md)
 - [ProductionCandidate](entities/ProductionCandidate.md)
 - [ProductionOperations](entities/ProductionOperations.md)
@@ -221,7 +223,6 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [ResolutionRecord](entities/ResolutionRecord.md)
 - [ResolvedRunInputs](entities/ResolvedRunInputs.md)
 - [ResourceLimits](entities/ResourceLimits.md)
-- [ResourceWatcher](entities/ResourceWatcher.md)
 - [ResultReceipt](entities/ResultReceipt.md)
 - [RlProfitSummary](entities/RlProfitSummary.md)
 - [RollbackStatusSummary](entities/RollbackStatusSummary.md)
@@ -366,11 +367,13 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [TopbarProps](entities/TopbarProps.md)
 - [TransitionResult](entities/TransitionResult.md)
 - [TransitionSpec](entities/TransitionSpec.md)
+- [TreeResourceGuard](entities/TreeResourceGuard.md)
 - [TrialContext](entities/TrialContext.md)
 - [TrialIdentityConfig](entities/TrialIdentityConfig.md)
 - [Turn](entities/Turn.md)
 - [TurnTrialState](entities/TurnTrialState.md)
 - [UIConfig](entities/UIConfig.md)
+- [UnenforceableResourceCapabilityError](entities/UnenforceableResourceCapabilityError.md)
 - [Usage](entities/Usage.md)
 - [VariantDescriptor](entities/VariantDescriptor.md)
 - [VariantsConfig](entities/VariantsConfig.md)
@@ -455,6 +458,12 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [test_skill_loader_StubSettings](entities/test_skill_loader_StubSettings.md)
 - [test_skills_generate_api_StubProvider](entities/test_skills_generate_api_StubProvider.md)
 - [test_trial_workspace_CapturingRunner](entities/test_trial_workspace_CapturingRunner.md)
+
+### Retired source members
+
+Retained history; these declarations are absent from the selected source inventory.
+
+- [ResourceWatcher](entities/ResourceWatcher.md)
 
 ## Modules
 
@@ -542,6 +551,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [postgres_state_store](modules/postgres_state_store.md) - ``PostgresStateStore`` — the multi-worker Postgres backend (ARC-011 P6-002).
 - [preflight](modules/preflight.md) - ``PreflightCheck`` protocol + concrete checks (ARC-011 P1-019..021).
 - [primitives](modules/primitives.md) - `ui/src/components/hifi/primitives.tsx`
+- [process_limits](modules/process_limits.md) - Bounded resource use, output, and cancellation for candidate subprocesses.
 - [productionOps](modules/productionOps.md) - `ui/src/utils/productionOps.ts`
 - [promotion](modules/promotion.md) - Config promotion endpoints — preview and confirm pushing configs to host.
 - [promotion_approval](modules/promotion_approval.md) - Pure production-approval v2 encoding and candidate binding (no I/O).
@@ -664,6 +674,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [test_postgres_sqlite_parity](modules/test_postgres_sqlite_parity.md) - ARC-011 P6-002b — dual-backend parity sweep.
 - [test_postgres_state_store](modules/test_postgres_state_store.md) - ARC-011 P6-002a — PostgresStateStore write-path tests.
 - [test_preflight](modules/test_preflight.md) - Structural / contract tests for the ``PreflightCheck`` protocol (ARC-011 P1-019) and the ``HTTPHealthCheck`` / ``TCPConnectCheck`` implementations (P1-020), plus the P1-021 dispatch migration in ``service_preflight``.
+- [test_process_limits](modules/test_process_limits.md) - Bounded resource use, output, and cancellation acceptance tests.
 - [test_promotion_approval](modules/test_promotion_approval.md) - P0-020 / P0-021 — Mandatory signed production approval bound to a candidate (W18 v2).
 - [test_promotion_diagnostics](modules/test_promotion_diagnostics.md) - Gap 3 — auto-promotion skip diagnostics include collection errors.
 - [test_promotion_target](modules/test_promotion_target.md) - Structural / contract tests for the ``PromotionTarget`` protocol (ARC-011 P1-015) and the ``FilePathPromotionTarget`` implementation (P1-016), plus the P1-017 wiring of ``ConfigPromoter`` to delegate its file-write surface to the target.
@@ -722,6 +733,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [AgentOrchestrator__try_auto_promote](workflows/AgentOrchestrator__try_auto_promote.md) - entry: `orchestrator.AgentOrchestrator._try_auto_promote`
 - [AgentOrchestrator_run](workflows/AgentOrchestrator_run.md) - entry: `orchestrator.AgentOrchestrator.run`
 - [ConfigPromoter_preview](workflows/ConfigPromoter_preview.md) - entry: `config_promoter.ConfigPromoter.preview`
+- [GovernedCommandRunner_run](workflows/GovernedCommandRunner_run.md) - entry: `command_runner.GovernedCommandRunner.run`
 - [PostgresStateStore_add_iteration](workflows/PostgresStateStore_add_iteration.md) - entry: `postgres_state_store.PostgresStateStore.add_iteration`
 - [SessionManager__run_skill_bootstrap](workflows/SessionManager__run_skill_bootstrap.md) - entry: `session_manager.SessionManager._run_skill_bootstrap`
 - [candidate_summary](workflows/candidate_summary.md) - entry: `research_state._candidate_summary`
@@ -740,6 +752,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [api-append_findings](flows/api-append_findings.md) - entry: `append_findings`
 - [api-audit_command_policy](flows/api-audit_command_policy.md) - entry: `audit_command_policy`
 - [api-best_config_hash](flows/api-best_config_hash.md) - entry: `best_config_hash`
+- [api-bounded_drain](flows/api-bounded_drain.md) - entry: `bounded_drain`
 - [api-build_generation_prompt](flows/api-build_generation_prompt.md) - entry: `build_generation_prompt`
 - [api-build_provider](flows/api-build_provider.md) - entry: `build_provider`
 - [api-build_trial_context](flows/api-build_trial_context.md) - entry: `build_trial_context`
@@ -769,16 +782,19 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [api-render_findings_markdown](flows/api-render_findings_markdown.md) - entry: `render_findings_markdown`
 - [api-render_path_template](flows/api-render_path_template.md) - entry: `render_path_template`
 - [api-resolve_run_inputs](flows/api-resolve_run_inputs.md) - entry: `resolve_run_inputs`
+- [api-rlimit_prefix](flows/api-rlimit_prefix.md) - entry: `rlimit_prefix`
 - [api-samples_from_rows](flows/api-samples_from_rows.md) - entry: `samples_from_rows`
 - [api-sanitize_path_segment](flows/api-sanitize_path_segment.md) - entry: `sanitize_path_segment`
 - [api-select_backend](flows/api-select_backend.md) - entry: `select_backend`
 - [api-selectable_for](flows/api-selectable_for.md) - entry: `selectable_for`
 - [api-session_workspace_path](flows/api-session_workspace_path.md) - entry: `session_workspace_path`
+- [api-signal_violation](flows/api-signal_violation.md) - entry: `signal_violation`
 - [api-significance_verdict](flows/api-significance_verdict.md) - entry: `significance_verdict`
 - [api-skill_id_to_model_type](flows/api-skill_id_to_model_type.md) - entry: `skill_id_to_model_type`
 - [api-stage_trial_or_none](flows/api-stage_trial_or_none.md) - entry: `stage_trial_or_none`
 - [api-stage_trial_workspace](flows/api-stage_trial_workspace.md) - entry: `stage_trial_workspace`
 - [api-target_state](flows/api-target_state.md) - entry: `target_state`
+- [api-terminate_process_tree](flows/api-terminate_process_tree.md) - entry: `terminate_process_tree`
 - [api-trial_marker_candidates](flows/api-trial_marker_candidates.md) - entry: `trial_marker_candidates`
 - [api-validate_path_template](flows/api-validate_path_template.md) - entry: `validate_path_template`
 - [api-validate_secret_list](flows/api-validate_secret_list.md) - entry: `validate_secret_list`

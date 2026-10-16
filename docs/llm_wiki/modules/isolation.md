@@ -62,7 +62,6 @@ flowchart LR
     n2["src/core/plugin_runner.py"]
     n3["tests/test_execution_isolation.py"]
     n0 --> n1
-    n2 --> n0
     n2 --> n1
     n3 --> n0
     n3 --> n1

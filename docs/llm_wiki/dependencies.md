@@ -31,8 +31,8 @@ flowchart TD
 | Module | Fan-in | Fan-out |
 |--------|--------|---------|
 | [results_store](modules/results_store.md) | 44 | 1 |
+| [config](modules/config.md) | 39 | 0 |
 | [orchestrator](modules/orchestrator.md) | 39 | 22 |
-| [config](modules/config.md) | 38 | 0 |
 | [skill_registry](modules/skill_registry.md) | 24 | 2 |
 | [client](modules/client.md) | 23 | 0 |
 | [llm_provider](modules/llm_provider.md) | 18 | 1 |
@@ -48,7 +48,7 @@ flowchart TD
 | [events](modules/events.md) | 12 | 1 |
 | [artifact_reference](modules/artifact_reference.md) | 11 | 0 |
 | [useResearch](modules/useResearch.md) | 11 | 2 |
-| [command_runner](modules/command_runner.md) | 10 | 3 |
+| [command_runner](modules/command_runner.md) | 10 | 4 |
 | [gate_status](modules/gate_status.md) | 10 | 0 |
 | [iteration_snapshot](modules/iteration_snapshot.md) | 10 | 2 |
 | [promotion_target](modules/promotion_target.md) | 10 | 1 |
@@ -63,10 +63,10 @@ flowchart TD
 | [state_machine](modules/state_machine.md) | 8 | 2 |
 | [agent_tools](modules/agent_tools.md) | 7 | 6 |
 | [command_policy](modules/command_policy.md) | 7 | 4 |
+| [plugin_runner](modules/plugin_runner.md) | 7 | 3 |
 | [postgres_state_store](modules/postgres_state_store.md) | 7 | 5 |
 | [src_api_skills](modules/src_api_skills.md) | 6 | 8 |
 | [observability](modules/observability.md) | 6 | 0 |
-| [plugin_runner](modules/plugin_runner.md) | 6 | 3 |
 | [result_artifact](modules/result_artifact.md) | 6 | 2 |
 | [service_preflight](modules/service_preflight.md) | 6 | 2 |
 | [iteration_context](modules/iteration_context.md) | 5 | 2 |
@@ -85,6 +85,7 @@ flowchart TD
 | [isolation](modules/isolation.md) | 3 | 0 |
 | [log_writer](modules/log_writer.md) | 3 | 1 |
 | [preflight](modules/preflight.md) | 3 | 1 |
+| [process_limits](modules/process_limits.md) | 3 | 0 |
 | [skill_generator](modules/skill_generator.md) | 3 | 3 |
 | [src_main](modules/src_main.md) | 3 | 16 |
 | [compat_legacy_alias](modules/compat_legacy_alias.md) | 2 | 0 |
@@ -232,6 +233,7 @@ flowchart TD
 | [test_postgres_sqlite_parity](modules/test_postgres_sqlite_parity.md) | 0 | 2 |
 | [test_postgres_state_store](modules/test_postgres_state_store.md) | 0 | 1 |
 | [test_preflight](modules/test_preflight.md) | 0 | 2 |
+| [test_process_limits](modules/test_process_limits.md) | 0 | 4 |
 | [test_promotion_approval](modules/test_promotion_approval.md) | 0 | 3 |
 | [test_promotion_diagnostics](modules/test_promotion_diagnostics.md) | 0 | 1 |
 | [test_promotion_target](modules/test_promotion_target.md) | 0 | 2 |

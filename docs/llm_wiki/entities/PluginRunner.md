@@ -1,6 +1,6 @@
 # PluginRunner
 
-**Location:** `src/core/plugin_runner.py:227`
+**Location:** `src/core/plugin_runner.py:242`
 **Kind:** Class
 **Bases:** —
 **Module:** [plugin_runner](../modules/plugin_runner.md)
@@ -23,7 +23,7 @@ skills_root:
 | Method | Signature | Decorators | Description |
 |--------|-----------|------------|-------------|
 | `__init__` | `(*, skills_root: Optional[Path] = None) -> None` | — | — |
-| `run` | *(async)* `(*, skill_dir: Path, plugin: str, kind: PluginKind, input_json: dict[str, Any], caps: PluginCaps, workspace: Optional[Path] = None, timeout_s: Optional[float] = None) -> PluginResult` | — | Run one plugin. See module docstring for the contract. |
+| `run` | *(async)* `(*, skill_dir: Path, plugin: str, kind: PluginKind, input_json: dict[str, Any], caps: PluginCaps, workspace: Optional[Path] = None, timeout_s: Optional[float] = None, proc_registry: Any = None, research_id: Optional[str] = None) -> PluginResult` | — | Run one plugin. See module docstring for the contract. |
 | `_isolation_plan` | `(*, skill_dir: Path, caps: PluginCaps, cwd: str, base_argv: list[str], input_json: dict[str, Any]) -> tuple[str, list[str], Optional[str]]` | — | Decide the execution boundary for one plugin run. |
 | `_run_sync` | `(body: '_PluginRunBody') -> PluginResult` | — | — |
 | `_run_sync_inner` | `(body: '_PluginRunBody') -> PluginResult` | — | — |
@@ -93,4 +93,4 @@ flowchart LR
 | `TestPluginFailClosed.test_non_object_json_fails_closed` | call | [test_plugin_runner](../modules/test_plugin_runner.md) | 1 |
 | `TestPluginFailClosed.test_non_zero_exit_fails_closed` | call | [test_plugin_runner](../modules/test_plugin_runner.md) | 1 |
 
-> References: showing 12 of 18 logical references; 6 omitted by the 12-row generated summary limit.
+> References: showing 12 of 19 logical references; 7 omitted by the 12-row generated summary limit.

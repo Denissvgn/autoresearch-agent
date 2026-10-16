@@ -43,15 +43,17 @@ same contract.
 Design decisions (P1-007 house style):
 
 * **Sync subprocess + thread offload.** Like ``GovernedCommandRunner.run``,
-  the blocking ``Popen`` poll loop lives on a worker thread; the public
-  ``run()`` is ``async`` and wraps the body in ``asyncio.to_thread`` so a hard
-  timeout / cancel can reap the tree via ``_terminate_process_group_without_communicate``.
+  the blocking drain lives on a worker thread; the public ``run()`` is
+  ``async`` and wraps the body in ``asyncio.to_thread`` so stop/cancel can
+  reap the tree through the process registry and the bounded cleanup path.
 * **No env inheritance.** The plugin child env is built fresh from the X-004
   §4.2 strict allow-list — it does NOT call ``command_runner._build_child_env``
   (that one is the agent path and carries experiment-legitimate creds plugins
   must never see).
-* **Resource monitoring.** A psutil watcher thread enforces ``max_rss_mb`` /
-  ``max_cpu_s``; on breach the tree is killed and the result is fail-closed.
+* **Resource bounds.** ``src.core.process_limits`` enforces cumulative CPU,
+  process-tree RSS, wall time, process count, and the configured output and
+  filesystem quotas over the whole tree; breaches terminate immediately and
+  the result is an attributed fail-closed record with explicit cleanup status.
 * **Auditing is the caller's job.** ``PluginRunner`` returns a ``PluginResult``
   with ``error``/``returncode``/``timed_out``; the caller (``BootstrapRunner``
   / orchestrator) writes the ``audit_events`` row. Keeps the runner free of the
@@ -68,9 +70,8 @@ Design decisions (P1-007 house style):
 | `logging` | `logging` |
 | `os` | `os` |
 | `pathlib` | `Path` |
-| `psutil` | `psutil` |
-| `src.core.command_runner` | `_terminate_process_group_without_communicate` |
 | `src.core.isolation` | `SANDBOXED_PREFIX`, `TRUSTED_LOCAL_CODE`, `IsolationPolicy`, `IsolationUnavailableError`, `UnsupportedCapabilityError`, `wrap_command` |
+| `src.core.process_limits` | `ProcessResourceCaps`, `TreeResourceGuard`, `UnenforceableResourceCapabilityError`, `bounded_drain`, `rlimit_prefix`, `signal_violation` |
 | `src.core.skill_manifest` | `PluginCaps`, `PluginKind` |
 | `subprocess` | `subprocess` |
 | `sys` | `sys` |
@@ -86,40 +87,42 @@ Design decisions (P1-007 house style):
 flowchart LR
     n0["src/cli.py"]
     n1["src/core/bootstrap_runner.py"]
-    n2["src/core/command_runner.py"]
-    n3["src/core/isolation.py"]
-    n4["src/core/plugin_runner.py"]
+    n2["src/core/isolation.py"]
+    n3["src/core/plugin_runner.py"]
+    n4["src/core/process_limits.py"]
     n5["src/core/skill_manifest.py"]
     n6["tests/test_execution_isolation.py"]
     n7["tests/test_plugin_runner.py"]
-    n8["tests/test_prompt_evaluator.py"]
-    n9["tests/test_skill_prompt_engineering_e2e.py"]
-    n0 --> n4
+    n8["tests/test_process_limits.py"]
+    n9["tests/test_prompt_evaluator.py"]
+    n10["tests/test_skill_prompt_engineering_e2e.py"]
+    n0 --> n3
     n0 --> n5
-    n1 --> n4
+    n1 --> n3
     n1 --> n5
-    n2 --> n3
-    n4 --> n2
-    n4 --> n3
-    n4 --> n5
+    n3 --> n2
+    n3 --> n4
+    n3 --> n5
     n6 --> n2
     n6 --> n3
-    n6 --> n4
-    n7 --> n4
+    n7 --> n3
     n7 --> n5
-    n8 --> n1
+    n8 --> n3
     n8 --> n4
-    n9 --> n4
+    n9 --> n1
+    n9 --> n3
+    n10 --> n3
     click n0 "../modules/cli.md"
     click n1 "../modules/bootstrap_runner.md"
-    click n2 "../modules/command_runner.md"
-    click n3 "../modules/isolation.md"
-    click n4 "../modules/plugin_runner.md"
+    click n2 "../modules/isolation.md"
+    click n3 "../modules/plugin_runner.md"
+    click n4 "../modules/process_limits.md"
     click n5 "../modules/skill_manifest.md"
     click n6 "../modules/test_execution_isolation.md"
     click n7 "../modules/test_plugin_runner.md"
-    click n8 "../modules/test_prompt_evaluator.md"
-    click n9 "../modules/test_skill_prompt_engineering_e2e.md"
+    click n8 "../modules/test_process_limits.md"
+    click n9 "../modules/test_prompt_evaluator.md"
+    click n10 "../modules/test_skill_prompt_engineering_e2e.md"
 ```
 
 ### Internal neighbors
@@ -130,26 +133,20 @@ flowchart LR
 | Inbound | [bootstrap_runner](../modules/bootstrap_runner.md) |
 | Inbound | [test_execution_isolation](../modules/test_execution_isolation.md) |
 | Inbound | [test_plugin_runner](../modules/test_plugin_runner.md) |
+| Inbound | [test_process_limits](../modules/test_process_limits.md) |
 | Inbound | [test_prompt_evaluator](../modules/test_prompt_evaluator.md) |
 | Inbound | [test_skill_prompt_engineering_e2e](../modules/test_skill_prompt_engineering_e2e.md) |
-| Outbound | [command_runner](../modules/command_runner.md) |
 | Outbound | [isolation](../modules/isolation.md) |
+| Outbound | [process_limits](../modules/process_limits.md) |
 | Outbound | [skill_manifest](../modules/skill_manifest.md) |
-
-### External packages
-
-| Language | Used packages | Undeclared packages |
-|---|---:|---:|
-| python | 1 | 1 |
 
 ## Classes
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [PluginResult](../entities/PluginResult.md) | 195 | — | Outcome of one plugin invocation (X-004 §6 failure semantics). |
-| [PluginRunner](../entities/PluginRunner.md) | 227 | — | Execute one skill plugin in a confined governed subprocess (X-004 §6). |
-| [_PluginRunBody](../entities/PluginRunBody.md) | 481 | — | Inputs bundled for the worker-thread sync body. |
-| [_ResourceWatcher](../entities/ResourceWatcher.md) | 510 | — | Polls a live plugin subprocess's RSS / CPU and flags cap breaches (D6). |
+| [PluginResult](../entities/PluginResult.md) | 197 | — | Outcome of one plugin invocation (X-004 §6 failure semantics). |
+| [PluginRunner](../entities/PluginRunner.md) | 242 | — | Execute one skill plugin in a confined governed subprocess (X-004 §6). |
+| [_PluginRunBody](../entities/PluginRunBody.md) | 512 | — | Inputs bundled for the worker-thread sync body. |
 
 ## Functions
 
@@ -158,3 +155,4 @@ flowchart LR
 | `_build_plugin_env` | `(*, declared_env_keys: Mapping[str, str] \| None = None, source_env: Mapping[str, str] \| None = None) -> dict[str, str]` | — | Build the env dict for a plugin subprocess (X-004 §4.2, strict). |
 | `_declared_input_paths` | `(input_json: Mapping[str, Any]) -> tuple[str, ...]` | — | Absolute path values in the input JSON that name existing host files. |
 | `_tail` | `(text: str, *, max_chars: int = 2000) -> str` | — | Return the trailing slice of ``text`` for error context. |
+| `_violation_result` | `(body: '_PluginRunBody', *, proc: Any, started: float, violation: str, timed_out: bool, cleanup_incomplete: bool, raw: str) -> PluginResult` | — | Build the attributed failed result for one resource-cap breach. |

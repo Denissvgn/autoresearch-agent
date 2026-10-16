@@ -1,7 +1,7 @@
 # SessionManager__run_skill_bootstrap
 
 **Entry point:** `session_manager.SessionManager._run_skill_bootstrap`
-**Modules involved:** [bootstrap_runner](../modules/bootstrap_runner.md), [session_manager](../modules/session_manager.md), [skill_loader](../modules/skill_loader.md), [skill_runtime](../modules/skill_runtime.md)
+**Modules involved:** [bootstrap_runner](../modules/bootstrap_runner.md), [command_runner](../modules/command_runner.md), [session_manager](../modules/session_manager.md), [skill_loader](../modules/skill_loader.md), [skill_runtime](../modules/skill_runtime.md)
 
 > Render the session workspace with the skill's ``bootstrap.py``
 (ARC-012 P7-011).
@@ -19,13 +19,16 @@ re-bootstrap: the inherited workspace IS the continuation state.
 <!-- Auto-generated static call-chain projection. Reviewed runtime ordering, branching, and side effects belong in Behavior. -->
 1. `skill_loader.load_layout`
 2. `skill_runtime.SkillConfigError`
-3. `bootstrap_runner.BootstrapRunner.run`
-4. `bootstrap_runner.BootstrapRunner`
-5. `skill_runtime.SkillConfigError`
+3. `command_runner.CommandProcessRegistry`
+4. `bootstrap_runner.BootstrapRunner.run`
+5. `bootstrap_runner.BootstrapRunner`
+6. `command_runner.CommandProcessRegistry.kill_all`
+7. `skill_runtime.SkillConfigError`
 
 ## Touches
 
 - [bootstrap_runner](../modules/bootstrap_runner.md)
+- [command_runner](../modules/command_runner.md)
 - [session_manager](../modules/session_manager.md)
 - [skill_loader](../modules/skill_loader.md)
 - [skill_runtime](../modules/skill_runtime.md)
