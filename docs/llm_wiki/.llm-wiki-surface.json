@@ -18,18 +18,18 @@
     "by_kind": {
       "api-contracts": 0,
       "dependencies": 1,
-      "entities": 430,
+      "entities": 432,
       "flows": 111,
       "guides": 0,
       "index": 1,
       "infrastructure": 3,
       "load-order": 1,
       "log": 1,
-      "modules": 250,
-      "workflows": 13
+      "modules": 252,
+      "workflows": 14
     },
     "dependency_architecture": 2,
-    "total": 811
+    "total": 816
   },
   "dependency_pages": {
     "count": 2,
@@ -8090,7 +8090,6 @@
         "entities/ScorerRef.md",
         "entities/ScriptedOpenAIClient.md",
         "entities/ScriptedOrchestrator.md",
-        "entities/ScriptedProvider.md",
         "entities/SecondaryMetric.md",
         "entities/SecretReference.md",
         "entities/SegmentedOption.md",
@@ -8183,6 +8182,7 @@
         "entities/test_orchestrator_command_audit_FakeAPIStatusError.md",
         "entities/test_orchestrator_command_audit_FakeAsyncAnthropic.md",
         "entities/test_orchestrator_timeout_CapturingRunner.md",
+        "entities/test_parallel_trials_ScriptedProvider.md",
         "entities/test_phase_state_broadcast_FakeBroadcaster.md",
         "entities/test_promotion_approval_FakePromoter.md",
         "entities/test_promotion_approval_FakeStore.md",
@@ -8194,6 +8194,7 @@
         "entities/test_prompt_promotion_policy_FakeAsyncAnthropic.md",
         "entities/test_research_api_compat_FakeSessionManager.md",
         "entities/test_research_api_compat_FakeStore.md",
+        "entities/test_result_authority_ScriptedProvider.md",
         "entities/test_results_api_FakeStore.md",
         "entities/test_runtime_recovery_FakeAPIStatusError.md",
         "entities/test_runtime_recovery_FakeAsyncAnthropic.md",
@@ -8276,6 +8277,7 @@
         "entities/TransitionSpec.md",
         "entities/TrialContext.md",
         "entities/TrialIdentityConfig.md",
+        "entities/Turn.md",
         "entities/TurnTrialState.md",
         "entities/UIConfig.md",
         "entities/UnsupportedCapabilityError.md",
@@ -8499,6 +8501,7 @@
         "modules/ResearchDetail.md",
         "modules/ResearchStatePanel.md",
         "modules/result_artifact.md",
+        "modules/result_authority.md",
         "modules/results.md",
         "modules/results_store.md",
         "modules/run-production-ops-tests.md",
@@ -8622,6 +8625,7 @@
         "modules/test_research_config.md",
         "modules/test_research_manifest.md",
         "modules/test_result_artifact_ingestion.md",
+        "modules/test_result_authority.md",
         "modules/test_results_api.md",
         "modules/test_results_store_manifest_snapshots.md",
         "modules/test_results_store_migrations.md",
@@ -8667,6 +8671,7 @@
         "workflows/candidate_summary.md",
         "workflows/ConfigPromoter_preview.md",
         "workflows/enrich_iteration.md",
+        "workflows/evaluate_command_policy.md",
         "workflows/lifespan.md",
         "workflows/PostgresStateStore_add_iteration.md",
         "workflows/promoter_for_session.md",
@@ -9448,7 +9453,8 @@
         "modules/llm_provider.md",
         "modules/test_anthropic_provider.md",
         "modules/test_llm_provider.md",
-        "modules/test_parallel_trials.md"
+        "modules/test_parallel_trials.md",
+        "modules/test_result_authority.md"
       ],
       "role": "semantic",
       "source_path": "src/core/llm_provider.py",
@@ -11626,18 +11632,6 @@
       "title": "_ScriptedOrchestrator"
     },
     {
-      "canonical_path": "entities/ScriptedProvider.md",
-      "id": "ScriptedProvider",
-      "kind": "entities",
-      "mcp_uri": "llm-wiki://entities/ScriptedProvider",
-      "outgoing_internal_links": [
-        "modules/test_parallel_trials.md"
-      ],
-      "role": "semantic",
-      "source_path": "tests/test_parallel_trials.py",
-      "title": "_ScriptedProvider"
-    },
-    {
       "canonical_path": "entities/SecondaryMetric.md",
       "id": "SecondaryMetric",
       "kind": "entities",
@@ -12843,6 +12837,18 @@
       "title": "_CapturingRunner"
     },
     {
+      "canonical_path": "entities/test_parallel_trials_ScriptedProvider.md",
+      "id": "test_parallel_trials_ScriptedProvider",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/test_parallel_trials_ScriptedProvider",
+      "outgoing_internal_links": [
+        "modules/test_parallel_trials.md"
+      ],
+      "role": "semantic",
+      "source_path": "tests/test_parallel_trials.py",
+      "title": "_ScriptedProvider"
+    },
+    {
       "canonical_path": "entities/test_phase_state_broadcast_FakeBroadcaster.md",
       "id": "test_phase_state_broadcast_FakeBroadcaster",
       "kind": "entities",
@@ -12973,6 +12979,18 @@
       "role": "semantic",
       "source_path": "tests/test_research_api_compat.py",
       "title": "FakeStore"
+    },
+    {
+      "canonical_path": "entities/test_result_authority_ScriptedProvider.md",
+      "id": "test_result_authority_ScriptedProvider",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/test_result_authority_ScriptedProvider",
+      "outgoing_internal_links": [
+        "modules/test_result_authority.md"
+      ],
+      "role": "semantic",
+      "source_path": "tests/test_result_authority.py",
+      "title": "_ScriptedProvider"
     },
     {
       "canonical_path": "entities/test_results_api_FakeStore.md",
@@ -13992,6 +14010,18 @@
       "title": "TrialIdentityConfig"
     },
     {
+      "canonical_path": "entities/Turn.md",
+      "id": "Turn",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/Turn",
+      "outgoing_internal_links": [
+        "modules/test_result_authority.md"
+      ],
+      "role": "semantic",
+      "source_path": "tests/test_result_authority.py",
+      "title": "_Turn"
+    },
+    {
       "canonical_path": "entities/TurnTrialState.md",
       "id": "TurnTrialState",
       "kind": "entities",
@@ -14527,6 +14557,7 @@
         "modules/command_runner.md",
         "modules/execution_request.md",
         "modules/fs_safety.md",
+        "modules/result_authority.md",
         "modules/test_command_policy.md",
         "modules/test_execution_request.md",
         "modules/test_manifest_runtime_production_path.md",
@@ -14869,8 +14900,10 @@
         "entities/WorkspaceBounds.md",
         "modules/compat_legacy_alias.md",
         "modules/execution_contracts.md",
+        "modules/result_authority.md",
         "modules/test_contract_examples.md",
-        "modules/test_execution_contracts.md"
+        "modules/test_execution_contracts.md",
+        "modules/test_result_authority.md"
       ],
       "role": "semantic",
       "source_path": "src/core/execution_contracts.py",
@@ -15737,6 +15770,21 @@
       "role": "semantic",
       "source_path": "src/core/result_artifact.py",
       "title": "result_artifact Module"
+    },
+    {
+      "canonical_path": "modules/result_authority.md",
+      "id": "result_authority",
+      "kind": "modules",
+      "mcp_uri": "llm-wiki://modules/result_authority",
+      "outgoing_internal_links": [
+        "modules/command_policy.md",
+        "modules/execution_contracts.md",
+        "modules/result_authority.md",
+        "modules/test_result_authority.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/result_authority.py",
+      "title": "result_authority Module"
     },
     {
       "canonical_path": "modules/results.md",
@@ -17347,7 +17395,7 @@
       "kind": "modules",
       "mcp_uri": "llm-wiki://modules/test_parallel_trials",
       "outgoing_internal_links": [
-        "entities/ScriptedProvider.md",
+        "entities/test_parallel_trials_ScriptedProvider.md",
         "modules/config.md",
         "modules/llm_provider.md",
         "modules/orchestrator.md",
@@ -17691,6 +17739,29 @@
       "role": "semantic",
       "source_path": "tests/test_result_artifact_ingestion.py",
       "title": "test_result_artifact_ingestion Module"
+    },
+    {
+      "canonical_path": "modules/test_result_authority.md",
+      "id": "test_result_authority",
+      "kind": "modules",
+      "mcp_uri": "llm-wiki://modules/test_result_authority",
+      "outgoing_internal_links": [
+        "entities/test_result_authority_ScriptedProvider.md",
+        "entities/Turn.md",
+        "modules/agent_tools.md",
+        "modules/config.md",
+        "modules/execution_contracts.md",
+        "modules/llm_provider.md",
+        "modules/orchestrator.md",
+        "modules/result_authority.md",
+        "modules/results_store.md",
+        "modules/skill_registry.md",
+        "modules/test_result_authority.md",
+        "modules/tool_access.md"
+      ],
+      "role": "semantic",
+      "source_path": "tests/test_result_authority.py",
+      "title": "test_result_authority Module"
     },
     {
       "canonical_path": "modules/test_results_api.md",
@@ -18120,17 +18191,6 @@
       "mcp_uri": "llm-wiki://modules/tool_access",
       "outgoing_internal_links": [
         "entities/ToolAccessContext.md",
-        "modules/agent_tools.md",
-        "modules/command_policy.md",
-        "modules/command_runner.md",
-        "modules/test_async_tool_path.md",
-        "modules/test_command_policy.md",
-        "modules/test_execution_request.md",
-        "modules/test_fs_safety.md",
-        "modules/test_orchestrator_timeout.md",
-        "modules/test_pinned_evaluators.md",
-        "modules/test_tool_access.md",
-        "modules/test_trial_workspace.md",
         "modules/tool_access.md"
       ],
       "role": "semantic",
@@ -18379,6 +18439,7 @@
         "modules/llm_provider.md",
         "modules/log_writer.md",
         "modules/orchestrator.md",
+        "modules/result_authority.md",
         "modules/skill_runtime.md",
         "modules/tool_access.md",
         "modules/trial_workspace.md"
@@ -18439,6 +18500,21 @@
       "role": "mixed",
       "source_path": "src/api/results.py",
       "title": "enrich_iteration"
+    },
+    {
+      "canonical_path": "workflows/evaluate_command_policy.md",
+      "id": "evaluate_command_policy",
+      "kind": "workflows",
+      "mcp_uri": "llm-wiki://workflows/evaluate_command_policy",
+      "outgoing_internal_links": [
+        "modules/command_policy.md",
+        "modules/execution_request.md",
+        "modules/result_authority.md",
+        "modules/tool_access.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/command_policy.py",
+      "title": "evaluate_command_policy"
     },
     {
       "canonical_path": "workflows/lifespan.md",
@@ -20058,6 +20134,7 @@
         "modules/ResearchDetail.md",
         "modules/ResearchStatePanel.md",
         "modules/result_artifact.md",
+        "modules/result_authority.md",
         "modules/results.md",
         "modules/results_store.md",
         "modules/run-production-ops-tests.md",
@@ -20181,6 +20258,7 @@
         "modules/test_research_config.md",
         "modules/test_research_manifest.md",
         "modules/test_result_artifact_ingestion.md",
+        "modules/test_result_authority.md",
         "modules/test_results_api.md",
         "modules/test_results_store_manifest_snapshots.md",
         "modules/test_results_store_migrations.md",
@@ -20319,6 +20397,7 @@
         "modules/ResearchDetail.md",
         "modules/ResearchStatePanel.md",
         "modules/result_artifact.md",
+        "modules/result_authority.md",
         "modules/results.md",
         "modules/results_store.md",
         "modules/run-production-ops-tests.md",
@@ -20442,6 +20521,7 @@
         "modules/test_research_config.md",
         "modules/test_research_manifest.md",
         "modules/test_result_artifact_ingestion.md",
+        "modules/test_result_authority.md",
         "modules/test_results_api.md",
         "modules/test_results_store_manifest_snapshots.md",
         "modules/test_results_store_migrations.md",
@@ -20485,5 +20565,5 @@
     }
   ],
   "schema_version": "llm-wiki-surface-index/v1",
-  "source_hash": "sha256:c30a385833b58bf04eff1c29c4aa5d57b01a9f8970ba486f5e9dd64253ad44a2"
+  "source_hash": "sha256:ca5b738b583247792a2c178b7b7e7044bcb89011fb272739aa8d2d468184b8c2"
 }

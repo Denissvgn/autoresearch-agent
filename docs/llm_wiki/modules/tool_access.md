@@ -49,75 +49,24 @@ never an authorization root for file access.
 <!-- Auto-generated local dependency summary. Do not edit by hand. -->
 ```mermaid
 flowchart LR
-    n0["src/core/agent_tools.py"]
-    n1["src/core/command_policy.py"]
-    n2["src/core/command_runner.py"]
-    n3["src/core/tool_access.py"]
-    n4["tests/test_async_tool_path.py"]
-    n5["tests/test_command_policy.py"]
-    n6["tests/test_execution_request.py"]
-    n7["tests/test_fs_safety.py"]
-    n8["tests/test_orchestrator_timeout.py"]
-    n9["tests/test_pinned_evaluators.py"]
-    n10["tests/test_tool_access.py"]
-    n11["tests/test_trial_workspace.py"]
-    n0 --> n2
-    n0 --> n3
-    n1 --> n3
+    n0["src"]
+    n1["src/core/tool_access.py"]
+    n2["tests"]
+    n0 --> n1
     n2 --> n1
-    n2 --> n3
-    n4 --> n0
-    n4 --> n2
-    n4 --> n3
-    n5 --> n1
-    n5 --> n2
-    n5 --> n3
-    n6 --> n0
-    n6 --> n1
-    n6 --> n2
-    n6 --> n3
-    n7 --> n3
-    n8 --> n2
-    n8 --> n3
-    n9 --> n0
-    n9 --> n1
-    n9 --> n2
-    n9 --> n3
-    n10 --> n0
-    n10 --> n1
-    n10 --> n3
-    n11 --> n0
-    n11 --> n2
-    n11 --> n3
-    click n0 "../modules/agent_tools.md"
-    click n1 "../modules/command_policy.md"
-    click n2 "../modules/command_runner.md"
-    click n3 "../modules/tool_access.md"
-    click n4 "../modules/test_async_tool_path.md"
-    click n5 "../modules/test_command_policy.md"
-    click n6 "../modules/test_execution_request.md"
-    click n7 "../modules/test_fs_safety.md"
-    click n8 "../modules/test_orchestrator_timeout.md"
-    click n9 "../modules/test_pinned_evaluators.md"
-    click n10 "../modules/test_tool_access.md"
-    click n11 "../modules/test_trial_workspace.md"
+    click n1 "../modules/tool_access.md"
 ```
+
+> Module-level dependencies exceed the generated-diagram limits, so the diagram and table below group them by top-level package. Counts report the number of module neighbors in each package.
 
 ### Internal neighbors
 
 | Direction | Module |
 |---|---|
-| Inbound | [agent_tools](../modules/agent_tools.md) |
-| Inbound | [command_policy](../modules/command_policy.md) |
-| Inbound | [command_runner](../modules/command_runner.md) |
-| Inbound | [test_async_tool_path](../modules/test_async_tool_path.md) |
-| Inbound | [test_command_policy](../modules/test_command_policy.md) |
-| Inbound | [test_execution_request](../modules/test_execution_request.md) |
-| Inbound | [test_fs_safety](../modules/test_fs_safety.md) |
-| Inbound | [test_orchestrator_timeout](../modules/test_orchestrator_timeout.md) |
-| Inbound | [test_pinned_evaluators](../modules/test_pinned_evaluators.md) |
-| Inbound | [test_tool_access](../modules/test_tool_access.md) |
-| Inbound | [test_trial_workspace](../modules/test_trial_workspace.md) |
+| Inbound | `src` (3) |
+| Inbound | `tests` (9) |
+
+> All 12 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 

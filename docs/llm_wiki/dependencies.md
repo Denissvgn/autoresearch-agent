@@ -30,13 +30,13 @@ flowchart TD
 
 | Module | Fan-in | Fan-out |
 |--------|--------|---------|
-| [results_store](modules/results_store.md) | 43 | 1 |
-| [orchestrator](modules/orchestrator.md) | 38 | 22 |
-| [config](modules/config.md) | 36 | 0 |
-| [skill_registry](modules/skill_registry.md) | 23 | 2 |
+| [results_store](modules/results_store.md) | 44 | 1 |
+| [orchestrator](modules/orchestrator.md) | 39 | 22 |
+| [config](modules/config.md) | 37 | 0 |
+| [skill_registry](modules/skill_registry.md) | 24 | 2 |
 | [client](modules/client.md) | 23 | 0 |
+| [llm_provider](modules/llm_provider.md) | 18 | 1 |
 | [research_phase_plan](modules/research_phase_plan.md) | 18 | 3 |
-| [llm_provider](modules/llm_provider.md) | 17 | 1 |
 | [skill_manifest](modules/skill_manifest.md) | 15 | 0 |
 | [config_promoter](modules/config_promoter.md) | 14 | 14 |
 | [skill_runtime](modules/skill_runtime.md) | 14 | 8 |
@@ -44,9 +44,9 @@ flowchart TD
 | [skill_loader](modules/skill_loader.md) | 13 | 2 |
 | [state_store](modules/state_store.md) | 13 | 4 |
 | [consistency_validator](modules/consistency_validator.md) | 12 | 2 |
+| [tool_access](modules/tool_access.md) | 12 | 0 |
 | [events](modules/events.md) | 12 | 1 |
 | [artifact_reference](modules/artifact_reference.md) | 11 | 0 |
-| [tool_access](modules/tool_access.md) | 11 | 0 |
 | [useResearch](modules/useResearch.md) | 11 | 2 |
 | [gate_status](modules/gate_status.md) | 10 | 0 |
 | [iteration_snapshot](modules/iteration_snapshot.md) | 10 | 2 |
@@ -61,10 +61,10 @@ flowchart TD
 | [results](modules/results.md) | 8 | 9 |
 | [core_legacy_alias](modules/core_legacy_alias.md) | 8 | 1 |
 | [state_machine](modules/state_machine.md) | 8 | 2 |
-| [command_policy](modules/command_policy.md) | 7 | 3 |
+| [agent_tools](modules/agent_tools.md) | 7 | 6 |
+| [command_policy](modules/command_policy.md) | 7 | 4 |
 | [postgres_state_store](modules/postgres_state_store.md) | 7 | 5 |
 | [src_api_skills](modules/src_api_skills.md) | 6 | 8 |
-| [agent_tools](modules/agent_tools.md) | 6 | 6 |
 | [observability](modules/observability.md) | 6 | 0 |
 | [result_artifact](modules/result_artifact.md) | 6 | 2 |
 | [service_preflight](modules/service_preflight.md) | 6 | 2 |
@@ -74,6 +74,7 @@ flowchart TD
 | [plugin_runner](modules/plugin_runner.md) | 5 | 2 |
 | [useWebSocket](modules/useWebSocket.md) | 5 | 1 |
 | [development_gate_bundle](modules/development_gate_bundle.md) | 4 | 2 |
+| [execution_contracts](modules/execution_contracts.md) | 4 | 1 |
 | [execution_request](modules/execution_request.md) | 4 | 0 |
 | [promotion_approval](modules/promotion_approval.md) | 4 | 0 |
 | [skill_paths](modules/skill_paths.md) | 4 | 0 |
@@ -87,11 +88,11 @@ flowchart TD
 | [src_main](modules/src_main.md) | 3 | 16 |
 | [compat_legacy_alias](modules/compat_legacy_alias.md) | 2 | 0 |
 | [bootstrap_runner](modules/bootstrap_runner.md) | 2 | 4 |
-| [execution_contracts](modules/execution_contracts.md) | 2 | 1 |
 | [http_headers](modules/http_headers.md) | 2 | 0 |
 | [output_digest](modules/output_digest.md) | 2 | 0 |
 | [research_manifest](modules/research_manifest.md) | 2 | 5 |
 | [research_state](modules/research_state.md) | 2 | 6 |
+| [result_authority](modules/result_authority.md) | 2 | 1 |
 | [significance](modules/significance.md) | 2 | 0 |
 | [skill_lifecycle](modules/skill_lifecycle.md) | 2 | 0 |
 | [DynamicFormFields](modules/DynamicFormFields.md) | 2 | 3 |
@@ -241,6 +242,7 @@ flowchart TD
 | [test_research_config](modules/test_research_config.md) | 0 | 2 |
 | [test_research_manifest](modules/test_research_manifest.md) | 0 | 3 |
 | [test_result_artifact_ingestion](modules/test_result_artifact_ingestion.md) | 0 | 6 |
+| [test_result_authority](modules/test_result_authority.md) | 0 | 9 |
 | [test_results_api](modules/test_results_api.md) | 0 | 1 |
 | [test_results_store_manifest_snapshots](modules/test_results_store_manifest_snapshots.md) | 0 | 5 |
 | [test_results_store_migrations](modules/test_results_store_migrations.md) | 0 | 3 |

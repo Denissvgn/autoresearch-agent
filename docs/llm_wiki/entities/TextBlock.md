@@ -89,4 +89,4 @@ flowchart LR
 | `_fake_text_response` | call | [test_orchestrator_loop_guard](../modules/test_orchestrator_loop_guard.md) | 1 |
 | `_ScriptedProvider.messages_create` | call | [test_parallel_trials](../modules/test_parallel_trials.md) | 1 |
 
-> References: showing 12 of 13 logical references; 1 omitted by the 12-row generated summary limit.
+> References: showing 12 of 14 logical references; 2 omitted by the 12-row generated summary limit.

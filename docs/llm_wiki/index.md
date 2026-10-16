@@ -6,9 +6,9 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 
 | Surface | Count | Start here |
 |---|---:|---|
-| Entities | 430 | [Open section](#entities) |
-| Modules | 250 | [Open section](#modules) |
-| Workflows | 13 | [Open section](#workflows) |
+| Entities | 432 | [Open section](#entities) |
+| Modules | 252 | [Open section](#modules) |
+| Workflows | 14 | [Open section](#workflows) |
 | Guides | 0 | No pages |
 | Entry-point flows | 111 | [Open section](#entry-point-flows) |
 | Infrastructure | 3 | [Open section](#infrastructure) |
@@ -232,7 +232,6 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [ScorerRef](entities/ScorerRef.md)
 - [ScriptedOpenAIClient](entities/ScriptedOpenAIClient.md)
 - [ScriptedOrchestrator](entities/ScriptedOrchestrator.md)
-- [ScriptedProvider](entities/ScriptedProvider.md)
 - [SecondaryMetric](entities/SecondaryMetric.md)
 - [SecretReference](entities/SecretReference.md)
 - [SegmentedOption](entities/SegmentedOption.md)
@@ -365,6 +364,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [TransitionSpec](entities/TransitionSpec.md)
 - [TrialContext](entities/TrialContext.md)
 - [TrialIdentityConfig](entities/TrialIdentityConfig.md)
+- [Turn](entities/Turn.md)
 - [TurnTrialState](entities/TurnTrialState.md)
 - [UIConfig](entities/UIConfig.md)
 - [UnsupportedCapabilityError](entities/UnsupportedCapabilityError.md)
@@ -428,6 +428,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [test_orchestrator_command_audit_FakeAPIStatusError](entities/test_orchestrator_command_audit_FakeAPIStatusError.md)
 - [test_orchestrator_command_audit_FakeAsyncAnthropic](entities/test_orchestrator_command_audit_FakeAsyncAnthropic.md)
 - [test_orchestrator_timeout_CapturingRunner](entities/test_orchestrator_timeout_CapturingRunner.md)
+- [test_parallel_trials_ScriptedProvider](entities/test_parallel_trials_ScriptedProvider.md)
 - [test_phase_state_broadcast_FakeBroadcaster](entities/test_phase_state_broadcast_FakeBroadcaster.md)
 - [test_promotion_approval_FakePromoter](entities/test_promotion_approval_FakePromoter.md)
 - [test_promotion_approval_FakeStore](entities/test_promotion_approval_FakeStore.md)
@@ -439,6 +440,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [test_prompt_promotion_policy_FakeAsyncAnthropic](entities/test_prompt_promotion_policy_FakeAsyncAnthropic.md)
 - [test_research_api_compat_FakeSessionManager](entities/test_research_api_compat_FakeSessionManager.md)
 - [test_research_api_compat_FakeStore](entities/test_research_api_compat_FakeStore.md)
+- [test_result_authority_ScriptedProvider](entities/test_result_authority_ScriptedProvider.md)
 - [test_results_api_FakeStore](entities/test_results_api_FakeStore.md)
 - [test_runtime_recovery_FakeAPIStatusError](entities/test_runtime_recovery_FakeAPIStatusError.md)
 - [test_runtime_recovery_FakeAsyncAnthropic](entities/test_runtime_recovery_FakeAsyncAnthropic.md)
@@ -546,6 +548,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [research_phase_plan](modules/research_phase_plan.md) - Phase-state helpers for autoresearch sessions (live machinery).
 - [research_state](modules/research_state.md) - Operator-facing autoresearch state summaries.
 - [result_artifact](modules/result_artifact.md) - Result artifact preservation for autoresearch iterations.
+- [result_authority](modules/result_authority.md) - Authoritative evaluator results: receipts, verification, and honest labels.
 - [results](modules/results.md) - Experiment results query endpoints.
 - [results_store](modules/results_store.md) - Deprecated back-compat shim (ARC-011 P1-006 / P1-007).
 - [run-production-ops-tests](modules/run-production-ops-tests.md) - `ui/scripts/run-production-ops-tests.mjs`
@@ -666,6 +669,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [test_research_config](modules/test_research_config.md) - ResearchConfig generalization tests (ARC-011 P2-020).
 - [test_research_manifest](modules/test_research_manifest.md) - `tests/test_research_manifest.py`
 - [test_result_artifact_ingestion](modules/test_result_artifact_ingestion.md) - `tests/test_result_artifact_ingestion.py`
+- [test_result_authority](modules/test_result_authority.md) - Evaluator-result authority: receipts, provenance labels, and replay tests.
 - [test_results_api](modules/test_results_api.md) - `tests/test_results_api.py`
 - [test_results_store_manifest_snapshots](modules/test_results_store_manifest_snapshots.md) - `tests/test_results_store_manifest_snapshots.py`
 - [test_results_store_migrations](modules/test_results_store_migrations.md) - Tests for ARC-011 P0-008 / P0-009 / P0-010 — migration error surfacing.
@@ -715,6 +719,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [SessionManager__run_skill_bootstrap](workflows/SessionManager__run_skill_bootstrap.md) - entry: `session_manager.SessionManager._run_skill_bootstrap`
 - [candidate_summary](workflows/candidate_summary.md) - entry: `research_state._candidate_summary`
 - [enrich_iteration](workflows/enrich_iteration.md) - entry: `results._enrich_iteration`
+- [evaluate_command_policy](workflows/evaluate_command_policy.md) - entry: `command_policy.evaluate_command_policy`
 - [lifespan](workflows/lifespan.md) - entry: `main.lifespan`
 - [promoter_for_session](workflows/promoter_for_session.md) - entry: `promotion._promoter_for_session`
 

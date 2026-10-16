@@ -154,4 +154,4 @@ flowchart LR
 | `test_confirm_persists_development_metadata_with_results_store` | call | [test_config_promoter_gate_bundle](../modules/test_config_promoter_gate_bundle.md) | 1 |
 | `test_confirm_writes_rollback_snapshot_and_rollback_restores_previous_config` | call | [test_config_promoter_gate_bundle](../modules/test_config_promoter_gate_bundle.md) | 1 |
 
-> References: showing 12 of 116 logical references; 104 omitted by the 12-row generated summary limit.
+> References: showing 12 of 117 logical references; 105 omitted by the 12-row generated summary limit.

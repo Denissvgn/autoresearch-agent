@@ -87,4 +87,4 @@ flowchart LR
 | `test_value_types_are_frozen_and_construct_correctly` | type_reference | [test_llm_provider](../modules/test_llm_provider.md) | — |
 | `_fake_text_response` | call | [test_orchestrator_loop_guard](../modules/test_orchestrator_loop_guard.md) | 1 |
 
-> References: showing 12 of 15 logical references; 3 omitted by the 12-row generated summary limit.
+> References: showing 12 of 16 logical references; 4 omitted by the 12-row generated summary limit.

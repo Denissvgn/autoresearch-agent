@@ -97,4 +97,4 @@ flowchart LR
 | `test_value_types_are_frozen_and_construct_correctly` | type_reference | [test_llm_provider](../modules/test_llm_provider.md) | — |
 | `TestEstimateCost.test_default_model` | call | [test_llm_provider_openai](../modules/test_llm_provider_openai.md) | 1 |
 
-> References: showing 12 of 17 logical references; 5 omitted by the 12-row generated summary limit.
+> References: showing 12 of 18 logical references; 6 omitted by the 12-row generated summary limit.

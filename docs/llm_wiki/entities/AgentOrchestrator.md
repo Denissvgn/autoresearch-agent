@@ -1,6 +1,6 @@
 # AgentOrchestrator
 
-**Location:** `src/core/orchestrator.py:327`
+**Location:** `src/core/orchestrator.py:328`
 **Kind:** Class
 **Bases:** —
 **Module:** [orchestrator](../modules/orchestrator.md)
@@ -36,6 +36,9 @@ Runs a Claude agent session for autonomous ML experiment tuning.
 | `_read_marker_file_async` | *(async)* `(config: ResearchConfig, min_mtime: Optional[float] = None, trial_dir: Optional[str] = None, outputs: Optional[list] = None) -> Optional[str]` | — | — |
 | `_verify_kv_metrics` | *(async)* `(research_id: str, result: Dict[str, Any], *, turn: int, agent_log: 'AgentLogWriter', session_nonce: Optional[bytes], nonce_field: str, requires_signed: bool, source: str, pipeline_id: Optional[str] = None) -> Optional[Dict[str, Any]]` | — | W11-verify a ``---`` KV metrics block (ARC-011 review C3). |
 | `_load_claude_md` | `() -> str` | — | — |
+| `_label_result_authority` | `(marker: Dict[str, Any], tool_meta: Optional[Dict[str, Any]] = None) -> None` | `@staticmethod` | Assign the ingestion-time provenance label for a result marker. |
+| `_issue_result_receipt_if_trusted` | *(async)* `(marker: Dict[str, Any], *, research_id: str, turn: Optional[int], iteration: int, session: Optional[Dict[str, Any]]) -> Optional[str]` | — | Issue the attempt-binding receipt for a trusted-channel result. |
+| `_receipt_already_recorded` | *(async)* `(research_id: str, receipt_id: str) -> bool` | — | Whether this exact receipt already produced a recorded result. |
 | `_read_marker_file` | `(config: ResearchConfig, min_mtime: Optional[float] = None, trial_dir: Optional[str] = None, outputs: Optional[list] = None) -> Optional[str]` | — | Read and consume a marker file declared by the skill's |
 | `_load_research_resume` | `(config: ResearchConfig) -> str` | — | Load the research resume for this instrument if it exists. |
 | `_read_research_resume_file` | `(resume_path: str) -> str` | `@staticmethod` | — |
@@ -124,7 +127,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [orchestrator](../modules/orchestrator.md) | 57 | — |
+| [orchestrator](../modules/orchestrator.md) | 60 | — |
 
 ### References
 
@@ -143,4 +146,4 @@ flowchart LR
 | `test_baseline_capture_inherits_cross_session_baseline` | call | [test_baseline_capture_dedup_bypass](../modules/test_baseline_capture_dedup_bypass.md) | 1 |
 | `test_baseline_capture_no_prior_returns_none` | call | [test_baseline_capture_dedup_bypass](../modules/test_baseline_capture_dedup_bypass.md) | 1 |
 
-> References: showing 12 of 104 logical references; 92 omitted by the 12-row generated summary limit.
+> References: showing 12 of 105 logical references; 93 omitted by the 12-row generated summary limit.

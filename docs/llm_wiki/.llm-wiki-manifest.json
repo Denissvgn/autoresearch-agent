@@ -1,8 +1,8 @@
 {
   "artifact_hashes": {
-    "evaluated_envelope_hash": "sha256:e14138f83b54ce605045051766beaf24cc9f9347411d5311ab3adb25fea768f0",
-    "knowledge_index_hash": "sha256:14e9f82b9e50b23e3135d880dbe7297226c4ec9a1efc63c2ede455dae48d405a",
-    "surface_index_hash": "sha256:891ae651ed61f9759ecfe940007fdaf9b9a21eaacbbd5ecbf7d5a44a4dc45f30"
+    "evaluated_envelope_hash": "sha256:75c00fefa3b6b1a469d871c62e6b88bdcadab8acade5dbfef2fb37715077f326",
+    "knowledge_index_hash": "sha256:e6768a9f435d9058e2e94a16089eda14f53b59772707fe2995369c83f670d363",
+    "surface_index_hash": "sha256:ece4e73cd91dab3b502b9ee8b6b81f724d6c289c604871e792100e6cecd3941c"
   },
   "evidence_baselines": {
     "entities/AccentName.md": {
@@ -77,10 +77,10 @@
     },
     "entities/AgentOrchestrator.md": {
       "basis": {
-        "concept_observation_hash": "sha256:88d6e54a62d55a5970fdea62c5c5365bbef0501c4950e4b0106342c3ca642f15",
+        "concept_observation_hash": "sha256:dcbe6e7e246e759cdd92ee9f3d0a8c614029622cf79ea1b5bde41d1dcc269296",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:ea36f60b127661fc3c41803d868ab661942bdf2641cb8a0e9aaa58092e5c1d93",
+        "source_content_hash": "sha256:adc578ad3af22173c698dfda22673057c424d3e864e326efd514b42d996fa8b6",
         "source_path": "src/core/orchestrator.py"
       },
       "state": "known"
@@ -280,7 +280,7 @@
         "concept_observation_hash": "sha256:a0789535258ca8eb90f21edf45f15f8b1bf1f2d58c289755b30faa490ff2f239",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:f543474a290c485eeaabfe8ca8f0a12983eba79845079b077f6c65deb4dd1219",
+        "source_content_hash": "sha256:f427148ca1e6c59077850633966b22411bfecba9fe909ecc7ceaae105c861c14",
         "source_path": "src/core/command_policy.py"
       },
       "state": "known"
@@ -1400,7 +1400,7 @@
         "concept_observation_hash": "sha256:0e893a76429cc899f1ab73fae1332479a1e6e057688f9acb8b9492dcec4a858c",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:ea36f60b127661fc3c41803d868ab661942bdf2641cb8a0e9aaa58092e5c1d93",
+        "source_content_hash": "sha256:adc578ad3af22173c698dfda22673057c424d3e864e326efd514b42d996fa8b6",
         "source_path": "src/core/orchestrator.py"
       },
       "state": "known"
@@ -1900,7 +1900,7 @@
         "concept_observation_hash": "sha256:266de332bcf9101e31e17959e339e01fcc0dad96e3574ec51bb8754860d2bfda",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:ea36f60b127661fc3c41803d868ab661942bdf2641cb8a0e9aaa58092e5c1d93",
+        "source_content_hash": "sha256:adc578ad3af22173c698dfda22673057c424d3e864e326efd514b42d996fa8b6",
         "source_path": "src/core/orchestrator.py"
       },
       "state": "known"
@@ -2145,16 +2145,6 @@
       },
       "state": "known"
     },
-    "entities/ScriptedProvider.md": {
-      "basis": {
-        "concept_observation_hash": "sha256:4ae712b2e09877d67815b50d18cebe151a9c37e45a5b1a63036461eee9b6df92",
-        "extractor_ref": "llm-wiki/extractor/python",
-        "scope": "entity",
-        "source_content_hash": "sha256:67f6abefebefaed06f576c38507ee104c1c090dd4fa26ef8b67ced2c273b06be",
-        "source_path": "tests/test_parallel_trials.py"
-      },
-      "state": "known"
-    },
     "entities/SecondaryMetric.md": {
       "basis": {
         "concept_observation_hash": "sha256:f3462be9e20364c12c78a3a285ecb4fdcb506247ae694e770a01dd0ed5fe1a9f",
@@ -2297,10 +2287,10 @@
     },
     "entities/Settings.md": {
       "basis": {
-        "concept_observation_hash": "sha256:7d597333d9fb1a46560e30c6fbfe9319b07db506b76d960218adfe1a77d51ec5",
+        "concept_observation_hash": "sha256:9db612c06b988d344ef8f4e53d542dc805435fb9663942f451cb4c7b76aff7bc",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:808600c23b076e77f79dd9a61f0e96e005522b515963ebba053a4bdcfb35d7ff",
+        "source_content_hash": "sha256:53c51efb809ca564a2102a0b6372a67384303cc9ecb917e789805cfa4b12181a",
         "source_path": "src/config.py"
       },
       "state": "known"
@@ -3475,12 +3465,22 @@
       },
       "state": "known"
     },
+    "entities/Turn.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:0bc9588f704d55b7fcfd8b0520007ec861d1f9d7277141cc931e26cc74cbe1ca",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:b724c39ef21eb64f824c6f5c0b8f6b4129736f66342e883a0986b6e019f1d00f",
+        "source_path": "tests/test_result_authority.py"
+      },
+      "state": "known"
+    },
     "entities/TurnTrialState.md": {
       "basis": {
         "concept_observation_hash": "sha256:cab1b7a430045d06f1dc65c838a3639b0ff2372d737be242ae1fd9a328e9dd92",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "entity",
-        "source_content_hash": "sha256:ea36f60b127661fc3c41803d868ab661942bdf2641cb8a0e9aaa58092e5c1d93",
+        "source_content_hash": "sha256:adc578ad3af22173c698dfda22673057c424d3e864e326efd514b42d996fa8b6",
         "source_path": "src/core/orchestrator.py"
       },
       "state": "known"
@@ -4105,6 +4105,16 @@
       },
       "state": "known"
     },
+    "entities/test_parallel_trials_ScriptedProvider.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:4ae712b2e09877d67815b50d18cebe151a9c37e45a5b1a63036461eee9b6df92",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:67f6abefebefaed06f576c38507ee104c1c090dd4fa26ef8b67ced2c273b06be",
+        "source_path": "tests/test_parallel_trials.py"
+      },
+      "state": "known"
+    },
     "entities/test_phase_state_broadcast_FakeBroadcaster.md": {
       "basis": {
         "concept_observation_hash": "sha256:23b991e5dc329e12eecf278dd57f6e9a7e2f90830dd9c20dc8b6800e6d636a3d",
@@ -4212,6 +4222,16 @@
         "scope": "entity",
         "source_content_hash": "sha256:c5a47ab35cc796469dc200dea861b28f482a921e9d064c5e14c4cdce05c35dfd",
         "source_path": "tests/test_research_api_compat.py"
+      },
+      "state": "known"
+    },
+    "entities/test_result_authority_ScriptedProvider.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:2777e64cb3c2b05db0f159bdb59056473d3735ff6df854c8408cb8773f447e85",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "entity",
+        "source_content_hash": "sha256:b724c39ef21eb64f824c6f5c0b8f6b4129736f66342e883a0986b6e019f1d00f",
+        "source_path": "tests/test_result_authority.py"
       },
       "state": "known"
     },
@@ -4717,10 +4737,10 @@
     },
     "modules/command_policy.md": {
       "basis": {
-        "concept_observation_hash": "sha256:f50807360483a7e8f83a9a604d1f8d8fe2ed69958b66352337f89556ea518691",
+        "concept_observation_hash": "sha256:d1cdcc479d9def7a709cd109b9f40f6dc96c16dfd691f932578611f321164ee4",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:f543474a290c485eeaabfe8ca8f0a12983eba79845079b077f6c65deb4dd1219",
+        "source_content_hash": "sha256:f427148ca1e6c59077850633966b22411bfecba9fe909ecc7ceaae105c861c14",
         "source_path": "src/core/command_policy.py"
       },
       "state": "known"
@@ -4750,7 +4770,7 @@
         "concept_observation_hash": "sha256:a3abea4a1ba7cdfec981b5e1efc267bb5d431ac64d1a530db7fdc721e7dd77dc",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:808600c23b076e77f79dd9a61f0e96e005522b515963ebba053a4bdcfb35d7ff",
+        "source_content_hash": "sha256:53c51efb809ca564a2102a0b6372a67384303cc9ecb917e789805cfa4b12181a",
         "source_path": "src/config.py"
       },
       "state": "known"
@@ -5037,10 +5057,10 @@
     },
     "modules/orchestrator.md": {
       "basis": {
-        "concept_observation_hash": "sha256:f27146f7f77c317b2854bcf81c28aa7268c0a10b2eb2cab4344f7045871924ea",
+        "concept_observation_hash": "sha256:ac3b2ab7bfa3bfd19d4e98d7575e282bfa561c0abc094f8a38c83db2c13a389f",
         "extractor_ref": "llm-wiki/extractor/python",
         "scope": "module",
-        "source_content_hash": "sha256:ea36f60b127661fc3c41803d868ab661942bdf2641cb8a0e9aaa58092e5c1d93",
+        "source_content_hash": "sha256:adc578ad3af22173c698dfda22673057c424d3e864e326efd514b42d996fa8b6",
         "source_path": "src/core/orchestrator.py"
       },
       "state": "known"
@@ -5252,6 +5272,16 @@
         "scope": "module",
         "source_content_hash": "sha256:2da790b291eaa84a049f31faaafe299f12e5abe0f04f7ad906cff89c46a7be2c",
         "source_path": "src/core/result_artifact.py"
+      },
+      "state": "known"
+    },
+    "modules/result_authority.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:37801940c09514a0dbda54ac7db0c14fa695517018067f4130626655c7fb563d",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "module",
+        "source_content_hash": "sha256:6e6414e26da214d8555fefeafddcfbdf4d45e636efa192c2dc89c0a5599f6317",
+        "source_path": "src/core/result_authority.py"
       },
       "state": "known"
     },
@@ -6452,6 +6482,16 @@
         "scope": "module",
         "source_content_hash": "sha256:ac272b0f34ad8105fa081b669abd2f34d817bb4a3b1c77bb486b666450c23759",
         "source_path": "tests/test_result_artifact_ingestion.py"
+      },
+      "state": "known"
+    },
+    "modules/test_result_authority.md": {
+      "basis": {
+        "concept_observation_hash": "sha256:b30f1f1d66be52e6db9a128d90b729446a7bef3a6fe21c95251599a788eb676f",
+        "extractor_ref": "llm-wiki/extractor/python",
+        "scope": "module",
+        "source_content_hash": "sha256:b724c39ef21eb64f824c6f5c0b8f6b4129736f66342e883a0986b6e019f1d00f",
+        "source_path": "tests/test_result_authority.py"
       },
       "state": "known"
     },
@@ -8202,12 +8242,6 @@
       "scope": "entity",
       "source_path": "tests/test_session_failure_modes.py"
     },
-    "entities/ScriptedProvider.md": {
-      "entity_name": "_ScriptedProvider",
-      "occurrence": 1,
-      "scope": "entity",
-      "source_path": "tests/test_parallel_trials.py"
-    },
     "entities/SecondaryMetric.md": {
       "entity_name": "SecondaryMetric",
       "occurrence": 1,
@@ -9000,6 +9034,12 @@
       "scope": "entity",
       "source_path": "src/core/skill_manifest.py"
     },
+    "entities/Turn.md": {
+      "entity_name": "_Turn",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "tests/test_result_authority.py"
+    },
     "entities/TurnTrialState.md": {
       "entity_name": "TurnTrialState",
       "occurrence": 1,
@@ -9378,6 +9418,12 @@
       "scope": "entity",
       "source_path": "tests/test_orchestrator_timeout.py"
     },
+    "entities/test_parallel_trials_ScriptedProvider.md": {
+      "entity_name": "_ScriptedProvider",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "tests/test_parallel_trials.py"
+    },
     "entities/test_phase_state_broadcast_FakeBroadcaster.md": {
       "entity_name": "FakeBroadcaster",
       "occurrence": 1,
@@ -9443,6 +9489,12 @@
       "occurrence": 1,
       "scope": "entity",
       "source_path": "tests/test_research_api_compat.py"
+    },
+    "entities/test_result_authority_ScriptedProvider.md": {
+      "entity_name": "_ScriptedProvider",
+      "occurrence": 1,
+      "scope": "entity",
+      "source_path": "tests/test_result_authority.py"
     },
     "entities/test_results_api_FakeStore.md": {
       "entity_name": "FakeStore",
@@ -9877,6 +9929,10 @@
     "modules/result_artifact.md": {
       "scope": "module",
       "source_path": "src/core/result_artifact.py"
+    },
+    "modules/result_authority.md": {
+      "scope": "module",
+      "source_path": "src/core/result_authority.py"
     },
     "modules/results.md": {
       "scope": "module",
@@ -10357,6 +10413,10 @@
     "modules/test_result_artifact_ingestion.md": {
       "scope": "module",
       "source_path": "tests/test_result_artifact_ingestion.py"
+    },
+    "modules/test_result_authority.md": {
+      "scope": "module",
+      "source_path": "tests/test_result_authority.py"
     },
     "modules/test_results_api.md": {
       "scope": "module",
@@ -11410,6 +11470,7 @@
               "preflight_enabled": "Run service dependency checks before starting research sessions.",
               "preflight_timeout_s": "Per-service preflight timeout in seconds.",
               "production_approval_verifier": "HMAC-SHA256 secret used to verify the signature on production-scope promotion approvals (W18 / P0-020). When unset, all production promotions are rejected (fail-closed). The approval.signature must be the hex HMAC-SHA256 of '{research_id}:{scope}:{approver}' keyed by this secret.",
+              "result_receipt_key": "Server-only HMAC-SHA256 key for authenticated result receipts when evaluator results cross a trust boundary. Never delivered to candidates or evaluators. When unset, receipts use deterministic digest ids (tamper-evident and idempotent within the server's own records).",
               "service_name": "—",
               "skill_generator_enabled": "P2 Skill SDK: expose POST /skills/generate (LLM-drafted skill packages). Operator opt-in — generation spends real tokens and writes validated-but-untrusted drafts into skills/_drafts/.",
               "stagnation_exempt_phases": "Phases where metric stagnation is expected (validation/evidence work, not hyperparameter tuning). The global stagnation guard is suppressed when the session is in one of these phases.",
@@ -11438,10 +11499,10 @@
           }
         }
       },
-      "hash": "sha256:808600c23b076e77f79dd9a61f0e96e005522b515963ebba053a4bdcfb35d7ff",
+      "hash": "sha256:53c51efb809ca564a2102a0b6372a67384303cc9ecb917e789805cfa4b12181a",
       "language": "python",
       "module_page": "config",
-      "semantic_hash": "sha256:f6c82bf4192ae067d611d8ba395740cd14e462401fc9b3b73e39511acceed43b"
+      "semantic_hash": "sha256:19e1755b5621d03e73138756254943c106c59e34d3b3a66bd8df94fdb008bd5d"
     },
     "src/core/agent_tools.py": {
       "entities": [
@@ -11675,10 +11736,10 @@
           }
         }
       },
-      "hash": "sha256:f543474a290c485eeaabfe8ca8f0a12983eba79845079b077f6c65deb4dd1219",
+      "hash": "sha256:f427148ca1e6c59077850633966b22411bfecba9fe909ecc7ceaae105c861c14",
       "language": "python",
       "module_page": "command_policy",
-      "semantic_hash": "sha256:15cd99dcbff0985d4f525b7195859320d8dad1e91d4abe67d82cd8881af9a283"
+      "semantic_hash": "sha256:04f367b7a02194b14f2711f3ee50e8c2b194bca5e6179f304d959e24c4229108"
     },
     "src/core/command_runner.py": {
       "entities": [
@@ -13954,6 +14015,8 @@
               "_infer_decision": "Determine keep/improve/discard by comparing against session best.",
               "_infer_failed_attempt_status": "—",
               "_is_paused_cross_worker": "True when the shared DB says the session is ``paused``.",
+              "_issue_result_receipt_if_trusted": "Issue the attempt-binding receipt for a trusted-channel result.",
+              "_label_result_authority": "Assign the ingestion-time provenance label for a result marker.",
               "_latest_iteration_context_digest": "—",
               "_load_claude_md": "—",
               "_load_claude_md_async": "—",
@@ -13968,6 +14031,7 @@
               "_read_marker_file": "Read and consume a marker file declared by the skill's",
               "_read_marker_file_async": "—",
               "_read_research_resume_file": "—",
+              "_receipt_already_recorded": "Whether this exact receipt already produced a recorded result.",
               "_record_command_policy_rejection": "—",
               "_record_iteration": "Record an iteration and broadcast the event.",
               "_refresh_phase_state": "DM-14: when ``iterations_remaining`` is supplied, ``build_phase_state``",
@@ -14059,10 +14123,10 @@
           "functions": {}
         }
       },
-      "hash": "sha256:ea36f60b127661fc3c41803d868ab661942bdf2641cb8a0e9aaa58092e5c1d93",
+      "hash": "sha256:adc578ad3af22173c698dfda22673057c424d3e864e326efd514b42d996fa8b6",
       "language": "python",
       "module_page": "orchestrator",
-      "semantic_hash": "sha256:122c3f75defb4e7ba853faf88879030b4c1de746a22597f1f0beec7df56ea73a"
+      "semantic_hash": "sha256:5b9fe0149a5143dc58e33499e02a30c12ebe9d60a1e8d762485f2d2609932560"
     },
     "src/core/output_digest.py": {
       "entities": [],
@@ -14921,6 +14985,31 @@
       "language": "python",
       "module_page": "result_artifact",
       "semantic_hash": "sha256:4b5cfe98b07b48507b4841cfea5fa6c5809b1cf09a068394e4156945f3d27745"
+    },
+    "src/core/result_authority.py": {
+      "entities": [],
+      "entity_page_occurrences": [],
+      "entity_pages": {},
+      "generated_semantics": {
+        "entities": {},
+        "module": {
+          "classes": {},
+          "description": "Authoritative evaluator results: receipts, verification, and honest labels.\n\nModel-visible nonces never establish authority: the W11 echo check only\nshows that a payload passed through a context that had seen the nonce.\nThis module binds result content to the server-created attempt and the\nexact candidate/evaluator/dataset identities, and issues a receipt over\nthat binding so any change to metric, gate, candidate, or attempt identity\ninvalidates it. The receipt mirrors the kernel ``ResultReceipt`` contract\n(``execution_contracts``) field-for-field so it can lift across a trust\nboundary later; for local execution the trusted evaluator-to-server channel\nis the authority and the receipt provides tamper evidence, replay\nprotection, and idempotent delivery.\n\nAuthority labels recorded on every ingested result (honest, never upgraded\nretroactively):\n\n* ``receipt_verified`` — delivered through the trusted evaluator channel\n  and bound by an issued receipt.\n* ``model_proposed`` — authored in model output; annotations/proposals\n  only, regardless of any echoed nonce.\n* ``unverified_imported`` — third-party or non-evaluator content.\n* ``nonce_only`` — legacy echo-verification provenance with no receipt.",
+          "functions": {
+            "_canonical": "—",
+            "_receipt_id": "—",
+            "_receipt_material": "—",
+            "issue_result_receipt": "Issue the receipt binding one result to one attempt.",
+            "protected_result_names": "Names candidate file tools must never write.",
+            "result_payload": "The canonical verified-content subset of a result marker.",
+            "verify_result_receipt": "Validate a receipt against the content and identities it claims."
+          }
+        }
+      },
+      "hash": "sha256:6e6414e26da214d8555fefeafddcfbdf4d45e636efa192c2dc89c0a5599f6317",
+      "language": "python",
+      "module_page": "result_authority",
+      "semantic_hash": "sha256:af0d38635597ca0f079f999321012aeae050feb2dc450136f53eb05b3526e57f"
     },
     "src/core/results_store.py": {
       "entities": [],
@@ -21025,11 +21114,11 @@
         {
           "name": "_ScriptedProvider",
           "occurrence": 1,
-          "page": "ScriptedProvider"
+          "page": "test_parallel_trials_ScriptedProvider"
         }
       ],
       "entity_pages": {
-        "_ScriptedProvider": "ScriptedProvider"
+        "_ScriptedProvider": "test_parallel_trials_ScriptedProvider"
       },
       "generated_semantics": {
         "entities": {
@@ -22075,6 +22164,82 @@
       "language": "python",
       "module_page": "test_result_artifact_ingestion",
       "semantic_hash": "sha256:c0b4d1fbfe2da8cfa2e5d5dd7302e4edbedb434466ed1c79ee2935ea2ed40601"
+    },
+    "tests/test_result_authority.py": {
+      "entities": [
+        "_Turn",
+        "_ScriptedProvider"
+      ],
+      "entity_page_occurrences": [
+        {
+          "name": "_Turn",
+          "occurrence": 1,
+          "page": "Turn"
+        },
+        {
+          "name": "_ScriptedProvider",
+          "occurrence": 1,
+          "page": "test_result_authority_ScriptedProvider"
+        }
+      ],
+      "entity_pages": {
+        "_ScriptedProvider": "test_result_authority_ScriptedProvider",
+        "_Turn": "Turn"
+      },
+      "generated_semantics": {
+        "entities": {
+          "_ScriptedProvider": {
+            "attributes": {},
+            "description": "Emits a fixed sequence of turns, then terminates.",
+            "methods": {
+              "__init__": "—",
+              "capabilities": "—",
+              "classify_error": "—",
+              "complete": "—",
+              "estimate_cost": "—",
+              "messages_create": "—"
+            }
+          },
+          "_Turn": {
+            "attributes": {},
+            "description": "One provider response: tool calls and/or assistant text.",
+            "methods": {
+              "__init__": "—"
+            }
+          }
+        },
+        "module": {
+          "classes": {
+            "_ScriptedProvider": "Emits a fixed sequence of turns, then terminates.",
+            "_Turn": "One provider response: tool calls and/or assistant text."
+          },
+          "description": "Evaluator-result authority: receipts, provenance labels, and replay tests.\n\nModel-visible nonces never establish authority. These regressions pin the\ntrusted-evaluator ingestion contract: result content is bound to the\nserver-created attempt and the exact candidate/evaluator/dataset identities\nby a receipt (changing metric, gate, candidate, or attempt identity\ninvalidates it), repeated delivery of a legitimate receipt creates no new\nresult, model-authored markers are annotations/proposals that can never\noverwrite verified metrics, gate outcomes, or scored candidate snapshots,\nand every record carries an honest, never-upgraded provenance label.",
+          "functions": {
+            "_issue": "—",
+            "_records": "—",
+            "_run_session": "Drive one real run() session through the built-in tool loop.",
+            "_write_skill": "A schema-valid skill whose evaluator prints a result block and",
+            "receipt_payload": "Rebuild the payload a receipt binds (for verification calls).",
+            "test_changing_candidate_or_attempt_identity_invalidates_the_receipt": "—",
+            "test_changing_metric_or_gate_invalidates_the_receipt": "—",
+            "test_duplicate_delivery_creates_no_new_result": "—",
+            "test_forged_snapshot_invalidates_the_recorded_receipt": "—",
+            "test_keyed_receipts_use_hmac_and_reject_wrong_keys": "—",
+            "test_model_marker_cannot_overwrite_a_verified_result": "—",
+            "test_model_reported_results_are_labeled_as_proposals": "—",
+            "test_prior_nonce_replay_never_becomes_authoritative": "—",
+            "test_repeating_a_legitimate_receipt_yields_the_same_id": "—",
+            "test_result_channel_files_are_not_writable_by_candidate_tools": "—",
+            "test_valid_receipt_verifies_clean": "—",
+            "test_valid_result_is_receipt_verified_and_binds_the_attempt": "—",
+            "test_wrong_attempt_receipt_is_rejected": "—"
+          }
+        }
+      },
+      "hash": "sha256:b724c39ef21eb64f824c6f5c0b8f6b4129736f66342e883a0986b6e019f1d00f",
+      "language": "python",
+      "module_page": "test_result_authority",
+      "semantic_hash": "sha256:dd837aef30d34455cbc92797cb96932fcad112421f6f456af6829a899dcd547c"
     },
     "tests/test_results_api.py": {
       "entities": [

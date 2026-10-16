@@ -57,23 +57,32 @@ Nothing the mapping classifies as preserved is silently dropped.
 flowchart LR
     n0["src/compat/legacy_alias.py"]
     n1["src/core/execution_contracts.py"]
-    n2["tests/test_contract_examples.py"]
-    n3["tests/test_execution_contracts.py"]
+    n2["src/core/result_authority.py"]
+    n3["tests/test_contract_examples.py"]
+    n4["tests/test_execution_contracts.py"]
+    n5["tests/test_result_authority.py"]
     n1 --> n0
     n2 --> n1
     n3 --> n1
+    n4 --> n1
+    n5 --> n1
+    n5 --> n2
     click n0 "../modules/compat_legacy_alias.md"
     click n1 "../modules/execution_contracts.md"
-    click n2 "../modules/test_contract_examples.md"
-    click n3 "../modules/test_execution_contracts.md"
+    click n2 "../modules/result_authority.md"
+    click n3 "../modules/test_contract_examples.md"
+    click n4 "../modules/test_execution_contracts.md"
+    click n5 "../modules/test_result_authority.md"
 ```
 
 ### Internal neighbors
 
 | Direction | Module |
 |---|---|
+| Inbound | [result_authority](../modules/result_authority.md) |
 | Inbound | [test_contract_examples](../modules/test_contract_examples.md) |
 | Inbound | [test_execution_contracts](../modules/test_execution_contracts.md) |
+| Inbound | [test_result_authority](../modules/test_result_authority.md) |
 | Outbound | [compat_legacy_alias](../modules/compat_legacy_alias.md) |
 
 ### External packages

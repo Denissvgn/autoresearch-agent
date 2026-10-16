@@ -15,6 +15,7 @@ Agent orchestrator — drives Claude via the Anthropic SDK with tool use.
 | `dataclasses` | `dataclass`, `field` |
 | `datetime` | `datetime`, `timezone` |
 | `glob` | `glob_mod` |
+| `hashlib` | `hashlib` |
 | `json` | `json` |
 | `logging` | `logging` |
 | `math` | `math` |
@@ -70,7 +71,7 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Inbound | `src` (2) |
-| Inbound | `tests` (36) |
+| Inbound | `tests` (37) |
 | Outbound | `src` (22) |
 
 ### External packages
@@ -79,13 +80,13 @@ flowchart LR
 |---|---:|---:|
 | python | 1 | 0 |
 
-> All 59 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 60 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [ResearchConfig](../entities/ResearchConfig.md) | 188 | — | — |
-| [TurnTrialState](../entities/TurnTrialState.md) | 272 | — | Mutable per-turn execution state owned by the agent tool loop. |
-| [PendingTrial](../entities/PendingTrial.md) | 302 | — | One deferred trial execution (P2 parallel-trial dispatch). |
-| [AgentOrchestrator](../entities/AgentOrchestrator.md) | 327 | — | Runs a Claude agent session for autonomous ML experiment tuning. |
+| [ResearchConfig](../entities/ResearchConfig.md) | 189 | — | — |
+| [TurnTrialState](../entities/TurnTrialState.md) | 273 | — | Mutable per-turn execution state owned by the agent tool loop. |
+| [PendingTrial](../entities/PendingTrial.md) | 303 | — | One deferred trial execution (P2 parallel-trial dispatch). |
+| [AgentOrchestrator](../entities/AgentOrchestrator.md) | 328 | — | Runs a Claude agent session for autonomous ML experiment tuning. |

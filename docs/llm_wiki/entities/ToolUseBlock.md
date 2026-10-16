@@ -94,3 +94,5 @@ flowchart LR
 | `test_mock_provider_relays_governed_eval_marker` | call | [test_mock_provider](../modules/test_mock_provider.md) | 1 |
 | `_fake_bash_tool_use` | call | [test_orchestrator_timeout](../modules/test_orchestrator_timeout.md) | 1 |
 | `_ScriptedProvider.messages_create` | call | [test_parallel_trials](../modules/test_parallel_trials.md) | 1 |
+
+> References: showing 12 of 13 logical references; 1 omitted by the 12-row generated summary limit.

@@ -40,6 +40,7 @@ flowchart LR
     n5["tests/test_anthropic_provider.py"]
     n6["test_value_types_are_frozen_and_construct_correctly (tests/test_llm_provider.py)"]
     n7["_ScriptedProvider.classify_error (tests/test_parallel_trials.py)"]
+    n8["_ScriptedProvider.classify_error (tests/test_result_authority.py)"]
     n1 --> n0
     n2 --> n0
     n3 --> n0
@@ -47,6 +48,7 @@ flowchart LR
     n5 --> n0
     n6 --> n0
     n7 --> n0
+    n8 --> n0
     click n0 "../modules/llm_provider.md"
     click n1 "../modules/llm_provider.md"
     click n2 "../modules/llm_provider.md"
@@ -55,6 +57,7 @@ flowchart LR
     click n5 "../modules/test_anthropic_provider.md"
     click n6 "../modules/test_llm_provider.md"
     click n7 "../modules/test_parallel_trials.md"
+    click n8 "../modules/test_result_authority.md"
 ```
 
 ### Summary
@@ -78,3 +81,4 @@ flowchart LR
 | `test_value_types_are_frozen_and_construct_correctly` | type_reference | [test_llm_provider](../modules/test_llm_provider.md) | — |
 | `_ScriptedProvider.classify_error` | call | [test_parallel_trials](../modules/test_parallel_trials.md) | 1 |
 | `_ScriptedProvider.classify_error` | type_reference | [test_parallel_trials](../modules/test_parallel_trials.md) | — |
+| `_ScriptedProvider.classify_error` | call | [test_result_authority](../modules/test_result_authority.md) | 1 |
