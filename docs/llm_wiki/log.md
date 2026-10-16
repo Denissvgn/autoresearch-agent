@@ -140,3 +140,28 @@ Append-only chronological log.
 - Pages deprecated: 0
 - Semantic fields preserved: 0
 - Moved entities: none
+
+## 2026-10-16
+
+### Wiki sync
+- Source: `.`
+- Generator version: `2.5.0`
+- Source selection profile: none (default discovery)
+- Source selection fingerprint: none
+- Source snapshot digest: `sha256:6a1527f85c082bd6feed618b29e57a026e7f71986b2cc0f213393bcd27c9f543`
+- Pages created: 4
+- Pages updated: 33
+- Pages metadata-only: 0
+- Pages skipped (unchanged): 770
+- Pages deprecated: 0
+- Semantic fields preserved: 0
+- Moved entities: none
+- Flow pages initialized: 0 (none)
+- Workflow pages created: 0
+- Dependency pages initialized: 0
+- Surface policy updated: no
+- Infrastructure added: 0
+- Infrastructure changed: 0
+- Infrastructure moved: 0
+- Infrastructure removed: 0
+- Unsupported infrastructure YAML: 8

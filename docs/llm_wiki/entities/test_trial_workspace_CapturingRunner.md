@@ -20,7 +20,7 @@ _Auto-generated from `_CapturingRunner` in `tests/test_trial_workspace.py`._
 | Method | Signature | Decorators | Description |
 |--------|-----------|------------|-------------|
 | `__init__` | `(**_: object) -> None` | — | — |
-| `run` | `(command, *, timeout_s, output_callback = None, proc_registry = None, research_id = None, extra_env = None, cwd = None)` | — | — |
+| `run` | `(command, *, timeout_s, output_callback = None, proc_registry = None, research_id = None, extra_env = None, cwd = None, resolved = None)` | — | — |
 
 ## Relationships
 

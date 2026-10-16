@@ -44,6 +44,7 @@ P1-023 references protocols introduced by the three prerequisite epics:
 |--------|---------|
 | `__future__` | `annotations` |
 | `pathlib` | `Path` |
+| `src.core.execution_request` | `PYTHON_BINDINGS`, `SUPPORTED_EXECUTABLE_BINDINGS`, `template_migration_reason` |
 | `src.core.fs_safety` | `sha256_regular_file` |
 | `src.core.orchestrator` | `ResearchConfig` |
 | `src.core.output_parser` | `OutputParser` |
@@ -74,26 +75,26 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Inbound | `src` (2) |
-| Inbound | `tests` (11) |
-| Outbound | `src` (7) |
+| Inbound | `tests` (12) |
+| Outbound | `src` (8) |
 
-> All 19 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 21 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [SkillConfigError](../entities/SkillConfigError.md) | 60 | `ValueError` | A skill manifest declares something the runtime cannot honor. |
-| [SessionRecord](../entities/SessionRecord.md) | 77 | `TypedDict` | Alias over the session dict ``StateStore.get_session`` returns. Keys |
-| [IterationRecord](../entities/IterationRecord.md) | 90 | `TypedDict` | Alias over the iteration dict ``StateStore.get_iteration`` returns |
-| [CommandPolicyExtension](../entities/CommandPolicyExtension.md) | 96 | `TypedDict` | Per-skill extension to the orchestrator's base command policy. |
-| [Phase](../entities/skill_runtime_Phase.md) | 130 | `TypedDict` | Alias over the phase dict shape in ``research_phase_plan.py`` |
-| [AdvancementRule](../entities/AdvancementRule.md) | 144 | `TypedDict` | Phase advancement evidence rule. Today advancement keys live in the |
-| [StructuredHPOPlan](../entities/StructuredHPOPlan.md) | 153 | `TypedDict` | Alias over the HPO plan dict ``structured_hpo.build_structured_hpo_plan`` |
-| [SubjectDescriptor](../entities/SubjectDescriptor.md) | 161 | `TypedDict` | A research subject a skill can enumerate (e.g. an instrument, a model |
-| [VariantDescriptor](../entities/VariantDescriptor.md) | 170 | `TypedDict` | A variant under a subject (e.g. a timeframe, a parameterization). |
-| [SkillRuntime](../entities/SkillRuntime.md) | 184 | `Protocol` | Contract every research skill implements (ARC-011 P1-023, §7.5). |
-| [ManifestSkillRuntime](../entities/ManifestSkillRuntime.md) | 356 | — | A ``SkillRuntime`` driven entirely by a ``ResearchSkillManifest`` (P2-007). |
+| [SkillConfigError](../entities/SkillConfigError.md) | 65 | `ValueError` | A skill manifest declares something the runtime cannot honor. |
+| [SessionRecord](../entities/SessionRecord.md) | 82 | `TypedDict` | Alias over the session dict ``StateStore.get_session`` returns. Keys |
+| [IterationRecord](../entities/IterationRecord.md) | 95 | `TypedDict` | Alias over the iteration dict ``StateStore.get_iteration`` returns |
+| [CommandPolicyExtension](../entities/CommandPolicyExtension.md) | 101 | `TypedDict` | Per-skill extension to the orchestrator's base command policy. |
+| [Phase](../entities/skill_runtime_Phase.md) | 141 | `TypedDict` | Alias over the phase dict shape in ``research_phase_plan.py`` |
+| [AdvancementRule](../entities/AdvancementRule.md) | 155 | `TypedDict` | Phase advancement evidence rule. Today advancement keys live in the |
+| [StructuredHPOPlan](../entities/StructuredHPOPlan.md) | 164 | `TypedDict` | Alias over the HPO plan dict ``structured_hpo.build_structured_hpo_plan`` |
+| [SubjectDescriptor](../entities/SubjectDescriptor.md) | 172 | `TypedDict` | A research subject a skill can enumerate (e.g. an instrument, a model |
+| [VariantDescriptor](../entities/VariantDescriptor.md) | 181 | `TypedDict` | A variant under a subject (e.g. a timeframe, a parameterization). |
+| [SkillRuntime](../entities/SkillRuntime.md) | 195 | `Protocol` | Contract every research skill implements (ARC-011 P1-023, §7.5). |
+| [ManifestSkillRuntime](../entities/ManifestSkillRuntime.md) | 367 | — | A ``SkillRuntime`` driven entirely by a ``ResearchSkillManifest`` (P2-007). |
 
 ## Functions
 

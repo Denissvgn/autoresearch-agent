@@ -17,12 +17,14 @@ resolution against a trial base dir.
 | Source | Symbols |
 |--------|---------|
 | `__future__` | `annotations` |
+| `hashlib` | `hashlib` |
 | `os` | `os` |
 | `pathlib` | `Path` |
 | `src.core.agent_tools` | `_config_snapshot_path_from_command`, `_tool_bash` |
 | `src.core.command_runner` | `CommandRunResult` |
 | `src.core.tool_access` | `build_tool_access_context` |
 | `src.core.trial_workspace` | `TRIALS_DIRNAME`, `TrialContext`, `allocate_trial_dir`, `build_trial_context`, `is_trial_eligible_command`, `stage_trial_or_none`, `stage_trial_workspace`, `trial_marker_candidates`, `tw` |
+| `sys` | `sys` |
 | `unittest.mock` | `MagicMock`, `patch` |
 
 ## Local dependency map
@@ -80,5 +82,6 @@ flowchart LR
 | `test_build_trial_context_bookkeeping_command_not_trialed` | `(tmp_path)` | — | — |
 | `_ws_access` | `()` | — | — |
 | `test_tool_bash_threads_cwd_to_governed_runner` | `()` | — | — |
+| `_pinned_eval_extension` | `(tmp_path) -> dict` | — | Digest-pinned package stand-in for ``eval/run.py`` (resolution now |
 | `test_config_snapshot_resolves_against_base_dir` | `(tmp_path)` | — | — |
 | `test_config_snapshot_base_dir_outside_session_returns_none` | `(tmp_path)` | — | — |

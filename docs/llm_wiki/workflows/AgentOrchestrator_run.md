@@ -1,7 +1,7 @@
 # AgentOrchestrator_run
 
 **Entry point:** `orchestrator.AgentOrchestrator.run`
-**Modules involved:** [agent_tools](../modules/agent_tools.md), [command_runner](../modules/command_runner.md), [experiment_parser](../modules/experiment_parser.md), [llm_provider](../modules/llm_provider.md), [log_writer](../modules/log_writer.md), [orchestrator](../modules/orchestrator.md), [skill_runtime](../modules/skill_runtime.md), [tool_access](../modules/tool_access.md), [trial_workspace](../modules/trial_workspace.md)
+**Modules involved:** [agent_tools](../modules/agent_tools.md), [command_policy](../modules/command_policy.md), [command_runner](../modules/command_runner.md), [experiment_parser](../modules/experiment_parser.md), [llm_provider](../modules/llm_provider.md), [log_writer](../modules/log_writer.md), [orchestrator](../modules/orchestrator.md), [skill_runtime](../modules/skill_runtime.md), [tool_access](../modules/tool_access.md), [trial_workspace](../modules/trial_workspace.md)
 
 > Run the autonomous research loop for a single session.
 
@@ -24,37 +24,39 @@
 14. `command_runner.redact_sensitive_text`
 15. `log_writer.AgentLogWriter.append`
 16. `trial_workspace.build_trial_context`
-17. `agent_tools._config_snapshot_path_from_command`
-18. `command_runner.redact_sensitive_text`
+17. `command_policy.evaluate_command_policy`
+18. `agent_tools.compute_bash_timeout`
 19. `command_runner.redact_sensitive_text`
-20. `agent_tools._nonce_env_for_command`
-21. `command_runner.redact_sensitive_text`
-22. `agent_tools._nonce_env_for_command`
-23. `command_runner.redact_sensitive_text`
-24. `log_writer.AgentLogWriter.append`
-25. `experiment_parser.parse_iteration_marker`
-26. `log_writer.AgentLogWriter.append`
+20. `command_runner.redact_sensitive_text`
+21. `agent_tools._nonce_env_for_command`
+22. `command_runner.redact_sensitive_text`
+23. `agent_tools._nonce_env_for_command`
+24. `command_runner.redact_sensitive_text`
+25. `log_writer.AgentLogWriter.append`
+26. `experiment_parser.parse_iteration_marker`
 27. `log_writer.AgentLogWriter.append`
-28. `llm_provider.Message`
+28. `log_writer.AgentLogWriter.append`
 29. `llm_provider.Message`
-30. `llm_provider.TextBlock`
-31. `log_writer.AgentLogWriter.append`
-32. `llm_provider.Message`
+30. `llm_provider.Message`
+31. `llm_provider.TextBlock`
+32. `log_writer.AgentLogWriter.append`
 33. `llm_provider.Message`
-34. `llm_provider.TextBlock`
-35. `llm_provider.Message`
-36. `llm_provider.TextBlock`
+34. `llm_provider.Message`
+35. `llm_provider.TextBlock`
+36. `llm_provider.Message`
 37. `llm_provider.TextBlock`
 38. `llm_provider.TextBlock`
 39. `llm_provider.TextBlock`
-40. `llm_provider.Message`
-41. `log_writer.AgentLogWriter.append`
+40. `llm_provider.TextBlock`
+41. `llm_provider.Message`
 42. `log_writer.AgentLogWriter.append`
 43. `log_writer.AgentLogWriter.append`
+44. `log_writer.AgentLogWriter.append`
 
 ## Touches
 
 - [agent_tools](../modules/agent_tools.md)
+- [command_policy](../modules/command_policy.md)
 - [command_runner](../modules/command_runner.md)
 - [experiment_parser](../modules/experiment_parser.md)
 - [llm_provider](../modules/llm_provider.md)

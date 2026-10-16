@@ -1,6 +1,6 @@
 # ManifestSkillRuntime
 
-**Location:** `src/core/skill_runtime.py:356`
+**Location:** `src/core/skill_runtime.py:367`
 **Kind:** Class
 **Bases:** —
 **Module:** [skill_runtime](../modules/skill_runtime.md)
@@ -63,16 +63,16 @@ flowchart LR
     n0["ManifestSkillRuntime (src/core/skill_runtime.py)"]
     n1["materialize_skill_runtime (src/core/skill_runtime.py)"]
     n2["_runtime_for (tests/test_execution_concurrency.py)"]
-    n3["test_manifest_runtime_blocker_classification_non_empty (tests/test_manifest_runtime_production_path.py)"]
-    n4["test_manifest_runtime_exposes_declared_primer_filename (tests/test_manifest_runtime_production_path.py)"]
-    n5["test_manifest_runtime_file_path_kind_returns_file_target (tests/test_manifest_runtime_production_path.py)"]
-    n6["test_manifest_runtime_policy_extension_carries_manifest_scripts (tests/test_manifest_runtime_production_path.py)"]
-    n7["test_manifest_runtime_registry_api_kind_raises_loudly (tests/test_manifest_runtime_production_path.py)"]
-    n8["test_requires_signed_metrics_capability_properties (tests/test_metrics_forgery_c3.py)"]
-    n9["tests/test_orchestrator_timeout.py"]
-    n10["test_manifest_runtime_extension_pins_packaged_scripts_with_digests (tests/test_pinned_evaluators.py)"]
-    n11["test_command_wiring_is_explicit (tests/test_prompt_evaluator.py)"]
-    n12["TestManifestSkillRuntimeNonceValidation.runtime (tests/test_skill_prompt_engineering_e2e.py)"]
+    n3["test_bundled_skills_advertise_only_supported_bindings (tests/test_execution_request.py)"]
+    n4["test_python_bindings_must_be_explicitly_qualified (tests/test_execution_request.py)"]
+    n5["test_template_shape_is_enforced_at_run_start (tests/test_execution_request.py)"]
+    n6["test_unsupported_executable_bindings_are_rejected (tests/test_execution_request.py)"]
+    n7["test_manifest_runtime_blocker_classification_non_empty (tests/test_manifest_runtime_production_path.py)"]
+    n8["test_manifest_runtime_exposes_declared_primer_filename (tests/test_manifest_runtime_production_path.py)"]
+    n9["test_manifest_runtime_file_path_kind_returns_file_target (tests/test_manifest_runtime_production_path.py)"]
+    n10["test_manifest_runtime_policy_extension_carries_manifest_scripts (tests/test_manifest_runtime_production_path.py)"]
+    n11["test_manifest_runtime_registry_api_kind_raises_loudly (tests/test_manifest_runtime_production_path.py)"]
+    n12["test_requires_signed_metrics_capability_properties (tests/test_metrics_forgery_c3.py)"]
     n1 --> n0
     n2 --> n0
     n3 --> n0
@@ -88,16 +88,16 @@ flowchart LR
     click n0 "../modules/skill_runtime.md"
     click n1 "../modules/skill_runtime.md"
     click n2 "../modules/test_execution_concurrency.md"
-    click n3 "../modules/test_manifest_runtime_production_path.md"
-    click n4 "../modules/test_manifest_runtime_production_path.md"
-    click n5 "../modules/test_manifest_runtime_production_path.md"
-    click n6 "../modules/test_manifest_runtime_production_path.md"
+    click n3 "../modules/test_execution_request.md"
+    click n4 "../modules/test_execution_request.md"
+    click n5 "../modules/test_execution_request.md"
+    click n6 "../modules/test_execution_request.md"
     click n7 "../modules/test_manifest_runtime_production_path.md"
-    click n8 "../modules/test_metrics_forgery_c3.md"
-    click n9 "../modules/test_orchestrator_timeout.md"
-    click n10 "../modules/test_pinned_evaluators.md"
-    click n11 "../modules/test_prompt_evaluator.md"
-    click n12 "../modules/test_skill_prompt_engineering_e2e.md"
+    click n8 "../modules/test_manifest_runtime_production_path.md"
+    click n9 "../modules/test_manifest_runtime_production_path.md"
+    click n10 "../modules/test_manifest_runtime_production_path.md"
+    click n11 "../modules/test_manifest_runtime_production_path.md"
+    click n12 "../modules/test_metrics_forgery_c3.md"
 ```
 
 ### Summary
@@ -112,15 +112,15 @@ flowchart LR
 |---|---|---|---:|
 | `materialize_skill_runtime` | call | [skill_runtime](../modules/skill_runtime.md) | 1 |
 | `_runtime_for` | call | [test_execution_concurrency](../modules/test_execution_concurrency.md) | 1 |
+| `test_bundled_skills_advertise_only_supported_bindings` | call | [test_execution_request](../modules/test_execution_request.md) | 1 |
+| `test_python_bindings_must_be_explicitly_qualified` | call | [test_execution_request](../modules/test_execution_request.md) | 1 |
+| `test_template_shape_is_enforced_at_run_start` | call | [test_execution_request](../modules/test_execution_request.md) | 1 |
+| `test_unsupported_executable_bindings_are_rejected` | call | [test_execution_request](../modules/test_execution_request.md) | 1 |
 | `test_manifest_runtime_blocker_classification_non_empty` | call | [test_manifest_runtime_production_path](../modules/test_manifest_runtime_production_path.md) | 1 |
 | `test_manifest_runtime_exposes_declared_primer_filename` | call | [test_manifest_runtime_production_path](../modules/test_manifest_runtime_production_path.md) | 1 |
 | `test_manifest_runtime_file_path_kind_returns_file_target` | call | [test_manifest_runtime_production_path](../modules/test_manifest_runtime_production_path.md) | 1 |
 | `test_manifest_runtime_policy_extension_carries_manifest_scripts` | call | [test_manifest_runtime_production_path](../modules/test_manifest_runtime_production_path.md) | 1 |
 | `test_manifest_runtime_registry_api_kind_raises_loudly` | call | [test_manifest_runtime_production_path](../modules/test_manifest_runtime_production_path.md) | 2 |
 | `test_requires_signed_metrics_capability_properties` | call | [test_metrics_forgery_c3](../modules/test_metrics_forgery_c3.md) | 1 |
-| `test_orchestrator_timeout` | import | [test_orchestrator_timeout](../modules/test_orchestrator_timeout.md) | — |
-| `test_manifest_runtime_extension_pins_packaged_scripts_with_digests` | call | [test_pinned_evaluators](../modules/test_pinned_evaluators.md) | 1 |
-| `test_command_wiring_is_explicit` | call | [test_prompt_evaluator](../modules/test_prompt_evaluator.md) | 1 |
-| `TestManifestSkillRuntimeNonceValidation.runtime` | call | [test_skill_prompt_engineering_e2e](../modules/test_skill_prompt_engineering_e2e.md) | 1 |
 
-> References: showing 12 of 16 logical references; 4 omitted by the 12-row generated summary limit.
+> References: showing 12 of 20 logical references; 8 omitted by the 12-row generated summary limit.

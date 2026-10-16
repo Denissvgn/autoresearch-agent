@@ -109,7 +109,7 @@ flowchart LR
 | [WorkspaceBounds](../entities/WorkspaceBounds.md) | Pydantic model | 669 | `BaseModel` | Where an attempt may write and what it may only read. |
 | [NetworkPolicy](../entities/NetworkPolicy.md) | Pydantic model | 678 | `BaseModel` | Network authority for one attempt; deny is the default posture. |
 | [ResourceLimits](../entities/ResourceLimits.md) | Pydantic model | 693 | `BaseModel` | OS-enforced resource ceilings for one attempt. |
-| [ExecutionRequest](../entities/ExecutionRequest.md) | Pydantic model | 703 | `VersionedContract` | One approved attempt: what the experiment executor may execute. |
+| [ExecutionRequest](../entities/execution_contracts_ExecutionRequest.md) | Pydantic model | 703 | `VersionedContract` | One approved attempt: what the experiment executor may execute. |
 | [SkillPackageRef](../entities/SkillPackageRef.md) | Pydantic model | 754 | `BaseModel` | The exact skill package a run executes. |
 | [HarnessConfig](../entities/HarnessConfig.md) | Pydantic model | 769 | `BaseModel` | Harness identity and effective configuration. |
 | [EnvironmentIdentity](../entities/EnvironmentIdentity.md) | Pydantic model | 784 | `BaseModel` | Pinned execution environment: image or dependency-lock digest. |

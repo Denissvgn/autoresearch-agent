@@ -43,9 +43,10 @@ flowchart LR
     n5["src/core/tool_access.py"]
     n6["tests/test_async_tool_path.py"]
     n7["tests/test_command_policy.py"]
-    n8["tests/test_orchestrator_timeout.py"]
-    n9["tests/test_pinned_evaluators.py"]
-    n10["tests/test_trial_workspace.py"]
+    n8["tests/test_execution_request.py"]
+    n9["tests/test_orchestrator_timeout.py"]
+    n10["tests/test_pinned_evaluators.py"]
+    n11["tests/test_trial_workspace.py"]
     n0 --> n2
     n0 --> n5
     n1 --> n5
@@ -62,17 +63,21 @@ flowchart LR
     n7 --> n2
     n7 --> n3
     n7 --> n5
+    n8 --> n0
+    n8 --> n1
     n8 --> n2
-    n8 --> n3
     n8 --> n5
-    n9 --> n0
-    n9 --> n1
     n9 --> n2
     n9 --> n3
     n9 --> n5
     n10 --> n0
+    n10 --> n1
     n10 --> n2
+    n10 --> n3
     n10 --> n5
+    n11 --> n0
+    n11 --> n2
+    n11 --> n5
     click n0 "../modules/agent_tools.md"
     click n1 "../modules/command_policy.md"
     click n2 "../modules/command_runner.md"
@@ -81,9 +86,10 @@ flowchart LR
     click n5 "../modules/tool_access.md"
     click n6 "../modules/test_async_tool_path.md"
     click n7 "../modules/test_command_policy.md"
-    click n8 "../modules/test_orchestrator_timeout.md"
-    click n9 "../modules/test_pinned_evaluators.md"
-    click n10 "../modules/test_trial_workspace.md"
+    click n8 "../modules/test_execution_request.md"
+    click n9 "../modules/test_orchestrator_timeout.md"
+    click n10 "../modules/test_pinned_evaluators.md"
+    click n11 "../modules/test_trial_workspace.md"
 ```
 
 ### Internal neighbors
@@ -95,6 +101,7 @@ flowchart LR
 | Inbound | [plugin_runner](../modules/plugin_runner.md) |
 | Inbound | [test_async_tool_path](../modules/test_async_tool_path.md) |
 | Inbound | [test_command_policy](../modules/test_command_policy.md) |
+| Inbound | [test_execution_request](../modules/test_execution_request.md) |
 | Inbound | [test_orchestrator_timeout](../modules/test_orchestrator_timeout.md) |
 | Inbound | [test_pinned_evaluators](../modules/test_pinned_evaluators.md) |
 | Inbound | [test_trial_workspace](../modules/test_trial_workspace.md) |

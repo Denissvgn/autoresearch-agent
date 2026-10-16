@@ -1,6 +1,6 @@
 # VariantDescriptor
 
-**Location:** `src/core/skill_runtime.py:170`
+**Location:** `src/core/skill_runtime.py:181`
 **Kind:** Class
 **Bases:** `TypedDict`
 **Module:** [skill_runtime](../modules/skill_runtime.md)

@@ -20,7 +20,7 @@ Stand-in for GovernedCommandRunner that records the resolved timeout_s.
 | Method | Signature | Decorators | Description |
 |--------|-----------|------------|-------------|
 | `__init__` | `(**_: object) -> None` | — | — |
-| `run` | `(command: str, *, timeout_s: int, output_callback: object = None, proc_registry: object = None, research_id: object = None, extra_env: object = None, cwd: object = None) -> CommandRunResult` | — | — |
+| `run` | `(command: str, *, timeout_s: int, output_callback: object = None, proc_registry: object = None, research_id: object = None, extra_env: object = None, cwd: object = None, resolved: object = None) -> CommandRunResult` | — | — |
 
 ## Relationships
 

@@ -1,6 +1,6 @@
 # IterationRecord
 
-**Location:** `src/core/skill_runtime.py:90`
+**Location:** `src/core/skill_runtime.py:95`
 **Kind:** Class
 **Bases:** `TypedDict`
 **Module:** [skill_runtime](../modules/skill_runtime.md)

@@ -65,11 +65,11 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| materialize_skill_runtime | SkillConfigError | 952 | `SkillConfigError('session has no skill_id — every session must name an installed skill (legacy model_type-only sessions are no longer supported)')` |
-| materialize_skill_runtime | default_registry.get | 959 | `default_registry.get(skill_id)` |
-| materialize_skill_runtime | SkillConfigError | 961 | `SkillConfigError(...)` |
-| materialize_skill_runtime | SkillConfigError | 967 | `SkillConfigError(...)` |
-| materialize_skill_runtime | ManifestSkillRuntime | 971 | `ManifestSkillRuntime(manifest, orchestrator)` |
+| materialize_skill_runtime | SkillConfigError | 1016 | `SkillConfigError('session has no skill_id — every session must name an installed skill (legacy model_type-only sessions are no longer supported)')` |
+| materialize_skill_runtime | default_registry.get | 1023 | `default_registry.get(skill_id)` |
+| materialize_skill_runtime | SkillConfigError | 1025 | `SkillConfigError(...)` |
+| materialize_skill_runtime | SkillConfigError | 1031 | `SkillConfigError(...)` |
+| materialize_skill_runtime | ManifestSkillRuntime | 1035 | `ManifestSkillRuntime(manifest, orchestrator)` |
 
 ### Boundary effects
 
@@ -79,7 +79,7 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `materialize_skill_runtime` | `default_registry.get` | 959 |
+| unresolved_call | `materialize_skill_runtime` | `default_registry.get` | 1023 |
 
 ## Behavior
 

@@ -6,8 +6,8 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 
 | Surface | Count | Start here |
 |---|---:|---|
-| Entities | 428 | [Open section](#entities) |
-| Modules | 248 | [Open section](#modules) |
+| Entities | 430 | [Open section](#entities) |
+| Modules | 250 | [Open section](#modules) |
 | Workflows | 13 | [Open section](#workflows) |
 | Guides | 0 | No pages |
 | Entry-point flows | 111 | [Open section](#entry-point-flows) |
@@ -73,7 +73,6 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [EstimateCostRequest](entities/EstimateCostRequest.md)
 - [EventBroadcaster](entities/EventBroadcaster.md)
 - [ExecutionConfig](entities/ExecutionConfig.md)
-- [ExecutionRequest](entities/ExecutionRequest.md)
 - [FailureRecord](entities/FailureRecord.md)
 - [FakeMlflowAsyncClient](entities/FakeMlflowAsyncClient.md)
 - [FakeMlflowResponse](entities/FakeMlflowResponse.md)
@@ -156,6 +155,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [PaginatedResponse](entities/PaginatedResponse.md)
 - [ParamSchema](entities/ParamSchema.md)
 - [ParamSchemaProperty](entities/ParamSchemaProperty.md)
+- [ParsedItem](entities/ParsedItem.md)
 - [ParserFormat](entities/ParserFormat.md)
 - [PendingTrial](entities/PendingTrial.md)
 - [PhaseAdvancement](entities/PhaseAdvancement.md)
@@ -388,6 +388,8 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [client_PromotionScope](entities/client_PromotionScope.md)
 - [client_PromotionScopeRequest](entities/client_PromotionScopeRequest.md)
 - [client_StartResearchRequest](entities/client_StartResearchRequest.md)
+- [execution_contracts_ExecutionRequest](entities/execution_contracts_ExecutionRequest.md)
+- [execution_request_ExecutionRequest](entities/execution_request_ExecutionRequest.md)
 - [promotion_PromotionApproval](entities/promotion_PromotionApproval.md)
 - [promotion_PromotionPreviewRequest](entities/promotion_PromotionPreviewRequest.md)
 - [promotion_PromotionScopeRequest](entities/promotion_PromotionScopeRequest.md)
@@ -507,6 +509,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [events](modules/events.md) - WebSocket broadcast manager for real-time experiment events.
 - [examples_prompt-registry_main](modules/examples_prompt-registry_main.md) - Example prompt-registry receiver (P1-3).
 - [execution_contracts](modules/execution_contracts.md) - Versioned research and execution contracts.
+- [execution_request](modules/execution_request.md) - One resolved execution request shared by policy and subprocesses.
 - [experiment_parser](modules/experiment_parser.md) - Parse prepare.py stdout output into structured metrics.
 - [fs_safety](modules/fs_safety.md) - Descriptor-relative, no-follow filesystem primitives.
 - [gate_status](modules/gate_status.md) - Compatibility helpers for autoresearch gate-status fields.
@@ -591,6 +594,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [test_execution_concurrency](modules/test_execution_concurrency.md) - Execution-config plumbing tests (P1-4).
 - [test_execution_contracts](modules/test_execution_contracts.md) - Tests for the versioned research and execution contracts.
 - [test_execution_ledger_validator](modules/test_execution_ledger_validator.md) - Tests for the execution-ledger validator (scripts/check_execution_ledger.py).
+- [test_execution_request](modules/test_execution_request.md) - One resolved execution request: policy/process parity regressions.
 - [test_experiment_parser_calibration](modules/test_experiment_parser_calibration.md) - Tests for experiment_parser _json suffix handling for phase 5 evidence keys.
 - [test_experiment_parser_inference_parity](modules/test_experiment_parser_inference_parity.md) - Tests for experiment_parser _json suffix handling for phase 7 evidence keys.
 - [test_experiment_parser_promotion_scope](modules/test_experiment_parser_promotion_scope.md) - Tests for experiment_parser handling of phase 8 evidence key (promotion_scope).

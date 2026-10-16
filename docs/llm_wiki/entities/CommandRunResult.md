@@ -56,7 +56,7 @@ flowchart LR
 
 | Reference | Kind | Source | Call sites |
 |---|---|---|---:|
-| `GovernedCommandRunner.run` | call | [command_runner](../modules/command_runner.md) | 2 |
+| `GovernedCommandRunner.run` | call | [command_runner](../modules/command_runner.md) | 3 |
 | `GovernedCommandRunner.run` | type_reference | [command_runner](../modules/command_runner.md) | — |
 | `_CapturingRunner.run` | call | [test_orchestrator_timeout](../modules/test_orchestrator_timeout.md) | 1 |
 | `_CapturingRunner.run` | type_reference | [test_orchestrator_timeout](../modules/test_orchestrator_timeout.md) | — |

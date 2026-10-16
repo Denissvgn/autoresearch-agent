@@ -18,18 +18,18 @@
     "by_kind": {
       "api-contracts": 0,
       "dependencies": 1,
-      "entities": 428,
+      "entities": 430,
       "flows": 111,
       "guides": 0,
       "index": 1,
       "infrastructure": 3,
       "load-order": 1,
       "log": 1,
-      "modules": 248,
+      "modules": 250,
       "workflows": 13
     },
     "dependency_architecture": 2,
-    "total": 807
+    "total": 811
   },
   "dependency_pages": {
     "count": 2,
@@ -1083,7 +1083,7 @@
           "gaps": [
             {
               "kind": "unresolved_call",
-              "line": 959,
+              "line": 1023,
               "step": "materialize_skill_runtime",
               "target": "default_registry.get"
             }
@@ -7923,8 +7923,9 @@
         "entities/ErrorClass.md",
         "entities/EstimateCostRequest.md",
         "entities/EventBroadcaster.md",
+        "entities/execution_contracts_ExecutionRequest.md",
+        "entities/execution_request_ExecutionRequest.md",
         "entities/ExecutionConfig.md",
-        "entities/ExecutionRequest.md",
         "entities/FailureRecord.md",
         "entities/FakeMlflowAsyncClient.md",
         "entities/FakeMlflowResponse.md",
@@ -8007,6 +8008,7 @@
         "entities/PaginatedResponse.md",
         "entities/ParamSchema.md",
         "entities/ParamSchemaProperty.md",
+        "entities/ParsedItem.md",
         "entities/ParserFormat.md",
         "entities/PendingTrial.md",
         "entities/PhaseAdvancement.md",
@@ -8446,6 +8448,7 @@
         "modules/events.md",
         "modules/examples_prompt-registry_main.md",
         "modules/execution_contracts.md",
+        "modules/execution_request.md",
         "modules/experiment_parser.md",
         "modules/fs_safety.md",
         "modules/gate_status.md",
@@ -8547,6 +8550,7 @@
         "modules/test_execution_concurrency.md",
         "modules/test_execution_contracts.md",
         "modules/test_execution_ledger_validator.md",
+        "modules/test_execution_request.md",
         "modules/test_experiment_parser_calibration.md",
         "modules/test_experiment_parser_inference_parity.md",
         "modules/test_experiment_parser_promotion_scope.md",
@@ -9481,6 +9485,32 @@
       "title": "EventBroadcaster"
     },
     {
+      "canonical_path": "entities/execution_contracts_ExecutionRequest.md",
+      "id": "execution_contracts_ExecutionRequest",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/execution_contracts_ExecutionRequest",
+      "outgoing_internal_links": [
+        "modules/execution_contracts.md",
+        "modules/test_execution_contracts.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_contracts.py",
+      "title": "ExecutionRequest"
+    },
+    {
+      "canonical_path": "entities/execution_request_ExecutionRequest.md",
+      "id": "execution_request_ExecutionRequest",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/execution_request_ExecutionRequest",
+      "outgoing_internal_links": [
+        "modules/command_policy.md",
+        "modules/execution_request.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_request.py",
+      "title": "ExecutionRequest"
+    },
+    {
       "canonical_path": "entities/ExecutionConfig.md",
       "id": "ExecutionConfig",
       "kind": "entities",
@@ -9492,19 +9522,6 @@
       "role": "semantic",
       "source_path": "src/core/skill_manifest.py",
       "title": "ExecutionConfig"
-    },
-    {
-      "canonical_path": "entities/ExecutionRequest.md",
-      "id": "ExecutionRequest",
-      "kind": "entities",
-      "mcp_uri": "llm-wiki://entities/ExecutionRequest",
-      "outgoing_internal_links": [
-        "modules/execution_contracts.md",
-        "modules/test_execution_contracts.md"
-      ],
-      "role": "semantic",
-      "source_path": "src/core/execution_contracts.py",
-      "title": "ExecutionRequest"
     },
     {
       "canonical_path": "entities/FailureRecord.md",
@@ -9755,6 +9772,7 @@
         "modules/command_runner.md",
         "modules/orchestrator.md",
         "modules/test_command_policy.md",
+        "modules/test_execution_request.md",
         "modules/test_orchestrator_timeout.md",
         "modules/test_pinned_evaluators.md"
       ],
@@ -10180,12 +10198,9 @@
       "outgoing_internal_links": [
         "modules/skill_runtime.md",
         "modules/test_execution_concurrency.md",
+        "modules/test_execution_request.md",
         "modules/test_manifest_runtime_production_path.md",
-        "modules/test_metrics_forgery_c3.md",
-        "modules/test_orchestrator_timeout.md",
-        "modules/test_pinned_evaluators.md",
-        "modules/test_prompt_evaluator.md",
-        "modules/test_skill_prompt_engineering_e2e.md"
+        "modules/test_metrics_forgery_c3.md"
       ],
       "role": "semantic",
       "source_path": "src/core/skill_runtime.py",
@@ -10560,6 +10575,18 @@
       "role": "semantic",
       "source_path": "src/core/skill_manifest.py",
       "title": "ParamSchemaProperty"
+    },
+    {
+      "canonical_path": "entities/ParsedItem.md",
+      "id": "ParsedItem",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/ParsedItem",
+      "outgoing_internal_links": [
+        "modules/execution_request.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_request.py",
+      "title": "_ParsedItem"
     },
     {
       "canonical_path": "entities/ParserFormat.md",
@@ -11932,6 +11959,7 @@
         "modules/session_manager.md",
         "modules/skill_runtime.md",
         "modules/test_canonical_start_wiring.md",
+        "modules/test_execution_request.md",
         "modules/test_manifest_runtime_production_path.md",
         "modules/test_session_failure_modes.md",
         "modules/test_webhook_promotion.md"
@@ -14193,17 +14221,7 @@
       "mcp_uri": "llm-wiki://modules/agent_tools",
       "outgoing_internal_links": [
         "entities/ToolExecutionResult.md",
-        "modules/agent_tools.md",
-        "modules/command_runner.md",
-        "modules/fs_safety.md",
-        "modules/llm_provider.md",
-        "modules/orchestrator.md",
-        "modules/skill_registry.md",
-        "modules/test_async_tool_path.md",
-        "modules/test_pinned_evaluators.md",
-        "modules/test_tool_access.md",
-        "modules/test_trial_workspace.md",
-        "modules/tool_access.md"
+        "modules/agent_tools.md"
       ],
       "role": "semantic",
       "source_path": "src/core/agent_tools.py",
@@ -14507,8 +14525,10 @@
         "modules/_engine.md",
         "modules/command_policy.md",
         "modules/command_runner.md",
+        "modules/execution_request.md",
         "modules/fs_safety.md",
         "modules/test_command_policy.md",
+        "modules/test_execution_request.md",
         "modules/test_manifest_runtime_production_path.md",
         "modules/test_pinned_evaluators.md",
         "modules/test_tool_access.md",
@@ -14538,6 +14558,7 @@
         "modules/plugin_runner.md",
         "modules/test_async_tool_path.md",
         "modules/test_command_policy.md",
+        "modules/test_execution_request.md",
         "modules/test_orchestrator_timeout.md",
         "modules/test_pinned_evaluators.md",
         "modules/test_trial_workspace.md",
@@ -14816,7 +14837,7 @@
         "entities/ContractError.md",
         "entities/ContractMigrationError.md",
         "entities/EnvironmentIdentity.md",
-        "entities/ExecutionRequest.md",
+        "entities/execution_contracts_ExecutionRequest.md",
         "entities/FailureRecord.md",
         "entities/HarnessConfig.md",
         "entities/HarnessPreferences.md",
@@ -14854,6 +14875,24 @@
       "role": "semantic",
       "source_path": "src/core/execution_contracts.py",
       "title": "execution_contracts Module"
+    },
+    {
+      "canonical_path": "modules/execution_request.md",
+      "id": "execution_request",
+      "kind": "modules",
+      "mcp_uri": "llm-wiki://modules/execution_request",
+      "outgoing_internal_links": [
+        "entities/execution_request_ExecutionRequest.md",
+        "entities/ParsedItem.md",
+        "modules/agent_tools.md",
+        "modules/command_policy.md",
+        "modules/execution_request.md",
+        "modules/skill_runtime.md",
+        "modules/test_execution_request.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/execution_request.py",
+      "title": "execution_request Module"
     },
     {
       "canonical_path": "modules/experiment_parser.md",
@@ -15689,6 +15728,7 @@
         "modules/fs_safety.md",
         "modules/orchestrator.md",
         "modules/result_artifact.md",
+        "modules/test_execution_request.md",
         "modules/test_fs_safety.md",
         "modules/test_issue6_adaptive_not_attempted.md",
         "modules/test_mlflow_run_id_contract.md",
@@ -16537,6 +16577,26 @@
       "role": "semantic",
       "source_path": "tests/test_execution_ledger_validator.py",
       "title": "test_execution_ledger_validator Module"
+    },
+    {
+      "canonical_path": "modules/test_execution_request.md",
+      "id": "test_execution_request",
+      "kind": "modules",
+      "mcp_uri": "llm-wiki://modules/test_execution_request",
+      "outgoing_internal_links": [
+        "modules/agent_tools.md",
+        "modules/command_policy.md",
+        "modules/command_runner.md",
+        "modules/execution_request.md",
+        "modules/result_artifact.md",
+        "modules/skill_registry.md",
+        "modules/skill_runtime.md",
+        "modules/test_execution_request.md",
+        "modules/tool_access.md"
+      ],
+      "role": "semantic",
+      "source_path": "tests/test_execution_request.py",
+      "title": "test_execution_request Module"
     },
     {
       "canonical_path": "modules/test_experiment_parser_calibration.md",
@@ -18065,6 +18125,7 @@
         "modules/command_runner.md",
         "modules/test_async_tool_path.md",
         "modules/test_command_policy.md",
+        "modules/test_execution_request.md",
         "modules/test_fs_safety.md",
         "modules/test_orchestrator_timeout.md",
         "modules/test_pinned_evaluators.md",
@@ -18312,6 +18373,7 @@
       "mcp_uri": "llm-wiki://workflows/AgentOrchestrator_run",
       "outgoing_internal_links": [
         "modules/agent_tools.md",
+        "modules/command_policy.md",
         "modules/command_runner.md",
         "modules/experiment_parser.md",
         "modules/llm_provider.md",
@@ -19945,6 +20007,7 @@
         "modules/events.md",
         "modules/examples_prompt-registry_main.md",
         "modules/execution_contracts.md",
+        "modules/execution_request.md",
         "modules/experiment_parser.md",
         "modules/fs_safety.md",
         "modules/gate_status.md",
@@ -20046,6 +20109,7 @@
         "modules/test_execution_concurrency.md",
         "modules/test_execution_contracts.md",
         "modules/test_execution_ledger_validator.md",
+        "modules/test_execution_request.md",
         "modules/test_experiment_parser_calibration.md",
         "modules/test_experiment_parser_inference_parity.md",
         "modules/test_experiment_parser_promotion_scope.md",
@@ -20204,6 +20268,7 @@
         "modules/events.md",
         "modules/examples_prompt-registry_main.md",
         "modules/execution_contracts.md",
+        "modules/execution_request.md",
         "modules/experiment_parser.md",
         "modules/fs_safety.md",
         "modules/gate_status.md",
@@ -20305,6 +20370,7 @@
         "modules/test_execution_concurrency.md",
         "modules/test_execution_contracts.md",
         "modules/test_execution_ledger_validator.md",
+        "modules/test_execution_request.md",
         "modules/test_experiment_parser_calibration.md",
         "modules/test_experiment_parser_inference_parity.md",
         "modules/test_experiment_parser_promotion_scope.md",
@@ -20419,5 +20485,5 @@
     }
   ],
   "schema_version": "llm-wiki-surface-index/v1",
-  "source_hash": "sha256:0081b21564b59abb50d94bb5eeec3f3f2dce3e5eac2b7f6785de4daf02e88def"
+  "source_hash": "sha256:c30a385833b58bf04eff1c29c4aa5d57b01a9f8970ba486f5e9dd64253ad44a2"
 }
