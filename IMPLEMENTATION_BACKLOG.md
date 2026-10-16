@@ -482,9 +482,9 @@ Autonomy: Resolve argv, paths, fixed arguments, and output roots once into typed
 Preserve compatible live/demo templates through that resolver; reject ambiguous
 shell-dependent templates with a migration diagnostic.
 
-- [ ] Resolve executable, typed argv, fixed arguments, CWD, inputs, outputs, and timeout into one immutable ExecutionRequest.
-- [ ] Make authorization, pre-run snapshots, sequential/parallel execution, and result lookup consume that exact request.
-- [ ] Route live and demo templates through the same resolver; support explicitly qualified executable bindings and reject unsupported bindings.
+- [x] Resolve executable, typed argv, fixed arguments, CWD, inputs, outputs, and timeout into one immutable ExecutionRequest.
+- [x] Make authorization, pre-run snapshots, sequential/parallel execution, and result lookup consume that exact request.
+- [x] Route live and demo templates through the same resolver; support explicitly qualified executable bindings and reject unsupported bindings.
 
 Acceptance: policy and process observe the same candidate bytes and paths.
 Outputs remain in the attempt's output root. Shell expansion, duplicate fixed

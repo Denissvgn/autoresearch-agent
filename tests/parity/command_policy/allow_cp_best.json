@@ -18,7 +18,8 @@
     "normalized_command": "",
     "operation": "",
     "reason": "cp requires a resolved session workspace",
-    "execution_identity": null
+    "execution_identity": null,
+    "request": null
   },
-  "source_sha": "c48cb8e742a3eb1dfc5fdcf32e4faf2e9573e723"
+  "source_sha": "ee4322543a6162ed077e8e33d48dcd5a1aa31df9"
 }

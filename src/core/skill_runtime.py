@@ -45,6 +45,11 @@ from typing import (
     cast,
 )
 
+from src.core.execution_request import (
+    PYTHON_BINDINGS,
+    SUPPORTED_EXECUTABLE_BINDINGS,
+    template_migration_reason,
+)
 from src.core.fs_safety import sha256_regular_file as _sha256_file
 
 if TYPE_CHECKING:
@@ -125,6 +130,12 @@ class CommandPolicyExtension(TypedDict, total=False):
     #: ARC-012 P7-011: the CLI flag carrying the skill's per-iteration config
     #: artifact (default ``--config`` when absent).
     config_flag: str
+    #: Explicitly qualified python executable spellings (the executable
+    #: binding vocabulary for evaluator commands).
+    allowed_python: list[str]
+    #: Declared marker/result basenames the attempt produces; the execution
+    #: request roots them at the attempt output root for result lookup.
+    output_files: list[str]
 
 
 class Phase(TypedDict, total=False):
@@ -689,6 +700,32 @@ class ManifestSkillRuntime:
                 ext["script_digests"] = script_digests
         if cp.allowed_executables:
             ext["allowed_executables"] = sorted(cp.allowed_executables)
+            unsupported = sorted(
+                str(name)
+                for name in cp.allowed_executables
+                if str(name) not in SUPPORTED_EXECUTABLE_BINDINGS
+            )
+            if unsupported:
+                raise SkillConfigError(
+                    f"unsupported executable binding(s) {unsupported}: only "
+                    "explicitly qualified bindings with a runner contract "
+                    f"({sorted(SUPPORTED_EXECUTABLE_BINDINGS)}) may be "
+                    "declared; remove the entry or migrate the command to a "
+                    "supported executable"
+                )
+        if cp.allowed_python:
+            unsupported_python = sorted(
+                str(name)
+                for name in cp.allowed_python
+                if str(name) not in PYTHON_BINDINGS
+            )
+            if unsupported_python:
+                raise SkillConfigError(
+                    f"unsupported executable binding(s) {unsupported_python}: "
+                    "python bindings must be explicitly qualified "
+                    f"({list(PYTHON_BINDINGS)})"
+                )
+            ext["allowed_python"] = sorted(cp.allowed_python)
         if cp.copyable_files:
             ext["copyable_files"] = sorted(cp.copyable_files)
         if cp.readable_files:
@@ -700,6 +737,33 @@ class ManifestSkillRuntime:
         # ``--config``).
         if cp.config_flag:
             ext["config_flag"] = cp.config_flag
+        # F06/F11: live and demo command templates must be plain argv forms
+        # resolvable through the shared execution-request resolver; a
+        # shell-dependent or ambiguous template is rejected at run start
+        # with a migration diagnostic instead of being silently misrun.
+        prompt_cfg = self._manifest.prompt
+        for template_field in ("experiment_command", "demo_experiment_command"):
+            template = (
+                getattr(prompt_cfg, template_field, None)
+                if prompt_cfg is not None
+                else None
+            )
+            if template:
+                migration = template_migration_reason(str(template))
+                if migration:
+                    raise SkillConfigError(f"{template_field}: {migration}")
+        # Declared marker/result basenames the attempt produces; the
+        # execution request roots them at the attempt output root.
+        output_files: list[str] = []
+        op_cfg = self._manifest.output_parser
+        fallback = getattr(op_cfg, "fallback", None) if op_cfg is not None else None
+        if fallback is not None:
+            for attr in ("read_marker_file", "read_results_file"):
+                name = getattr(fallback, attr, None)
+                if name:
+                    output_files.append(str(name))
+        if output_files:
+            ext["output_files"] = output_files
         return ext
 
     # ── Iteration detection ───────────────────────────────────────

@@ -351,25 +351,42 @@ class GovernedCommandRunner:
         research_id: str | None = None,
         extra_env: Mapping[str, str] | None = None,
         cwd: str | None = None,
+        resolved: CommandDecision | None = None,
     ) -> CommandRunResult:
         """Validate and execute one approved command without invoking a shell.
 
-        ``cwd`` (P2 per-workdir state) optionally overrides the subprocess
-        working directory — used for trial-directory execution. The policy
-        still validates against the session workspace (a trial dir lives
-        inside it), so the override never widens what a command may touch.
+        F06: the subprocess runs exactly what the resolved
+        :class:`~src.core.execution_request.ExecutionRequest` records —
+        ``request.argv`` in ``request.cwd`` (the attempt output root) for
+        ``request.timeout_s``. ``cwd`` sets the attempt output root when the
+        request is resolved here (trial-directory execution); when a
+        pre-resolved ``decision`` is supplied it already carries the root.
+        The policy still validates against the session workspace (a trial
+        dir lives inside it), so the override never widens what a command
+        may touch.
         """
-        decision = evaluate_command_policy(
-            command,
-            workspace_root=self._workspace_root,
-            session_workspace=self._session_workspace,
-            policy_extension=self._policy_extension,
-            access=self._access,
-        )
+        if resolved is not None:
+            decision = resolved
+        else:
+            decision = evaluate_command_policy(
+                command,
+                workspace_root=self._workspace_root,
+                session_workspace=self._session_workspace,
+                policy_extension=self._policy_extension,
+                access=self._access,
+                workdir=cwd,
+                timeout_s=timeout_s,
+            )
         if not decision.allowed:
             reason = decision.reason or "Command is not allowed"
             return CommandRunResult(
                 output=f"Command rejected by policy: {reason}",
+                decision=decision,
+            )
+        request = decision.request
+        if request is None:
+            return CommandRunResult(
+                output="Command rejected by policy: no execution request resolved",
                 decision=decision,
             )
 
@@ -381,23 +398,9 @@ class GovernedCommandRunner:
         child_env = _build_child_env()
         if extra_env:
             child_env.update(extra_env)
-        argv = decision.argv
-        if (
-            cwd is not None
-            and argv
-            and not os.path.isabs(argv[0])
-            and os.path.sep in argv[0]
-        ):
-            # P2 trial-directory execution: a path-like executable (the
-            # sanctioned ``.venv/bin/python``) lives beside the workspace
-            # root, outside the session workspace, so trial staging cannot
-            # carry it into the trial dir. Resolve it against the same root
-            # the default cwd used; bare executable names (cp, cat) keep
-            # PATH lookup, which the cwd override never affected.
-            argv = [os.path.join(self._workspace_root, argv[0]), *argv[1:]]
         proc = subprocess.Popen(
-            argv,
-            cwd=cwd if cwd is not None else self._workspace_root,
+            list(request.argv),
+            cwd=request.cwd,
             env=child_env,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -411,14 +414,14 @@ class GovernedCommandRunner:
             proc_registry.register(research_id, proc)
         try:
             stdout, stderr, timed_out, log_path, log_truncated = _collect_process_output(
-                proc, timeout_s=timeout_s,
+                proc, timeout_s=request.timeout_s,
                 workspace=self._session_workspace or self._workspace_root,
                 output_callback=output_callback,
             )
             output = _truncate_output(redact_sensitive_text(_combine_output(stdout, stderr)))
             if timed_out:
-                output = (output + f"\n[Command timed out after {timeout_s}s]"
-                          if output else f"Command timed out after {timeout_s}s")
+                output = (output + f"\n[Command timed out after {request.timeout_s}s]"
+                          if output else f"Command timed out after {request.timeout_s}s")
             elif proc.returncode != 0:
                 output += f"\n[exit code: {proc.returncode}]"
             if log_path:

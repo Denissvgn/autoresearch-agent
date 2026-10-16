@@ -182,45 +182,43 @@ def _config_snapshot_path_from_command(
     session_workspace: str,
     base_dir: str | None = None,
     config_flag: str = "--config",
+    policy_extension: Mapping[str, Any] | None = None,
+    access: Any = None,
 ) -> Optional[str]:
     """Resolve the config artifact a command references.
 
-    The artifact rides the skill's declared ``config_flag`` (ARC-012 P7-011;
-    ``--config`` for the ML vocabulary, ``--prompt``/``--target``/... for
-    non-ML skills).
-
-    ``base_dir`` (P2 per-workdir state) is the directory the command will
-    actually run in — a trial directory when the skill opted into parallel
-    trials, ``None``/the session workspace otherwise. Relative config paths
-    resolve against it, so the pre-run snapshot reads the exact copy the
-    subprocess will see. The containment check stays anchored to the session
-    workspace (a trial dir lives inside it), so the override can never point
-    a snapshot outside the session tree.
+    F06: this consumes the same resolver that builds the execution request
+    the governed subprocess runs, so the pre-run snapshot reads the exact
+    file the process will open. ``base_dir`` (P2 per-workdir state) is the
+    attempt output root — a trial directory when the skill opted into
+    parallel trials, ``None``/the session workspace otherwise. Relative
+    config paths resolve against it; the containment check stays anchored
+    to the session workspace (a trial dir lives inside it), so the override
+    can never point a snapshot outside the session tree.
     """
-    try:
-        argv = shlex.split(command)
-    except ValueError:
+    from src.core.execution_request import resolve_execution_request
+
+    extension: dict[str, Any] = dict(policy_extension or {})
+    extension.setdefault("config_flag", config_flag)
+    request, error = resolve_execution_request(
+        command,
+        workspace_root=workspace_root,
+        session_workspace=session_workspace,
+        workdir=base_dir,
+        policy_extension=extension,
+        access=access,
+    )
+    if request is None:
         return None
-    if config_flag not in argv:
+    resolved_path = request.config_path
+    if resolved_path is None:
         return None
-    index = argv.index(config_flag) + 1
-    if index >= len(argv):
-        return None
-    raw_path = argv[index]
-    if os.path.isabs(raw_path):
-        resolved = os.path.realpath(raw_path)
-    elif raw_path.startswith("runs/") or raw_path.startswith("./runs/"):
-        resolved = os.path.realpath(os.path.join(workspace_root, raw_path))
-    else:
-        resolved = os.path.realpath(
-            os.path.join(base_dir if base_dir is not None else session_workspace, raw_path)
-        )
     # Shared authorization: a tool-argument path must land inside the
     # session's authorized roots exactly like every other file operation.
     session_real = os.path.realpath(session_workspace)
-    if not path_within_roots(resolved, (session_real,)):
+    if not path_within_roots(resolved_path, (session_real,)):
         return None
-    return resolved
+    return resolved_path
 
 
 # ---------------------------------------------------------------------------
@@ -240,13 +238,17 @@ def _execute_tool(
     extra_env: Mapping[str, str] | None = None,
     policy_extension: Mapping[str, Any] | None = None,
     cwd: str | None = None,
+    resolved: Any = None,
 ) -> ToolExecutionResult:
     """Execute a tool call and return the text result.
 
     ``access`` is the server-derived authorization context for every file
     operation the tool surface performs. ``cwd`` (P2 per-workdir state)
     overrides the bash subprocess working directory (trial-directory
-    execution); other tools ignore it.
+    execution); other tools ignore it. ``resolved`` is the pre-resolved
+    authorized :class:`~src.core.command_policy.CommandDecision` produced
+    at dispatch (F06 one-resolution contract); when omitted the bash path
+    resolves internally.
     """
     try:
         if name == "bash":
@@ -258,6 +260,7 @@ def _execute_tool(
                 extra_env=extra_env,
                 policy_extension=policy_extension,
                 cwd=cwd,
+                resolved=resolved,
             )
         elif name == "read_file":
             return ToolExecutionResult(_tool_read_file(input_data, access))
@@ -273,19 +276,16 @@ def _execute_tool(
         return ToolExecutionResult(f"Tool error ({name}): {exc}")
 
 
-def _tool_bash(
+def compute_bash_timeout(
     input_data: Dict[str, Any],
-    access: ToolAccessContext,
-    output_callback: OutputCallback | None = None,
-    *,
-    command_deadline_mono: float | None = None,
-    proc_registry: CommandProcessRegistry | None = None,
-    research_id: str | None = None,
-    extra_env: Mapping[str, str] | None = None,
-    policy_extension: Mapping[str, Any] | None = None,
-    cwd: str | None = None,
-) -> ToolExecutionResult:
-    command = input_data["command"]
+    command_deadline_mono: float | None,
+) -> int:
+    """The final per-command timeout: tool input floored and deadline-capped.
+
+    Shared by the dispatch-time request resolution and the bash tool so the
+    request's ``timeout_s`` is exactly what the runner enforces.
+    """
+
     timeout = input_data.get("timeout_s", 7200)
     # Enforce minimum timeout — agents routinely ignore tool-description hints
     if timeout < 900:
@@ -297,7 +297,27 @@ def _tool_bash(
     # truncation) so the command overruns by <1s into the grace buffer and the
     # soft check then trips cleanly, avoiding a cap≈0 thrash of subprocesses.
     if command_deadline_mono is not None:
-        timeout = min(timeout, max(0, math.ceil(command_deadline_mono - time.monotonic())))
+        timeout = min(
+            timeout, max(0, math.ceil(command_deadline_mono - time.monotonic()))
+        )
+    return timeout
+
+
+def _tool_bash(
+    input_data: Dict[str, Any],
+    access: ToolAccessContext,
+    output_callback: OutputCallback | None = None,
+    *,
+    command_deadline_mono: float | None = None,
+    proc_registry: CommandProcessRegistry | None = None,
+    research_id: str | None = None,
+    extra_env: Mapping[str, str] | None = None,
+    policy_extension: Mapping[str, Any] | None = None,
+    cwd: str | None = None,
+    resolved: Any = None,
+) -> ToolExecutionResult:
+    command = input_data["command"]
+    timeout = compute_bash_timeout(input_data, command_deadline_mono)
     runner = GovernedCommandRunner(
         workspace_root=access.workspace_root,
         session_workspace=access.session_workspace,
@@ -307,7 +327,7 @@ def _tool_bash(
     result = runner.run(
         command, timeout_s=timeout, output_callback=output_callback,
         proc_registry=proc_registry, research_id=research_id,
-        extra_env=extra_env, cwd=cwd,
+        extra_env=extra_env, cwd=cwd, resolved=resolved,
     )
     # Preserve the existing orchestrator/output_digest integration and its
     # settings.agent_output_digest_max_chars (0 disables digesting). The runner
@@ -320,6 +340,9 @@ def _tool_bash(
             "policy_reason": decision.reason,
             "policy_operation": decision.operation,
             "execution_identity": decision.execution_identity,
+            "execution_request": (
+                decision.request.to_meta() if decision.request is not None else None
+            ),
             "normalized_command": decision.normalized_command,
             "returncode": result.returncode,
             "timed_out": result.timed_out,

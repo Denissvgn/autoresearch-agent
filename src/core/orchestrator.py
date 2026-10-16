@@ -1047,9 +1047,11 @@ class AgentOrchestrator:
             block.name == "bash"
             and not (state.turn_recorded_iteration and not per_trial_recording)
         ):
+            _request_meta = tool_meta.get("execution_request") or {}
             marker_text = await self._read_marker_file_async(
                 config, min_mtime=command_started_at,
                 trial_dir=trial_dir,
+                outputs=list(_request_meta.get("outputs") or ()),
             )
             _rc_for_marker = tool_meta.get("returncode")
             _command_succeeded = (
@@ -1203,9 +1205,10 @@ class AgentOrchestrator:
         config: ResearchConfig,
         min_mtime: Optional[float] = None,
         trial_dir: Optional[str] = None,
+        outputs: Optional[list] = None,
     ) -> Optional[str]:
         return await asyncio.to_thread(
-            self._read_marker_file, config, min_mtime, trial_dir,
+            self._read_marker_file, config, min_mtime, trial_dir, outputs,
         )
 
     async def _verify_kv_metrics(
@@ -1301,6 +1304,7 @@ class AgentOrchestrator:
         config: ResearchConfig,
         min_mtime: Optional[float] = None,
         trial_dir: Optional[str] = None,
+        outputs: Optional[list] = None,
     ) -> Optional[str]:
         """Read and consume a marker file declared by the skill's
         ``output_parser.fallback`` section.
@@ -1311,11 +1315,12 @@ class AgentOrchestrator:
         timestamp is treated as stale (left over from a prior session)
         and ignored.
 
-        ``trial_dir`` (P2 per-workdir state): when the command executed in
-        an isolated trial directory, its marker/results files land there —
-        the trial copies are checked first, the session-workspace paths
-        stay as fallback (a staging-time copy is older than the command
-        start and the ``min_mtime`` check discards it naturally).
+        F06: ``outputs`` is the resolved execution request's declared
+        output list — the exact attempt-rooted paths the request pinned —
+        and is checked first. ``trial_dir`` (P2 per-workdir state) keeps the
+        trial-first derivation as the fallback; the session-workspace paths
+        remain the last resort (a staging-time copy is older than the
+        command start and the ``min_mtime`` check discards it naturally).
         """
         skill = getattr(self, "_session_skills", {}).get(config.id)
         if skill is None:
@@ -1324,9 +1329,21 @@ class AgentOrchestrator:
             paths = list(skill.marker_file_paths(config))
         except Exception:
             return None
+        candidates: list[Path] = []
+        if outputs:
+            candidates.extend(Path(p) for p in outputs)
         if trial_dir:
-            paths = trial_marker_candidates(trial_dir, paths)
-        for marker_path in paths:
+            candidates.extend(trial_marker_candidates(trial_dir, paths))
+        else:
+            candidates.extend(paths)
+        seen: set[str] = set()
+        ordered: list[Path] = []
+        for candidate in candidates:
+            key = str(candidate)
+            if key not in seen:
+                seen.add(key)
+                ordered.append(candidate)
+        for marker_path in ordered:
             if not marker_path.exists():
                 continue
             if min_mtime is not None:
@@ -2711,25 +2728,40 @@ class AgentOrchestrator:
                         # Pre-snapshot: capture the config file a command
                         # references BEFORE running it, so the attempt has an
                         # immutable config record preserved even on crash or
-                        # timeout.
+                        # timeout. F06: the execution request is resolved and
+                        # authorized exactly once here — the snapshot, the
+                        # governed subprocess, and result lookup all consume
+                        # this same request.
                         _pending_snapshot: Optional[str] = None
+                        _resolved_decision = None
                         if (
                             isinstance(block.input, dict)
                             and block.name == "bash"
                         ):
-                            snapshot_path = _config_snapshot_path_from_command(
+                            from src.core.agent_tools import compute_bash_timeout
+                            from src.core.command_policy import (
+                                evaluate_command_policy,
+                            )
+
+                            _resolved_decision = evaluate_command_policy(
                                 raw_command_for_tool,
-                                settings.workspace_root,
-                                workspace,
-                                base_dir=(
+                                workspace_root=settings.workspace_root,
+                                session_workspace=workspace,
+                                workdir=(
                                     _trial_ctx.workdir
                                     if _trial_ctx is not None and _trial_ctx.is_trial
                                     else None
                                 ),
-                                config_flag=str(
-                                    skill_policy_extension.get("config_flag")
-                                    or "--config"
+                                policy_extension=skill_policy_extension,
+                                access=tool_access,
+                                timeout_s=compute_bash_timeout(
+                                    block.input, _command_deadline_mono
                                 ),
+                            )
+                            snapshot_path = (
+                                _resolved_decision.request.config_path
+                                if _resolved_decision.request is not None
+                                else None
                             )
                             if snapshot_path:
                                 try:
@@ -2883,6 +2915,7 @@ class AgentOrchestrator:
                                     ),
                                     policy_extension=skill_policy_extension,
                                     cwd=_trial_ctx.trial_dir,
+                                    resolved=_resolved_decision,
                                 ))
                                 pending_trials.append(PendingTrial(
                                     block_index=block_index,
@@ -2917,6 +2950,7 @@ class AgentOrchestrator:
                                     if _trial_ctx is not None and _trial_ctx.is_trial
                                     else None
                                 ),
+                                resolved=_resolved_decision,
                             )
                         tool_result = tool_execution.content
                         tool_meta = tool_execution.meta
@@ -4078,6 +4112,7 @@ class AgentOrchestrator:
                 workspace=workspace,
                 iteration=iteration,
                 logger=logger,
+                output_root=marker.get("trial_dir"),
             )
 
         attempt_snapshot = None

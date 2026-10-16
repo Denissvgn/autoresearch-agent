@@ -88,7 +88,7 @@ command_policy:
   allowed_scripts:
     - eval/run.py
     - bootstrap.py
-  allowed_executables: [cp, cat, jq]
+  allowed_executables: [cp, cat]
   copyable_files: [refactor_target.py, best_refactor_target.py]
   readable_files: [refactor_target.py, best_refactor_target.py, eval_result.json]
   # Evaluation data staged by bootstrap: the candidate must never rewrite the

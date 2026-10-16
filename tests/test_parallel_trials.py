@@ -375,10 +375,12 @@ async def test_sequential_default_never_allocates_trials(monkeypatch, tmp_path):
         monkeypatch, tmp_path, concurrency=None, absolute_config=True,
     )
     assert not (session_ws / TRIALS_DIRNAME).exists()
-    # No isolation: the default cwd (workspace root) collects both trials'
-    # relative writes, while the session workspace keeps only its configs.
-    sentinels = sorted(p.name for p in ws_root.glob("sentinel_*.txt"))
+    # The attempt output root is the session workspace: relative outputs
+    # land there, never in the shared workspace root (the pre-B06 behavior
+    # leaked both trials' writes into the shared root).
+    sentinels = sorted(p.name for p in session_ws.glob("sentinel_*.txt"))
     assert sentinels == ["sentinel_candidates_a.txt", "sentinel_candidates_b.txt"]
+    assert not list(ws_root.glob("sentinel_*.txt"))
     # ...but the sequential turn flag lets only the FIRST recording stand.
     iterations = await store.get_iterations(research_id)
     assert len(iterations) == 1, [i["iteration"] for i in iterations]

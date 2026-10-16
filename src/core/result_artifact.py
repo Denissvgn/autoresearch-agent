@@ -108,12 +108,17 @@ def enrich_marker_from_result_artifact(
     workspace: str,
     iteration: int,
     logger: Any = None,
+    output_root: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
     """Copy and merge a result artifact referenced by a marker.
 
     The mutable ``results.json`` handoff file is copied into
     ``server_snapshots`` before its promotion evidence is merged into the
-    marker. Invalid paths are ignored rather than failing iteration recording.
+    marker. F06: ``output_root`` is the resolved execution request's attempt
+    output root (a trial directory for parallel trials) — a relative
+    ``results_json_path`` resolves against it first, so ingestion reads the
+    exact file the attempt produced. Invalid paths are ignored rather than
+    failing iteration recording.
     """
 
     raw_path = marker.get("results_json_path")
@@ -121,7 +126,7 @@ def enrich_marker_from_result_artifact(
         return None
 
     workspace_path = Path(workspace).expanduser().resolve(strict=False)
-    raw_source = _resolve_source_path(raw_path, workspace_path)
+    raw_source = _resolve_source_path(raw_path, workspace_path, output_root)
     if raw_source is None:
         _log_debug(logger, "Ignoring invalid results_json_path %r", raw_path)
         marker.pop("results_json_path", None)
@@ -234,12 +239,20 @@ def merge_result_payload(
     _add_flat_aliases(marker, payload)
 
 
-def _resolve_source_path(raw_path: Any, workspace_path: Path) -> Optional[Path]:
+def _resolve_source_path(
+    raw_path: Any,
+    workspace_path: Path,
+    output_root: Optional[str] = None,
+) -> Optional[Path]:
     if not isinstance(raw_path, str) or not raw_path.strip():
         return None
     path = Path(raw_path).expanduser()
     if path.is_absolute():
         return path
+    if output_root:
+        rooted = Path(output_root).expanduser() / path
+        if rooted.exists():
+            return rooted
     return workspace_path / path
 
 

@@ -303,6 +303,7 @@ class _CapturingRunner:
         research_id: object = None,
         extra_env: object = None,
         cwd: object = None,
+        resolved: object = None,
     ) -> CommandRunResult:
         type(self).captures.append(
             {
@@ -313,6 +314,9 @@ class _CapturingRunner:
                 # P2 per-workdir state: the cwd override is threaded through
                 # to the governed runner (trial-directory execution).
                 "cwd": cwd,
+                # F06: the pre-resolved authorized decision (when the
+                # dispatch resolves once).
+                "resolved": resolved,
             }
         )
         decision = MagicMock()

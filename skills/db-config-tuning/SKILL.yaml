@@ -85,7 +85,7 @@ command_policy:
   allowed_scripts:
     - eval/run.py
     - bootstrap.py
-  allowed_executables: [cp, cat, jq]
+  allowed_executables: [cp, cat]
   copyable_files: [db_config.yaml, best_db_config.yaml]
   readable_files: [db_config.yaml, best_db_config.yaml, bench_result.json]
   forbidden_tokens: ["|", "||", "&&", ";", "&"]

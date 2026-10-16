@@ -187,8 +187,11 @@ class _CapturingRunner:
         pass
 
     def run(self, command, *, timeout_s, output_callback=None,
-            proc_registry=None, research_id=None, extra_env=None, cwd=None):
-        type(self).captured = {"cwd": cwd, "timeout_s": timeout_s}
+            proc_registry=None, research_id=None, extra_env=None, cwd=None,
+            resolved=None):
+        type(self).captured = {
+            "cwd": cwd, "timeout_s": timeout_s, "resolved": resolved,
+        }
         decision = MagicMock()
         decision.allowed = True
         return CommandRunResult(output="ok", decision=decision)
@@ -213,6 +216,31 @@ def test_tool_bash_threads_cwd_to_governed_runner():
 # --- snapshot resolution against the trial base dir -------------------------
 
 
+def _pinned_eval_extension(tmp_path) -> dict:
+    """Digest-pinned package stand-in for ``eval/run.py`` (resolution now
+    requires declared bindings, not bare workspace names)."""
+    import hashlib
+    import sys
+
+    venv_python = tmp_path / ".venv" / "bin" / "python"
+    venv_python.parent.mkdir(parents=True, exist_ok=True)
+    if not venv_python.exists():
+        venv_python.symlink_to(sys.executable)
+    pkg = tmp_path / "pkg"
+    script = pkg / "eval" / "run.py"
+    script.parent.mkdir(parents=True, exist_ok=True)
+    content = "print('eval')\n"
+    script.write_text(content, encoding="utf-8")
+    return {
+        "allowed_scripts": {"eval/run.py"},
+        "script_paths": {"eval/run.py": str(script)},
+        "script_digests": {
+            "eval/run.py": hashlib.sha256(content.encode("utf-8")).hexdigest()
+        },
+        "config_flag": "--config",
+    }
+
+
 def test_config_snapshot_resolves_against_base_dir(tmp_path):
     session = tmp_path / "session"
     trial = tmp_path / "session" / ".trials" / "t1"
@@ -220,15 +248,17 @@ def test_config_snapshot_resolves_against_base_dir(tmp_path):
     trial.mkdir(parents=True)
     (session / "db_config.yaml").write_text("session copy\n")
     (trial / "db_config.yaml").write_text("trial copy\n")
+    extension = _pinned_eval_extension(tmp_path)
 
     cmd = ".venv/bin/python eval/run.py --config db_config.yaml"
     # Default: resolves against the session workspace.
     assert _config_snapshot_path_from_command(
-        cmd, str(tmp_path), str(session)
+        cmd, str(tmp_path), str(session), policy_extension=extension
     ) == str(session / "db_config.yaml")
     # Trial: resolves against the staged trial copy.
     assert _config_snapshot_path_from_command(
-        cmd, str(tmp_path), str(session), base_dir=str(trial)
+        cmd, str(tmp_path), str(session), base_dir=str(trial),
+        policy_extension=extension,
     ) == str(trial / "db_config.yaml")
 
 
@@ -238,9 +268,11 @@ def test_config_snapshot_base_dir_outside_session_returns_none(tmp_path):
     (outside / "db_config.yaml").write_text("nope\n")
     session = tmp_path / "session"
     session.mkdir()
+    extension = _pinned_eval_extension(tmp_path)
     cmd = ".venv/bin/python eval/run.py --config db_config.yaml"
     # Containment stays anchored to the session workspace — a base dir
     # outside it can never steer the snapshot out of the session tree.
     assert _config_snapshot_path_from_command(
-        cmd, str(tmp_path), str(session), base_dir=str(outside)
+        cmd, str(tmp_path), str(session), base_dir=str(outside),
+        policy_extension=extension,
     ) is None
