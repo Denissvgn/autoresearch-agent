@@ -30,7 +30,8 @@ branches.
 | `directive_prompt` | `(config: 'ResearchConfig') -> str` | — | — |
 | `resume_prompt` | `(config: 'ResearchConfig', parent: SessionRecord, parent_iterations: list[IterationRecord]) -> str` | — | — |
 | `command_policy_extension` | `() -> CommandPolicyExtension` | — | Allowed scripts/executables/copyable-files/readable-files that extend |
-| `evaluator_command_params` | `(config: 'ResearchConfig') -> dict[str, str]` | — | Server-owned evaluator flags for execution-boundary enforcement. |
+| `evaluator_command_params` | `(config: 'ResearchConfig') -> dict[str, str]` | — | Server-owned evaluator flags for execution-boundary enforcement, |
+| `bound_arguments` | `(config: 'ResearchConfig') -> dict[str, str]` | — | The flag->value map model-authored argv may not change or drop. |
 | `experiment_command` | `(config: 'ResearchConfig') -> str` | — | Session-resolved suggested experiment command. |
 | `demo_experiment_command` | `(config: 'ResearchConfig') -> str` | — | The command the demo provider (MockProvider) executes verbatim in |
 | `iteration_marker_prefix` | `() -> str` | — | The ``output_parser.iteration_marker`` prefix (default |
@@ -76,7 +77,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [skill_runtime](../modules/skill_runtime.md) | 27 | — |
+| [skill_runtime](../modules/skill_runtime.md) | 28 | — |
 
 ### Structure
 

@@ -110,4 +110,4 @@ flowchart LR
 | `AgentOrchestrator._finalize_tool_result` | type_reference | [orchestrator](../modules/orchestrator.md) | — |
 | `AgentOrchestrator._guard_duplicate_training_attempt` | type_reference | [orchestrator](../modules/orchestrator.md) | — |
 
-> References: showing 12 of 105 logical references; 93 omitted by the 12-row generated summary limit.
+> References: showing 12 of 109 logical references; 97 omitted by the 12-row generated summary limit.

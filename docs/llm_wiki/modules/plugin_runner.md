@@ -85,65 +85,26 @@ Design decisions (P1-007 house style):
 <!-- Auto-generated local dependency summary. Do not edit by hand. -->
 ```mermaid
 flowchart LR
-    n0["src/cli.py"]
-    n1["src/core/bootstrap_runner.py"]
-    n2["src/core/isolation.py"]
-    n3["src/core/plugin_runner.py"]
-    n4["src/core/process_limits.py"]
-    n5["src/core/skill_manifest.py"]
-    n6["tests/test_execution_isolation.py"]
-    n7["tests/test_plugin_runner.py"]
-    n8["tests/test_process_limits.py"]
-    n9["tests/test_prompt_evaluator.py"]
-    n10["tests/test_skill_prompt_engineering_e2e.py"]
-    n11["tests/test_trust_boundary_qualification.py"]
-    n0 --> n3
-    n0 --> n5
-    n1 --> n3
-    n1 --> n5
-    n3 --> n2
-    n3 --> n4
-    n3 --> n5
-    n6 --> n2
-    n6 --> n3
-    n7 --> n3
-    n7 --> n5
-    n8 --> n3
-    n8 --> n4
-    n9 --> n1
-    n9 --> n3
-    n10 --> n3
-    n11 --> n3
-    n11 --> n4
-    click n0 "../modules/cli.md"
-    click n1 "../modules/bootstrap_runner.md"
-    click n2 "../modules/isolation.md"
-    click n3 "../modules/plugin_runner.md"
-    click n4 "../modules/process_limits.md"
-    click n5 "../modules/skill_manifest.md"
-    click n6 "../modules/test_execution_isolation.md"
-    click n7 "../modules/test_plugin_runner.md"
-    click n8 "../modules/test_process_limits.md"
-    click n9 "../modules/test_prompt_evaluator.md"
-    click n10 "../modules/test_skill_prompt_engineering_e2e.md"
-    click n11 "../modules/test_trust_boundary_qualification.md"
+    n0["src"]
+    n1["src/core/plugin_runner.py"]
+    n2["tests"]
+    n0 --> n1
+    n1 --> n0
+    n2 --> n1
+    click n1 "../modules/plugin_runner.md"
 ```
+
+> Module-level dependencies exceed the generated-diagram limits, so the diagram and table below group them by top-level package. Counts report the number of module neighbors in each package.
 
 ### Internal neighbors
 
 | Direction | Module |
 |---|---|
-| Inbound | [cli](../modules/cli.md) |
-| Inbound | [bootstrap_runner](../modules/bootstrap_runner.md) |
-| Inbound | [test_execution_isolation](../modules/test_execution_isolation.md) |
-| Inbound | [test_plugin_runner](../modules/test_plugin_runner.md) |
-| Inbound | [test_process_limits](../modules/test_process_limits.md) |
-| Inbound | [test_prompt_evaluator](../modules/test_prompt_evaluator.md) |
-| Inbound | [test_skill_prompt_engineering_e2e](../modules/test_skill_prompt_engineering_e2e.md) |
-| Inbound | [test_trust_boundary_qualification](../modules/test_trust_boundary_qualification.md) |
-| Outbound | [isolation](../modules/isolation.md) |
-| Outbound | [process_limits](../modules/process_limits.md) |
-| Outbound | [skill_manifest](../modules/skill_manifest.md) |
+| Inbound | `src` (2) |
+| Inbound | `tests` (7) |
+| Outbound | `src` (3) |
+
+> All 12 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 

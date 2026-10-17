@@ -101,11 +101,11 @@ flowchart LR
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
 | [TestPromptEngineeringSkillManifest](../entities/TestPromptEngineeringSkillManifest.md) | 49 | — | P4-012: the skill manifest loads and declares the Phase-4 properties. |
-| [TestCrossProviderRouter](../entities/TestCrossProviderRouter.md) | 122 | — | P4-010: the provider router constructs an OpenAIProvider for openai. |
-| [TestEvalScorerNonceEcho](../entities/TestEvalScorerNonceEcho.md) | 136 | — | P4-014: the eval scorer echoes the session nonce in the marker. |
-| [TestManifestSkillRuntimeNonceValidation](../entities/TestManifestSkillRuntimeNonceValidation.md) | 160 | — | P4-003: ManifestSkillRuntime threads nonce config from the manifest. |
-| [TestCanonicalRequestTranslation](../entities/TestCanonicalRequestTranslation.md) | 223 | — | P4-016 (was mislabeled P4-017 — no such task): non-ML skills are |
-| [_ScriptedOpenAIClient](../entities/ScriptedOpenAIClient.md) | 285 | — | Stands in at the OpenAI HTTP boundary (chat.completions.create). |
+| [TestCrossProviderRouter](../entities/TestCrossProviderRouter.md) | 125 | — | P4-010: the provider router constructs an OpenAIProvider for openai. |
+| [TestEvalScorerNonceEcho](../entities/TestEvalScorerNonceEcho.md) | 139 | — | P4-014: the eval scorer echoes the session nonce in the marker. |
+| [TestManifestSkillRuntimeNonceValidation](../entities/TestManifestSkillRuntimeNonceValidation.md) | 163 | — | P4-003: ManifestSkillRuntime threads nonce config from the manifest. |
+| [TestCanonicalRequestTranslation](../entities/TestCanonicalRequestTranslation.md) | 226 | — | P4-016 (was mislabeled P4-017 — no such task): non-ML skills are |
+| [_ScriptedOpenAIClient](../entities/ScriptedOpenAIClient.md) | 288 | — | Stands in at the OpenAI HTTP boundary (chat.completions.create). |
 
 ## Functions
 

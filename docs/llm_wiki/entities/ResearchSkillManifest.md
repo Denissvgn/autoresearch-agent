@@ -1,6 +1,6 @@
 # ResearchSkillManifest
 
-**Location:** `src/core/skill_manifest.py:954`
+**Location:** `src/core/skill_manifest.py:987`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)
@@ -26,6 +26,7 @@ applies per-field defaults.
 |--------|-------|--------|------|---------|
 | `_check_version` | field | schema_version | after | — |
 | `_unique_phase_ids` | model | — | after | — |
+| `_check_parameter_bindings` | model | — | after | — |
 | `_phase_evidence_keys_subset` | model | — | after | — |
 
 ## Attributes
@@ -57,6 +58,7 @@ applies per-field defaults.
 | `insights` | `Optional[InsightsConfig]` | `insights` | No | Yes | `None` | — | — | — |
 | `prompt` | `Optional[PromptConfig]` | `prompt` | No | Yes | `None` | — | — | — |
 | `ui` | `Optional[UIConfig]` | `ui` | No | Yes | `None` | — | — | — |
+| `parameter_bindings` | `Optional[ParameterBindings]` | `parameter_bindings` | No | Yes | `None` | — | — | — |
 | `plugins` | `PluginsConfig` | `plugins` | No | No | factory: `PluginsConfig` | — | — | — |
 | `auto_absorb_insights` | `bool` | `auto_absorb_insights` | No | No | `False` | — | — | — |
 | `execution` | `Optional[ExecutionConfig]` | `execution` | No | Yes | `None` | — | — | — |
@@ -69,6 +71,7 @@ applies per-field defaults.
 |--------|-----------|------------|-------------|
 | `_check_version` | `(value: str) -> str` | `@field_validator('schema_version')`, `@classmethod` | — |
 | `_unique_phase_ids` | `() -> 'ResearchSkillManifest'` | `@model_validator(mode='after')` | — |
+| `_check_parameter_bindings` | `() -> 'ResearchSkillManifest'` | `@model_validator(mode='after')` | Bindings reference only declared parameters; templates use only the |
 | `_phase_evidence_keys_subset` | `() -> 'ResearchSkillManifest'` | `@model_validator(mode='after')` | A per-phase ``advancement`` override must only reference known phases. |
 
 ## Relationships
@@ -122,7 +125,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [skill_manifest](../modules/skill_manifest.md) | 3 | `auto_absorb_insights`, `blocker_classification`, `category`, `command_policy`, `decision_vocabulary`, `description`, `display_name`, `execution`, `id`, `insights`, `knowledge_last_reviewed`, `llm` |
+| [skill_manifest](../modules/skill_manifest.md) | 4 | `auto_absorb_insights`, `blocker_classification`, `category`, `command_policy`, `decision_vocabulary`, `description`, `display_name`, `execution`, `id`, `insights`, `knowledge_last_reviewed`, `llm` |
 
 ### Structure
 
@@ -147,4 +150,4 @@ flowchart LR
 | `DomainClassifier._cached_embed` | type_reference | [domain_classifier](../modules/domain_classifier.md) | — |
 | `load_layout` | type_reference | [skill_loader](../modules/skill_loader.md) | — |
 
-> References: showing 12 of 25 logical references; 13 omitted by the 12-row generated summary limit.
+> References: showing 12 of 27 logical references; 15 omitted by the 12-row generated summary limit.

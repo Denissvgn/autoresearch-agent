@@ -42,6 +42,7 @@ flowchart LR
     n2["src/core/execution_request.py"]
     n3["src/core/skill_runtime.py"]
     n4["tests/test_execution_request.py"]
+    n5["tests/test_parameter_bindings.py"]
     n0 --> n2
     n1 --> n2
     n3 --> n2
@@ -49,11 +50,14 @@ flowchart LR
     n4 --> n1
     n4 --> n2
     n4 --> n3
+    n5 --> n2
+    n5 --> n3
     click n0 "../modules/agent_tools.md"
     click n1 "../modules/command_policy.md"
     click n2 "../modules/execution_request.md"
     click n3 "../modules/skill_runtime.md"
     click n4 "../modules/test_execution_request.md"
+    click n5 "../modules/test_parameter_bindings.md"
 ```
 
 ### Internal neighbors
@@ -64,6 +68,7 @@ flowchart LR
 | Inbound | [command_policy](../modules/command_policy.md) |
 | Inbound | [skill_runtime](../modules/skill_runtime.md) |
 | Inbound | [test_execution_request](../modules/test_execution_request.md) |
+| Inbound | [test_parameter_bindings](../modules/test_parameter_bindings.md) |
 
 ## Classes
 

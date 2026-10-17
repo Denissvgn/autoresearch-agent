@@ -96,7 +96,7 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [_ScriptedProvider](../entities/test_parallel_trials_ScriptedProvider.md) | 158 | — | Issues two sanctioned eval commands in one turn, then terminates. |
+| [_ScriptedProvider](../entities/test_parallel_trials_ScriptedProvider.md) | 159 | — | Issues two sanctioned eval commands in one turn, then terminates. |
 
 ## Functions
 

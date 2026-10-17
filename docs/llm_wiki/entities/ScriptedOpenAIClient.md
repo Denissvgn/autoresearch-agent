@@ -1,6 +1,6 @@
 # _ScriptedOpenAIClient
 
-**Location:** `tests/test_skill_prompt_engineering_e2e.py:285`
+**Location:** `tests/test_skill_prompt_engineering_e2e.py:288`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_skill_prompt_engineering_e2e](../modules/test_skill_prompt_engineering_e2e.md)

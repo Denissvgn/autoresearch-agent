@@ -35,9 +35,12 @@ immutability after acceptance.
 | `src.core.plugin_runner` | `PluginCaps`, `PluginRunner` |
 | `src.core.process_limits` | `TERMINATION_BOUND_S` |
 | `src.core.result_authority` | `issue_result_receipt`, `result_payload`, `verify_result_receipt`, `protected_result_names` |
+| `src.core.skill_loader` | `load_skill_manifest` |
+| `src.core.skill_runtime` | `ManifestSkillRuntime` |
 | `subprocess` | `subprocess` |
 | `sys` | `sys` |
 | `time` | `time` |
+| `types` | `types` |
 | `yaml` | `yaml` |
 
 ## Local dependency map
@@ -51,23 +54,30 @@ flowchart LR
     n3["src/core/plugin_runner.py"]
     n4["src/core/process_limits.py"]
     n5["src/core/result_authority.py"]
-    n6["tests/test_trust_boundary_qualification.py"]
+    n6["src/core/skill_loader.py"]
+    n7["src/core/skill_runtime.py"]
+    n8["tests/test_trust_boundary_qualification.py"]
     n1 --> n2
     n2 --> n4
     n3 --> n4
     n6 --> n0
-    n6 --> n1
-    n6 --> n2
-    n6 --> n3
-    n6 --> n4
-    n6 --> n5
+    n8 --> n0
+    n8 --> n1
+    n8 --> n2
+    n8 --> n3
+    n8 --> n4
+    n8 --> n5
+    n8 --> n6
+    n8 --> n7
     click n0 "../modules/config.md"
     click n1 "../modules/agent_tools.md"
     click n2 "../modules/command_runner.md"
     click n3 "../modules/plugin_runner.md"
     click n4 "../modules/process_limits.md"
     click n5 "../modules/result_authority.md"
-    click n6 "../modules/test_trust_boundary_qualification.md"
+    click n6 "../modules/skill_loader.md"
+    click n7 "../modules/skill_runtime.md"
+    click n8 "../modules/test_trust_boundary_qualification.md"
 ```
 
 ### Internal neighbors
@@ -80,6 +90,8 @@ flowchart LR
 | Outbound | [plugin_runner](../modules/plugin_runner.md) |
 | Outbound | [process_limits](../modules/process_limits.md) |
 | Outbound | [result_authority](../modules/result_authority.md) |
+| Outbound | [skill_loader](../modules/skill_loader.md) |
+| Outbound | [skill_runtime](../modules/skill_runtime.md) |
 
 ### External packages
 
@@ -100,8 +112,8 @@ flowchart LR
 | `test_attack_synthetic_secrets_reach_no_candidate_child` | `(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None` | — | — |
 | `test_attack_forged_receipt_never_verifies` | `() -> None` | — | — |
 | `test_attack_child_process_escape_denied_at_os` | `(tmp_path: Path) -> None` | — | — |
-| `_live_template` | `(skill_id: str) -> str` | — | — |
+| `_live_command` | `(skill_id: str, skill_params: dict, session: Path) -> str` | — | The session's real suggested command: the manifest template rendered |
 | `_fresh_session` | `(tmp_path: Path, kind: str)` | — | — |
 | `_bootstrap_into` | `(skill_id: str, session: Path, skill_params: dict) -> None` | — | — |
-| `test_real_live_template_runs_and_evidence_is_immutable` | `(tmp_path: Path, skill_id: str, kind: str, skill_params: dict) -> None` | `@pytest.mark.parametrize('skill_id,kind,skill_params', [('db-config-tuning', 'autotuner', {'symbol': 'AAPL', 'timeframe': '1h', 'direction': 'long'}), ('code-refactor', 'refactor', {'symbol': 'AAPL', 'timeframe': '1h', 'direction': 'long', 'file_path': 'refactor_target.py'})])` | The declared live template runs in a fresh workspace; the recorded |
+| `test_real_live_template_runs_and_evidence_is_immutable` | `(tmp_path: Path, skill_id: str, kind: str, skill_params: dict) -> None` | `@pytest.mark.parametrize('skill_id,kind,skill_params', [('db-config-tuning', 'autotuner', {'target_latency_ms': 15, 'bench_duration_s': 20}), ('code-refactor', 'refactor', {'target_file': 'refactor_target.py'})])` | The declared live template runs in a fresh workspace; the recorded |
 | `test_live_template_without_external_scorer_refuses_cleanly` | `(tmp_path: Path) -> None` | — | The live prompt-engineering template needs an external scorer; without |

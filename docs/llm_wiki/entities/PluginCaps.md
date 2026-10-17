@@ -60,7 +60,7 @@ flowchart LR
     n9["test_plugin_runner_host_prereq_failure_fails_closed (tests/test_execution_isolation.py)"]
     n10["test_plugin_runner_refuses_allowlist_request (tests/test_execution_isolation.py)"]
     n11["test_trusted_local_code_mode_labeled_not_sandboxed (tests/test_execution_isolation.py)"]
-    n12["TestPluginCannotForgeVerifiedMetric.test_plugin_output_is_untrusted_data (tests/test_plugin_runner.py)"]
+    n12["test_code_skill_uses_requested_candidate_source (tests/test_parameter_bindings.py)"]
     n0 --> n1
     n2 --> n0
     n3 --> n0
@@ -84,7 +84,7 @@ flowchart LR
     click n9 "../modules/test_execution_isolation.md"
     click n10 "../modules/test_execution_isolation.md"
     click n11 "../modules/test_execution_isolation.md"
-    click n12 "../modules/test_plugin_runner.md"
+    click n12 "../modules/test_parameter_bindings.md"
 ```
 
 ### Summary
@@ -114,6 +114,6 @@ flowchart LR
 | `test_plugin_runner_host_prereq_failure_fails_closed` | call | [test_execution_isolation](../modules/test_execution_isolation.md) | 1 |
 | `test_plugin_runner_refuses_allowlist_request` | call | [test_execution_isolation](../modules/test_execution_isolation.md) | 1 |
 | `test_trusted_local_code_mode_labeled_not_sandboxed` | call | [test_execution_isolation](../modules/test_execution_isolation.md) | 1 |
-| `TestPluginCannotForgeVerifiedMetric.test_plugin_output_is_untrusted_data` | call | [test_plugin_runner](../modules/test_plugin_runner.md) | 1 |
+| `test_code_skill_uses_requested_candidate_source` | call | [test_parameter_bindings](../modules/test_parameter_bindings.md) | 1 |
 
-> References: showing 12 of 27 logical references; 15 omitted by the 12-row generated summary limit.
+> References: showing 12 of 28 logical references; 16 omitted by the 12-row generated summary limit.

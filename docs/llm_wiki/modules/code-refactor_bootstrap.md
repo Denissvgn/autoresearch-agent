@@ -24,4 +24,5 @@ Bootstrap for code-refactor skill. ABI: JSON stdin -> JSON stdout.
 
 | Function | Signature | Decorators | Description |
 |----------|-----------|------------|-------------|
+| `_target_name` | `(payload)` | — | — |
 | `main` | `()` | — | — |

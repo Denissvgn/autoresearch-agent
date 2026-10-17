@@ -18,18 +18,18 @@
     "by_kind": {
       "api-contracts": 0,
       "dependencies": 1,
-      "entities": 443,
+      "entities": 444,
       "flows": 123,
       "guides": 0,
       "index": 1,
       "infrastructure": 3,
       "load-order": 1,
       "log": 1,
-      "modules": 259,
+      "modules": 260,
       "workflows": 15
     },
     "dependency_architecture": 2,
-    "total": 847
+    "total": 849
   },
   "dependency_pages": {
     "count": 2,
@@ -1270,7 +1270,7 @@
           "gaps": [
             {
               "kind": "unresolved_call",
-              "line": 1023,
+              "line": 1068,
               "step": "materialize_skill_runtime",
               "target": "default_registry.get"
             }
@@ -7311,7 +7311,7 @@
             {
               "confidence": "unknown",
               "kind": "filesystem_read",
-              "line": 10,
+              "line": 16,
               "step": "main",
               "step_index": 1,
               "target": "json.load"
@@ -7319,7 +7319,7 @@
             {
               "confidence": "unknown",
               "kind": "filesystem_write",
-              "line": 21,
+              "line": 32,
               "step": "main",
               "step_index": 1,
               "target": "open"
@@ -7328,51 +7328,45 @@
           "gaps": [
             {
               "kind": "external_call",
-              "line": 12,
-              "step": "main",
-              "target": "json.dump"
-            },
-            {
-              "kind": "unresolved_call",
-              "line": 13,
-              "step": "main",
-              "target": "payload.get"
-            },
-            {
-              "kind": "external_call",
-              "line": 15,
-              "step": "main",
-              "target": "json.dump"
-            },
-            {
-              "kind": "unresolved_call",
-              "line": 16,
-              "step": "main",
-              "target": "payload.get"
-            },
-            {
-              "kind": "external_call",
-              "line": 17,
-              "step": "main",
-              "target": "json.dump"
-            },
-            {
-              "kind": "unresolved_call",
               "line": 18,
               "step": "main",
-              "target": "ws.mkdir"
+              "target": "json.dump"
             },
             {
               "kind": "unresolved_call",
               "line": 19,
               "step": "main",
-              "target": "(ws / 'refactor_target.py').write_text"
+              "target": "payload.get"
+            },
+            {
+              "kind": "external_call",
+              "line": 21,
+              "step": "main",
+              "target": "json.dump"
             },
             {
               "kind": "unresolved_call",
-              "line": 20,
-              "step": "main",
-              "target": "(ws / 'best_refactor_target.py').write_text"
+              "line": 8,
+              "step": "_target_name",
+              "target": "payload.get"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 9,
+              "step": "_target_name",
+              "target": "params.get"
+            },
+            {
+              "kind": "external_call",
+              "line": 10,
+              "step": "_target_name",
+              "target": "isinstance"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 11,
+              "step": "_target_name",
+              "target": "name.endswith"
             },
             {
               "kind": "step_limit",
@@ -7390,7 +7384,7 @@
           "modules_touched": [
             "skills/code-refactor/bootstrap.py"
           ],
-          "step_count": 17,
+          "step_count": 25,
           "truncated": false
         }
       },
@@ -8517,7 +8511,7 @@
             {
               "confidence": "unknown",
               "kind": "filesystem_read",
-              "line": 17,
+              "line": 18,
               "step": "main",
               "step_index": 1,
               "target": "open"
@@ -8525,7 +8519,7 @@
             {
               "confidence": "unknown",
               "kind": "filesystem_read",
-              "line": 20,
+              "line": 21,
               "step": "main",
               "step_index": 1,
               "target": "json.load"
@@ -8533,7 +8527,7 @@
             {
               "confidence": "unknown",
               "kind": "filesystem_read",
-              "line": 20,
+              "line": 21,
               "step": "main",
               "step_index": 1,
               "target": "open"
@@ -8543,7 +8537,7 @@
               "kind": "environment_read",
               "line": 6,
               "step": "_emit",
-              "step_index": 11,
+              "step_index": 12,
               "target": "os.environ.get"
             },
             {
@@ -8551,7 +8545,7 @@
               "kind": "output",
               "line": 8,
               "step": "_emit",
-              "step_index": 11,
+              "step_index": 12,
               "target": "print"
             }
           ],
@@ -8584,6 +8578,12 @@
               "kind": "unresolved_call",
               "line": 14,
               "step": "main",
+              "target": "ap.add_argument"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 15,
+              "step": "main",
               "target": "ap.parse_args"
             },
             {
@@ -8602,7 +8602,7 @@
           "modules_touched": [
             "skills/db-config-tuning/eval/run.py"
           ],
-          "step_count": 42,
+          "step_count": 43,
           "truncated": false
         }
       },
@@ -8871,6 +8871,7 @@
         "entities/OutputParserFallback.md",
         "entities/OutputStream.md",
         "entities/PaginatedResponse.md",
+        "entities/ParameterBindings.md",
         "entities/ParamSchema.md",
         "entities/ParamSchemaProperty.md",
         "entities/ParsedItem.md",
@@ -9489,6 +9490,7 @@
         "modules/test_packaging.md",
         "modules/test_pagination.md",
         "modules/test_parallel_trials.md",
+        "modules/test_parameter_bindings.md",
         "modules/test_parity.md",
         "modules/test_phase_evidence_dedup_inherit.md",
         "modules/test_phase_genuine_dwell.md",
@@ -11541,6 +11543,19 @@
       "title": "PaginatedResponse"
     },
     {
+      "canonical_path": "entities/ParameterBindings.md",
+      "id": "ParameterBindings",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/ParameterBindings",
+      "outgoing_internal_links": [
+        "modules/skill_manifest.md",
+        "modules/test_parameter_bindings.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/skill_manifest.py",
+      "title": "ParameterBindings"
+    },
+    {
       "canonical_path": "entities/ParamSchema.md",
       "id": "ParamSchema",
       "kind": "entities",
@@ -11661,7 +11676,7 @@
         "modules/skill_loader.md",
         "modules/skill_manifest.md",
         "modules/test_execution_isolation.md",
-        "modules/test_plugin_runner.md"
+        "modules/test_parameter_bindings.md"
       ],
       "role": "semantic",
       "source_path": "src/core/skill_manifest.py",
@@ -11731,6 +11746,7 @@
         "modules/cli.md",
         "modules/plugin_runner.md",
         "modules/test_execution_isolation.md",
+        "modules/test_parameter_bindings.md",
         "modules/test_plugin_runner.md"
       ],
       "role": "semantic",
@@ -15951,7 +15967,8 @@
         "modules/command_policy.md",
         "modules/execution_request.md",
         "modules/skill_runtime.md",
-        "modules/test_execution_request.md"
+        "modules/test_execution_request.md",
+        "modules/test_parameter_bindings.md"
       ],
       "role": "semantic",
       "source_path": "src/core/execution_request.py",
@@ -16423,18 +16440,7 @@
         "entities/PluginResult.md",
         "entities/PluginRunBody.md",
         "entities/PluginRunner.md",
-        "modules/bootstrap_runner.md",
-        "modules/cli.md",
-        "modules/isolation.md",
-        "modules/plugin_runner.md",
-        "modules/process_limits.md",
-        "modules/skill_manifest.md",
-        "modules/test_execution_isolation.md",
-        "modules/test_plugin_runner.md",
-        "modules/test_process_limits.md",
-        "modules/test_prompt_evaluator.md",
-        "modules/test_skill_prompt_engineering_e2e.md",
-        "modules/test_trust_boundary_qualification.md"
+        "modules/plugin_runner.md"
       ],
       "role": "semantic",
       "source_path": "src/core/plugin_runner.py",
@@ -17038,6 +17044,7 @@
         "entities/MetricGoal.md",
         "entities/OutputParserConfig.md",
         "entities/OutputParserFallback.md",
+        "entities/ParameterBindings.md",
         "entities/ParamSchema.md",
         "entities/ParamSchemaProperty.md",
         "entities/ParserFormat.md",
@@ -18513,6 +18520,23 @@
       "title": "test_parallel_trials Module"
     },
     {
+      "canonical_path": "modules/test_parameter_bindings.md",
+      "id": "test_parameter_bindings",
+      "kind": "modules",
+      "mcp_uri": "llm-wiki://modules/test_parameter_bindings",
+      "outgoing_internal_links": [
+        "modules/execution_request.md",
+        "modules/plugin_runner.md",
+        "modules/skill_loader.md",
+        "modules/skill_manifest.md",
+        "modules/skill_runtime.md",
+        "modules/test_parameter_bindings.md"
+      ],
+      "role": "semantic",
+      "source_path": "tests/test_parameter_bindings.py",
+      "title": "test_parameter_bindings Module"
+    },
+    {
       "canonical_path": "modules/test_parity.md",
       "id": "test_parity",
       "kind": "modules",
@@ -19286,6 +19310,8 @@
         "modules/plugin_runner.md",
         "modules/process_limits.md",
         "modules/result_authority.md",
+        "modules/skill_loader.md",
+        "modules/skill_runtime.md",
         "modules/test_trust_boundary_qualification.md"
       ],
       "role": "semantic",
@@ -21559,6 +21585,7 @@
         "modules/test_packaging.md",
         "modules/test_pagination.md",
         "modules/test_parallel_trials.md",
+        "modules/test_parameter_bindings.md",
         "modules/test_parity.md",
         "modules/test_phase_evidence_dedup_inherit.md",
         "modules/test_phase_genuine_dwell.md",
@@ -21829,6 +21856,7 @@
         "modules/test_packaging.md",
         "modules/test_pagination.md",
         "modules/test_parallel_trials.md",
+        "modules/test_parameter_bindings.md",
         "modules/test_parity.md",
         "modules/test_phase_evidence_dedup_inherit.md",
         "modules/test_phase_genuine_dwell.md",
@@ -21897,5 +21925,5 @@
     }
   ],
   "schema_version": "llm-wiki-surface-index/v1",
-  "source_hash": "sha256:e085182fdf2acd3aed302534bd2d4fe21d4cd4d203f7f7a6f261b699e5e51d5e"
+  "source_hash": "sha256:0f281f8368774c617e8283c4d1481266b83c5b75a82bc1072a6ff92a38783a54"
 }

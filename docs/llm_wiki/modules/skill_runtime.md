@@ -75,10 +75,10 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Inbound | `src` (2) |
-| Inbound | `tests` (12) |
+| Inbound | `tests` (14) |
 | Outbound | `src` (8) |
 
-> All 21 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 23 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
@@ -94,7 +94,7 @@ flowchart LR
 | [SubjectDescriptor](../entities/SubjectDescriptor.md) | 172 | `TypedDict` | A research subject a skill can enumerate (e.g. an instrument, a model |
 | [VariantDescriptor](../entities/VariantDescriptor.md) | 181 | `TypedDict` | A variant under a subject (e.g. a timeframe, a parameterization). |
 | [SkillRuntime](../entities/SkillRuntime.md) | 195 | `Protocol` | Contract every research skill implements (ARC-011 P1-023, §7.5). |
-| [ManifestSkillRuntime](../entities/ManifestSkillRuntime.md) | 367 | — | A ``SkillRuntime`` driven entirely by a ``ResearchSkillManifest`` (P2-007). |
+| [ManifestSkillRuntime](../entities/ManifestSkillRuntime.md) | 371 | — | A ``SkillRuntime`` driven entirely by a ``ResearchSkillManifest`` (P2-007). |
 
 ## Functions
 

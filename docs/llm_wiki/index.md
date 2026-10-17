@@ -6,8 +6,8 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 
 | Surface | Count | Start here |
 |---|---:|---|
-| Entities | 443 | [Open section](#entities) |
-| Modules | 259 | [Open section](#modules) |
+| Entities | 444 | [Open section](#entities) |
+| Modules | 260 | [Open section](#modules) |
 | Workflows | 15 | [Open section](#workflows) |
 | Guides | 0 | No pages |
 | Entry-point flows | 123 | [Open section](#entry-point-flows) |
@@ -160,6 +160,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [PaginatedResponse](entities/PaginatedResponse.md)
 - [ParamSchema](entities/ParamSchema.md)
 - [ParamSchemaProperty](entities/ParamSchemaProperty.md)
+- [ParameterBindings](entities/ParameterBindings.md)
 - [ParsedItem](entities/ParsedItem.md)
 - [ParserFormat](entities/ParserFormat.md)
 - [PendingTrial](entities/PendingTrial.md)
@@ -668,6 +669,7 @@ Retained history; these declarations are absent from the selected source invento
 - [test_packaging](modules/test_packaging.md) - Release metadata and archive-content regressions.
 - [test_pagination](modules/test_pagination.md) - Cursor-pagination tests (ARC-011 P0-015..019).
 - [test_parallel_trials](modules/test_parallel_trials.md) - P2 parallel-trial dispatch tests (the ``execution.concurrency`` flip-on).
+- [test_parameter_bindings](modules/test_parameter_bindings.md) - Parameter-to-work binding contract: traceability and fixed-argument enforcement.
 - [test_parity](modules/test_parity.md) - ARC-011 X-002 parity suite.
 - [test_phase_evidence_dedup_inherit](modules/test_phase_evidence_dedup_inherit.md) - Issue 5 — noop-phase evidence inheritance on a dedup hit.
 - [test_phase_genuine_dwell](modules/test_phase_genuine_dwell.md) - Fix 8 — phases gated by ``auto_phase_evidence`` must still require ``min_iterations`` of phase-tagged iterations (or an explicit agent key).

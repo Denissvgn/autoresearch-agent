@@ -1,6 +1,6 @@
 # ManifestSkillRuntime
 
-**Location:** `src/core/skill_runtime.py:367`
+**Location:** `src/core/skill_runtime.py:371`
 **Kind:** Class
 **Bases:** —
 **Module:** [skill_runtime](../modules/skill_runtime.md)
@@ -31,8 +31,11 @@ constructs this when ``config.skill_id`` resolves in the registry.
 | `nonce_field` | `() -> str` | `@property` | The echoed-nonce field name (``output_parser.nonce_field``, |
 | `system_prompt` | `() -> str` | — | Assemble the system prompt from the manifest's primer file |
 | `blocker_classification` | `() -> dict[str, Any]` | — | G3: the manifest's ``blocker_classification`` section (ARC-011 |
-| `evaluator_command_params` | `(config: 'ResearchConfig') -> dict[str, str]` | — | Server-owned argv values; execution must override agent-supplied flags. |
-| `experiment_command` | `(config: 'ResearchConfig') -> str` | — | Resolve the manifest command with explicit session evaluator wiring. |
+| `bound_arguments` | `(config: 'ResearchConfig') -> dict[str, str]` | — | Server-owned evaluator argv values from the manifest's declared |
+| `evaluator_command_params` | `(config: 'ResearchConfig') -> dict[str, str]` | — | Server-owned argv values; execution must override agent-supplied |
+| `_render_value_template` | `(template: str, config: 'ResearchConfig') -> str` | — | — |
+| `_render_command` | `(template: str, config: 'ResearchConfig') -> str` | — | Render one command template with its bound arguments canonicalized. |
+| `experiment_command` | `(config: 'ResearchConfig') -> str` | — | Render the manifest command with the session's bound arguments. |
 | `demo_experiment_command` | `(config: 'ResearchConfig') -> str` | — | Render ``prompt.demo_experiment_command`` for this session |
 | `iteration_marker_prefix` | `() -> str` | — | — |
 | `directive_prompt` | `(config: 'ResearchConfig') -> str` | — | Build the session-directing user prompt from the manifest. |
@@ -104,7 +107,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [skill_runtime](../modules/skill_runtime.md) | 32 | — |
+| [skill_runtime](../modules/skill_runtime.md) | 35 | — |
 
 ### References
 
@@ -123,4 +126,4 @@ flowchart LR
 | `test_manifest_runtime_registry_api_kind_raises_loudly` | call | [test_manifest_runtime_production_path](../modules/test_manifest_runtime_production_path.md) | 2 |
 | `test_requires_signed_metrics_capability_properties` | call | [test_metrics_forgery_c3](../modules/test_metrics_forgery_c3.md) | 1 |
 
-> References: showing 12 of 20 logical references; 8 omitted by the 12-row generated summary limit.
+> References: showing 12 of 23 logical references; 11 omitted by the 12-row generated summary limit.

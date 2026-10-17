@@ -86,7 +86,7 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Inbound | `src` (10) |
-| Inbound | `tests` (6) |
+| Inbound | `tests` (7) |
 
 ### External packages
 
@@ -94,7 +94,7 @@ flowchart LR
 |---|---:|---:|
 | python | 1 | 0 |
 
-> All 16 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 17 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
@@ -147,8 +147,9 @@ flowchart LR
 | [StructuredHPOConfig](../entities/StructuredHPOConfig.md) | Pydantic model | 859 | `BaseModel` | Optional structured-HPO capability (ARC-011 §9 ``structured_hpo``). |
 | [InsightsConfig](../entities/InsightsConfig.md) | Pydantic model | 869 | `BaseModel` | Per-skill insights summarization (ARC-011 §9 ``insights``, G9). |
 | [PromptConfig](../entities/PromptConfig.md) | Pydantic model | 879 | `BaseModel` | Prompt-assembly templates (ARC-011 §9 ``prompt``). |
-| [UIConfig](../entities/UIConfig.md) | Pydantic model | 923 | `BaseModel` | UI hints (ARC-011 §9 ``ui``). Advisory; not behaviorally load-bearing. |
-| [ExecutionConfig](../entities/ExecutionConfig.md) | Pydantic model | 937 | `BaseModel` | Per-skill execution capabilities (P1-4). |
-| [ResearchSkillManifest](../entities/ResearchSkillManifest.md) | Pydantic model | 954 | `BaseModel` | A validated ``research_skill.v1`` skill descriptor (ARC-011 P2-001). |
-| [ManifestValidationError](../entities/ManifestValidationError.md) | Class | 1057 | `ValueError` | Raised when a manifest fails structural validation. Wraps a pydantic |
-| [ManifestVersionError](../entities/ManifestVersionError.md) | Class | 1074 | `ManifestValidationError` | Raised by the loader (P2-002) for an unrecognized ``schema_version``. |
+| [ParameterBindings](../entities/ParameterBindings.md) | Pydantic model | 917 | `BaseModel` | Declarative bindings from resolved ``skill_params`` into actual work. |
+| [UIConfig](../entities/UIConfig.md) | Pydantic model | 956 | `BaseModel` | UI hints (ARC-011 §9 ``ui``). Advisory; not behaviorally load-bearing. |
+| [ExecutionConfig](../entities/ExecutionConfig.md) | Pydantic model | 970 | `BaseModel` | Per-skill execution capabilities (P1-4). |
+| [ResearchSkillManifest](../entities/ResearchSkillManifest.md) | Pydantic model | 987 | `BaseModel` | A validated ``research_skill.v1`` skill descriptor (ARC-011 P2-001). |
+| [ManifestValidationError](../entities/ManifestValidationError.md) | Class | 1148 | `ValueError` | Raised when a manifest fails structural validation. Wraps a pydantic |
+| [ManifestVersionError](../entities/ManifestVersionError.md) | Class | 1165 | `ManifestValidationError` | Raised by the loader (P2-002) for an unrecognized ``schema_version``. |

@@ -1,6 +1,6 @@
 # _ScriptedProvider
 
-**Location:** `tests/test_parallel_trials.py:158`
+**Location:** `tests/test_parallel_trials.py:159`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_parallel_trials](../modules/test_parallel_trials.md)
