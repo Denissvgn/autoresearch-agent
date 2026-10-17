@@ -573,9 +573,9 @@ Autonomy: Run attacks against disposable files, synthetic secrets, and isolated
 processes. Inspect sentinels and teardown independently of the tested API response;
 missing real enforcement evidence keeps G1 incomplete.
 
-- [ ] Exercise the combined attack paths: candidate edits, evaluator shadowing, symlinks, credential reachability, forged results, and child-process escape attempts.
-- [ ] Run the real live command templates in fresh isolated workspaces and confirm private evidence cannot be changed after acceptance.
-- [ ] Capture a capability-bound qualification record and document which privileges/environments remain outside the guarantee.
+- [x] Exercise the combined attack paths: candidate edits, evaluator shadowing, symlinks, credential reachability, forged results, and child-process escape attempts.
+- [x] Run the real live command templates in fresh isolated workspaces and confirm private evidence cannot be changed after acceptance.
+- [x] Capture a capability-bound qualification record and document which privileges/environments remain outside the guarantee.
 
 Acceptance: every reproduced trust finding is closed by a failing-before/passing-
 after regression, and declared enforcement is observed outside application-only

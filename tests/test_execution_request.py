@@ -409,3 +409,41 @@ def test_pre_run_snapshot_and_request_agree_on_the_config_path(tmp_path: Path):
 
     assert decision.allowed, decision.reason
     assert snapshot_path == decision.request.config_path
+
+
+def test_pinned_interpreter_binding_keeps_workspace_venv(tmp_path: Path):
+    """The pinned interpreter reaches argv as the workspace-venv binding.
+
+    Python detects the virtual environment from the invoked path: resolving
+    the binding to its symlink target (the base interpreter) would silently
+    strip the venv's installed packages from every governed evaluator run.
+    """
+    workspace, session = _workspace(tmp_path)
+    # A venv-directory binding (the production layout): interpreter detection
+    # must see pyvenv.cfg through the invoked path.
+    import shutil
+
+    shutil.rmtree(Path(workspace) / ".venv")
+    (Path(workspace) / ".venv").symlink_to(REPO_ROOT / ".venv")
+    extension = _pin(tmp_path)
+    (Path(session) / "db_config.yaml").write_text("max_conn: 7\n", encoding="utf-8")
+
+    decision = _resolve(
+        ".venv/bin/python eval/run.py --config db_config.yaml --target-latency-ms 10",
+        workspace, session, extension,
+    )
+    assert decision.allowed, decision.reason
+    request = decision.request
+    assert request is not None
+    binding = str(Path(workspace) / ".venv" / "bin" / "python")
+    assert request.executable == binding
+    assert request.argv[0] == binding
+    # The venv's installed packages must be importable through the binding —
+    # the interpreter pin is a binding, not a base-interpreter resolution.
+    import subprocess
+
+    probe = subprocess.run(
+        [binding, "-E", "-s", "-c", "import yaml"],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert probe.returncode == 0, probe.stderr

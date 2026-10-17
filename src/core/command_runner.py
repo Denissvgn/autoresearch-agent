@@ -86,14 +86,16 @@ class _SessionOutputLog:
     ...     first.write("abcde")
     ...     second.write("1234567890")
     ...     assert second.truncated
-    ...     assert sum(p.stat().st_size for p in Path(workspace, "logs").iterdir()) == 10
+    ...     assert sum(p.stat().st_size for p in Path(workspace, "command_logs").iterdir()) == 10
     ...     first.close()
     ...     second.close()
     """
 
     def __init__(self, workspace: str, quota_bytes: int = _SESSION_LOG_QUOTA_BYTES):
         root = Path(workspace).resolve()
-        directory = root / "logs"
+        # The protected server-owned convention (PROTECTED_SESSION_DIRS): the
+        # logs live under command_logs/ so candidate tools cannot rewrite them.
+        directory = root / "command_logs"
         directory.mkdir(exist_ok=True)
         # Do not follow a workspace-provided logs symlink outside the session.
         self._dir_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)

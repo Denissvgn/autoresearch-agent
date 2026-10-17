@@ -39,7 +39,7 @@ from typing import Iterable, Optional, Sequence
 #: Server-owned directories inside a session workspace that candidate writes
 #: must never touch: private evidence snapshots, captured command output, and
 #: the server-managed trial staging tree.
-PROTECTED_SESSION_DIRS = ("server_snapshots", "command_logs", ".trials")
+PROTECTED_SESSION_DIRS = ("server_snapshots", "command_logs", "logs", ".trials")
 
 #: Server-owned single files inside a session workspace, plus filename
 #: patterns (the session manifest is written under a per-run name).

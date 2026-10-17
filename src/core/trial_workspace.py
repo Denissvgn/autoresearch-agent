@@ -42,6 +42,7 @@ TRIALS_DIRNAME = ".trials"
 _STAGE_IGNORE = frozenset({
     TRIALS_DIRNAME,
     "command_logs",
+    "logs",
     "server_snapshots",
     "__pycache__",
 })

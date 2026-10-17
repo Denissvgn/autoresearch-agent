@@ -71,10 +71,11 @@ def test_workspace_shadow_of_declared_evaluator_never_runs(tmp_path: Path):
     assert decision.allowed, decision.reason
     assert str(packaged) in decision.argv
     assert str(shadow) not in decision.argv
-    interpreter = os.path.realpath(
-        os.path.join(workspace, ".venv", "bin", "python")
-    )
-    assert decision.argv[0] == interpreter
+    # The pin keeps the workspace-venv binding in argv: interpreter detection
+    # (and the venv's installed packages) follows the invoked path, not the
+    # resolved base interpreter.
+    interpreter_binding = os.path.join(workspace, ".venv", "bin", "python")
+    assert decision.argv[0] == interpreter_binding
     assert decision.argv[1:3] == ["-E", "-s"]
 
 

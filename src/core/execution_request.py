@@ -269,10 +269,14 @@ def _secret_reason(argv: Iterable[str]) -> Optional[str]:
 
 
 def _pinned_interpreter_path(workspace_root: str) -> Optional[str]:
-    expected = os.path.realpath(
-        os.path.join(workspace_root, ".venv", "bin", "python")
-    )
-    return expected if os.path.isfile(expected) else None
+    """The workspace-venv interpreter binding the subprocess is pinned to.
+
+    The binding path (not its symlink target) must reach argv: Python detects
+    the virtual environment from the invoked path, so resolving to the base
+    interpreter would silently strip the venv's installed packages.
+    """
+    binding = os.path.join(workspace_root, ".venv", "bin", "python")
+    return binding if os.path.lexists(binding) else None
 
 
 def _strip_legacy_cd(argv: list[str], workspace_root: str) -> list[str]:
