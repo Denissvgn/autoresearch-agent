@@ -117,6 +117,13 @@ output_parser:
   nonce_field: server_nonce
   require_signed_metrics: true
   required_fields: [status, primary_metric, metric_name, test_pass_rate]
+  field_types:
+    composite_refactor_score: ratio
+    test_pass_rate: ratio
+    tests_pass: boolean
+    no_perf_regression: boolean
+    complexity_drop_pct: number
+    lint_issues: integer
   failure_statuses: [eval_error, timeout, build_failed]
   fallback:
     read_results_file: eval_result.json

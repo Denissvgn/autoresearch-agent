@@ -202,7 +202,8 @@ class TestManifestSkillRuntimeNonceValidation:
         nonce_bytes = bytes.fromhex(nonce_hex)
         marker = (
             'ITERATION_RESULT: {"status":"completed","primary_metric":0.82,'
-            f'"metric_name":"composite_eval_score","server_nonce":"{nonce_hex}"}}'
+            '"metric_name":"composite_eval_score","n_eval_examples":2,'
+            f'"server_nonce":"{nonce_hex}"}}'
         )
         result = runtime.parse_iteration(marker, session_nonce=nonce_bytes)
         assert result is not None

@@ -56,10 +56,6 @@ from src.core.consistency_validator import (
     check_adaptive_feature_sweep,
     consistency_report_json,
 )
-from src.core.experiment_parser import (
-    parse_iteration_marker,
-    parse_prepare_output,
-)
 from src.core.gate_status import (
     normalize_training_gate_aliases,
     training_gates_passed_from_iteration,
@@ -895,19 +891,21 @@ class AgentOrchestrator:
             and not (state.turn_recorded_iteration and not per_trial_recording)
             and "---" in tool_result
         ):
-            metrics = parse_prepare_output(tool_result)
-            # ARC-011 review C3: this auto-detect path
-            # previously bypassed W11 verification entirely
-            # (parse_prepare_output takes no nonce) — any
-            # bash output containing a `---` block was
-            # recorded as an iteration even for enforced
-            # skills. Route the parsed block through the
-            # four-state _verify_nonce check first.
+            # One normalized result contract (stdout side): the declared
+            # format, marker prefix, required fields, field types/units,
+            # finite numbers, and declared failure statuses all apply here
+            # exactly as they do to artifact-file collection below.
+            metrics = skill.parse_result(tool_result)
+            if metrics is not None and metrics.outcome == "invalid":
+                await self._record_invalid_result_evidence(
+                    research_id, config, metrics, turn=turn, source="bash_output",
+                )
             _kv_result = (
                 metrics.to_dict()
                 if (
-                    metrics.primary_metric is not None
-                    and metrics.status in ("completed", "success")
+                    metrics is not None
+                    and metrics.outcome == "completed"
+                    and metrics.primary_metric is not None
                 )
                 else None
             )
@@ -935,7 +933,7 @@ class AgentOrchestrator:
                 decision = await self._infer_decision(
                     research_id,
                     metrics.primary_metric,
-                    metrics.training_gates_passed,
+                    bool(metrics.gates_passed),
                     config_hash=(
                         canonical_config_hash(pending_snapshot)
                         if pending_snapshot else None
@@ -964,7 +962,7 @@ class AgentOrchestrator:
                     research_id, turn, state.iteration_count,
                     metrics.metric_name,
                     metrics.primary_metric,
-                    metrics.training_gates_passed,
+                    bool(metrics.gates_passed),
                 )
                 # Track D1: bit-identical metric from a new
                 # config ⇒ the changed knob is INERT for the
@@ -973,7 +971,7 @@ class AgentOrchestrator:
                 # keeps probing dead dimensions (observed:
                 # Option-A meta/stacking knobs, no-data
                 # lanes, non-winner roster removals).
-                _metric_val = float(metrics.primary_metric)
+                _metric_val = float(metrics.primary_metric or 0.0)
                 if (
                     _metric_val in state.seen_primary_metrics
                     and state.results_by_index
@@ -1005,13 +1003,9 @@ class AgentOrchestrator:
                         turn=turn,
                     )
                 state.seen_primary_metrics.add(_metric_val)
-            elif (
-                metrics.status in (
-                    "crash", "timeout", "failed", "error",
-                    "pruned",
-                )
-            ):
-                # Record failed attempts as first-class discard
+            elif metrics is not None and metrics.outcome == "failed":
+                # Record failed attempts (core or DECLARED failure
+                # statuses) as first-class discard
                 # iterations so the full audit trail is in DB
                 # and the agent cannot revisit the same invalid
                 # config region without a recorded trace.
@@ -1064,7 +1058,17 @@ class AgentOrchestrator:
                 )
             )
             if marker_text:
-                metrics = parse_prepare_output(marker_text)
+                # Identical rules to the stdout channel: the same declared
+                # format, marker prefix, required fields, types/units,
+                # finite numbers, and failure statuses normalize artifact
+                # content (stale files were already discarded above by the
+                # min_mtime gate).
+                metrics = skill.parse_result(marker_text)
+                if metrics is not None and metrics.outcome == "invalid":
+                    await self._record_invalid_result_evidence(
+                        research_id, config, metrics,
+                        turn=turn, source="marker_file",
+                    )
                 # ARC-011 review C3: same W11 verification
                 # as the bash auto-detect path — the marker
                 # file is written by the sanctioned script
@@ -1074,8 +1078,9 @@ class AgentOrchestrator:
                     metrics.to_dict()
                     if (
                         _command_succeeded
+                        and metrics is not None
+                        and metrics.outcome == "completed"
                         and metrics.primary_metric is not None
-                        and metrics.status in ("completed", "success")
                     )
                     else None
                 )
@@ -1101,7 +1106,7 @@ class AgentOrchestrator:
                     decision = await self._infer_decision(
                         research_id,
                         metrics.primary_metric,
-                        metrics.training_gates_passed,
+                        bool(metrics.gates_passed),
                         config_hash=(
                             canonical_config_hash(pending_snapshot)
                             if pending_snapshot else None
@@ -1129,12 +1134,9 @@ class AgentOrchestrator:
                         research_id, turn, state.iteration_count,
                         metrics.metric_name,
                         metrics.primary_metric,
-                        metrics.training_gates_passed,
+                        bool(metrics.gates_passed),
                     )
-                elif metrics.status in (
-                    "crash", "timeout", "failed", "error",
-                    "pruned",
-                ):
+                elif metrics is not None and metrics.outcome == "failed":
                     state.iteration_count += 1
                     crash_marker = metrics.to_dict()
                     self._attach_runtime_command_metadata(
@@ -1295,6 +1297,39 @@ class AgentOrchestrator:
                 "event: %s", research_id, exc,
             )
         return None
+
+    async def _record_invalid_result_evidence(
+        self,
+        research_id: str,
+        config: ResearchConfig,
+        normalized: Any,
+        *,
+        turn: int,
+        source: str,
+    ) -> None:
+        """Explicit invalid evidence for a present-but-broken result.
+
+        The payload is rejected — never recorded as an iteration and never a
+        success — and the rejection with its reasons is audited, so invalid
+        evidence is explicit rather than a silent drop or an implicit win.
+        """
+        await self._store.record_audit_event(
+            actor_id="autoresearch-agent",
+            action="result.invalid",
+            research_id=research_id,
+            pipeline_id=config.pipeline_id,
+            request_metadata={
+                "turn": turn,
+                "source": source,
+                "status": normalized.status,
+                "violations": list(normalized.violations),
+            },
+            outcome="rejected",
+        )
+        logger.warning(
+            "Research %s turn %d: rejected invalid result (%s): %s",
+            research_id, turn, source, "; ".join(normalized.violations),
+        )
 
     def _load_claude_md(self) -> str:
         claude_md_path = os.path.join(settings.workspace_root, "CLAUDE.md")
@@ -3324,12 +3359,14 @@ class AgentOrchestrator:
                             )
                     else:
                         # ARC-011 P4-003: marker was rejected. Distinguish a
-                        # forged marker (a raw ITERATION_RESULT: block existed
+                        # forged marker (a raw marker block existed
                         # but failed nonce verification → require_signed_metrics
                         # is true) from a genuinely absent one. Only enforced
                         # skills can return None for a present marker, so this
                         # audit fires exclusively on real forgery attempts.
-                        raw_marker_present = parse_iteration_marker(agent_text) is not None
+                        raw_marker_present = (
+                            skill.parse_result(agent_text) is not None
+                        )
                         if raw_marker_present:
                             logger.warning(
                                 "Research %s turn %d: rejected forged "

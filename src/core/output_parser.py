@@ -54,8 +54,11 @@ from __future__ import annotations
 import hmac
 import json
 import logging
+import math
 import re
-from typing import Any, Optional, Protocol, TypedDict, cast
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
+from typing import Any, Mapping, Optional, Protocol, TypedDict, cast
 
 from src.core.artifact_reference import (
     ARTIFACT_REFERENCE_KEYS,
@@ -68,6 +71,38 @@ logger = logging.getLogger(__name__)
 # prepare.py outputs a --- delimited block of key: value pairs
 _KV_PATTERN = re.compile(r"^\s*(\w[\w_]*)\s*:\s*(.*?)\s*$")
 _ITERATION_MARKER = "ITERATION_RESULT:"
+
+# ── Normalized result contract ─────────────────────────────────────────────
+#
+# One contract for every result source (agent-visible stdout markers and
+# artifact/marker-file collection apply identical rules). A payload either
+# validates against the declared result semantics or becomes explicit invalid
+# evidence — never implicit success.
+
+#: Version stamp a result payload may declare. An unknown version is invalid
+#: evidence; absence is accepted (legacy payloads) and recorded as this
+#: contract's version on the normalized result.
+RESULT_SCHEMA_VERSION = "iteration_result.v1"
+
+#: Statuses that mean the run completed AND may carry a winning metric.
+SUCCESS_STATUSES = frozenset({"completed", "success"})
+
+#: Declared field types. The unit-bearing names are numeric (finite) values
+#: whose unit is part of the declaration and is preserved on the normalized
+#: result so a reported number can never silently change meaning.
+FIELD_TYPE_VOCABULARY = frozenset(
+    {
+        "string",
+        "integer",
+        "number",
+        "boolean",
+        "seconds",
+        "milliseconds",
+        "bytes",
+        "ratio",
+    }
+)
+_UNIT_FIELD_TYPES = frozenset({"seconds", "milliseconds", "bytes", "ratio"})
 
 # Statuses prepare.py emits when a run did NOT produce a valid model. The
 # failure blocks (auth_failed / gpubusy / timeout / crash / generic failure)
@@ -82,6 +117,369 @@ _ITERATION_MARKER = "ITERATION_RESULT:"
 FAILURE_STATUSES = frozenset(
     {"crash", "timeout", "failed", "error", "pruned", "auth_failed", "gpu_busy"}
 )
+
+
+@dataclass(frozen=True)
+class ResultSpec:
+    """The declared result semantics (built from ``output_parser``).
+
+    ``failure_statuses`` is the declared list unioned with the core
+    :data:`FAILURE_STATUSES` — a run whose status is in the set is a
+    non-winning outcome regardless of which side declared it.
+    """
+
+    format: str = "json_marker"
+    marker_prefix: str = _ITERATION_MARKER
+    block_delimiter: str = "---"
+    required_fields: tuple[str, ...] = ()
+    field_types: Mapping[str, str] = dataclass_field(default_factory=dict)
+    failure_statuses: frozenset[str] = FAILURE_STATUSES
+    schema_versions: frozenset[str] = frozenset({RESULT_SCHEMA_VERSION})
+
+    @classmethod
+    def from_output_parser(cls, op: Any) -> "ResultSpec":
+        """Build the spec from a manifest ``OutputParserConfig`` (or None)."""
+        if op is None:
+            return cls()
+        declared_failures = frozenset(str(s) for s in (op.failure_statuses or ()))
+        return cls(
+            format=str(getattr(op, "format", None) or "json_marker"),
+            marker_prefix=str(
+                getattr(op, "iteration_marker", None) or _ITERATION_MARKER
+            ),
+            block_delimiter=str(getattr(op, "block_delimiter", None) or "---"),
+            required_fields=tuple(str(f) for f in (op.required_fields or ())),
+            field_types=dict(getattr(op, "field_types", None) or {}),
+            failure_statuses=FAILURE_STATUSES | declared_failures,
+        )
+
+
+@dataclass(frozen=True)
+class NormalizedResult:
+    """One normalized result with its trusted raw evidence preserved.
+
+    ``outcome`` is the semantics class: ``completed`` (may be a win),
+    ``failed`` (declared failure status — non-winning, never carrying a
+    promotable metric), ``invalid`` (contract violations — explicit invalid
+    evidence, never implicit success). ``raw_evidence`` keeps the verbatim
+    parsed payload so audits can see exactly what the source said.
+    """
+
+    outcome: str
+    status: Optional[str]
+    primary_metric: Optional[float]
+    metric_name: Optional[str]
+    direction: str
+    gates_passed: Optional[bool]
+    training_time_s: Optional[float]
+    fields: Mapping[str, Any]
+    units: Mapping[str, str]
+    raw_evidence: Mapping[str, Any]
+    violations: tuple[str, ...]
+
+    @property
+    def valid(self) -> bool:
+        return not self.violations
+
+    def to_dict(self) -> dict[str, Any]:
+        """The record-facing dict (IterationMetrics shape + explicit flags)."""
+        out: dict[str, Any] = {
+            "status": self.status if self.status is not None else "",
+            "primary_metric": self.primary_metric,
+            "metric_name": self.metric_name,
+            "direction": self.direction,
+            "training_gates_passed": bool(self.gates_passed),
+            "all_gates_passed": bool(self.gates_passed),
+            "gates_declared": self.gates_passed is not None,
+            "training_time_s": self.training_time_s,
+            "result_valid": self.valid,
+            "result_outcome": self.outcome,
+            "result_schema_version": RESULT_SCHEMA_VERSION,
+        }
+        if self.violations:
+            out["invalid_evidence"] = list(self.violations)
+        if self.units:
+            out["field_units"] = dict(self.units)
+        # The trusted raw evidence is preserved verbatim, separately from the
+        # normalized fields above (audits read exactly what the source said).
+        out["raw_evidence"] = dict(self.raw_evidence)
+        for key, value in self.fields.items():
+            out.setdefault(key, value)
+        return out
+
+
+def _coerce_kv_value(key: str, value: str) -> Any:
+    """Legacy-compatible coercion of one raw KV pair into a typed value."""
+    if key == "gate_failures":
+        return [part.strip() for part in value.split(";") if part.strip()]
+    if key in ARTIFACT_REFERENCE_KEYS:
+        return normalize_optional_artifact_ref(value)
+    if key in {"is_tsfm_candidate", "tsfm_candidate", "auto_phase_evidence"}:
+        return coerce_bool(value)
+    if key.endswith("_json"):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+    try:
+        return float(value)
+    except ValueError:
+        return value
+
+
+def extract_raw_result(
+    text: str, spec: ResultSpec, *, allow_bare_json: bool = True
+) -> Optional[dict[str, Any]]:
+    """Extract the raw result payload in the DECLARED form.
+
+    The marker channel (the declared prefix) is independent of the block
+    format and always available — agent relays and marker files use it. The
+    block channel honors the declared ``format``: ``delimited_kv`` reads the
+    declared-delimiter block; ``json_marker`` accepts a bare top-level JSON
+    object when ``allow_bare_json`` (the artifact-file form). The returned
+    dict is verbatim source evidence — no defaults.
+    """
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith(spec.marker_prefix):
+            continue
+        payload = stripped[len(spec.marker_prefix):].strip()
+        try:
+            parsed = json.loads(payload)
+        except json.JSONDecodeError:
+            logger.warning("Failed to parse result marker JSON: %s", payload)
+            continue
+        if isinstance(parsed, dict):
+            return dict(parsed)
+        logger.warning("Result marker JSON was not an object: %s", payload)
+
+    if spec.format == "delimited_kv":
+        raw: dict[str, Any] = {}
+        in_block = False
+        saw = False
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped == spec.block_delimiter:
+                if in_block:
+                    break
+                in_block = True
+                continue
+            if not in_block:
+                continue
+            match = _KV_PATTERN.match(line)
+            if not match:
+                continue
+            raw[match.group(1)] = _coerce_kv_value(
+                match.group(1), match.group(2).strip()
+            )
+            saw = True
+        return raw if saw else None
+
+    if not allow_bare_json:
+        return None
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    return dict(parsed) if isinstance(parsed, dict) else None
+
+
+def normalize_result(raw: Mapping[str, Any], spec: ResultSpec) -> NormalizedResult:
+    """Apply the declared result semantics to one raw payload.
+
+    Structural violations (missing status, unknown schema version, missing
+    required fields, declared-type mismatches, nonfinite numbers, unknown
+    status semantics) make the result **invalid**; a declared failure status
+    makes it **failed** (non-winning, never carrying a promotable metric);
+    only a well-formed ``completed``/``success`` payload is **completed**.
+    Missing gates normalize to ``None`` — never a successful default.
+    """
+    violations: list[str] = []
+    payload = dict(raw)
+    if "training_gates_passed" in payload or "all_gates_passed" in payload:
+        normalize_training_gate_aliases(payload, logger=logger, context="result")
+
+    raw_status = payload.get("status")
+    status: Optional[str]
+    if isinstance(raw_status, str) and raw_status.strip():
+        status = raw_status.strip()
+    else:
+        status = None
+        violations.append("missing status")
+
+    declared_version = payload.get("schema_version")
+    if (
+        declared_version is not None
+        and str(declared_version) not in spec.schema_versions
+    ):
+        violations.append(f"unknown result schema version {declared_version!r}")
+
+    for name in spec.required_fields:
+        value = payload.get(name)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            violations.append(f"missing required field {name}")
+
+    def _check_finite(name: str, value: Any) -> None:
+        if isinstance(value, bool):
+            return
+        if isinstance(value, (int, float)) and not math.isfinite(float(value)):
+            violations.append(f"nonfinite value for {name}")
+
+    for name, value in payload.items():
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                _check_finite(name, item)
+        else:
+            _check_finite(name, value)
+
+    fields: dict[str, Any] = {
+        name: value for name, value in payload.items() if name != "status"
+    }
+    units: dict[str, str] = {}
+    for name, type_name in dict(spec.field_types).items():
+        type_name = str(type_name)
+        if type_name not in FIELD_TYPE_VOCABULARY:
+            violations.append(f"unknown declared field type {type_name!r} for {name}")
+            continue
+        if name not in payload:
+            continue
+        value = payload[name]
+        if type_name == "string":
+            if not isinstance(value, str):
+                violations.append(f"{name} must be a string")
+        elif type_name == "boolean":
+            if isinstance(value, bool):
+                pass
+            elif isinstance(value, str) and value.strip().lower() in {"true", "false"}:
+                fields[name] = value.strip().lower() == "true"
+            else:
+                violations.append(f"{name} must be a boolean")
+        elif type_name == "integer":
+            if isinstance(value, bool):
+                violations.append(f"{name} must be an integer")
+            elif isinstance(value, int):
+                pass
+            elif isinstance(value, float) and value.is_integer():
+                fields[name] = int(value)
+            else:
+                violations.append(f"{name} must be an integer")
+        else:  # number / seconds / milliseconds / bytes / ratio
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                violations.append(f"{name} must be a finite number")
+            elif not math.isfinite(float(value)):
+                violations.append(f"nonfinite value for {name}")
+            else:
+                fields[name] = float(value)
+                if type_name in _UNIT_FIELD_TYPES:
+                    units[name] = type_name
+
+    metric_raw = payload.get("primary_metric")
+    primary_metric: Optional[float] = None
+    if isinstance(metric_raw, bool):
+        violations.append("primary_metric must be a finite number")
+    elif isinstance(metric_raw, (int, float)):
+        if math.isfinite(float(metric_raw)):
+            primary_metric = float(metric_raw)
+        else:
+            violations.append("nonfinite value for primary_metric")
+    elif isinstance(metric_raw, str):
+        try:
+            parsed_metric = float(metric_raw)
+        except ValueError:
+            parsed_metric = None
+        if parsed_metric is not None and math.isfinite(parsed_metric):
+            primary_metric = parsed_metric
+        else:
+            violations.append("primary_metric must be a finite number")
+    elif metric_raw is not None:
+        violations.append("primary_metric must be a finite number")
+
+    gates_raw = payload.get("training_gates_passed")
+    if gates_raw is None:
+        gates_raw = payload.get("all_gates_passed")
+    if gates_raw is None:
+        gates_raw = payload.get("gates_passed")
+    gates_passed = None if gates_raw is None else coerce_bool(gates_raw)
+
+    training_time_raw = payload.get("training_time_s")
+    training_time_s: Optional[float] = None
+    if isinstance(training_time_raw, (int, float)) and not isinstance(
+        training_time_raw, bool
+    ):
+        if math.isfinite(float(training_time_raw)):
+            training_time_s = float(training_time_raw)
+
+    status_key = (status or "").lower()
+    if status is not None and status_key in spec.failure_statuses:
+        outcome = "failed"
+    elif status is not None and status_key in SUCCESS_STATUSES:
+        outcome = "completed"
+    else:
+        outcome = "invalid"
+        if status is not None:
+            violations.append(f"unknown status semantics {status!r}")
+    if violations and outcome != "failed":
+        outcome = "invalid"
+
+    # A failed or invalid result never carries a promotable metric — the
+    # placeholder or measured value stays in the raw evidence only.
+    if outcome != "completed":
+        primary_metric = None
+
+    return NormalizedResult(
+        outcome=outcome,
+        status=status,
+        primary_metric=primary_metric,
+        metric_name=(
+            str(payload["metric_name"])
+            if payload.get("metric_name") is not None
+            else None
+        ),
+        direction=str(payload.get("direction") or "higher_is_better"),
+        gates_passed=gates_passed,
+        training_time_s=training_time_s,
+        fields=fields,
+        units=units,
+        raw_evidence=dict(raw),
+        violations=tuple(violations),
+    )
+
+
+def parse_result_text(
+    text: str, spec: ResultSpec, *, allow_bare_json: bool = True
+) -> Optional[NormalizedResult]:
+    """Parse ``text`` in the declared format and normalize the result.
+
+    The one entry point for stdout and artifact collection: identical
+    extraction and identical rules for both. Returns ``None`` only when no
+    result payload is present at all — a present-but-broken payload yields a
+    normalized ``invalid`` result (explicit evidence, never a silent success).
+    """
+    raw = extract_raw_result(text, spec, allow_bare_json=allow_bare_json)
+    if raw is None:
+        return None
+    return normalize_result(raw, spec)
+
+
+def parse_and_verify_text(
+    text: str,
+    spec: ResultSpec,
+    *,
+    session_nonce: Optional[bytes] = None,
+    nonce_field: Optional[str] = None,
+    require_signed_metrics: bool = False,
+    allow_bare_json: bool = True,
+) -> Optional[IterationResult]:
+    """Contract parse plus the W11 nonce check — the runtime's one entry."""
+    normalized = parse_result_text(text, spec, allow_bare_json=allow_bare_json)
+    if normalized is None:
+        return None
+    return _verify_nonce(
+        cast(IterationResult, normalized.to_dict()),
+        session_nonce=session_nonce,
+        nonce_field=nonce_field,
+        require_signed_metrics=require_signed_metrics,
+    )
 
 
 class IterationResult(TypedDict, total=False):
@@ -211,6 +609,9 @@ class JSONMarkerParser:
     ``experiment_parser.parse_iteration_marker`` can delegate without rename.
     """
 
+    def __init__(self, marker_prefix: str = _ITERATION_MARKER) -> None:
+        self._marker_prefix = marker_prefix
+
     def parse(self, raw_output: str) -> Optional[IterationResult]:
         """KV-block parsing is not this parser's concern.
 
@@ -236,7 +637,7 @@ class JSONMarkerParser:
         dict (gate-alias-normalized in place) or ``None`` if no well-formed
         marker dict is found.
         """
-        result = _scan_iteration_marker(text)
+        result = _scan_iteration_marker(text, self._marker_prefix)
         return _verify_nonce(
             result,
             session_nonce=session_nonce,
@@ -368,13 +769,15 @@ def _parse_delimited_block(stdout: str) -> IterationResult:
     return result
 
 
-def _scan_iteration_marker(text: str) -> Optional[IterationResult]:
-    """Scan for an ``ITERATION_RESULT:`` JSON line — body moved from
-    parse_iteration_marker."""
+def _scan_iteration_marker(
+    text: str, marker_prefix: str = _ITERATION_MARKER
+) -> Optional[IterationResult]:
+    """Scan for a marker-prefixed JSON line — body moved from
+    parse_iteration_marker (the prefix is the DECLARED one)."""
     for line in text.splitlines():
         stripped = line.strip()
-        if stripped.startswith(_ITERATION_MARKER):
-            json_str = stripped[len(_ITERATION_MARKER):].strip()
+        if stripped.startswith(marker_prefix):
+            json_str = stripped[len(marker_prefix):].strip()
             try:
                 payload = json.loads(json_str)
             except json.JSONDecodeError:
@@ -459,7 +862,16 @@ def _verify_nonce(
 __all__ = [
     "DelimitedKVParser",
     "FAILURE_STATUSES",
+    "FIELD_TYPE_VOCABULARY",
     "IterationResult",
     "JSONMarkerParser",
+    "NormalizedResult",
     "OutputParser",
+    "RESULT_SCHEMA_VERSION",
+    "ResultSpec",
+    "SUCCESS_STATUSES",
+    "extract_raw_result",
+    "normalize_result",
+    "parse_and_verify_text",
+    "parse_result_text",
 ]

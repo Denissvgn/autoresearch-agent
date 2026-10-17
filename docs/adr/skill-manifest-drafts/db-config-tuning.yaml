@@ -109,10 +109,10 @@ output_parser:
   nonce_field: server_nonce
   required_fields: [status, primary_metric, metric_name, p99_within_slo]
   field_types:
-    primary_metric: float
-    tps: float
-    p99_latency_ms: float
-    p99_within_slo: bool
+    primary_metric: number
+    tps: number
+    p99_latency_ms: milliseconds
+    p99_within_slo: boolean
   failure_statuses: [crash, timeout, failed, error, bench_failed]
   fallback:
     read_marker_file: bench_result.txt

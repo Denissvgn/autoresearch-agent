@@ -254,6 +254,14 @@ class SkillRuntime(Protocol):
         ...
 
     # ── Iteration detection ───────────────────────────────────────
+    def result_spec(self) -> Any:
+        """The declared result semantics (from ``output_parser``)."""
+        ...
+
+    def parse_result(self, raw_output: str) -> Optional[Any]:
+        """Parse and normalize in the declared format (one contract)."""
+        ...
+
     def parse_iteration(
         self,
         raw_output: str,
@@ -263,10 +271,9 @@ class SkillRuntime(Protocol):
     ) -> Optional[dict[str, Any]]:
         """Parse experiment output into a structured result.
 
-        Validates ``session_nonce`` to reject forged metrics blocks (P4
-        anti-forgery). The transitional runtimes (P1-024..026) **ignore** the
-        nonce and delegate to the unchanged ``OutputParser`` impls — no nonce
-        validation exists today (D2 deviation).
+        Honors the declared parser format and marker prefix and applies the
+        normalized result contract. Validates ``session_nonce`` to reject
+        forged metrics blocks (P4 anti-forgery).
         """
         ...
 
@@ -812,6 +819,19 @@ class ManifestSkillRuntime:
         return ext
 
     # ── Iteration detection ───────────────────────────────────────
+    def result_spec(self) -> Any:
+        """The declared result semantics (from ``output_parser``)."""
+        from src.core.output_parser import ResultSpec
+
+        return ResultSpec.from_output_parser(self._manifest.output_parser)
+
+    def parse_result(self, raw_output: str) -> Optional[Any]:
+        """Parse and normalize in the declared format — one contract for
+        stdout markers and artifact text."""
+        from src.core.output_parser import parse_result_text
+
+        return parse_result_text(raw_output, self.result_spec())
+
     def parse_iteration(
         self,
         raw_output: str,
@@ -819,30 +839,29 @@ class ManifestSkillRuntime:
         session_nonce: Optional[bytes] = None,
         config_snapshot: Optional[str] = None,
     ) -> Optional[dict[str, Any]]:
-        # P4-003: thread the manifest's nonce config (nonce_field +
-        # require_signed_metrics) to the parser. When require_signed_metrics is
-        # true, the parser validates the echoed nonce and rejects forged blocks.
-        from src.core.output_parser import DelimitedKVParser, JSONMarkerParser
+        """Parse one iteration result in the DECLARED format.
+
+        Honors the manifest's parser format and marker prefix (a custom
+        marker parses; the fixed ``ITERATION_RESULT:`` prefix is only the
+        default) and applies the normalized result contract: required
+        fields, declared types/units, finite numbers, and declared failure
+        statuses. P4-003: when ``require_signed_metrics`` is true, the
+        echoed nonce is validated and forged blocks are rejected. Agent
+        text must carry a declared marker — a bare JSON object in model
+        output is never honored here (the marker-relay contract).
+        """
+        from src.core.output_parser import parse_and_verify_text
 
         op = self._manifest.output_parser
-        marker = op.iteration_marker or "ITERATION_RESULT:"
-        if marker in raw_output:
-            return cast(
-                Optional[dict[str, Any]],
-                JSONMarkerParser().parse_iteration(
-                    raw_output,
-                    session_nonce=session_nonce,
-                    nonce_field=op.nonce_field,
-                    require_signed_metrics=op.require_signed_metrics,
-                ),
-            )
         return cast(
             Optional[dict[str, Any]],
-            DelimitedKVParser().parse_iteration(
+            parse_and_verify_text(
                 raw_output,
+                self.result_spec(),
                 session_nonce=session_nonce,
                 nonce_field=op.nonce_field,
                 require_signed_metrics=op.require_signed_metrics,
+                allow_bare_json=False,
             ),
         )
 

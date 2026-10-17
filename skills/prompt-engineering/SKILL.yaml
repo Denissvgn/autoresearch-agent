@@ -157,6 +157,12 @@ output_parser:
   nonce_field: server_nonce
   require_signed_metrics: true
   required_fields: [status, primary_metric, metric_name, n_eval_examples]
+  field_types:
+    composite_eval_score: ratio
+    precision: ratio
+    n_eval_examples: integer
+    passes_min_precision: boolean
+    mean_cost_usd: number
   failure_statuses: [eval_error, timeout]
   fallback:
     read_results_file: eval_result.json

@@ -565,9 +565,34 @@ class OutputParserFallback(BaseModel):
 
 
 class FieldTypes(BaseModel):
-    """Type hints for parser fields used during coercion."""
+    """Type hints for parser fields used during coercion.
+
+    Names are a closed vocabulary (``string``, ``integer``, ``number``,
+    ``boolean``, ``seconds``, ``milliseconds``, ``bytes``, ``ratio``); the
+    unit-bearing names are finite numbers whose unit is part of the
+    declaration and is preserved on the normalized result. Unknown names are
+    rejected at manifest load — a declaration without matching behavior must
+    never be silently accepted.
+    """
 
     model_config = ConfigDict(extra="allow")
+
+    @model_validator(mode="after")
+    def _known_field_types(self) -> "FieldTypes":
+        from src.core.output_parser import FIELD_TYPE_VOCABULARY
+
+        declared = {**self.__dict__, **(self.model_extra or {})}
+        unknown = sorted(
+            f"{name}={type_name}"
+            for name, type_name in declared.items()
+            if str(type_name) not in FIELD_TYPE_VOCABULARY
+        )
+        if unknown:
+            raise ValueError(
+                f"field_types: unknown declared type(s) {unknown}; vocabulary "
+                f"is {sorted(FIELD_TYPE_VOCABULARY)}"
+            )
+        return self
 
 
 class OutputParserConfig(BaseModel):

@@ -111,6 +111,12 @@ output_parser:
   nonce_field: server_nonce
   require_signed_metrics: true
   required_fields: [status, primary_metric, metric_name, p99_within_slo]
+  field_types:
+    tps: number
+    p99_latency_ms: milliseconds
+    p99_within_slo: boolean
+    bench_duration_s: seconds
+    target_latency_ms: milliseconds
   failure_statuses: [crash, timeout, failed, error, bench_failed]
   fallback:
     read_results_file: bench_result.json
