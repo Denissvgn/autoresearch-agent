@@ -733,9 +733,9 @@ Autonomy: Generate support from executable handlers and conformance cases. Rejec
 unimplemented declarations before side effects; evaluate generated-file prerequisites
 after bootstrap, without treating their earlier absence as failure.
 
-- [ ] Implement local-file checks at the correct stage: source prerequisites before bootstrap and generated-output readiness after bootstrap.
-- [ ] Generate capability/support descriptors from actual implementations; reject inert executable, parser, plugin, and promotion declarations before launch.
-- [ ] Validate runtime/toolchain availability without broadening base execution authority; expose actionable diagnostics to API and UI.
+- [x] Implement local-file checks at the correct stage: source prerequisites before bootstrap and generated-output readiness after bootstrap.
+- [x] Generate capability/support descriptors from actual implementations; reject inert executable, parser, plugin, and promotion declarations before launch.
+- [x] Validate runtime/toolchain availability without broadening base execution authority; expose actionable diagnostics to API and UI.
 
 Acceptance: every accepted manifest feature has a behavior test. A missing
 required file fails at the appropriate stage, and a declared executable is

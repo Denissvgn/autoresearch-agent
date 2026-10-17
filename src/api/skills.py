@@ -108,8 +108,14 @@ def _skill_descriptor(manifest: ResearchSkillManifest) -> Dict[str, Any]:
     projected to a JSON-serializable dict plus a ``links`` block."""
     dump = manifest.model_dump(exclude_none=True, mode="json")
     dump["model_type"] = skill_id_to_model_type(manifest.id)
+    # Published support/diagnostics travel with the descriptor the UI renders:
+    # actionable, machine-readable, and never an execution-authority grant.
+    from src.core.support_matrix import support_descriptor
+
+    dump["support"] = support_descriptor(manifest)
     dump["links"] = {
         "self": f"/skills/{manifest.id}",
+        "support": f"/skills/{manifest.id}/support",
         "param_schema": f"/skills/{manifest.id}/param-schema",
         "form_fields": f"/skills/{manifest.id}/form-fields",
         "metric_schema": f"/skills/{manifest.id}/metric-schema",
@@ -233,6 +239,21 @@ async def get_skill_form_fields(skill_id: str):
     """UI form-field definitions for the dynamic form renderer."""
     manifest = _get_or_404(skill_id)
     return {"skill_id": skill_id, "form_fields": _form_fields(manifest)}
+
+
+@router.get("/skills/{skill_id}/support")
+async def get_skill_support(skill_id: str):
+    """Machine-readable support descriptor + actionable diagnostics.
+
+    Publishes the support matrix (which declarations have implementing
+    behavior), any unsupported-declaration diagnostics with remedies, and
+    toolchain availability notes (path lookup only — never an authority
+    grant).
+    """
+    manifest = _get_or_404(skill_id)
+    from src.core.support_matrix import support_descriptor
+
+    return support_descriptor(manifest)
 
 
 @router.get("/skills/{skill_id}/metric-schema")

@@ -1372,6 +1372,45 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/skills/{skill_id}/support:
+    get:
+      tags:
+      - skills
+      summary: Get Skill Support
+      description: "Machine-readable support descriptor + actionable diagnostics.\n\nPublishes the support matrix (which declarations have implementing\nbehavior), any unsupported-declaration diagnostics with remedies, and\ntoolchain availability notes (path lookup only \u2014 never an authority\ngrant)."
+      operationId: get_skill_support_api_v1_skills__skill_id__support_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: skill_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Skill Id
+      - name: X-Request-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: 'Correlation identifier; auto-generated UUID4 when missing.'
+          title: X-Request-Id
+        description: 'Correlation identifier; auto-generated UUID4 when missing.'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+
   /api/v1/skills/{skill_id}/metric-schema:
     get:
       tags:

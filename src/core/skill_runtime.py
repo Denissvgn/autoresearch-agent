@@ -317,7 +317,7 @@ class SkillRuntime(Protocol):
     ) -> dict: ...
 
     # ── Preflight ─────────────────────────────────────────────────
-    def preflight_checks(self) -> list["PreflightCheck"]: ...
+    def preflight_checks(self, *, stage: str = "source") -> list["PreflightCheck"]: ...
 
     # ── Execution (P1-4) ───────────────────────────────────────────
     def execution_concurrency(self) -> int:
@@ -987,16 +987,30 @@ class ManifestSkillRuntime:
         )
 
     # ── Preflight ─────────────────────────────────────────────────
-    def preflight_checks(self) -> list["PreflightCheck"]:
-        """Build preflight checks from the manifest's ``preflight`` section."""
-        from src.core.preflight import HTTPHealthCheck, TCPConnectCheck
+    def preflight_checks(
+        self, *, stage: str = "source",
+    ) -> list["PreflightCheck"]:
+        """Build preflight checks from the manifest's ``preflight`` section.
+
+        ``stage`` selects which local_file prerequisites to emit: ``source``
+        (before bootstrap) or ``generated`` (after bootstrap — their earlier
+        absence is never a failure). Service checks are stage-independent and
+        returned for either stage.
+        """
+        from src.core.preflight import HTTPHealthCheck, LocalFileCheck, TCPConnectCheck
         from src.core.service_preflight import ServicePreflightTarget
 
         checks: list["PreflightCheck"] = []
         for entry in self._manifest.preflight:
             if entry.kind == "local_file":
-                # local_file checks aren't PreflightCheck instances today
-                # (no transport); skip — they are validated elsewhere. P3 UI.
+                if entry.stage != stage:
+                    continue
+                checks.append(LocalFileCheck(
+                    name=entry.name,
+                    path=entry.path or "",
+                    required=entry.required,
+                    stage=entry.stage,
+                ))
                 continue
             health_paths = tuple(entry.health_paths) if entry.health_paths else ("/health",)
             target = ServicePreflightTarget(

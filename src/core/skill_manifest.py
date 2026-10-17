@@ -647,6 +647,10 @@ class PreflightEntry(BaseModel):
     health_paths: list[str] = Field(default_factory=lambda: ["/health"])
     required: bool = True
     timeout_s: float = Field(default=3.0, ge=0)
+    #: local_file only: ``source`` prerequisites must exist BEFORE bootstrap
+    #: (inputs the bootstrap consumes); ``generated`` outputs are evaluated
+    #: AFTER bootstrap and their earlier absence is never a failure.
+    stage: Literal["source", "generated"] = "source"
 
     @model_validator(mode="after")
     def _kind_field_consistency(self) -> "PreflightEntry":
@@ -654,6 +658,11 @@ class PreflightEntry(BaseModel):
             raise ValueError(f"preflight {self.name!r}: kind=local_file requires ``path``")
         if self.kind in ("http_health", "tcp") and self.url is None:
             raise ValueError(f"preflight {self.name!r}: kind={self.kind} requires ``url``")
+        if self.stage != "source" and self.kind != "local_file":
+            raise ValueError(
+                f"preflight {self.name!r}: stage={self.stage!r} applies only "
+                "to kind=local_file"
+            )
         return self
 
 

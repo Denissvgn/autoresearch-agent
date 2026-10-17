@@ -38,7 +38,8 @@ Design decisions baked in here:
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from dataclasses import dataclass
+from typing import Any, Optional, Protocol
 
 import httpx
 
@@ -98,6 +99,40 @@ class HTTPHealthCheck:
         # ``run_service_preflight`` always supplies a client for HTTP checks.
         assert client is not None, "HTTPHealthCheck requires an httpx.AsyncClient"
         return await _spf._check_target(client, self._target)
+
+
+@dataclass
+class LocalFileCheck:
+    """A declared local-file prerequisite (no transport involved).
+
+    ``stage`` decides when it runs: ``source`` prerequisites are evaluated
+    before the skill bootstrap renders the workspace; ``generated`` outputs
+    after it (their earlier absence is never a failure).
+    """
+
+    name: str
+    path: str
+    required: bool = True
+    stage: str = "source"
+    root: Optional[str] = None
+
+    async def check(self, client: httpx.AsyncClient | None = None) -> dict[str, Any]:
+        from pathlib import Path
+
+        candidate = Path(self.path)
+        if not candidate.is_absolute() and self.root:
+            candidate = Path(self.root) / candidate
+        exists = candidate.exists()
+        passed = exists or not self.required
+        return {
+            "passed": passed,
+            "name": self.name,
+            "kind": "local_file",
+            "path": str(candidate),
+            "stage": self.stage,
+            "required": self.required,
+            "exists": exists,
+        }
 
 
 class TCPConnectCheck:

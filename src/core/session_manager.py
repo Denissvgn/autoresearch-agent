@@ -440,6 +440,8 @@ class SessionManager:
         # Fail fast (P7-010 rule): a skill whose bootstrap cannot render its
         # workspace gets no row and no background task.
         await self._run_skill_bootstrap(config)
+        # Generated-output readiness is evaluated AFTER bootstrap.
+        await self._run_local_file_preflight(config, stage="generated")
 
         # Persist session to DB
         session_dict = await self._store.create_session(
@@ -552,9 +554,19 @@ class SessionManager:
         same ``SkillConfigError`` fire during ``start_session`` instead: no
         row, no workspace, no spawned task for a session that cannot run.
         """
-        from src.core.skill_runtime import materialize_skill_runtime
+        from src.core.skill_runtime import SkillConfigError, materialize_skill_runtime
+        from src.core.support_matrix import validate_manifest_support
 
-        materialize_skill_runtime(None, config)
+        runtime = materialize_skill_runtime(None, config)
+        # Reject schema-valid but unimplemented declarations before any side
+        # effects: schema parsing is never proof that a skill can execute.
+        diagnostics = validate_manifest_support(getattr(runtime, "manifest", None))
+        if diagnostics:
+            details = "; ".join(
+                f"{d['feature']}={d['declared']!r}: {d['reason']} ({d['remedy']})"
+                for d in diagnostics
+            )
+            raise SkillConfigError(f"unsupported skill declaration(s): {details}")
 
     async def _run_skill_bootstrap(self, config: ResearchConfig) -> None:
         """Render the session workspace with the skill's ``bootstrap.py``
@@ -621,6 +633,10 @@ class SessionManager:
         targets = self._skill_preflight_targets(getattr(config, "skill_id", ""))
         preflight = await run_service_preflight(targets=targets)
         require_preflight_ready(preflight)
+        # Source-stage local-file prerequisites are evaluated BEFORE the
+        # bootstrap renders the workspace (generated outputs are checked
+        # after it — their earlier absence is never a failure).
+        await self._run_local_file_preflight(config, stage="source")
         if preflight.get("status") == "degraded":
             logger.warning(
                 "Service preflight degraded but override is enabled: %s",
@@ -632,6 +648,49 @@ class SessionManager:
                 preflight.get("status"), config.skill_id or config.model_type,
             )
         return preflight
+
+    async def _run_local_file_preflight(
+        self, config: ResearchConfig, *, stage: str,
+    ) -> None:
+        """Run the declared local_file prerequisites for one stage, failing
+        required misses before anything else proceeds.
+
+        Optional (``required: false``) prerequisites are reported, never
+        blocking; required misses raise with the specific path and stage.
+        """
+        from src.core.preflight import LocalFileCheck
+        from src.core.skill_registry import default_registry
+        from src.core.skill_runtime import SkillConfigError
+
+        skill_id = getattr(config, "skill_id", "")
+        if not skill_id:
+            return
+        try:
+            manifest = default_registry.get(skill_id)
+        except Exception:
+            return
+        if manifest is None:
+            return
+        failures: list[str] = []
+        for entry in manifest.preflight:
+            if entry.kind != "local_file" or entry.stage != stage:
+                continue
+            result = await LocalFileCheck(
+                name=entry.name,
+                path=entry.path or "",
+                required=entry.required,
+                stage=entry.stage,
+                root=getattr(config, "workspace_path", None),
+            ).check()
+            if not result["passed"]:
+                failures.append(
+                    f"{entry.name}: {result['path']} (stage={stage}, required)"
+                )
+        if failures:
+            raise SkillConfigError(
+                f"preflight {stage}-stage local_file check(s) failed: "
+                + "; ".join(failures)
+            )
 
     @staticmethod
     def _skill_preflight_targets(skill_id: str) -> list[ServicePreflightTarget]:
