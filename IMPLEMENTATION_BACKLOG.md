@@ -597,9 +597,9 @@ Autonomy: Select a maintained standard JSON Schema validator through the decisio
 procedure and pin its supported dialect/subset. Resolve defaults separately, validate
 the resolved object once, and reuse the contract for API/UI errors.
 
-- [ ] Adopt a standard JSON Schema validator and declare the supported dialect/subset, including numeric bounds, enums, nesting, and additional properties.
-- [ ] Validate omitted/null parameter objects, required values, and defaulted values with one canonical resolution path.
-- [ ] Return field-addressed errors and keep UI form validation consistent with server authority.
+- [x] Adopt a standard JSON Schema validator and declare the supported dialect/subset, including numeric bounds, enums, nesting, and additional properties.
+- [x] Validate omitted/null parameter objects, required values, and defaulted values with one canonical resolution path.
+- [x] Return field-addressed errors and keep UI form validation consistent with server authority.
 
 Acceptance: invalid bounds and missing required fields are rejected before
 session side effects; permitted extra properties behave as declared. Defaults

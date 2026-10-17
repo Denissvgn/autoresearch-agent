@@ -116,6 +116,21 @@ def _poll_terminal(client: TestClient, research_id: str, timeout_s: float = 90.0
     return session
 
 
+def _valid_params(skill_id: str, staging_dir: Path) -> dict:
+    """Per-skill parameter objects valid against each declared param_schema.
+
+    The prompt-engineering schema declares ``eval_set`` required — stage a
+    real dataset file (the declared-input contract) and pass its path.
+    """
+    if skill_id == "prompt-engineering":
+        eval_set = staging_dir / "fixture_eval_set.jsonl"
+        eval_set.write_text(
+            '{"input": "q", "expected": "a"}\n', encoding="utf-8"
+        )
+        return {"eval_set": str(eval_set)}
+    return {}
+
+
 @pytest.mark.parametrize(("skill_id", "expected_target_kind"), _SKILL_CASES)
 def test_non_ml_session_runs_end_to_end(
     demo_workspace: Path, skill_id: str, expected_target_kind: str,
@@ -125,7 +140,8 @@ def test_non_ml_session_runs_end_to_end(
         started = client.post(
             "/api/v1/research/start",
             headers=_auth(),
-            json={"skill_id": skill_id, "max_iterations": 1},
+            json={"skill_id": skill_id, "max_iterations": 1,
+                "skill_params": _valid_params(skill_id, demo_workspace)},
         )
         assert started.status_code == 201, started.text
         body = started.json()
@@ -192,7 +208,8 @@ def test_demo_workspace_bootstrap_files_exist(demo_workspace: Path) -> None:
             started = client.post(
                 "/api/v1/research/start",
                 headers=_auth(),
-                json={"skill_id": skill_id, "max_iterations": 1},
+                json={"skill_id": skill_id, "max_iterations": 1,
+                "skill_params": _valid_params(skill_id, demo_workspace)},
             )
             assert started.status_code == 201, started.text
             session_ws = (

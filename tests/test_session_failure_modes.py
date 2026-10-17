@@ -776,11 +776,16 @@ async def test_api_unknown_skill_start_returns_404_without_row(
 async def test_api_valid_skill_start_still_returns_201(monkeypatch, tmp_path):
     """P7-010 AC: a valid skill still returns 201 with the dual-shape body."""
     store, manager, fake, client = await _make_api(monkeypatch, tmp_path)
+    eval_set = tmp_path / "fixture_eval_set.jsonl"
+    eval_set.write_text('{"input": "q", "expected": "a"}\n', encoding="utf-8")
     try:
         resp = await client.post(
             "/api/v1/research/start",
             headers=_auth(),
-            json={"skill_id": "prompt-engineering", "max_iterations": 1},
+            json={
+                "skill_id": "prompt-engineering", "max_iterations": 1,
+                "skill_params": {"eval_set": str(eval_set)},
+            },
         )
         assert resp.status_code == 201, resp.text
         body = resp.json()

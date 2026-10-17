@@ -228,7 +228,12 @@ class ParamSchemaProperty(BaseModel):
 class ParamSchema(BaseModel):
     """JSON Schema describing the ``skill_params`` a skill accepts (ARC-011
     §9 ``param_schema``). Lifted from ``ResearchConfig`` flat fields + the HTTP
-    request bounds."""
+    request bounds.
+
+    The inner schema is checked against the declared JSON Schema subset at
+    load time (:mod:`src.core.skill_params`) so an unsupported keyword can
+    never be silently ignored by the validator.
+    """
 
     model_config = ConfigDict(extra="allow")
 
@@ -236,6 +241,18 @@ class ParamSchema(BaseModel):
     additionalProperties: bool = False
     properties: dict[str, ParamSchemaProperty] = Field(default_factory=dict)
     required: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _check_declared_subset(self) -> "ParamSchema":
+        from src.core.skill_params import unsupported_schema_keywords
+
+        unsupported = unsupported_schema_keywords(self)
+        if unsupported:
+            raise ValueError(
+                "param_schema uses keywords outside the declared JSON Schema "
+                f"subset: {sorted(unsupported)}"
+            )
+        return self
 
 
 # ---------------------------------------------------------------------------

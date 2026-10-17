@@ -358,79 +358,26 @@ def _translate_canonical_request(
     return conflicts
 
 
-# P3-013: JSON-Schema subset types → Python types for lightweight validation.
-_PARAM_TYPE_MAP: dict[str, type | tuple[type, ...]] = {
-    "string": str,
-    "integer": int,
-    "number": (int, float),
-    "boolean": bool,
-}
-
-
 def _validate_skill_params(
     skill_id: str,
     params: Dict[str, Any] | None,
     schema: Any,
-) -> None:
-    """Validate ``skill_params`` against the skill's ``param_schema`` (P3-013 AC).
+) -> Dict[str, Any]:
+    """Resolve and validate ``skill_params`` against the skill's ``param_schema``.
 
-    Lightweight validator for the ``ParamSchema`` subset — no ``jsonschema``
-    dependency needed: checks required keys, rejects unknown keys (honors
-    ``additionalProperties: false``), and checks ``type`` annotations.
+    The one canonical resolution path (:mod:`src.core.skill_params`): an
+    omitted/null parameter object resolves to ``{}`` (so schemas declaring
+    required fields reject it exactly like an empty submission), declared
+    defaults are applied deliberately, and the resolved object is validated
+    once with the standard JSON Schema validator over the declared dialect
+    subset. Returns the resolved parameter object to bind into execution.
 
-    Raises ``HTTPException(422)`` with field pointers on violation.
+    Raises ``HTTPException(422)`` with field addresses on violation — the
+    same error contract any UI form validation mirrors.
     """
-    if params is None:
-        params = {}
-    violations: list[dict[str, str]] = []
+    from src.core.skill_params import resolve_and_validate
 
-    # Required keys.
-    for key in getattr(schema, "required", []) or []:
-        if key not in params:
-            violations.append(
-                {"field": f"skill_params.{key}", "message": "required field is missing"}
-            )
-
-    # Unknown keys (additionalProperties: false).
-    allowed = set((getattr(schema, "properties", {}) or {}).keys())
-    for key in params:
-        if key not in allowed:
-            violations.append(
-                {
-                    "field": f"skill_params.{key}",
-                    "message": (
-                        "unknown field (not in param_schema; "
-                        "additionalProperties is false)"
-                    ),
-                }
-            )
-
-    # Type checking (bool is a subclass of int in Python — guard explicitly).
-    properties = getattr(schema, "properties", {}) or {}
-    for key, value in params.items():
-        prop = properties.get(key)
-        if prop is None:
-            continue  # already reported as unknown
-        expected_type = getattr(prop, "type", None)
-        if expected_type and expected_type in _PARAM_TYPE_MAP:
-            py_type = _PARAM_TYPE_MAP[expected_type]
-            if isinstance(value, bool) and expected_type in ("integer", "number"):
-                violations.append(
-                    {
-                        "field": f"skill_params.{key}",
-                        "message": f"expected {expected_type}, got boolean",
-                    }
-                )
-            elif not isinstance(value, py_type):
-                violations.append(
-                    {
-                        "field": f"skill_params.{key}",
-                        "message": (
-                            f"expected {expected_type}, got {type(value).__name__}"
-                        ),
-                    }
-                )
-
+    resolved, violations = resolve_and_validate(skill_id, schema, params)
     if violations:
         raise HTTPException(
             status_code=422,
@@ -440,6 +387,7 @@ def _validate_skill_params(
                 "violations": violations,
             },
         )
+    return resolved
 
 
 def _json_hash(payload: Any) -> str:
@@ -640,6 +588,9 @@ async def start_research(request: Request, req: StartResearchRequest):
         _translate_legacy_request(req)
     # P3-013: translate canonical {skill_id, subject_id, variant} → legacy
     # {model_type, instrument, timeframe} the session_manager expects.
+    # The resolved parameter object (defaults applied deliberately by the
+    # canonical path below); legacy non-skill requests pass their raw value.
+    resolved_skill_params: Dict[str, Any] | None = req.skill_params
     if req.skill_id:
         conflicts = _translate_canonical_request(req)
         if conflicts:
@@ -649,10 +600,13 @@ async def start_research(request: Request, req: StartResearchRequest):
                 outcome="warning",
                 metadata={"skill_id": req.skill_id, "conflicts": conflicts},
             )
-        # P3-013 AC: validate skill_params against the skill's param_schema.
-        if req.skill_params is not None:
-            manifest = default_registry.get(req.skill_id)
-            _validate_skill_params(req.skill_id, req.skill_params, manifest.param_schema)
+        # Validate skill_params against the skill's param_schema on the one
+        # canonical resolution path — including omitted/null parameter objects
+        # (a schema declaring required fields must reject those too).
+        manifest = default_registry.get(req.skill_id)
+        resolved_skill_params = _validate_skill_params(
+            req.skill_id, req.skill_params, manifest.param_schema
+        )
 
     metadata = _start_metadata(req)
     try:
@@ -673,7 +627,7 @@ async def start_research(request: Request, req: StartResearchRequest):
             # validated against the skill's param_schema above) reach
             # ResearchConfig; subject_id/variant are authoritative aliases.
             skill_id=req.skill_id,
-            skill_params=req.skill_params,
+            skill_params=resolved_skill_params,
             subject_id=req.subject_id,
             variant=req.variant,
         )

@@ -274,6 +274,7 @@ def start_payload() -> dict[str, object]:
         "skill_id": "prompt-engineering",
         "subject_id": "default",
         "variant": "production",
+        "skill_params": {"eval_set": "eval/eval_set.jsonl"},
     }
 
 

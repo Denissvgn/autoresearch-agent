@@ -43,6 +43,9 @@ websockets = "^14.0"
 httpx = "^0.27.0"
 prometheus-client = "^0.19.0"
 psutil = "^5.9.0"
+# Standard JSON Schema validator for skill parameter contracts (param_schema
+# subset; pinned dialect Draft 2020-12 — see src/core/skill_params.py).
+jsonschema = "^4.23.0"
 # TF-IDF backend for the goal->skill domain classifier (src/core/domain_classifier.py).
 numpy = "^2.2"
 

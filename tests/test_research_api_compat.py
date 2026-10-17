@@ -200,6 +200,7 @@ def test_legacy_start_of_installed_skill_returns_201_with_dual_shape(
             "instrument": "default",
             "timeframe": "production",
             "model_type": "prompt-engineering",
+            "skill_params": {"eval_set": "eval/eval_set.jsonl"},
         },
     )
     assert response.status_code == 201
@@ -224,6 +225,7 @@ def test_canonical_start_returns_201_with_dual_shape(client: TestClient):
         json={
             "skill_id": "prompt-engineering",
             "subject_id": "default",
+            "skill_params": {"eval_set": "eval/eval_set.jsonl"},
             "variant": "production",
         },
     )
@@ -281,6 +283,7 @@ def test_both_shapes_canonical_wins(client: TestClient):
         json={
             "skill_id": "prompt-engineering",
             "subject_id": "default",
+            "skill_params": {"eval_set": "eval/eval_set.jsonl"},
             "variant": "production",
             "model_type": "prompt-engineering",  # also legacy — canonical wins
         },
@@ -315,6 +318,7 @@ def test_conflicting_shapes_canonical_overrides_legacy(client: TestClient):
         json={
             "skill_id": "prompt-engineering",   # → model_type "prompt-engineering"
             "subject_id": "default",
+            "skill_params": {"eval_set": "eval/eval_set.jsonl"},
             "variant": "production",
             "model_type": "volatility",        # CONFLICTS — canonical must win
             "instrument": "BTC_USDT",          # CONFLICTS — canonical must win
@@ -341,6 +345,7 @@ def test_conflicting_shapes_recorded_in_audit(client: TestClient):
         json={
             "skill_id": "prompt-engineering",
             "subject_id": "default",
+            "skill_params": {"eval_set": "eval/eval_set.jsonl"},
             "variant": "production",
             "model_type": "volatility",
         },
@@ -497,9 +502,11 @@ def test_canonical_fields_forwarded_to_session_manager(client: TestClient):
     assert response.status_code == 201
     captured = _session_manager().captured_kwargs
     assert captured["skill_id"] == "prompt-engineering"
-    assert captured["skill_params"] == {
-        "eval_set": "eval/eval_set.jsonl", "target_metric": "f1",
-    }
+    assert captured["skill_params"]["eval_set"] == "eval/eval_set.jsonl"
+    assert captured["skill_params"]["target_metric"] == "f1"
+    # Defaults are applied deliberately by the canonical resolution path
+    # (validation never inserts values — resolution does).
+    assert captured["skill_params"]["cost_ceiling_per_run_usd"] == 0.50
     assert captured["subject_id"] == "default"
     assert captured["variant"] == "production"
     # The translated legacy shape is still passed alongside (dual shape).
@@ -550,6 +557,7 @@ def test_legacy_start_translates_to_canonical_fields(client: TestClient):
             "instrument": "default",
             "timeframe": "production",
             "model_type": "prompt-engineering",
+            "skill_params": {"eval_set": "eval/eval_set.jsonl"},
         },
     )
     assert response.status_code == 201
