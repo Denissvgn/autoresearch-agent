@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
 # P1-2: historical phase tables moved to src/compat/legacy_phase_tables.py;
 # re-exported here so every existing importer (orchestrator, config_promoter,
@@ -76,6 +76,7 @@ def build_phase_state(
             session.get("skill_id") or model_type,
             default=ObjectiveComparator(),
         ),
+        phases=phases if phases is not None else _declared_phases_for_session(session),
     )
     blocked = _blocked_reason(rows)
     current_phase = _select_current_phase(phases, completed, blocked)
@@ -265,12 +266,34 @@ FAILED_ITERATION_STATUSES: frozenset[str] = frozenset(
 )
 
 
+def _declared_phases_for_session(
+    session: Mapping[str, Any],
+) -> Optional[List[Mapping[str, Any]]]:
+    """The skill manifest's declared phase rules for this session, or None.
+
+    Sessions whose skill cannot be resolved keep the legacy evaluation with no
+    declared rules (never a guessed declaration).
+    """
+    skill_id = session.get("skill_id") or session.get("model_type")
+    if not skill_id:
+        return None
+    try:
+        from src.core.skill_registry import default_registry
+
+        skill = default_registry.get(skill_id)
+        manifest = getattr(skill, "manifest", None)
+        return [dict(p) for p in (getattr(manifest, "phase_plan", None) or [])]
+    except Exception:
+        return None
+
+
 def _completed_phase_ids(
     iterations: List[Dict[str, Any]],
     hpo_studies: List[Dict[str, Any]],
     promotions: List[Dict[str, Any]],
     model_type: Optional[str],
     comparator: Optional["ObjectiveComparator"] = None,
+    phases: Optional[Sequence[Mapping[str, Any]]] = None,
 ) -> set[str]:
     """Mark phases complete using a hybrid contract:
 
@@ -424,6 +447,28 @@ def _completed_phase_ids(
         completed.add("inference_parity_replay")
     if _has_promotion_evidence(iterations, promotions, prior_best=_prior_best):
         completed.add("promotion_proposal")
+    # Declarative phase rules (manifest-declared): a declared phase completes
+    # when one of its declared evidence keys appears in a verified IN-PHASE
+    # observation and its declared minimum observation count is met. Model
+    # prose, other phases' evidence, and stale (out-of-phase) rows never
+    # advance a phase. Verified = the rejected-duplicate/failed filter above.
+    if phases:
+        for phase in phases:
+            pid = str(phase.get("id") or "")
+            if not pid or pid in completed:
+                continue
+            keys = tuple(phase.get("evidence_keys") or ())
+            if not keys:
+                continue
+            min_obs = int(phase.get("min_iterations") or 0)
+            in_phase = [
+                it for it in iterations
+                if str(it.get("search_phase") or "") == pid
+            ]
+            if len(in_phase) >= max(min_obs, 1) and any(
+                _has_metric(it, *keys) for it in in_phase
+            ):
+                completed.add(pid)
     return completed
 
 

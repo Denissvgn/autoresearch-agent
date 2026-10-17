@@ -152,6 +152,14 @@ class Phase(TypedDict, total=False):
     stagnation_exempt: bool
 
 
+class UnsupportedPhaseAdvancementError(ValueError):
+    """Raised when a plugin phase-advancement mode is declared but unsupported.
+
+    Plugin modes are rejected explicitly until their separately qualified
+    implementation exists — declarative behavior is never silently substituted.
+    """
+
+
 class AdvancementRule(TypedDict, total=False):
     """Phase advancement evidence rule. Today advancement keys live in the
     module constant ``research_phase_plan._PHASE_ADVANCEMENT_KEYS`` (a tuple of
@@ -159,6 +167,10 @@ class AdvancementRule(TypedDict, total=False):
     descriptor the manifest future can express declaratively."""
 
     evidence_keys: tuple[str, ...]
+    #: Declared minimum observation requirement for the phase.
+    min_observations: int
+    #: Declared maximum observation requirement (cap) for the phase.
+    max_observations: int
 
 
 class StructuredHPOPlan(TypedDict, total=False):
@@ -894,7 +906,13 @@ class ManifestSkillRuntime:
     # ── Phase contract ────────────────────────────────────────────
     def phase_plan(self) -> list[Phase]:
         """Read the phase list from the manifest's ``phase_plan`` section,
-        reproducing the incumbent ``DIRECTION_PHASES`` etc. literals."""
+        reproducing the incumbent ``DIRECTION_PHASES`` etc. literals.
+
+        A declared ``phase_advancement.mode=plugin`` is rejected explicitly:
+        deriving the declarative plan for a plugin-owned rule would silently
+        substitute behavior the declaration does not ask for.
+        """
+        self._reject_plugin_advancement()
         return [
             {  # type: ignore[return-value]
                 "id": p.id,
@@ -908,13 +926,33 @@ class ManifestSkillRuntime:
             for p in self._manifest.phase_plan
         ]
 
+    def _reject_plugin_advancement(self) -> None:
+        """Reject plugin phase-advancement modes explicitly (top-level or per-phase)."""
+        advancement = getattr(self._manifest, "phase_advancement", None)
+        if getattr(advancement, "mode", "declarative") == "plugin":
+            raise UnsupportedPhaseAdvancementError(
+                "phase_advancement: mode=plugin is not supported; "
+                "declare mode=declarative with per-phase evidence_keys"
+            )
+        for phase in self._manifest.phase_plan:
+            override = getattr(phase, "advancement", None)
+            if getattr(override, "mode", None) == "plugin":
+                raise UnsupportedPhaseAdvancementError(
+                    f"phase {phase.id!r}: advancement mode=plugin is not "
+                    "supported; declare mode=declarative with evidence_keys"
+                )
+
     def phase_advancement_rule(self, phase_id: str) -> AdvancementRule:
-        """Read per-phase evidence keys from the manifest. The hybrid completion
-        rule (G1) is owned by the phases.py plugin when ``phase_advancement.mode
-        == plugin``; this returns the declarative evidence-keys portion only."""
+        """The declared phase rule: evidence keys and min/max observation
+        requirements. Plugin modes are rejected explicitly."""
+        self._reject_plugin_advancement()
         for p in self._manifest.phase_plan:
             if p.id == phase_id:
-                return {"evidence_keys": tuple(p.evidence_keys)}
+                return {
+                    "evidence_keys": tuple(p.evidence_keys),
+                    "min_observations": p.min_iterations,
+                    "max_observations": p.max_iterations,
+                }
         return {"evidence_keys": ()}
 
     # ── Trial identity (dedup) ────────────────────────────────────

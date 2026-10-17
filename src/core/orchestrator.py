@@ -60,6 +60,13 @@ from src.core.gate_status import (
     normalize_training_gate_aliases,
     training_gates_passed_from_iteration,
 )
+from src.core.goal_semantics import (
+    GOAL_INCONCLUSIVE,
+    GOAL_SATISFICE,
+    GOAL_SATISFICED,
+    goal_decision,
+    goal_outcome,
+)
 from src.core.iteration_context import (
     ITERATION_CONTEXT_DIGEST_MARKER,
     build_iteration_context_digest,
@@ -111,6 +118,7 @@ from src.core.research_phase_plan import (
     _PHASE_ADVANCEMENT_KEYS,
     EVIDENCE_INHERITABLE_PHASES,
     NOOP_INHERITABLE_PHASES,
+    _is_failed_iteration,
     _is_rejected_duplicate,
     build_phase_state,
     incomplete_phase_ids,
@@ -128,6 +136,7 @@ from src.core.significance import (
 from src.core.skill_runtime import (
     SkillConfigError,
     SkillRuntime,
+    UnsupportedPhaseAdvancementError,
     materialize_skill_runtime,
 )
 from src.core.state_machine import (
@@ -945,6 +954,7 @@ class AgentOrchestrator:
                         canonical_config_hash(pending_snapshot)
                         if pending_snapshot else None
                     ),
+                    metrics=marker_from_tool,
                 )
                 marker_from_tool["decision"] = decision
                 # Attach the pre-captured snapshot so the DB
@@ -1118,6 +1128,7 @@ class AgentOrchestrator:
                             canonical_config_hash(pending_snapshot)
                             if pending_snapshot else None
                         ),
+                        metrics=marker_from_file,
                     )
                     marker_from_file["decision"] = decision
                     # Attach snapshot for marker-file path too.
@@ -3428,6 +3439,7 @@ class AgentOrchestrator:
                                     research_id,
                                     marker.get("primary_metric"),
                                     marker.get("training_gates_passed"),
+                                    metrics=marker,
                                 )
                             # Model-authored content is a proposal: the
                             # record is honestly labeled and never receives
@@ -3651,6 +3663,11 @@ class AgentOrchestrator:
                     # Fix D: once all phases are complete, force a clean stop
                     # immediately rather than letting the agent grind the
                     # terminal phase until the cap/stagnation guards trip.
+                    goal_message = await self._maybe_goal_satisfied_terminate(
+                        research_id=research_id,
+                    )
+                    if goal_message:
+                        tool_results.append(TextBlock(text=goal_message))
                     all_complete_message = (
                         await self._maybe_all_phases_complete_terminate(
                             research_id=research_id,
@@ -4243,6 +4260,37 @@ class AgentOrchestrator:
                     blockers.append(blocker_s)
         return blockers
 
+    async def _session_goal(
+        self,
+        research_id: str,
+        *,
+        session: Optional[Dict[str, Any]] = None,
+    ) -> tuple[str, Optional[str]]:
+        """The declared goal semantics for this session: (goal, threshold_field).
+
+        ``metric_schema.goal`` (optimize/satisfice) and the satisfice threshold
+        field come from the skill manifest; sessions without a declared goal
+        keep the optimize default.
+        """
+        skill = getattr(self, "_session_skills", {}).get(research_id)
+        manifest = getattr(skill, "manifest", None) if skill else None
+        if manifest is None and session is not None:
+            skill_id = session.get("skill_id") or session.get("model_type")
+            if skill_id:
+                try:
+                    from src.core.skill_registry import default_registry
+
+                    resolved = default_registry.get(skill_id)
+                    manifest = getattr(resolved, "manifest", None)
+                except Exception:
+                    manifest = None
+        metric_schema = getattr(manifest, "metric_schema", None)
+        goal = getattr(metric_schema, "goal", None)
+        threshold_field = getattr(metric_schema, "satisfice_threshold_field", None)
+        if goal is None:
+            return "optimize", None
+        return str(goal), (str(threshold_field) if threshold_field else None)
+
     async def _objective_comparator(
         self,
         research_id: str,
@@ -4282,6 +4330,7 @@ class AgentOrchestrator:
         training_gates_passed: bool,
         *,
         config_hash: Optional[str] = None,
+        metrics: Optional[Mapping[str, Any]] = None,
     ) -> str:
         """Determine keep/improve/discard by comparing against session best.
 
@@ -4299,6 +4348,16 @@ class AgentOrchestrator:
         sharpens decisions, it never blocks exploration. Sessions without
         the declaration are byte-identical to the legacy path.
         """
+        goal, threshold_field = await self._session_goal(research_id)
+        if goal == GOAL_SATISFICE:
+            # Satisfice: the declared threshold condition decides — no winner
+            # comparison, no single winner.
+            return goal_decision(
+                goal=goal,
+                metrics=metrics or {},
+                threshold_field=threshold_field,
+                gates_passed=training_gates_passed,
+            )
         if primary_metric is None:
             return "discard"
 
@@ -4964,6 +5023,10 @@ class AgentOrchestrator:
             if skill_runtime is not None:
                 try:
                     phases = skill_runtime.phase_plan()
+                except UnsupportedPhaseAdvancementError:
+                    # Plugin phase modes are rejected explicitly — never
+                    # silently substituted with declarative/legacy behavior.
+                    raise
                 except Exception as exc:
                     logger.warning(
                         "Research %s: skill phase_plan() failed — falling "
@@ -5349,6 +5412,47 @@ class AgentOrchestrator:
             "improve. Do NOT continue running experiments."
         )
 
+    async def _maybe_goal_satisfied_terminate(
+        self,
+        *,
+        research_id: str,
+    ) -> Optional[str]:
+        """Goal semantics: a satisfied declared threshold condition ends the run.
+
+        For satisfice sessions, once the declared boolean condition is observed
+        true on a verified observation, the goal is met (no winner competition
+        continues) and the LLM is instructed to reply with TERMINATE_REQUEST.
+        """
+        session = await self._store.get_session(research_id)
+        goal, threshold_field = await self._session_goal(research_id, session=session)
+        if goal != GOAL_SATISFICE or not threshold_field:
+            return None
+        rows = await self._store.get_iterations(research_id)
+        observations = []
+        for row in rows:
+            if row.get("duplicate_reason") or _is_failed_iteration(row):
+                continue
+            raw = row.get("metrics_json")
+            try:
+                metrics = json.loads(raw) if isinstance(raw, str) and raw.strip() else (raw or {})
+            except (json.JSONDecodeError, TypeError):
+                metrics = {}
+            if isinstance(metrics, dict):
+                observations.append(metrics)
+        outcome = goal_outcome(
+            goal=goal, observations=observations, threshold_field=threshold_field,
+        )
+        if outcome["status"] != GOAL_SATISFICED:
+            return None
+        return (
+            f"GOAL_SATISFICED: the declared threshold condition "
+            f"`{threshold_field}` is satisfied on a verified observation — the "
+            "research goal is met and no further optimization is required. "
+            "Reply on the next turn with a single line beginning "
+            "`TERMINATE_REQUEST:` and structured justification naming the "
+            "satisficing observation. Do NOT continue running experiments."
+        )
+
     async def _derive_terminal_reason(
         self,
         *,
@@ -5371,6 +5475,8 @@ class AgentOrchestrator:
           operator_stopped                — user sent stop request
           error_unrecoverable             — used only by _derive_terminal_reason
                                            for legacy completions marked failed
+          goal_satisficed                 — declared satisfice condition observed
+          goal_inconclusive               — declared condition never observed
           max_iterations_reached          — hit config.max_iterations
           budget_exhausted                — spent >=99% of max_budget_usd
           phase_plan_completed            — all phases done
@@ -5389,6 +5495,40 @@ class AgentOrchestrator:
             return "operator_stopped"
         if final_status == "failed":
             return "error_unrecoverable"
+        # Goal semantics: a satisfied declared condition is the run's success
+        # outcome. Exhaustion and an unobserved condition stay distinct from
+        # success (checked after the exhaustion tokens below).
+        _goal_session = await self._store.get_session(research_id)
+        goal, threshold_field = await self._session_goal(
+            research_id, session=_goal_session,
+        )
+        goal_status: Optional[str] = None
+        if goal == GOAL_SATISFICE and threshold_field:
+            goal_rows = await self._store.get_iterations(research_id)
+            goal_observations = []
+            for row in goal_rows:
+                if row.get("duplicate_reason") or _is_failed_iteration(row):
+                    continue
+                raw = row.get("metrics_json")
+                try:
+                    parsed = (
+                        json.loads(raw)
+                        if isinstance(raw, str) and raw.strip()
+                        else (raw or {})
+                    )
+                except (json.JSONDecodeError, TypeError):
+                    parsed = {}
+                if isinstance(parsed, dict):
+                    goal_observations.append(parsed)
+            goal_status = str(
+                goal_outcome(
+                    goal=goal,
+                    observations=goal_observations,
+                    threshold_field=threshold_field,
+                )["status"]
+            )
+            if goal_status == GOAL_SATISFICED:
+                return GOAL_SATISFICED
         # final_status == "completed": refine.
         if iteration_count >= config.max_iterations:
             return "max_iterations_reached"
@@ -5396,6 +5536,10 @@ class AgentOrchestrator:
         # budget terminated because it ran out of money.
         if total_cost >= 0.99 * config.max_budget_usd:
             return "budget_exhausted"
+        if goal_status == GOAL_INCONCLUSIVE:
+            # The declared condition was never observed: inconclusive is
+            # distinct from both success and exhaustion.
+            return GOAL_INCONCLUSIVE
         # Look at the phase state to decide between "phase plan finished"
         # and "agent self-terminated early".
         session = await self._store.get_session(research_id)

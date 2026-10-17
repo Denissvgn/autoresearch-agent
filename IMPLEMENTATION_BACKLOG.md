@@ -711,9 +711,9 @@ Autonomy: Implement declarative optimize/satisfice and phase predicates over ver
 observations. Preserve explicit rejection of plugin modes until B49; do not execute
 arbitrary expressions to avoid deciding a contract.
 
-- [ ] Implement explicit optimize and satisfice decisions, threshold evidence, and terminal outcomes for the initial schema.
-- [ ] Evaluate declarative phase rules against verified evidence and defined min/max observation requirements, including validation phases.
-- [ ] Reject plugin phase/resolver modes until their separately qualified implementation exists; do not silently substitute declarative behavior.
+- [x] Implement explicit optimize and satisfice decisions, threshold evidence, and terminal outcomes for the initial schema.
+- [x] Evaluate declarative phase rules against verified evidence and defined min/max observation requirements, including validation phases.
+- [x] Reject plugin phase/resolver modes until their separately qualified implementation exists; do not silently substitute declarative behavior.
 
 Acceptance: satisfice completion reflects its declared condition, and phases
 cannot advance from model prose or unrelated/stale evidence. Exhaustion and
