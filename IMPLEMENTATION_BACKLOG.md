@@ -2,17 +2,23 @@
 
 Date: 2026-09-27
 Autonomous execution revision: 2026-10-03.
+Progress actualized: 2026-10-17 (B01-B13 delivered with recorded evidence).
 
 Source: [PROJECT_REVIEW.md](PROJECT_REVIEW.md), findings F01-F12 and its
 architecture, caveats, and acceptance matrix.
 
 Code baseline: `1a5d54505d98976572887b6e23fdca0988902d60`.
 
-Status: planning only; revised for autonomous implementation. All implementation
-cards are open. Reviewing or editing this document does not start their execution.
-The review's 170 passing focused tests are baseline evidence, not completion
-evidence for these tasks. No fixes or harness integrations are claimed by this
-backlog.
+Status: autonomous execution in progress; revised for autonomous
+implementation. B01-B13 are delivered and carry DONE records with passing
+closure evidence in the execution ledger (`cards.json`), which remains
+authoritative for execution status; B14 is the active card. Checkboxes below
+mirror the ledger only after evidence is recorded. Reviewing or editing this
+document does not start execution. The review's 170 passing focused tests are
+baseline evidence, not completion evidence for open tasks. The `docs/llm_wiki`
+projection lags the source at this revision: after its 3.0.0 store migration the
+wiki sync tool refuses its own generated updates under a safety limit (tracked
+upstream), so wiki pages were not regenerated at the latest close-out.
 
 Inventory: 50 task cards, 150 implementation subtasks, and 136 hard dependency
 links. Initial delivery contains 44 CORE cards; 6 extensions are GATED.
@@ -619,9 +625,9 @@ Autonomy: Express bundled-skill differences as manifest bindings and migrate the
 fixtures together. Trace a deliberately nondefault value into actual evaluator inputs;
 a core branch for a skill name is not an acceptable shortcut.
 
-- [ ] Define declarative parameter bindings for bootstrap, candidate initialization, fixed evaluator argv, and output metadata.
-- [ ] Apply nondefault target/scorer/latency/duration values and reject undeclared model attempts to change operator-fixed arguments.
-- [ ] Remove the core `prompt-engineering` ID branch and migrate bundled packages to the same binding contract.
+- [x] Define declarative parameter bindings for bootstrap, candidate initialization, fixed evaluator argv, and output metadata.
+- [x] Apply nondefault target/scorer/latency/duration values and reject undeclared model attempts to change operator-fixed arguments.
+- [x] Remove the core `prompt-engineering` ID branch and migrate bundled packages to the same binding contract.
 
 Acceptance: submitted values can be traced from API to resolved request and
 actual evaluator behavior. The code skill uses the requested candidate source;
@@ -641,9 +647,9 @@ Autonomy: Use one normalized result contract for stdout and artifact paths. Miss
 status/gates, unknown required semantics, or invalid numbers produce explicit invalid
 evidence, never implicit success.
 
-- [ ] Honor declared parser format and marker prefix and enforce required fields, field types, finite numbers, units, and schema version.
-- [ ] Normalize declared failure statuses to non-winning outcomes; missing gates and malformed output must not become successful defaults.
-- [ ] Preserve trusted raw evidence separately from its normalized result and apply identical rules to stdout and file-based collection.
+- [x] Honor declared parser format and marker prefix and enforce required fields, field types, finite numbers, units, and schema version.
+- [x] Normalize declared failure statuses to non-winning outcomes; missing gates and malformed output must not become successful defaults.
+- [x] Preserve trusted raw evidence separately from its normalized result and apply identical rules to stdout and file-based collection.
 
 Acceptance: custom markers parse; failed results cannot carry promotable placeholder
 metrics; missing required fields and nonfinite values are rejected consistently.
@@ -1510,9 +1516,11 @@ capability absence must be visible and tested through explicit rejection.
 ## Completion Record
 
 Store one machine-readable record per card in `cards.json`; link any PR to that
-record's sanitized summary. The following is a schema example, not a claim that
-B01 has started. Expand checks and acceptance IDs when the card starts. Use the
-states defined above; keep remote delivery status separate from card status.
+record's sanitized summary. The following is the schema example; the
+authoritative per-card records, including the B01-B13 DONE records with passing
+closure evidence, live in `cards.json`. Expand checks and acceptance IDs when a
+card starts. Use the states defined above; keep remote delivery status separate
+from card status.
 
 ```json
 {
