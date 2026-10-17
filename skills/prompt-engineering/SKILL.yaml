@@ -46,11 +46,26 @@ param_schema:
   additionalProperties: false
   properties:
     eval_set:      { type: string,  description: "regular JSONL file; absolute or relative to session workspace; nonempty input/expected strings only" }
-    scorer_url:    { type: string,  description: "explicit HTTP(S) scorer endpoint, required for live scoring; no embedded credentials" }
+    scorer_url:    { type: string,  pattern: "^https?://[^/@\\s]+(?::\\d+)?(?:/[^\\s#]*)?$", description: "explicit HTTP(S) scorer endpoint, required for live scoring; no embedded credentials or fragments" }
     registry_url:  { type: string,  description: "prompt registry base URL" }
     target_metric: { type: string, enum: [composite_eval_score, precision, f1], default: composite_eval_score }
     cost_ceiling_per_run_usd: { type: number, minimum: 0, default: 0.50 }
   required: [eval_set]
+
+# Parameter-to-work bindings: the submitted eval_set feeds the bootstrap
+# (which materializes the workspace copy); dataset selection and the demo
+# switch are operator-fixed and cannot be changed by model-authored argv.
+parameter_bindings:
+  bootstrap_inputs:
+    eval_set: eval_set
+  candidate_files: {}
+  evaluator_flags:
+    scorer_url: --scorer-url
+  fixed_flags:
+    --eval: eval_set.jsonl
+    --demo: "{demo_mode}"
+  output_metadata:
+    eval_set: n_eval_examples
 
 # ── 2/8 metric_schema ─────────────────────────────────────────────────────────
 metric_schema:
@@ -193,12 +208,14 @@ insights:
 
 # ── Prompt assembly ───────────────────────────────────────────────────────────
 prompt:
+  # Bound flags (operator-fixed --eval/--demo, parameter-bound --scorer-url)
+  # are canonicalized into the command from parameter_bindings at render time.
   experiment_command: |
-    .venv/bin/python eval/run.py --prompt prompt.yaml --eval eval_set.jsonl --demo false
+    .venv/bin/python eval/run.py --prompt prompt.yaml
   # ARC-012 P7-011: what the demo provider executes verbatim (offline fallback
-  # scorer). Absolute {session_workspace} paths — governed commands run with
-  # cwd = the workspace root, not the session workspace.
-  demo_experiment_command: .venv/bin/python eval/run.py --prompt {session_workspace}/prompt.yaml --eval {session_workspace}/eval_set.jsonl --demo true
+  # scorer). The {session_workspace} prompt path is absolute; the bound
+  # dataset/demo flags render identically to the live command (parity).
+  demo_experiment_command: .venv/bin/python eval/run.py --prompt {session_workspace}/prompt.yaml
   continuation_enabled: true
 
 # ── UI hints ──────────────────────────────────────────────────────────────────

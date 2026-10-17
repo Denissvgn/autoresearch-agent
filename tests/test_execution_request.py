@@ -78,7 +78,10 @@ def test_live_template_with_bare_config_path_executes_end_to_end(tmp_path: Path)
         )
     )
     live_template = manifest["prompt"]["experiment_command"].strip()
-    assert live_template.endswith("--target-latency-ms 10")
+    assert live_template.endswith("--config db_config.yaml")
+    # Bound evaluator flags render from parameter_bindings at command-build
+    # time; the template itself carries no hard-coded flag values.
+    assert "--target-latency-ms" not in live_template
 
     workspace, session = _workspace(tmp_path)
     extension = _pin(tmp_path)
@@ -298,7 +301,7 @@ def test_template_shape_is_enforced_at_run_start(tmp_path: Path):
         REPO_ROOT / "skills" / "prompt-engineering" / "SKILL.yaml"
     ).read_text(encoding="utf-8")
     bad = manifest_yaml.replace(
-        ".venv/bin/python eval/run.py --prompt prompt.yaml --eval eval_set.jsonl --demo false",
+        ".venv/bin/python eval/run.py --prompt prompt.yaml",
         ".venv/bin/python eval/run.py --prompt prompt.yaml | tee log",
     )
     assert bad != manifest_yaml

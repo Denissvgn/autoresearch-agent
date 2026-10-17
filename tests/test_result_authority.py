@@ -157,6 +157,7 @@ def _write_skill(skills_root: Path) -> Path:
     base.pop("execution", None)
     base.pop("plugins", None)
     base.pop("insights", None)
+    base.pop("parameter_bindings", None)
     base["llm"] = {**base["llm"], "provider": "anthropic"}
     base["command_policy"] = {
         "allowed_python": [".venv/bin/python"],

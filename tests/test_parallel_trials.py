@@ -101,6 +101,7 @@ def _write_synthetic_skill(skills_root: Path, *, concurrency: int | None) -> Pat
     base["llm"] = {**base["llm"], "provider": "anthropic"}
     base.pop("plugins", None)
     base.pop("insights", None)
+    base.pop("parameter_bindings", None)
     base["command_policy"] = {
         **base["command_policy"],
         "allowed_python": [".venv/bin/python"],

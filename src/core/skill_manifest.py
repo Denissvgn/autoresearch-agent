@@ -908,15 +908,48 @@ class PromptConfig(BaseModel):
                 "demo_experiment_command must be a single shell-free command "
                 "(no newlines or backslashes)"
             )
-        allowed = {"session_workspace", "skill_id", "subject_id", "variant"}
-        from src.core.skill_paths import _template_placeholder_tokens
+        # Placeholder vocabulary is validated at the manifest level (where the
+        # declared parameter names are known): the closed vocabulary plus any
+        # declared parameter name is legal in either command template.
+        return self
 
-        for token in _template_placeholder_tokens(command):
-            if token not in allowed:
-                raise ValueError(
-                    f"demo_experiment_command placeholder {{{token}}} is not "
-                    f"in the closed vocabulary {sorted(allowed)}"
-                )
+
+class ParameterBindings(BaseModel):
+    """Declarative bindings from resolved ``skill_params`` into actual work.
+
+    The binding contract (parameter-to-work traceability): a submitted
+    parameter reaches the bootstrap, the candidate initialization, the
+    evaluator argv, and the output metadata only through these declared
+    mappings — never through a core branch keyed on the skill name. Bound
+    flags are operator-owned at execution: model-authored argv can neither
+    change their values nor drop them (the execution-request resolver
+    rejects changes and supplies omissions).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: parameter name -> bootstrap input key (the plugin input payload).
+    bootstrap_inputs: dict[str, str] = Field(default_factory=dict)
+    #: parameter name -> workspace-relative candidate file (initialization).
+    candidate_files: dict[str, str] = Field(default_factory=dict)
+    #: parameter name -> evaluator argv flag; the value binds from the
+    #: resolved parameter (an omitted optional parameter renders empty).
+    evaluator_flags: dict[str, str] = Field(default_factory=dict)
+    #: argv flag -> value template (literal, or ``{demo_mode}`` /
+    #: ``{session_workspace}`` / ``{skill_id}`` / ``{subject_id}`` /
+    #: ``{variant}``): operator-fixed values model input cannot change.
+    fixed_flags: dict[str, str] = Field(default_factory=dict)
+    #: parameter name -> result metadata field (the traceability echo).
+    output_metadata: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _check_flags(self) -> "ParameterBindings":
+        for flag in self.evaluator_flags.values():
+            if not flag.startswith("--"):
+                raise ValueError(f"bound flag {flag!r} must be a --flag")
+        for flag in self.fixed_flags:
+            if not flag.startswith("--"):
+                raise ValueError(f"bound flag {flag!r} must be a --flag")
         return self
 
 
@@ -994,6 +1027,10 @@ class ResearchSkillManifest(BaseModel):
     insights: Optional[InsightsConfig] = None
     prompt: Optional[PromptConfig] = None
     ui: Optional[UIConfig] = None
+    #: Declarative bindings from resolved skill_params into actual work
+    #: (bootstrap inputs, candidate files, fixed evaluator argv, output
+    #: metadata). Bundled-skill differences live here, never in core branches.
+    parameter_bindings: Optional[ParameterBindings] = None
     #: P5-001 / X-004: declared plugins + capability grants. Optional; the
     #: loader cross-checks paths against the package layout and the registry
     #: surfaces a resolved ``SkillLayout``. Consumed by ``PluginRunner`` (P5-005).
@@ -1033,6 +1070,60 @@ class ResearchSkillManifest(BaseModel):
         dupes = {i for i in ids if ids.count(i) > 1}
         if dupes:
             raise ValueError(f"phase_plan: duplicate phase id(s): {sorted(dupes)}")
+        return self
+
+    @model_validator(mode="after")
+    def _check_parameter_bindings(self) -> "ResearchSkillManifest":
+        """Bindings reference only declared parameters; templates use only the
+        closed vocabulary plus declared parameter names (the manifest must
+        never fail only once someone runs it)."""
+        from src.core.skill_paths import _template_placeholder_tokens
+
+        bindings = self.parameter_bindings
+        properties = getattr(self.param_schema, "properties", None) or {}
+        params = set(properties)
+        if bindings is not None:
+            declared = (
+                set(bindings.bootstrap_inputs)
+                | set(bindings.candidate_files)
+                | set(bindings.evaluator_flags)
+                | set(bindings.output_metadata)
+            )
+            unknown = sorted(declared - params)
+            if unknown:
+                raise ValueError(
+                    f"parameter_bindings reference undeclared parameters: {unknown}"
+                )
+        allowed_tokens = (
+            {
+                "session_workspace",
+                "workspace",
+                "skill_id",
+                "subject_id",
+                "variant",
+                "demo_mode",
+            }
+            | params
+        )
+        if bindings is not None:
+            for flag, template in bindings.fixed_flags.items():
+                for token in _template_placeholder_tokens(template):
+                    if token not in allowed_tokens:
+                        raise ValueError(
+                            f"fixed_flags {flag} placeholder {{{token}}} is not "
+                            f"in the closed vocabulary {sorted(allowed_tokens)}"
+                        )
+        if self.prompt is not None:
+            for label, command_template in (
+                ("experiment_command", self.prompt.experiment_command),
+                ("demo_experiment_command", self.prompt.demo_experiment_command),
+            ):
+                for token in _template_placeholder_tokens(command_template or ""):
+                    if token not in allowed_tokens:
+                        raise ValueError(
+                            f"{label} placeholder {{{token}}} is not in the "
+                            f"closed vocabulary {sorted(allowed_tokens)}"
+                        )
         return self
 
     @model_validator(mode="after")

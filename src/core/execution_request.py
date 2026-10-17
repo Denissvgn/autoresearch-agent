@@ -427,6 +427,15 @@ def _resolve_python(
         for key in ("copyable_files", "readable_files", "write_protected_files")
         for name in (ext.get(key) or ())
     }
+    # Operator-bound arguments (manifest parameter bindings): model-authored
+    # argv can neither change their values nor drop them. Values the model
+    # supplied identically are left alone; mismatches are rejected; missing
+    # bound flags are supplied from the binding (the resolved parameter).
+    bound_arguments = {
+        str(flag): str(value)
+        for flag, value in dict(ext.get("bound_arguments") or {}).items()
+    }
+    supplied: dict[str, str] = {}
     arguments: list[str] = []
     inputs: list[str] = []
     fixed: list[str] = []
@@ -439,9 +448,38 @@ def _resolve_python(
         if value is None:
             if flag == config_flag:
                 return None, f"{config_flag} requires a path"
+            if flag in bound_arguments:
+                return None, (
+                    f"operator-fixed argument {flag} cannot be changed by "
+                    "candidate input"
+                )
             fixed.append(flag)
             arguments.extend(item.render())
             continue
+        if flag in bound_arguments:
+            bound_value = bound_arguments[flag]
+            is_bound_path = (
+                flag == config_flag or os.path.basename(bound_value) in declared_names
+            )
+            if flag in supplied:
+                return None, (
+                    f"operator-fixed argument {flag} cannot be changed by "
+                    "candidate input"
+                )
+            if is_bound_path:
+                matches = _resolve_path_value(
+                    value, workspace_root=workspace_root, workdir=attempt_root
+                ) == _resolve_path_value(
+                    bound_value, workspace_root=workspace_root, workdir=attempt_root
+                )
+            else:
+                matches = value == bound_value
+            if not matches:
+                return None, (
+                    f"operator-fixed argument {flag} cannot be changed by "
+                    "candidate input"
+                )
+            supplied[flag] = value
         is_path_value = (
             flag == config_flag or os.path.basename(value) in declared_names
         )
@@ -457,6 +495,25 @@ def _resolve_python(
         inputs.append(resolved)
         arguments.extend((flag, resolved))
         fixed.append(f"{flag}={resolved}")
+
+    for flag, bound_value in bound_arguments.items():
+        if flag in supplied or bound_value == "":
+            continue
+        is_path_value = (
+            flag == config_flag or os.path.basename(bound_value) in declared_names
+        )
+        if is_path_value:
+            resolved = _resolve_path_value(
+                bound_value, workspace_root=workspace_root, workdir=attempt_root
+            )
+            if flag == config_flag:
+                config_path = resolved
+            inputs.append(resolved)
+            arguments.extend((flag, resolved))
+            fixed.append(f"{flag}={resolved}")
+        else:
+            arguments.extend((flag, bound_value))
+            fixed.append(f"{flag}={bound_value}")
 
     return ExecutionRequest(
         schema_version=REQUEST_SCHEMA_VERSION,

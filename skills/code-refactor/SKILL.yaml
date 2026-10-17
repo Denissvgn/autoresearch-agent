@@ -29,6 +29,19 @@ param_schema:
     max_complexity: { type: integer, minimum: 1, default: 10 }
   required: []
 
+# Parameter-to-work bindings: the requested candidate source initializes the
+# workspace and binds into the evaluator argv; the test set is operator-fixed.
+parameter_bindings:
+  bootstrap_inputs:
+    target_file: target_file
+  candidate_files:
+    target_file: target_file
+  evaluator_flags:
+    target_file: --target
+  fixed_flags:
+    --tests: tests_target.jsonl
+  output_metadata: {}
+
 metric_schema:
   primary:
     field: primary_metric
@@ -135,12 +148,13 @@ structured_hpo:
   enabled: false
 
 prompt:
+  # Bound flags (--target from target_file, operator-fixed --tests) are
+  # canonicalized into the command from parameter_bindings at render time.
   experiment_command: |
-    .venv/bin/python eval/run.py --target refactor_target.py --tests tests_target.jsonl
+    .venv/bin/python eval/run.py --tests tests_target.jsonl
   # ARC-012 P7-011: what the demo provider executes verbatim (offline static
-  # analysis). Absolute {session_workspace} paths — governed commands run with
-  # cwd = the workspace root, not the session workspace.
-  demo_experiment_command: .venv/bin/python eval/run.py --target {session_workspace}/refactor_target.py --tests {session_workspace}/tests_target.jsonl
+  # analysis). Bound flags render identically to the live command (parity).
+  demo_experiment_command: .venv/bin/python eval/run.py --tests tests_target.jsonl
   continuation_enabled: true
 
 ui:

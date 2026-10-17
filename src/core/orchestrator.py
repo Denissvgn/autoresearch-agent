@@ -2436,6 +2436,10 @@ class AgentOrchestrator:
         # the default policy sets inside ``evaluate_command_policy``; the
         # transitional runtimes return {} (parity with the hardcoded sets).
         skill_policy_extension = skill.command_policy_extension()
+        # Operator-bound evaluator arguments (manifest parameter bindings):
+        # the resolver rejects model-authored changes to these flags and
+        # supplies them when omitted (parameter-to-work traceability).
+        skill_policy_extension["bound_arguments"] = skill.bound_arguments(config)
         # One shared file-operation authorization for this run, derived
         # server-side from run ownership (the session workspace) and the
         # skill's declared evaluation data. Every tool call resolves its

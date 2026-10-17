@@ -10,6 +10,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
     ap.add_argument("--target-latency-ms", type=float, default=10.0)
+    ap.add_argument("--bench-duration-s", type=int, default=60)
     ap.add_argument("--baseline-tps", type=float, default=0.0)
     a = ap.parse_args()
     try:
@@ -31,7 +32,9 @@ def main():
     no_regr = (a.baseline_tps <= 0) or (tps >= 0.95 * a.baseline_tps)
     m = {"status": "completed", "primary_metric": tps, "metric_name": "tps", "tps": tps,
         "p99_latency_ms": p99, "p99_within_slo": slo, "no_regression": no_regr,
-        "bench_duration_s": 60, "training_gates_passed": slo and no_regr,
+        "bench_duration_s": a.bench_duration_s,
+        "target_latency_ms": a.target_latency_ms,
+        "training_gates_passed": slo and no_regr,
         "scorer": "offline-bench", "memory_knob_swept": True, "baseline_tps": True,
         "soak_test_passed": slo, "promotion_proposal": False}
     open("bench_result.json", "w", encoding="utf-8").write(json.dumps(m))

@@ -29,6 +29,19 @@ param_schema:
     bench_duration_s: { type: integer, minimum: 1, maximum: 3600, default: 60 }
   required: []
 
+# Parameter-to-work bindings: resolved skill_params reach the evaluator argv
+# and the reported output metadata only through these declared mappings.
+parameter_bindings:
+  bootstrap_inputs: {}
+  candidate_files: {}
+  evaluator_flags:
+    target_latency_ms: --target-latency-ms
+    bench_duration_s: --bench-duration-s
+  fixed_flags: {}
+  output_metadata:
+    bench_duration_s: bench_duration_s
+    target_latency_ms: target_latency_ms
+
 metric_schema:
   primary:
     field: primary_metric
@@ -128,12 +141,14 @@ structured_hpo:
   enabled: false
 
 prompt:
+  # Bound evaluator flags (--target-latency-ms, --bench-duration-s) are
+  # canonicalized into the command from parameter_bindings at render time.
   experiment_command: |
-    .venv/bin/python eval/run.py --config db_config.yaml --target-latency-ms 10
+    .venv/bin/python eval/run.py --config db_config.yaml
   # ARC-012 P7-011: what the demo provider executes verbatim (simulated
   # bench). Absolute {session_workspace} paths — governed commands run with
   # cwd = the workspace root, not the session workspace.
-  demo_experiment_command: .venv/bin/python eval/run.py --config {session_workspace}/db_config.yaml --target-latency-ms 10
+  demo_experiment_command: .venv/bin/python eval/run.py --config {session_workspace}/db_config.yaml
   continuation_enabled: true
 
 ui:

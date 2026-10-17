@@ -373,11 +373,23 @@ def test_attack_child_process_escape_denied_at_os(tmp_path: Path) -> None:
 # --- real live command templates + evidence immutability ---------------------
 
 
-def _live_template(skill_id: str) -> str:
-    manifest = yaml.safe_load(
-        (REPO_ROOT / "skills" / skill_id / "SKILL.yaml").read_text(encoding="utf-8")
+def _live_command(skill_id: str, skill_params: dict, session: Path) -> str:
+    """The session's real suggested command: the manifest template rendered
+    with the resolved parameter bindings (the parameter-to-work chain)."""
+    import types
+
+    from src.core.skill_loader import load_skill_manifest
+    from src.core.skill_runtime import ManifestSkillRuntime
+
+    runtime = ManifestSkillRuntime(
+        load_skill_manifest(REPO_ROOT / "skills" / skill_id / "SKILL.yaml"), None
     )
-    return manifest["prompt"]["experiment_command"].strip()
+    config = types.SimpleNamespace(
+        skill_params=dict(skill_params),
+        workspace_path=str(session),
+        subject_id=None, variant=None, instrument="", timeframe="",
+    )
+    return runtime.experiment_command(config)
 
 
 def _fresh_session(tmp_path: Path, kind: str):
@@ -407,9 +419,9 @@ def _bootstrap_into(skill_id: str, session: Path, skill_params: dict) -> None:
     "skill_id,kind,skill_params",
     [
         ("db-config-tuning", "autotuner",
-         {"symbol": "AAPL", "timeframe": "1h", "direction": "long"}),
-        ("code-refactor", "refactor", {"symbol": "AAPL", "timeframe": "1h", "direction": "long",
-                                        "file_path": "refactor_target.py"}),
+         {"target_latency_ms": 15, "bench_duration_s": 20}),
+        ("code-refactor", "refactor",
+         {"target_file": "refactor_target.py"}),
     ],
 )
 def test_real_live_template_runs_and_evidence_is_immutable(
@@ -422,7 +434,7 @@ def test_real_live_template_runs_and_evidence_is_immutable(
     shared, session = _fresh_session(tmp_path, kind)
     _bootstrap_into(skill_id, session, skill_params)
     extension = _pin_extension(skill_id, "eval/run.py")
-    template = _live_template(skill_id)
+    template = _live_command(skill_id, skill_params, session)
 
     runner = GovernedCommandRunner(
         workspace_root=str(shared), session_workspace=str(session),
@@ -490,7 +502,14 @@ def test_live_template_without_external_scorer_refuses_cleanly(tmp_path: Path) -
         workspace_root=str(shared), session_workspace=str(session),
         policy_extension=extension,
     )
-    result = runner.run(_live_template("prompt-engineering"), timeout_s=120)
+    result = runner.run(
+        _live_command(
+            "prompt-engineering",
+            {"symbol": "AAPL", "timeframe": "1h", "direction": "long"},
+            session,
+        ),
+        timeout_s=120,
+    )
     # A failed evaluation is recorded as eval_error — never as a score.
     assert '"status": "eval_error"' in result.output
     assert '"primary_metric": null' in result.output

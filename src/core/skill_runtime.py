@@ -229,7 +229,11 @@ class SkillRuntime(Protocol):
         ...
 
     def evaluator_command_params(self, config: "ResearchConfig") -> dict[str, str]:
-        """Server-owned evaluator flags for execution-boundary enforcement."""
+        """Server-owned evaluator flags for execution-boundary enforcement,
+        from the manifest's declared ``parameter_bindings``."""
+
+    def bound_arguments(self, config: "ResearchConfig") -> dict[str, str]:
+        """The flag->value map model-authored argv may not change or drop."""
         ...
 
     def experiment_command(self, config: "ResearchConfig") -> str:
@@ -445,45 +449,92 @@ class ManifestSkillRuntime:
             },
         }
 
-    def evaluator_command_params(self, config: "ResearchConfig") -> dict[str, str]:
-        """Server-owned argv values; execution must override agent-supplied flags.
+    def bound_arguments(self, config: "ResearchConfig") -> dict[str, str]:
+        """Server-owned evaluator argv values from the manifest's declared
+        ``parameter_bindings``.
 
-        This is also used to render the suggested command, but prompt text alone
-        is NOT enforcement. No provider credential is exposed to the child.
+        Fixed flags (operator-owned value templates) and parameter-bound
+        flags (values from the resolved skill_params) are the same contract
+        at execution: model-authored argv can neither change their values nor
+        drop them — the execution-request resolver enforces both. No provider
+        credential is exposed to the child.
         """
-        if self.skill_id != "prompt-engineering":
+        bindings = getattr(self._manifest, "parameter_bindings", None)
+        if bindings is None:
             return {}
-        from urllib.parse import urlsplit
+        params = getattr(config, "skill_params", None) or {}
+        bound: dict[str, str] = {}
+        for flag, template in bindings.fixed_flags.items():
+            bound[flag] = self._render_value_template(template, config)
+        for name, flag in bindings.evaluator_flags.items():
+            value = params.get(name)
+            bound[flag] = "" if value is None else str(value)
+        return bound
 
+    def evaluator_command_params(self, config: "ResearchConfig") -> dict[str, str]:
+        """Server-owned argv values; execution must override agent-supplied
+        flags. Backed by the manifest's declared bindings (no core branch on
+        a skill name)."""
+        return self.bound_arguments(config)
+
+    def _render_value_template(self, template: str, config: "ResearchConfig") -> str:
         from src.config import settings
 
-        params = getattr(config, "skill_params", None) or {}
-        scorer = params.get("scorer_url", "")
-        if not isinstance(scorer, str):
-            raise SkillConfigError("scorer_url must be a string")
-        if scorer:
-            url = urlsplit(scorer)
-            if (url.scheme not in {"http", "https"} or not url.hostname
-                    or url.username or url.password or url.fragment
-                    or any(c.isspace() or ord(c) < 32 for c in scorer)):
-                raise SkillConfigError("scorer_url must be an HTTP(S) endpoint without credentials")
         demo = settings.demo_mode is True and str(settings.environment).lower() != "production"
-        return {"--eval": "eval_set.jsonl", "--scorer-url": scorer,
-                "--demo": "true" if demo else "false"}
+        values = {
+            "session_workspace": getattr(config, "workspace_path", None) or "",
+            "workspace": getattr(config, "workspace_path", None) or "",
+            "skill_id": self.skill_id,
+            "subject_id": getattr(config, "subject_id", None) or getattr(config, "instrument", ""),
+            "variant": getattr(config, "variant", None) or getattr(config, "timeframe", ""),
+            "demo_mode": "true" if demo else "false",
+        }
+        return template.format_map(values)
 
-    def experiment_command(self, config: "ResearchConfig") -> str:
-        """Resolve the manifest command with explicit session evaluator wiring."""
+    def _render_command(self, template: str, config: "ResearchConfig") -> str:
+        """Render one command template with its bound arguments canonicalized.
+
+        Bound flags are normalized into the command: any occurrence in the
+        template is removed and the canonical (flag, resolved value) pairs are
+        appended, so the live and demo templates carry identical bound values
+        by construction (binding parity) and no duplicate-flag ambiguity
+        reaches the resolver.
+        """
         import shlex
 
+        command = self._render_value_template(template, config).strip()
+        if not command:
+            return ""
+        bound = self.bound_arguments(config)
+        kept: list[str] = []
+        skip_value = False
+        for token in shlex.split(command):
+            if skip_value:
+                skip_value = False
+                continue
+            name = token.split("=", 1)[0]
+            if name in bound:
+                if "=" not in token:
+                    skip_value = True
+                continue
+            kept.append(token)
+        for flag, value in bound.items():
+            if value == "":
+                continue
+            kept.extend((flag, value))
+        return " ".join(shlex.quote(token) for token in kept)
+
+    def experiment_command(self, config: "ResearchConfig") -> str:
+        """Render the manifest command with the session's bound arguments.
+
+        The template is the command base; every declared binding whose flag
+        is not already in the base is appended with its resolved value, so a
+        submitted (nondefault) parameter is visible in the suggested command
+        and traceable into the resolved execution request.
+        """
         prompt = self._manifest.prompt
-        command = (prompt.experiment_command if prompt is not None else None) or ""
-        params = self.evaluator_command_params(config)
-        if params:
-            # Fixed packaged entrypoint; never copy or invoke workspace code.
-            command = ".venv/bin/python eval/run.py --prompt prompt.yaml"
-            for flag, value in params.items():
-                command += " " + flag + " " + shlex.quote(value)
-        return command.strip()
+        template = (prompt.experiment_command if prompt is not None else None) or ""
+        return self._render_command(template, config)
 
     def demo_experiment_command(self, config: "ResearchConfig") -> str:
         """Render ``prompt.demo_experiment_command`` for this session
@@ -492,22 +543,16 @@ class ManifestSkillRuntime:
         The template's ``{session_workspace}`` becomes the session's absolute
         workspace path (governed commands run with cwd = the workspace root,
         so workspace-relative file arguments would miss); the identity
-        placeholders mirror the D4 path-template vocabulary. A skill that
-        declares no demo command renders "" — the demo provider then keeps
-        its default behaviour (no session-specific eval).
+        placeholders mirror the D4 path-template vocabulary. The session's
+        bound arguments are appended exactly as for the live command (binding
+        parity). A skill that declares no demo command renders "" — the demo
+        provider then keeps its default behaviour (no session-specific eval).
         """
         prompt = self._manifest.prompt
         template = (
             prompt.demo_experiment_command if prompt is not None else None
         ) or ""
-        if not template:
-            return ""
-        return template.format(
-            session_workspace=config.workspace_path or "",
-            skill_id=self.skill_id,
-            subject_id=config.subject_id or config.instrument,
-            variant=config.variant or config.timeframe,
-        )
+        return self._render_command(template, config)
 
     def iteration_marker_prefix(self) -> str:
         op = self._manifest.output_parser

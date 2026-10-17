@@ -68,12 +68,15 @@ class TestPromptEngineeringSkillManifest:
     def test_promotion_target_is_registry_api(self, manifest):
         assert manifest.promotion_target.primary.kind == "registry_api"
 
-    def test_demo_experiment_command_declared_and_renders(self, manifest):
+    def test_demo_experiment_command_declared_and_renders(self, manifest, monkeypatch):
         """ARC-012 P7-011: the skill declares the command the demo provider
         executes — rendered per-session with absolute workspace paths and the
-        offline scorer flag."""
+        operator-fixed dataset/demo flags bound from parameter_bindings."""
+        from src.config import settings
         from src.core.orchestrator import ResearchConfig
 
+        monkeypatch.setattr(settings, "demo_mode", True)
+        monkeypatch.setattr(settings, "environment", "development")
         assert manifest.prompt is not None
         assert manifest.prompt.demo_experiment_command, (
             "the skill must declare prompt.demo_experiment_command"
@@ -88,7 +91,7 @@ class TestPromptEngineeringSkillManifest:
         assert rendered == (
             ".venv/bin/python eval/run.py "
             "--prompt /ws/runs/prompt-engineering/default/production/prompt.yaml "
-            "--eval /ws/runs/prompt-engineering/default/production/eval_set.jsonl "
+            "--eval eval_set.jsonl "
             "--demo true"
         )
         assert runtime.iteration_marker_prefix() == "ITERATION_RESULT:"
@@ -388,6 +391,10 @@ async def test_prompt_engineering_session_end_to_end(monkeypatch, tmp_path):
     venv_bin.mkdir(parents=True)
     os.symlink(sys.executable, venv_bin / "python")
     monkeypatch.setattr(settings, "workspace_root", str(ws_root))
+    # The operator-fixed --demo binding is settings-derived: a demo-wired
+    # session must run under demo settings (model argv cannot set it).
+    monkeypatch.setattr(settings, "demo_mode", True)
+    monkeypatch.setattr(settings, "environment", "development")
 
     # ── Render the session workspace with the REAL bootstrap (P4-015 ABI). ──
     session_ws = (
@@ -465,6 +472,13 @@ async def test_prompt_engineering_session_end_to_end(monkeypatch, tmp_path):
     # P4-010 per-session selection calls this symbol inside orchestrator.
     monkeypatch.setattr(
         orchestrator_module, "build_provider", lambda name, **kw: provider,
+    )
+    # The operator-fixed --demo binding is settings-derived, so this session
+    # runs under demo settings — where the orchestrator would wire its
+    # MockProvider. Keep THIS test on the scripted HTTP-boundary client (the
+    # mock's job is the same injection point, driven by the demo command).
+    monkeypatch.setattr(
+        orchestrator_module, "MockProvider", lambda **kw: provider,
     )
 
     orchestrator = AgentOrchestrator(store)
