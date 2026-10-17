@@ -1,6 +1,6 @@
 # SignificanceConfig
 
-**Location:** `src/core/skill_manifest.py:272`
+**Location:** `src/core/skill_manifest.py:289`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)

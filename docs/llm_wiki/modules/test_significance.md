@@ -68,7 +68,7 @@ flowchart LR
 | [TestVerdict](../entities/TestVerdict.md) | 54 | — | — |
 | [TestRowHelpers](../entities/TestRowHelpers.md) | 116 | — | — |
 | [TestManifestDeclaration](../entities/TestManifestDeclaration.md) | 171 | — | — |
-| [_StubStore](../entities/StubStore.md) | 199 | — | — |
+| [_StubStore](../entities/test_significance_StubStore.md) | 199 | — | — |
 
 ## Functions
 

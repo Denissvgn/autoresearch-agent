@@ -1,6 +1,6 @@
 # PromptConfig
 
-**Location:** `src/core/skill_manifest.py:862`
+**Location:** `src/core/skill_manifest.py:879`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)

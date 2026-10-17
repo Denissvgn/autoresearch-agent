@@ -137,9 +137,9 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| list_research | isinstance (src/api/research.py:list_research) | 730 | `isinstance(limit, int)` |
-| list_research | isinstance (src/api/research.py:list_research) | 732 | `isinstance(offset, int)` |
-| list_research | decode_cursor | 734 | `decode_cursor(cursor)` |
+| list_research | isinstance (src/api/research.py:list_research) | 684 | `isinstance(limit, int)` |
+| list_research | isinstance (src/api/research.py:list_research) | 686 | `isinstance(offset, int)` |
+| list_research | decode_cursor | 688 | `decode_cursor(cursor)` |
 | decode_cursor | len (src/core/pagination.py:decode_cursor) | 66 | `len(token)` |
 | decode_cursor | base64.urlsafe_b64decode(…).decode | 67 | `base64.urlsafe_b64decode(token + padding).decode('utf-8')` |
 | decode_cursor | base64.urlsafe_b64decode | 67 | `base64.urlsafe_b64decode(...)` |
@@ -157,8 +157,8 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| external_call | `list_research` | `isinstance` | 730 |
-| external_call | `list_research` | `isinstance` | 732 |
+| external_call | `list_research` | `isinstance` | 684 |
+| external_call | `list_research` | `isinstance` | 686 |
 | unresolved_call | `decode_cursor` | `base64.urlsafe_b64decode(token + padding).decode` | 67 |
 | external_call | `decode_cursor` | `base64.urlsafe_b64decode` | 67 |
 | external_call | `decode_cursor` | `json.loads` | 68 |

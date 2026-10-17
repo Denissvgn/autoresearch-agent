@@ -106,8 +106,8 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| resume_research | _session_manager.resume_session | 873 | `_session_manager.resume_session(research_id)` |
-| resume_research | _audit | 875 | `_audit(request, action='research.resume', outcome='failure', research_id=research_id, error_message='Session not found or not running')` |
+| resume_research | _session_manager.resume_session | 827 | `_session_manager.resume_session(research_id)` |
+| resume_research | _audit | 829 | `_audit(request, action='research.resume', outcome='failure', research_id=research_id, error_message='Session not found or not running')` |
 | _audit | record_api_audit_event | 109 | `record_api_audit_event(request, _store, action=action, outcome=outcome, research_id=research_id, pipeline_id=pipeline_id, metadata=metadata, error_message=error_message)` |
 | record_api_audit_event | _request_actor | 51 | `_request_actor(request)` |
 | _request_actor | getattr | 13 | `getattr(request.state, 'auth_actor', None)` |
@@ -128,7 +128,7 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `resume_research` | `_session_manager.resume_session` | 873 |
+| unresolved_call | `resume_research` | `_session_manager.resume_session` | 827 |
 | external_call | `_request_actor` | `getattr` | 13 |
 | external_call | `_request_actor` | `isinstance` | 14 |
 | unresolved_call | `record_api_audit_event` | `store.record_audit_event` | 52 |

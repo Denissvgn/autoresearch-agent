@@ -31,13 +31,13 @@ flowchart TD
 | Module | Fan-in | Fan-out |
 |--------|--------|---------|
 | [results_store](modules/results_store.md) | 44 | 1 |
-| [config](modules/config.md) | 40 | 0 |
+| [config](modules/config.md) | 41 | 0 |
 | [orchestrator](modules/orchestrator.md) | 39 | 22 |
 | [skill_registry](modules/skill_registry.md) | 24 | 2 |
 | [client](modules/client.md) | 23 | 0 |
 | [llm_provider](modules/llm_provider.md) | 18 | 1 |
 | [research_phase_plan](modules/research_phase_plan.md) | 18 | 3 |
-| [skill_manifest](modules/skill_manifest.md) | 15 | 0 |
+| [skill_manifest](modules/skill_manifest.md) | 16 | 0 |
 | [config_promoter](modules/config_promoter.md) | 14 | 14 |
 | [skill_runtime](modules/skill_runtime.md) | 14 | 8 |
 | [experiment_parser](modules/experiment_parser.md) | 13 | 1 |
@@ -49,13 +49,13 @@ flowchart TD
 | [artifact_reference](modules/artifact_reference.md) | 11 | 0 |
 | [command_runner](modules/command_runner.md) | 11 | 4 |
 | [useResearch](modules/useResearch.md) | 11 | 2 |
+| [research](modules/research.md) | 10 | 11 |
 | [gate_status](modules/gate_status.md) | 10 | 0 |
 | [iteration_snapshot](modules/iteration_snapshot.md) | 10 | 2 |
 | [promotion_target](modules/promotion_target.md) | 10 | 1 |
 | [session_manager](modules/session_manager.md) | 10 | 10 |
 | [primitives](modules/primitives.md) | 10 | 0 |
 | [promotion](modules/promotion.md) | 9 | 7 |
-| [research](modules/research.md) | 9 | 10 |
 | [fs_safety](modules/fs_safety.md) | 9 | 0 |
 | [auth](modules/auth.md) | 8 | 1 |
 | [results](modules/results.md) | 8 | 9 |
@@ -97,6 +97,7 @@ flowchart TD
 | [research_state](modules/research_state.md) | 2 | 6 |
 | [significance](modules/significance.md) | 2 | 0 |
 | [skill_lifecycle](modules/skill_lifecycle.md) | 2 | 0 |
+| [skill_params](modules/skill_params.md) | 2 | 0 |
 | [DynamicFormFields](modules/DynamicFormFields.md) | 2 | 3 |
 | [IterationsTable](modules/IterationsTable.md) | 2 | 1 |
 | [MetricsChart](modules/MetricsChart.md) | 2 | 1 |
@@ -259,6 +260,7 @@ flowchart TD
 | [test_skill_generator](modules/test_skill_generator.md) | 0 | 2 |
 | [test_skill_lifecycle](modules/test_skill_lifecycle.md) | 0 | 2 |
 | [test_skill_loader](modules/test_skill_loader.md) | 0 | 3 |
+| [test_skill_params_validation](modules/test_skill_params_validation.md) | 0 | 4 |
 | [test_skill_paths](modules/test_skill_paths.md) | 0 | 1 |
 | [test_skill_prompt_engineering_e2e](modules/test_skill_prompt_engineering_e2e.md) | 0 | 7 |
 | [test_skills_api](modules/test_skills_api.md) | 0 | 3 |
@@ -292,8 +294,8 @@ flowchart TD
 
 ### python
 
-- **Used:** `aiosqlite`, `anthropic`, `asyncpg`, `dataset`, `engine`, `eval`, `fastapi`, `httpx`, `numpy`, `openai`, `prometheus-client`, `psutil`, `pydantic`, `pydantic-settings`, `pytest`, `pyyaml`, `starlette`, `uvicorn`
-- ⚠️ **Undeclared:** `aiosqlite`, `anthropic`, `dataset`, `engine`, `eval`, `fastapi`, `psutil`, `pytest`, `starlette`, `uvicorn`
+- **Used:** `aiosqlite`, `anthropic`, `asyncpg`, `dataset`, `engine`, `eval`, `fastapi`, `httpx`, `jsonschema`, `numpy`, `openai`, `prometheus-client`, `psutil`, `pydantic`, `pydantic-settings`, `pytest`, `pyyaml`, `starlette`, `uvicorn`
+- ⚠️ **Undeclared:** `aiosqlite`, `anthropic`, `dataset`, `engine`, `eval`, `fastapi`, `jsonschema`, `psutil`, `pytest`, `starlette`, `uvicorn`
 - **Unused (declared, not imported):** `requests`
 
 ### typescript

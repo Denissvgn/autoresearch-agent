@@ -1,6 +1,6 @@
 # PromotionTarget
 
-**Location:** `src/core/skill_manifest.py:759`
+**Location:** `src/core/skill_manifest.py:776`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)

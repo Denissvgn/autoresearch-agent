@@ -1,6 +1,6 @@
 # PromotionTargetKind
 
-**Location:** `src/core/skill_manifest.py:750`
+**Location:** `src/core/skill_manifest.py:767`
 **Kind:** Type alias
 **Bases:** —
 **Module:** [skill_manifest](../modules/skill_manifest.md)

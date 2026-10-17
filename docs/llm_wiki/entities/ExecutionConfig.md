@@ -1,6 +1,6 @@
 # ExecutionConfig
 
-**Location:** `src/core/skill_manifest.py:920`
+**Location:** `src/core/skill_manifest.py:937`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)

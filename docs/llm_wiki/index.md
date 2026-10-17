@@ -6,11 +6,11 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 
 | Surface | Count | Start here |
 |---|---:|---|
-| Entities | 441 | [Open section](#entities) |
-| Modules | 257 | [Open section](#modules) |
+| Entities | 443 | [Open section](#entities) |
+| Modules | 259 | [Open section](#modules) |
 | Workflows | 15 | [Open section](#workflows) |
 | Guides | 0 | No pages |
-| Entry-point flows | 118 | [Open section](#entry-point-flows) |
+| Entry-point flows | 123 | [Open section](#entry-point-flows) |
 | Infrastructure | 3 | [Open section](#infrastructure) |
 | HTTP API contracts | 0 | No pages |
 | Dependency architecture | 2 | [Open section](#dependency-architecture) |
@@ -288,7 +288,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [StubManifest](entities/StubManifest.md)
 - [StubProvider](entities/StubProvider.md)
 - [StubRegistry](entities/StubRegistry.md)
-- [StubStore](entities/StubStore.md)
+- [StubSessionManager](entities/StubSessionManager.md)
 - [SubjectDescriptor](entities/SubjectDescriptor.md)
 - [SubjectField](entities/SubjectField.md)
 - [SubjectInfo](entities/SubjectInfo.md)
@@ -455,7 +455,9 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [test_service_preflight_FakeAPIStatusError](entities/test_service_preflight_FakeAPIStatusError.md)
 - [test_service_preflight_FakeAsyncAnthropic](entities/test_service_preflight_FakeAsyncAnthropic.md)
 - [test_session_status_routing_FakeAsyncAnthropic](entities/test_session_status_routing_FakeAsyncAnthropic.md)
+- [test_significance_StubStore](entities/test_significance_StubStore.md)
 - [test_skill_loader_StubSettings](entities/test_skill_loader_StubSettings.md)
+- [test_skill_params_validation_StubStore](entities/test_skill_params_validation_StubStore.md)
 - [test_skills_generate_api_StubProvider](entities/test_skills_generate_api_StubProvider.md)
 - [test_trial_workspace_CapturingRunner](entities/test_trial_workspace_CapturingRunner.md)
 
@@ -575,6 +577,7 @@ Retained history; these declarations are absent from the selected source invento
 - [skill_lifecycle](modules/skill_lifecycle.md) - Skill lifecycle state machine (ARC-011 P5-010).
 - [skill_loader](modules/skill_loader.md) - Skill-manifest loader (ARC-011 P2-002).
 - [skill_manifest](modules/skill_manifest.md) - ``research_skill.v1`` manifest schema (ARC-011 P2-001).
+- [skill_params](modules/skill_params.md) - Skill-parameter resolution and validation over a declared schema subset.
 - [skill_paths](modules/skill_paths.md) - Skill path-template rendering (ARC-012 D4 / P7-005 / P7-007).
 - [skill_registry](modules/skill_registry.md) - Skill registry — startup discovery + hot reload (ARC-011 P2-003).
 - [skill_runtime](modules/skill_runtime.md) - ``SkillRuntime`` protocol — the single contract between skill author and orchestrator (ARC-011 P1-023).
@@ -700,6 +703,7 @@ Retained history; these declarations are absent from the selected source invento
 - [test_skill_generator](modules/test_skill_generator.md) - Skill generator tests (ARC-011 P5-021..026).
 - [test_skill_lifecycle](modules/test_skill_lifecycle.md) - Skill lifecycle + promotion tests (ARC-011 P5-010..013).
 - [test_skill_loader](modules/test_skill_loader.md) - Manifest schema + loader + registry tests (ARC-011 P2-001 / P2-002 / P2-003).
+- [test_skill_params_validation](modules/test_skill_params_validation.md) - Skill-parameter validation over the declared JSON Schema subset.
 - [test_skill_paths](modules/test_skill_paths.md) - ARC-012 P7-005/P7-007 — skill path-template rules (D4).
 - [test_skill_prompt_engineering_e2e](modules/test_skill_prompt_engineering_e2e.md) - P4-016 — End-to-end prompt-engineering session on OpenAI provider (ARC-011).
 - [test_skills_api](modules/test_skills_api.md) - Skill & subject endpoint contract tests (ARC-011 P3-012, GEN-003).
@@ -751,6 +755,7 @@ Retained history; these declarations are absent from the selected source invento
 
 - [api-allocate_trial_dir](flows/api-allocate_trial_dir.md) - entry: `allocate_trial_dir`
 - [api-append_findings](flows/api-append_findings.md) - entry: `append_findings`
+- [api-apply_defaults](flows/api-apply_defaults.md) - entry: `apply_defaults`
 - [api-audit_command_policy](flows/api-audit_command_policy.md) - entry: `audit_command_policy`
 - [api-best_config_hash](flows/api-best_config_hash.md) - entry: `best_config_hash`
 - [api-bounded_drain](flows/api-bounded_drain.md) - entry: `bounded_drain`
@@ -782,10 +787,12 @@ Retained history; these declarations are absent from the selected source invento
 - [api-reject_raw_secret_parameters](flows/api-reject_raw_secret_parameters.md) - entry: `reject_raw_secret_parameters`
 - [api-render_findings_markdown](flows/api-render_findings_markdown.md) - entry: `render_findings_markdown`
 - [api-render_path_template](flows/api-render_path_template.md) - entry: `render_path_template`
+- [api-resolve_and_validate](flows/api-resolve_and_validate.md) - entry: `resolve_and_validate`
 - [api-resolve_run_inputs](flows/api-resolve_run_inputs.md) - entry: `resolve_run_inputs`
 - [api-rlimit_prefix](flows/api-rlimit_prefix.md) - entry: `rlimit_prefix`
 - [api-samples_from_rows](flows/api-samples_from_rows.md) - entry: `samples_from_rows`
 - [api-sanitize_path_segment](flows/api-sanitize_path_segment.md) - entry: `sanitize_path_segment`
+- [api-schema_to_json_schema](flows/api-schema_to_json_schema.md) - entry: `schema_to_json_schema`
 - [api-select_backend](flows/api-select_backend.md) - entry: `select_backend`
 - [api-selectable_for](flows/api-selectable_for.md) - entry: `selectable_for`
 - [api-session_workspace_path](flows/api-session_workspace_path.md) - entry: `session_workspace_path`
@@ -797,7 +804,9 @@ Retained history; these declarations are absent from the selected source invento
 - [api-target_state](flows/api-target_state.md) - entry: `target_state`
 - [api-terminate_process_tree](flows/api-terminate_process_tree.md) - entry: `terminate_process_tree`
 - [api-trial_marker_candidates](flows/api-trial_marker_candidates.md) - entry: `trial_marker_candidates`
+- [api-unsupported_schema_keywords](flows/api-unsupported_schema_keywords.md) - entry: `unsupported_schema_keywords`
 - [api-validate_path_template](flows/api-validate_path_template.md) - entry: `validate_path_template`
+- [api-validate_resolved](flows/api-validate_resolved.md) - entry: `validate_resolved`
 - [api-validate_secret_list](flows/api-validate_secret_list.md) - entry: `validate_secret_list`
 - [api-wrap_command](flows/api-wrap_command.md) - entry: `wrap_command`
 

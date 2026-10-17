@@ -1,6 +1,6 @@
 # StartResearchRequest
 
-**Location:** `src/api/research.py:521`
+**Location:** `src/api/research.py:469`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [research](../modules/research.md)

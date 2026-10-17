@@ -1,6 +1,6 @@
 # FieldTypes
 
-**Location:** `src/core/skill_manifest.py:550`
+**Location:** `src/core/skill_manifest.py:567`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)

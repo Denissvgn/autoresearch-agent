@@ -73,13 +73,13 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| estimate_research_cost | estimate_session_cost | 617 | `estimate_session_cost(iterations=req.max_iterations, quick_mode=req.quick_mode)` |
+| estimate_research_cost | estimate_session_cost | 565 | `estimate_session_cost(iterations=req.max_iterations, quick_mode=req.quick_mode)` |
 | estimate_session_cost | max | 101 | `max(0, iterations)` |
 | estimate_session_cost | round | 103 | `round(per_iteration, 4)` |
 | estimate_session_cost | round | 104 | `round(total, 2)` |
-| estimate_research_cost | float | 620 | `float(estimate[...])` |
-| estimate_research_cost | bool | 621 | `bool(...)` |
-| estimate_research_cost | min | 626 | `min(total, req.max_budget_usd)` |
+| estimate_research_cost | float | 568 | `float(estimate[...])` |
+| estimate_research_cost | bool | 569 | `bool(...)` |
+| estimate_research_cost | min | 574 | `min(total, req.max_budget_usd)` |
 
 ### Boundary effects
 
@@ -92,7 +92,7 @@ flowchart LR
 | external_call | `estimate_session_cost` | `max` | 101 |
 | external_call | `estimate_session_cost` | `round` | 103 |
 | external_call | `estimate_session_cost` | `round` | 104 |
-| external_call | `estimate_research_cost` | `min` | 626 |
+| external_call | `estimate_research_cost` | `min` | 574 |
 
 ## Behavior
 

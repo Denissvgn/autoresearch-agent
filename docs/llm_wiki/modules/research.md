@@ -26,6 +26,7 @@ Research session management endpoints.
 | `src.core.llm_provider` | `estimate_session_cost` |
 | `src.core.pagination` | `DEFAULT_PAGE_SIZE`, `MAX_PAGE_SIZE`, `build_cursor_page`, `compute_next_cursor`, `decode_cursor` |
 | `src.core.skill_manifest` | `ManifestValidationError` |
+| `src.core.skill_params` | `resolve_and_validate` |
 | `src.core.skill_paths` | `sanitize_path_segment` |
 | `src.core.skill_registry` | `SkillNotRegisteredError`, `default_registry` |
 | `src.core.skill_runtime` | `SkillConfigError` |
@@ -53,8 +54,8 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Inbound | `src` (1) |
-| Inbound | `tests` (8) |
-| Outbound | `src` (10) |
+| Inbound | `tests` (9) |
+| Outbound | `src` (11) |
 
 ### External packages
 
@@ -62,16 +63,16 @@ flowchart LR
 |---|---:|---:|
 | python | 3 | 1 |
 
-> All 19 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 21 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [StartResearchRequest](../entities/research_StartResearchRequest.md) | 521 | `BaseModel` | — |
-| [EstimateCostRequest](../entities/EstimateCostRequest.md) | 588 | `BaseModel` | Body for ``POST /research/estimate-cost`` — the New-Research preview. |
-| [ContinueResearchRequest](../entities/ContinueResearchRequest.md) | 894 | `BaseModel` | Request body for continuing a timed-out/completed session. |
-| [RuntimeResumeRequest](../entities/RuntimeResumeRequest.md) | 908 | `ContinueResearchRequest` | Explicit operator action for resuming a restart-recovered session. |
+| [StartResearchRequest](../entities/research_StartResearchRequest.md) | 469 | `BaseModel` | — |
+| [EstimateCostRequest](../entities/EstimateCostRequest.md) | 536 | `BaseModel` | Body for ``POST /research/estimate-cost`` — the New-Research preview. |
+| [ContinueResearchRequest](../entities/ContinueResearchRequest.md) | 848 | `BaseModel` | Request body for continuing a timed-out/completed session. |
+| [RuntimeResumeRequest](../entities/RuntimeResumeRequest.md) | 862 | `ContinueResearchRequest` | Explicit operator action for resuming a restart-recovered session. |
 
 ## Functions
 
@@ -87,7 +88,7 @@ flowchart LR
 | `_translate_legacy_request` | `(req: 'StartResearchRequest') -> None` | — | D3 translation shim (ARC-012 P7-010): translate a legacy |
 | `_skill_config_http_error` | `(skill_id: str, exc: SkillConfigError) -> HTTPException` | — | Map a start-time ``SkillConfigError`` to a structured 4xx (P7-010). |
 | `_translate_canonical_request` | `(req: 'StartResearchRequest') -> list[dict[str, Any]]` | — | Translate a canonical request (skill_id/subject_id/variant) to the |
-| `_validate_skill_params` | `(skill_id: str, params: Dict[str, Any] \| None, schema: Any) -> None` | — | Validate ``skill_params`` against the skill's ``param_schema`` (P3-013 AC). |
+| `_validate_skill_params` | `(skill_id: str, params: Dict[str, Any] \| None, schema: Any) -> Dict[str, Any]` | — | Resolve and validate ``skill_params`` against the skill's ``param_schema``. |
 | `_json_hash` | `(payload: Any) -> str` | — | — |
 | `_run_idempotent` | *(async)* `(*, operation: str, parent_id: str, key: str \| None, request_payload: Dict[str, Any], call: Callable[[], Awaitable[Dict[str, Any]]]) -> Dict[str, Any]` | — | — |
 | `estimate_research_cost` | *(async)* `(req: EstimateCostRequest)` | `@router.post('/research/estimate-cost')` | Expected-cost preview for a planned session (P2 ops). |

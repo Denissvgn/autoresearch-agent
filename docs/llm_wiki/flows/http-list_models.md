@@ -43,7 +43,7 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| list_models | default_registry.available | 1092 | `default_registry.available(data not statically known)` |
+| list_models | default_registry.available | 1046 | `default_registry.available(data not statically known)` |
 
 ### Boundary effects
 
@@ -53,7 +53,7 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `list_models` | `default_registry.available` | 1092 |
+| unresolved_call | `list_models` | `default_registry.available` | 1046 |
 
 ## Behavior
 

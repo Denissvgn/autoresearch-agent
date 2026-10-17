@@ -1,6 +1,6 @@
 # BlockerClassification
 
-**Location:** `src/core/skill_manifest.py:831`
+**Location:** `src/core/skill_manifest.py:848`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)

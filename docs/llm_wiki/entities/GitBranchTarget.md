@@ -1,6 +1,6 @@
 # GitBranchTarget
 
-**Location:** `src/core/skill_manifest.py:712`
+**Location:** `src/core/skill_manifest.py:729`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)

@@ -1,6 +1,6 @@
 # RegistryLookup
 
-**Location:** `src/core/skill_manifest.py:667`
+**Location:** `src/core/skill_manifest.py:684`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)

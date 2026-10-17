@@ -1,6 +1,6 @@
 # RuntimeResumeRequest
 
-**Location:** `src/api/research.py:908`
+**Location:** `src/api/research.py:862`
 **Kind:** Pydantic model
 **Bases:** `ContinueResearchRequest`
 **Module:** [research](../modules/research.md)

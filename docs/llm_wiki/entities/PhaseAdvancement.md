@@ -1,6 +1,6 @@
 # PhaseAdvancement
 
-**Location:** `src/core/skill_manifest.py:374`
+**Location:** `src/core/skill_manifest.py:391`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)

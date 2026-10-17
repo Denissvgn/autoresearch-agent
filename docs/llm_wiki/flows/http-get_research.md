@@ -122,17 +122,17 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| get_research | research_id.startswith | 799 | `research_id.startswith('pipe_')` |
-| get_research | _store.get_pipeline | 800 | `_store.get_pipeline(research_id)` |
-| get_research | dict (src/api/research.py:get_research) | 802 | `dict(pipe)` |
-| get_research | payload.setdefault | 803 | `payload.setdefault('model_type', 'pipeline')` |
-| get_research | payload.setdefault | 804 | `payload.setdefault('skill_name', 'pipeline')` |
-| get_research | payload.setdefault | 805 | `payload.setdefault('workspace_path', '')` |
-| get_research | payload.setdefault | 806 | `payload.setdefault('best_iteration', None)` |
-| get_research | payload.setdefault | 807 | `payload.setdefault('best_metric', None)` |
-| get_research | payload.setdefault | 808 | `payload.setdefault('resumed_from', None)` |
-| get_research | pipe.get | 810 | `pipe.get('current_phase')` |
-| get_research | pipe.get | 812 | `pipe.get(...)` |
+| get_research | research_id.startswith | 753 | `research_id.startswith('pipe_')` |
+| get_research | _store.get_pipeline | 754 | `_store.get_pipeline(research_id)` |
+| get_research | dict (src/api/research.py:get_research) | 756 | `dict(pipe)` |
+| get_research | payload.setdefault | 757 | `payload.setdefault('model_type', 'pipeline')` |
+| get_research | payload.setdefault | 758 | `payload.setdefault('skill_name', 'pipeline')` |
+| get_research | payload.setdefault | 759 | `payload.setdefault('workspace_path', '')` |
+| get_research | payload.setdefault | 760 | `payload.setdefault('best_iteration', None)` |
+| get_research | payload.setdefault | 761 | `payload.setdefault('best_metric', None)` |
+| get_research | payload.setdefault | 762 | `payload.setdefault('resumed_from', None)` |
+| get_research | pipe.get | 764 | `pipe.get('current_phase')` |
+| get_research | pipe.get | 766 | `pipe.get(...)` |
 
 ### Boundary effects
 
@@ -142,16 +142,16 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `get_research` | `research_id.startswith` | 799 |
-| unresolved_call | `get_research` | `_store.get_pipeline` | 800 |
-| unresolved_call | `get_research` | `payload.setdefault` | 803 |
-| unresolved_call | `get_research` | `payload.setdefault` | 804 |
-| unresolved_call | `get_research` | `payload.setdefault` | 805 |
-| unresolved_call | `get_research` | `payload.setdefault` | 806 |
-| unresolved_call | `get_research` | `payload.setdefault` | 807 |
-| unresolved_call | `get_research` | `payload.setdefault` | 808 |
-| unresolved_call | `get_research` | `pipe.get` | 810 |
-| unresolved_call | `get_research` | `pipe.get` | 812 |
+| unresolved_call | `get_research` | `research_id.startswith` | 753 |
+| unresolved_call | `get_research` | `_store.get_pipeline` | 754 |
+| unresolved_call | `get_research` | `payload.setdefault` | 757 |
+| unresolved_call | `get_research` | `payload.setdefault` | 758 |
+| unresolved_call | `get_research` | `payload.setdefault` | 759 |
+| unresolved_call | `get_research` | `payload.setdefault` | 760 |
+| unresolved_call | `get_research` | `payload.setdefault` | 761 |
+| unresolved_call | `get_research` | `payload.setdefault` | 762 |
+| unresolved_call | `get_research` | `pipe.get` | 764 |
+| unresolved_call | `get_research` | `pipe.get` | 766 |
 | step_limit | `get_research` | `first 12 steps` | 0 |
 
 ## Behavior

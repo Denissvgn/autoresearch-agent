@@ -1,6 +1,6 @@
 # ContinueResearchRequest
 
-**Location:** `src/api/research.py:894`
+**Location:** `src/api/research.py:848`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [research](../modules/research.md)

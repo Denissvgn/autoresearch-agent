@@ -1,6 +1,6 @@
 # EstimateCostRequest
 
-**Location:** `src/api/research.py:588`
+**Location:** `src/api/research.py:536`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [research](../modules/research.md)

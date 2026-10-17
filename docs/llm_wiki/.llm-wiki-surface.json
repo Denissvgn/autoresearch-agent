@@ -18,18 +18,18 @@
     "by_kind": {
       "api-contracts": 0,
       "dependencies": 1,
-      "entities": 441,
-      "flows": 118,
+      "entities": 443,
+      "flows": 123,
       "guides": 0,
       "index": 1,
       "infrastructure": 3,
       "load-order": 1,
       "log": 1,
-      "modules": 257,
+      "modules": 259,
       "workflows": 15
     },
     "dependency_architecture": 2,
-    "total": 838
+    "total": 847
   },
   "dependency_pages": {
     "count": 2,
@@ -194,6 +194,83 @@
         }
       },
       "id": "api-append_findings",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
+        "label": "apply_defaults",
+        "source_path": "src/core/skill_params.py",
+        "symbol": "apply_defaults"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [],
+          "gaps": [
+            {
+              "kind": "external_call",
+              "line": 54,
+              "step": "schema_to_json_schema",
+              "target": "isinstance"
+            },
+            {
+              "kind": "external_call",
+              "line": 57,
+              "step": "schema_to_json_schema",
+              "target": "getattr"
+            },
+            {
+              "kind": "external_call",
+              "line": 58,
+              "step": "schema_to_json_schema",
+              "target": "getattr"
+            },
+            {
+              "kind": "external_call",
+              "line": 60,
+              "step": "schema_to_json_schema",
+              "target": "getattr"
+            },
+            {
+              "kind": "external_call",
+              "line": 64,
+              "step": "schema_to_json_schema",
+              "target": "hasattr"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 63,
+              "step": "schema_to_json_schema",
+              "target": "prop.model_dump"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 65,
+              "step": "schema_to_json_schema",
+              "target": "properties.items"
+            },
+            {
+              "kind": "step_limit",
+              "line": 0,
+              "step": "apply_defaults",
+              "target": "first 12 steps"
+            }
+          ],
+          "generated": true,
+          "step_count": 12,
+          "transfer_count": 11,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/skill_params.py"
+          ],
+          "step_count": 31,
+          "truncated": false
+        }
+      },
+      "id": "api-apply_defaults",
       "language": "python"
     },
     {
@@ -2062,6 +2139,77 @@
       "category": "api",
       "detector": "builtin",
       "entry_point": {
+        "label": "resolve_and_validate",
+        "source_path": "src/core/skill_params.py",
+        "symbol": "resolve_and_validate"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [],
+          "gaps": [
+            {
+              "kind": "external_call",
+              "line": 54,
+              "step": "schema_to_json_schema",
+              "target": "isinstance"
+            },
+            {
+              "kind": "external_call",
+              "line": 57,
+              "step": "schema_to_json_schema",
+              "target": "getattr"
+            },
+            {
+              "kind": "external_call",
+              "line": 58,
+              "step": "schema_to_json_schema",
+              "target": "getattr"
+            },
+            {
+              "kind": "external_call",
+              "line": 60,
+              "step": "schema_to_json_schema",
+              "target": "getattr"
+            },
+            {
+              "kind": "external_call",
+              "line": 64,
+              "step": "schema_to_json_schema",
+              "target": "hasattr"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 63,
+              "step": "schema_to_json_schema",
+              "target": "prop.model_dump"
+            },
+            {
+              "kind": "step_limit",
+              "line": 0,
+              "step": "resolve_and_validate",
+              "target": "first 12 steps"
+            }
+          ],
+          "generated": true,
+          "step_count": 12,
+          "transfer_count": 11,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/skill_params.py"
+          ],
+          "step_count": 48,
+          "truncated": false
+        }
+      },
+      "id": "api-resolve_and_validate",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
         "label": "resolve_run_inputs",
         "source_path": "src/core/execution_contracts.py",
         "symbol": "resolve_run_inputs"
@@ -2284,6 +2432,89 @@
         }
       },
       "id": "api-sanitize_path_segment",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
+        "label": "schema_to_json_schema",
+        "source_path": "src/core/skill_params.py",
+        "symbol": "schema_to_json_schema"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [],
+          "gaps": [
+            {
+              "kind": "external_call",
+              "line": 54,
+              "step": "schema_to_json_schema",
+              "target": "isinstance"
+            },
+            {
+              "kind": "external_call",
+              "line": 57,
+              "step": "schema_to_json_schema",
+              "target": "getattr"
+            },
+            {
+              "kind": "external_call",
+              "line": 58,
+              "step": "schema_to_json_schema",
+              "target": "getattr"
+            },
+            {
+              "kind": "external_call",
+              "line": 60,
+              "step": "schema_to_json_schema",
+              "target": "getattr"
+            },
+            {
+              "kind": "external_call",
+              "line": 64,
+              "step": "schema_to_json_schema",
+              "target": "hasattr"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 63,
+              "step": "schema_to_json_schema",
+              "target": "prop.model_dump"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 65,
+              "step": "schema_to_json_schema",
+              "target": "properties.items"
+            },
+            {
+              "kind": "external_call",
+              "line": 67,
+              "step": "schema_to_json_schema",
+              "target": "getattr"
+            },
+            {
+              "kind": "step_limit",
+              "line": 0,
+              "step": "schema_to_json_schema",
+              "target": "first 12 steps"
+            }
+          ],
+          "generated": true,
+          "step_count": 12,
+          "transfer_count": 11,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/skill_params.py"
+          ],
+          "step_count": 16,
+          "truncated": false
+        }
+      },
+      "id": "api-schema_to_json_schema",
       "language": "python"
     },
     {
@@ -2870,6 +3101,83 @@
       "category": "api",
       "detector": "builtin",
       "entry_point": {
+        "label": "unsupported_schema_keywords",
+        "source_path": "src/core/skill_params.py",
+        "symbol": "unsupported_schema_keywords"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [],
+          "gaps": [
+            {
+              "kind": "external_call",
+              "line": 54,
+              "step": "schema_to_json_schema",
+              "target": "isinstance"
+            },
+            {
+              "kind": "external_call",
+              "line": 57,
+              "step": "schema_to_json_schema",
+              "target": "getattr"
+            },
+            {
+              "kind": "external_call",
+              "line": 58,
+              "step": "schema_to_json_schema",
+              "target": "getattr"
+            },
+            {
+              "kind": "external_call",
+              "line": 60,
+              "step": "schema_to_json_schema",
+              "target": "getattr"
+            },
+            {
+              "kind": "external_call",
+              "line": 64,
+              "step": "schema_to_json_schema",
+              "target": "hasattr"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 63,
+              "step": "schema_to_json_schema",
+              "target": "prop.model_dump"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 65,
+              "step": "schema_to_json_schema",
+              "target": "properties.items"
+            },
+            {
+              "kind": "step_limit",
+              "line": 0,
+              "step": "unsupported_schema_keywords",
+              "target": "first 12 steps"
+            }
+          ],
+          "generated": true,
+          "step_count": 12,
+          "transfer_count": 11,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/skill_params.py"
+          ],
+          "step_count": 20,
+          "truncated": false
+        }
+      },
+      "id": "api-unsupported_schema_keywords",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
         "label": "validate_path_template",
         "source_path": "src/core/skill_paths.py",
         "symbol": "validate_path_template"
@@ -2953,6 +3261,100 @@
         }
       },
       "id": "api-validate_path_template",
+      "language": "python"
+    },
+    {
+      "category": "api",
+      "detector": "builtin",
+      "entry_point": {
+        "label": "validate_resolved",
+        "source_path": "src/core/skill_params.py",
+        "symbol": "validate_resolved"
+      },
+      "evidence": {
+        "data_flow": {
+          "boundary_effects": [
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 147,
+              "step": "validate_resolved",
+              "step_index": 1,
+              "target": "violations.append"
+            },
+            {
+              "confidence": "unknown",
+              "kind": "mutation",
+              "line": 154,
+              "step": "validate_resolved",
+              "step_index": 1,
+              "target": "violations.append"
+            }
+          ],
+          "gaps": [
+            {
+              "kind": "external_call",
+              "line": 54,
+              "step": "schema_to_json_schema",
+              "target": "isinstance"
+            },
+            {
+              "kind": "external_call",
+              "line": 57,
+              "step": "schema_to_json_schema",
+              "target": "getattr"
+            },
+            {
+              "kind": "external_call",
+              "line": 58,
+              "step": "schema_to_json_schema",
+              "target": "getattr"
+            },
+            {
+              "kind": "external_call",
+              "line": 60,
+              "step": "schema_to_json_schema",
+              "target": "getattr"
+            },
+            {
+              "kind": "external_call",
+              "line": 64,
+              "step": "schema_to_json_schema",
+              "target": "hasattr"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 63,
+              "step": "schema_to_json_schema",
+              "target": "prop.model_dump"
+            },
+            {
+              "kind": "unresolved_call",
+              "line": 65,
+              "step": "schema_to_json_schema",
+              "target": "properties.items"
+            },
+            {
+              "kind": "step_limit",
+              "line": 0,
+              "step": "validate_resolved",
+              "target": "first 12 steps"
+            }
+          ],
+          "generated": true,
+          "step_count": 12,
+          "transfer_count": 11,
+          "truncated": false
+        },
+        "flow": {
+          "modules_touched": [
+            "src/core/skill_params.py"
+          ],
+          "step_count": 31,
+          "truncated": false
+        }
+      },
+      "id": "api-validate_resolved",
       "language": "python"
     },
     {
@@ -3068,43 +3470,43 @@
           "gaps": [
             {
               "kind": "unresolved_call",
-              "line": 458,
+              "line": 406,
               "step": "_run_idempotent",
               "target": "key.strip"
             },
             {
               "kind": "external_call",
-              "line": 459,
+              "line": 407,
               "step": "_run_idempotent",
               "target": "HTTPException"
             },
             {
               "kind": "external_call",
-              "line": 461,
+              "line": 409,
               "step": "_run_idempotent",
               "target": "HTTPException"
             },
             {
               "kind": "unresolved_call",
-              "line": 463,
+              "line": 411,
               "step": "_run_idempotent",
               "target": "hashlib.sha256(key.strip().encode('utf-8')).hexdigest"
             },
             {
               "kind": "external_call",
-              "line": 463,
+              "line": 411,
               "step": "_run_idempotent",
               "target": "hashlib.sha256"
             },
             {
               "kind": "unresolved_call",
-              "line": 463,
+              "line": 411,
               "step": "_run_idempotent",
               "target": "key.strip().encode"
             },
             {
               "kind": "unresolved_call",
-              "line": 463,
+              "line": 411,
               "step": "_run_idempotent",
               "target": "key.strip"
             },
@@ -3155,7 +3557,7 @@
           "gaps": [
             {
               "kind": "unresolved_call",
-              "line": 1044,
+              "line": 998,
               "step": "delete_research",
               "target": "_session_manager.is_running"
             },
@@ -3527,7 +3929,7 @@
             },
             {
               "kind": "external_call",
-              "line": 626,
+              "line": 574,
               "step": "estimate_research_cost",
               "target": "min"
             }
@@ -4177,61 +4579,61 @@
           "gaps": [
             {
               "kind": "unresolved_call",
-              "line": 799,
+              "line": 753,
               "step": "get_research",
               "target": "research_id.startswith"
             },
             {
               "kind": "unresolved_call",
-              "line": 800,
+              "line": 754,
               "step": "get_research",
               "target": "_store.get_pipeline"
             },
             {
               "kind": "unresolved_call",
-              "line": 803,
+              "line": 757,
               "step": "get_research",
               "target": "payload.setdefault"
             },
             {
               "kind": "unresolved_call",
-              "line": 804,
+              "line": 758,
               "step": "get_research",
               "target": "payload.setdefault"
             },
             {
               "kind": "unresolved_call",
-              "line": 805,
+              "line": 759,
               "step": "get_research",
               "target": "payload.setdefault"
             },
             {
               "kind": "unresolved_call",
-              "line": 806,
+              "line": 760,
               "step": "get_research",
               "target": "payload.setdefault"
             },
             {
               "kind": "unresolved_call",
-              "line": 807,
+              "line": 761,
               "step": "get_research",
               "target": "payload.setdefault"
             },
             {
               "kind": "unresolved_call",
-              "line": 808,
+              "line": 762,
               "step": "get_research",
               "target": "payload.setdefault"
             },
             {
               "kind": "unresolved_call",
-              "line": 810,
+              "line": 764,
               "step": "get_research",
               "target": "pipe.get"
             },
             {
               "kind": "unresolved_call",
-              "line": 812,
+              "line": 766,
               "step": "get_research",
               "target": "pipe.get"
             },
@@ -5105,25 +5507,25 @@
           "gaps": [
             {
               "kind": "unresolved_call",
-              "line": 774,
+              "line": 728,
               "step": "list_audit_events",
               "target": "_store.list_audit_events"
             },
             {
               "kind": "unresolved_call",
-              "line": 785,
+              "line": 739,
               "step": "list_audit_events",
               "target": "event.get"
             },
             {
               "kind": "external_call",
-              "line": 787,
+              "line": 741,
               "step": "list_audit_events",
               "target": "isinstance"
             },
             {
               "kind": "unresolved_call",
-              "line": 788,
+              "line": 742,
               "step": "list_audit_events",
               "target": "actor_id.startswith"
             }
@@ -5158,7 +5560,7 @@
           "gaps": [
             {
               "kind": "unresolved_call",
-              "line": 1092,
+              "line": 1046,
               "step": "list_models",
               "target": "default_registry.available"
             }
@@ -5285,13 +5687,13 @@
           "gaps": [
             {
               "kind": "external_call",
-              "line": 730,
+              "line": 684,
               "step": "list_research",
               "target": "isinstance"
             },
             {
               "kind": "external_call",
-              "line": 732,
+              "line": 686,
               "step": "list_research",
               "target": "isinstance"
             },
@@ -5777,7 +6179,7 @@
           "gaps": [
             {
               "kind": "unresolved_call",
-              "line": 850,
+              "line": 804,
               "step": "pause_research",
               "target": "_session_manager.pause_session"
             },
@@ -6328,7 +6730,7 @@
           "gaps": [
             {
               "kind": "unresolved_call",
-              "line": 873,
+              "line": 827,
               "step": "resume_research",
               "target": "_session_manager.resume_session"
             },
@@ -6469,43 +6871,43 @@
           "gaps": [
             {
               "kind": "unresolved_call",
-              "line": 458,
+              "line": 406,
               "step": "_run_idempotent",
               "target": "key.strip"
             },
             {
               "kind": "external_call",
-              "line": 459,
+              "line": 407,
               "step": "_run_idempotent",
               "target": "HTTPException"
             },
             {
               "kind": "external_call",
-              "line": 461,
+              "line": 409,
               "step": "_run_idempotent",
               "target": "HTTPException"
             },
             {
               "kind": "unresolved_call",
-              "line": 463,
+              "line": 411,
               "step": "_run_idempotent",
               "target": "hashlib.sha256(key.strip().encode('utf-8')).hexdigest"
             },
             {
               "kind": "external_call",
-              "line": 463,
+              "line": 411,
               "step": "_run_idempotent",
               "target": "hashlib.sha256"
             },
             {
               "kind": "unresolved_call",
-              "line": 463,
+              "line": 411,
               "step": "_run_idempotent",
               "target": "key.strip().encode"
             },
             {
               "kind": "unresolved_call",
-              "line": 463,
+              "line": 411,
               "step": "_run_idempotent",
               "target": "key.strip"
             },
@@ -6678,9 +7080,10 @@
             "src/api/research.py",
             "src/compat/legacy_alias.py",
             "src/core/skill_paths.py",
-            "src/api/audit.py"
+            "src/api/audit.py",
+            "src/core/skill_params.py"
           ],
-          "step_count": 86,
+          "step_count": 119,
           "truncated": false
         }
       },
@@ -6710,7 +7113,7 @@
           "gaps": [
             {
               "kind": "unresolved_call",
-              "line": 827,
+              "line": 781,
               "step": "stop_research",
               "target": "_session_manager.stop_session"
             },
@@ -8612,7 +9015,7 @@
         "entities/StubManifest.md",
         "entities/StubProvider.md",
         "entities/StubRegistry.md",
-        "entities/StubStore.md",
+        "entities/StubSessionManager.md",
         "entities/SubjectDescriptor.md",
         "entities/SubjectField.md",
         "entities/SubjectInfo.md",
@@ -8664,7 +9067,9 @@
         "entities/test_service_preflight_FakeAPIStatusError.md",
         "entities/test_service_preflight_FakeAsyncAnthropic.md",
         "entities/test_session_status_routing_FakeAsyncAnthropic.md",
+        "entities/test_significance_StubStore.md",
         "entities/test_skill_loader_StubSettings.md",
+        "entities/test_skill_params_validation_StubStore.md",
         "entities/test_skills_generate_api_StubProvider.md",
         "entities/test_trial_workspace_CapturingRunner.md",
         "entities/TestAdaptiveNoopReasonFallback.md",
@@ -8760,6 +9165,7 @@
         "entities/YieldingFakeWS.md",
         "flows/api-allocate_trial_dir.md",
         "flows/api-append_findings.md",
+        "flows/api-apply_defaults.md",
         "flows/api-audit_command_policy.md",
         "flows/api-best_config_hash.md",
         "flows/api-bounded_drain.md",
@@ -8791,10 +9197,12 @@
         "flows/api-reject_raw_secret_parameters.md",
         "flows/api-render_findings_markdown.md",
         "flows/api-render_path_template.md",
+        "flows/api-resolve_and_validate.md",
         "flows/api-resolve_run_inputs.md",
         "flows/api-rlimit_prefix.md",
         "flows/api-samples_from_rows.md",
         "flows/api-sanitize_path_segment.md",
+        "flows/api-schema_to_json_schema.md",
         "flows/api-select_backend.md",
         "flows/api-selectable_for.md",
         "flows/api-session_workspace_path.md",
@@ -8806,7 +9214,9 @@
         "flows/api-target_state.md",
         "flows/api-terminate_process_tree.md",
         "flows/api-trial_marker_candidates.md",
+        "flows/api-unsupported_schema_keywords.md",
         "flows/api-validate_path_template.md",
+        "flows/api-validate_resolved.md",
         "flows/api-validate_secret_list.md",
         "flows/api-wrap_command.md",
         "flows/http-continue_research.md",
@@ -8986,6 +9396,7 @@
         "modules/skill_lifecycle.md",
         "modules/skill_loader.md",
         "modules/skill_manifest.md",
+        "modules/skill_params.md",
         "modules/skill_paths.md",
         "modules/skill_registry.md",
         "modules/skill_runtime.md",
@@ -9113,6 +9524,7 @@
         "modules/test_skill_generator.md",
         "modules/test_skill_lifecycle.md",
         "modules/test_skill_loader.md",
+        "modules/test_skill_params_validation.md",
         "modules/test_skill_paths.md",
         "modules/test_skill_prompt_engineering_e2e.md",
         "modules/test_skills_api.md",
@@ -11134,7 +11546,8 @@
       "kind": "entities",
       "mcp_uri": "llm-wiki://entities/ParamSchema",
       "outgoing_internal_links": [
-        "modules/skill_manifest.md"
+        "modules/skill_manifest.md",
+        "modules/test_skill_params_validation.md"
       ],
       "role": "semantic",
       "source_path": "src/core/skill_manifest.py",
@@ -13026,16 +13439,16 @@
       "title": "_StubRegistry"
     },
     {
-      "canonical_path": "entities/StubStore.md",
-      "id": "StubStore",
+      "canonical_path": "entities/StubSessionManager.md",
+      "id": "StubSessionManager",
       "kind": "entities",
-      "mcp_uri": "llm-wiki://entities/StubStore",
+      "mcp_uri": "llm-wiki://entities/StubSessionManager",
       "outgoing_internal_links": [
-        "modules/test_significance.md"
+        "modules/test_skill_params_validation.md"
       ],
       "role": "semantic",
-      "source_path": "tests/test_significance.py",
-      "title": "_StubStore"
+      "source_path": "tests/test_skill_params_validation.py",
+      "title": "_StubSessionManager"
     },
     {
       "canonical_path": "entities/SubjectDescriptor.md",
@@ -13652,6 +14065,18 @@
       "title": "_FakeAsyncAnthropic"
     },
     {
+      "canonical_path": "entities/test_significance_StubStore.md",
+      "id": "test_significance_StubStore",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/test_significance_StubStore",
+      "outgoing_internal_links": [
+        "modules/test_significance.md"
+      ],
+      "role": "semantic",
+      "source_path": "tests/test_significance.py",
+      "title": "_StubStore"
+    },
+    {
       "canonical_path": "entities/test_skill_loader_StubSettings.md",
       "id": "test_skill_loader_StubSettings",
       "kind": "entities",
@@ -13662,6 +14087,18 @@
       "role": "semantic",
       "source_path": "tests/test_skill_loader.py",
       "title": "_StubSettings"
+    },
+    {
+      "canonical_path": "entities/test_skill_params_validation_StubStore.md",
+      "id": "test_skill_params_validation_StubStore",
+      "kind": "entities",
+      "mcp_uri": "llm-wiki://entities/test_skill_params_validation_StubStore",
+      "outgoing_internal_links": [
+        "modules/test_skill_params_validation.md"
+      ],
+      "role": "semantic",
+      "source_path": "tests/test_skill_params_validation.py",
+      "title": "_StubStore"
     },
     {
       "canonical_path": "entities/test_skills_generate_api_StubProvider.md",
@@ -16641,6 +17078,20 @@
       "title": "skill_manifest Module"
     },
     {
+      "canonical_path": "modules/skill_params.md",
+      "id": "skill_params",
+      "kind": "modules",
+      "mcp_uri": "llm-wiki://modules/skill_params",
+      "outgoing_internal_links": [
+        "modules/research.md",
+        "modules/skill_params.md",
+        "modules/test_skill_params_validation.md"
+      ],
+      "role": "semantic",
+      "source_path": "src/core/skill_params.py",
+      "title": "skill_params Module"
+    },
+    {
       "canonical_path": "modules/skill_paths.md",
       "id": "skill_paths",
       "kind": "modules",
@@ -18571,7 +19022,7 @@
       "kind": "modules",
       "mcp_uri": "llm-wiki://modules/test_significance",
       "outgoing_internal_links": [
-        "entities/StubStore.md",
+        "entities/test_significance_StubStore.md",
         "entities/TestManifestDeclaration.md",
         "entities/TestMeanStd.md",
         "entities/TestRowHelpers.md",
@@ -18639,6 +19090,24 @@
       "role": "semantic",
       "source_path": "tests/test_skill_loader.py",
       "title": "test_skill_loader Module"
+    },
+    {
+      "canonical_path": "modules/test_skill_params_validation.md",
+      "id": "test_skill_params_validation",
+      "kind": "modules",
+      "mcp_uri": "llm-wiki://modules/test_skill_params_validation",
+      "outgoing_internal_links": [
+        "entities/StubSessionManager.md",
+        "entities/test_skill_params_validation_StubStore.md",
+        "modules/config.md",
+        "modules/research.md",
+        "modules/skill_manifest.md",
+        "modules/skill_params.md",
+        "modules/test_skill_params_validation.md"
+      ],
+      "role": "semantic",
+      "source_path": "tests/test_skill_params_validation.py",
+      "title": "test_skill_params_validation Module"
     },
     {
       "canonical_path": "modules/test_skill_paths.md",
@@ -19311,6 +19780,18 @@
       "title": "append_findings"
     },
     {
+      "canonical_path": "flows/api-apply_defaults.md",
+      "id": "api-apply_defaults",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-apply_defaults",
+      "outgoing_internal_links": [
+        "modules/skill_params.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/skill_params.py",
+      "title": "apply_defaults"
+    },
+    {
       "canonical_path": "flows/api-audit_command_policy.md",
       "id": "api-audit_command_policy",
       "kind": "flows",
@@ -19689,6 +20170,18 @@
       "title": "render_path_template"
     },
     {
+      "canonical_path": "flows/api-resolve_and_validate.md",
+      "id": "api-resolve_and_validate",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-resolve_and_validate",
+      "outgoing_internal_links": [
+        "modules/skill_params.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/skill_params.py",
+      "title": "resolve_and_validate"
+    },
+    {
       "canonical_path": "flows/api-resolve_run_inputs.md",
       "id": "api-resolve_run_inputs",
       "kind": "flows",
@@ -19735,6 +20228,18 @@
       "role": "mixed",
       "source_path": "src/core/skill_paths.py",
       "title": "sanitize_path_segment"
+    },
+    {
+      "canonical_path": "flows/api-schema_to_json_schema.md",
+      "id": "api-schema_to_json_schema",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-schema_to_json_schema",
+      "outgoing_internal_links": [
+        "modules/skill_params.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/skill_params.py",
+      "title": "schema_to_json_schema"
     },
     {
       "canonical_path": "flows/api-select_backend.md",
@@ -19871,6 +20376,18 @@
       "title": "trial_marker_candidates"
     },
     {
+      "canonical_path": "flows/api-unsupported_schema_keywords.md",
+      "id": "api-unsupported_schema_keywords",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-unsupported_schema_keywords",
+      "outgoing_internal_links": [
+        "modules/skill_params.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/skill_params.py",
+      "title": "unsupported_schema_keywords"
+    },
+    {
       "canonical_path": "flows/api-validate_path_template.md",
       "id": "api-validate_path_template",
       "kind": "flows",
@@ -19881,6 +20398,18 @@
       "role": "mixed",
       "source_path": "src/core/skill_paths.py",
       "title": "validate_path_template"
+    },
+    {
+      "canonical_path": "flows/api-validate_resolved.md",
+      "id": "api-validate_resolved",
+      "kind": "flows",
+      "mcp_uri": "llm-wiki://flows/api-validate_resolved",
+      "outgoing_internal_links": [
+        "modules/skill_params.md"
+      ],
+      "role": "mixed",
+      "source_path": "src/core/skill_params.py",
+      "title": "validate_resolved"
     },
     {
       "canonical_path": "flows/api-validate_secret_list.md",
@@ -20588,6 +21117,7 @@
         "modules/audit.md",
         "modules/compat_legacy_alias.md",
         "modules/research.md",
+        "modules/skill_params.md",
         "modules/skill_paths.md"
       ],
       "role": "mixed",
@@ -20936,6 +21466,7 @@
         "modules/skill_lifecycle.md",
         "modules/skill_loader.md",
         "modules/skill_manifest.md",
+        "modules/skill_params.md",
         "modules/skill_paths.md",
         "modules/skill_registry.md",
         "modules/skill_runtime.md",
@@ -21063,6 +21594,7 @@
         "modules/test_skill_generator.md",
         "modules/test_skill_lifecycle.md",
         "modules/test_skill_loader.md",
+        "modules/test_skill_params_validation.md",
         "modules/test_skill_paths.md",
         "modules/test_skill_prompt_engineering_e2e.md",
         "modules/test_skills_api.md",
@@ -21204,6 +21736,7 @@
         "modules/skill_lifecycle.md",
         "modules/skill_loader.md",
         "modules/skill_manifest.md",
+        "modules/skill_params.md",
         "modules/skill_paths.md",
         "modules/skill_registry.md",
         "modules/skill_runtime.md",
@@ -21331,6 +21864,7 @@
         "modules/test_skill_generator.md",
         "modules/test_skill_lifecycle.md",
         "modules/test_skill_loader.md",
+        "modules/test_skill_params_validation.md",
         "modules/test_skill_paths.md",
         "modules/test_skill_prompt_engineering_e2e.md",
         "modules/test_skills_api.md",
@@ -21363,5 +21897,5 @@
     }
   ],
   "schema_version": "llm-wiki-surface-index/v1",
-  "source_hash": "sha256:6120d1e046658d172b60fbe15f61554b6607ae79c203efbc4e3e1164c4fbc123"
+  "source_hash": "sha256:e085182fdf2acd3aed302534bd2d4fe21d4cd4d203f7f7a6f261b699e5e51d5e"
 }

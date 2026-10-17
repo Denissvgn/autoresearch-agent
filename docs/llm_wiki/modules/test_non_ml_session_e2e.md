@@ -114,5 +114,6 @@ flowchart LR
 | `_preserve_lifespan_globals` | `(monkeypatch: pytest.MonkeyPatch) -> None` | — | Snapshot the module globals main's lifespan wires so teardown restores |
 | `demo_workspace` | `(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path` | `@pytest.fixture` | A hermetic demo deployment: temp workspace root with the workspace |
 | `_poll_terminal` | `(client: TestClient, research_id: str, timeout_s: float = 90.0) -> dict` | — | — |
+| `_valid_params` | `(skill_id: str, staging_dir: Path) -> dict` | — | Per-skill parameter objects valid against each declared param_schema. |
 | `test_non_ml_session_runs_end_to_end` | `(demo_workspace: Path, skill_id: str, expected_target_kind: str) -> None` | `@pytest.mark.parametrize(('skill_id', 'expected_target_kind'), _SKILL_CASES)` | — |
 | `test_demo_workspace_bootstrap_files_exist` | `(demo_workspace: Path) -> None` | — | The start-path bootstrap (P7-011) renders the evaluator's inputs — |
