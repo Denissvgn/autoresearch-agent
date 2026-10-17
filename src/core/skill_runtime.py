@@ -926,12 +926,14 @@ class ManifestSkillRuntime:
         config_snapshot: Optional[str] = None,
         planned_trial: Optional[dict] = None,
     ) -> dict:
-        # G2: delegates to build_trial_identity (the existing multi-source
-        # synthesis). A resolve_identity.py plugin slot is declared in the
-        # manifest but the behavior is byte-identical via the shared helper.
+        # G2: delegates to build_trial_identity, honoring the declared
+        # ``trial_identity.hash_fields`` selection (declarative resolve mode).
+        # A declared plugin resolver is rejected explicitly by the shared
+        # helper until the plugin runner exists.
         from src.core.iteration_snapshot import build_trial_identity
 
         model_type = getattr(config, "model_type", "") or ""
+        trial_config = getattr(self._manifest, "trial_identity", None)
         return build_trial_identity(
             instrument=config.instrument,
             timeframe=config.timeframe,
@@ -940,6 +942,10 @@ class ManifestSkillRuntime:
             command=command,
             marker=planned_trial,
             quick_mode=config.quick_mode,
+            hash_fields=getattr(trial_config, "hash_fields", None) or None,
+            resolve_mode=getattr(
+                getattr(trial_config, "resolve", None), "mode", "declarative",
+            ),
         )
 
     # ── Preflight ─────────────────────────────────────────────────

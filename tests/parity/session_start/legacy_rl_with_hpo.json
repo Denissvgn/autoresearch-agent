@@ -2,24 +2,24 @@
   "category": "session_start",
   "description": "legacy RL request with HPO settings and initial balance",
   "expected": {
-    "focus_hint": null,
     "id": "res_parity0002",
     "instrument": "BTC_USDT",
-    "max_budget_usd": 25.0,
-    "max_iterations": 50,
+    "timeframe": "1h",
     "model_type": "rl",
-    "pipeline_id": null,
+    "tag": "parity-rl",
     "quick_mode": false,
+    "max_iterations": 50,
+    "max_budget_usd": 25.0,
+    "timeout_s": 0,
+    "focus_hint": null,
+    "workspace_path": "",
     "resumed_from": null,
+    "pipeline_id": null,
     "skill_id": "",
-    "skill_params": {},
     "skill_version": "",
     "subject_id": "BTC_USDT",
-    "tag": "parity-rl",
-    "timeframe": "1h",
-    "timeout_s": 0,
     "variant": "1h",
-    "workspace_path": ""
+    "skill_params": {}
   },
   "function": "construct_research_config",
   "input": {
@@ -41,5 +41,5 @@
     }
   },
   "recapture": "ARC-011 P2-017: ResearchConfig gained canonical subject_id/variant/skill_params fields (derived from legacy instrument/timeframe in __post_init__; flat ML fields mirror into skill_params). skill_id stays \"\" by default (derived at materialize_skill_runtime, not construction, to preserve the transitional-runtime back-compat). Re-captured under the append-only-with-linked-task rule.\nARC-011 P4-002: ResearchConfig gained session_nonce (a per-build 32-byte hex anti-forgery secret). NOT re-captured \u2014 it is non-deterministic; the parity engine now DROPS session_nonce from the normalized snapshot (_engine._DROP_KEY_RE) so the golden expected block is byte-identical and no secret is baked into a fixture.",
-  "source_sha": "f2300939d6fb3252f2dd2f714dce0c4efcd0ec3e"
+  "source_sha": "a544f7394042d213730f60c2059f9fa511405735"
 }

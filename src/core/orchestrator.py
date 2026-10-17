@@ -66,6 +66,7 @@ from src.core.iteration_context import (
     derive_exploration_markers,
 )
 from src.core.iteration_snapshot import (
+    UnsupportedIdentityResolveError,
     build_iteration_attempt_snapshot,
     build_trial_identity,
     canonical_config_hash,
@@ -1801,18 +1802,60 @@ class AgentOrchestrator:
         identical across sessions.
         """
 
-        identity = build_trial_identity(
-            instrument=config.subject_id,
-            timeframe=config.variant,
-            model_type=config.domain,
-            command=command,
-            config_snapshot=config_snapshot,
-            quick_mode=config.quick_mode,
-            marker=planned_trial or {},
-        )
+        _skill = getattr(self, "_session_skills", {}).get(config.id)
+        _manifest = getattr(_skill, "manifest", None) if _skill else None
+        _trial_cfg = getattr(_manifest, "trial_identity", None)
+        _sig_cfg = getattr(getattr(_manifest, "metric_schema", None), "significance", None)
+        try:
+            identity = build_trial_identity(
+                instrument=config.subject_id,
+                timeframe=config.variant,
+                model_type=config.domain,
+                command=command,
+                config_snapshot=config_snapshot,
+                quick_mode=config.quick_mode,
+                marker=planned_trial or {},
+                hash_fields=getattr(_trial_cfg, "hash_fields", None) or None,
+                resolve_mode=getattr(
+                    getattr(_trial_cfg, "resolve", None), "mode", "declarative",
+                ),
+            )
+        except UnsupportedIdentityResolveError as exc:
+            return self._reject_observation(
+                config=config,
+                turn=turn,
+                command=command,
+                config_snapshot=config_snapshot,
+                reason=str(exc),
+                policy_operation="identity_resolve.reject",
+            )
         identity_hash = trial_identity_hash(identity)
         if not identity_hash:
             return None, None
+
+        # Authorized repeats: the declared evaluation policy admits up to
+        # ``planned_repeats`` observations per candidate, each with a distinct
+        # observation slot (and each charged to the run budget). A slot beyond
+        # the declaration is not authorized and is rejected explicitly.
+        repeat_index = identity.get("repeat_index")
+        planned_repeats = int(getattr(_sig_cfg, "planned_repeats", 1) or 1)
+        if repeat_index is not None and int(repeat_index) >= planned_repeats:
+            return self._reject_observation(
+                config=config,
+                turn=turn,
+                command=command,
+                config_snapshot=config_snapshot,
+                reason=(
+                    "Unauthorized repeat rejected: observation slot "
+                    f"{repeat_index} exceeds the declared "
+                    f"planned_repeats={planned_repeats}. Declare the repeat "
+                    "in the evaluation policy to authorize (and charge) "
+                    "another observation of this candidate."
+                ),
+                policy_operation="unauthorized_repeat.reject",
+                identity=identity,
+                identity_hash=identity_hash,
+            )
 
         duplicate = await self._store.find_duplicate_trial_identity(
             research_id=config.id,
@@ -1958,6 +2001,48 @@ class AgentOrchestrator:
                 "trial_identity_hash": identity_hash,
                 "duplicate_of_research_id": duplicate_research_id,
                 "duplicate_of_iteration": duplicate_iteration,
+            },
+        ), marker
+
+    def _reject_observation(
+        self,
+        *,
+        config: ResearchConfig,
+        turn: int,
+        command: str,
+        config_snapshot: Optional[str],
+        reason: str,
+        policy_operation: str,
+        identity: Optional[Dict[str, Any]] = None,
+        identity_hash: Optional[str] = None,
+    ) -> tuple[ToolExecutionResult, Dict[str, Any]]:
+        """Explicitly reject an observation that must never run (or re-run)."""
+        marker = {
+            "status": "rejected_duplicate",
+            "primary_metric": None,
+            "metric_name": None,
+            "training_gates_passed": False,
+            "all_gates_passed": False,
+            "decision": "discard",
+            "description": f"{reason} (turn {turn})",
+            "config_snapshot": config_snapshot,
+            "canonical_config_hash": (identity or {}).get("canonical_config_hash"),
+            "trial_identity": identity,
+            "trial_identity_hash": identity_hash,
+            "duplicate_of_research_id": None,
+            "duplicate_of_iteration": None,
+            "duplicate_reason": reason,
+        }
+        return ToolExecutionResult(
+            reason,
+            meta={
+                "policy_allowed": False,
+                "policy_reason": reason,
+                "policy_operation": policy_operation,
+                "normalized_command": _normalize_command_for_plan(command),
+                "returncode": None,
+                "timed_out": False,
+                "trial_identity_hash": identity_hash,
             },
         ), marker
 
@@ -4147,6 +4232,7 @@ class AgentOrchestrator:
             "gate_bundle_evaluation",
             "consistency_report",
             "quality_baseline_evaluation",
+            "replication_qualification",
         ):
             container = preview.get(key)
             if not isinstance(container, dict):
@@ -4361,6 +4447,9 @@ class AgentOrchestrator:
         if session:
             identity = marker.get("trial_identity")
             if not identity:
+                _rec_skill = getattr(self, "_session_skills", {}).get(research_id)
+                _rec_manifest = getattr(_rec_skill, "manifest", None) if _rec_skill else None
+                _rec_trial_cfg = getattr(_rec_manifest, "trial_identity", None)
                 identity = build_trial_identity(
                     instrument=str(session.get("instrument") or ""),
                     timeframe=str(session.get("timeframe") or ""),
@@ -4369,6 +4458,10 @@ class AgentOrchestrator:
                     config_snapshot=marker.get("config_snapshot"),
                     quick_mode=bool(session.get("quick_mode")),
                     marker=marker,
+                    hash_fields=getattr(_rec_trial_cfg, "hash_fields", None) or None,
+                    resolve_mode=getattr(
+                        getattr(_rec_trial_cfg, "resolve", None), "mode", "declarative",
+                    ),
                 )
                 marker["trial_identity"] = identity
             marker["canonical_config_hash"] = (

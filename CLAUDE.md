@@ -54,9 +54,9 @@ You have a LIMITED number of tool calls. **Do not waste them** on `ls`, `find`, 
 
 These rules prevent common failure patterns observed in research sessions:
 
-1. **Never re-run the exact same configuration** — deterministic experiments return the same result. Always change at least one meaningful parameter.
+1. **Do not re-run an unchanged configuration unless the evaluation policy declares a repeat** — a declared repeat (`planned_repeats`) is an authorized, budget-charged observation for replication/noise estimation and must carry its own observation slot. An undeclared identical re-run is rejected as a duplicate.
 2. **Never change ONLY a random seed** — if a configuration only works with one specific seed, it is not robust and will never pass multi-seed validation. Changing the seed is not a valid optimization strategy.
 3. **Make meaningful changes** — do not nudge parameters by tiny amounts. Change by at least 2× or 0.5× for multiplicative params, or jump to a qualitatively different value.
-4. **Never "restore best and re-run unchanged"** — if you already ran that configuration, re-running it gives the same result. Always vary at least one parameter when restoring from best.
+4. **"Restore best and re-run unchanged" only as a declared repeat** — replication must be predeclared in the evaluation policy (`planned_repeats`); undeclared identical re-runs are rejected as duplicates. Otherwise vary at least one parameter when restoring from best.
 5. **Diversify search dimensions** — if 3+ consecutive iterations tuned the same parameter, switch to a completely different dimension.
 6. **Screening trap**: if the skill offers a quick/screening mode, use it for triage only. Validate promising candidates in full mode EARLY (don't wait until the last iteration). Quick-mode winners often fail in full mode — expect this and plan for it.

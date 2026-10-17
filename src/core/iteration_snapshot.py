@@ -9,7 +9,7 @@ import platform
 import shlex
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, Mapping, Optional, Sequence
 
 import yaml
 
@@ -17,6 +17,56 @@ from src.core import fs_safety
 from src.core.artifact_reference import normalize_optional_artifact_ref
 
 TRIAL_IDENTITY_SCHEMA_VERSION = "autoresearch_trial_identity.v1"
+#: Schema stamped on declaration-shaped observation identities (declared
+#: ``trial_identity.hash_fields``): the candidate digest stays separate from
+#: the observation identity, which folds the evaluation context and the
+#: observation slot.
+OBSERVATION_IDENTITY_SCHEMA_VERSION = "autoresearch_observation_identity.v2"
+
+#: Closed alias vocabulary for declarative ``trial_identity.hash_fields``.
+#: Declared names resolve from the built-in identity namespace first; anything
+#: else resolves from the attempt marker (e.g. ``db_config_hash``).
+IDENTITY_FIELD_ALIASES = {
+    "skill_id": "model_type",
+    "subject_id": "instrument",
+    "variant": "timeframe",
+    "candidate_digest": "canonical_config_hash",
+    "observation_slot": "repeat_index",
+}
+
+#: Evaluation-context fields folded into comparison identity: results from
+#: different evaluators, datasets, environments, or fidelity levels must never
+#: be deduplicated or pooled against each other.
+EVALUATION_CONTEXT_FIELDS = (
+    "evaluator_id",
+    "evaluator_version",
+    "evaluator_digest",
+    "scorer_id",
+    "scorer_version",
+    "dataset_digests",
+    "data_hash",
+    "environment_digest",
+    "fidelity",
+)
+
+
+class UnsupportedIdentityResolveError(ValueError):
+    """Raised when an identity resolver mode is declared but unsupported."""
+
+
+def evaluation_context_hash(context: Any) -> Optional[str]:
+    """Digest of the evaluator/data/environment/fidelity context, or None.
+
+    The comparability key: two observations hash equal only when their
+    evaluation contexts match.
+    """
+    if not isinstance(context, Mapping):
+        return None
+    picked = {key: context[key] for key in EVALUATION_CONTEXT_FIELDS if key in context}
+    if not picked:
+        return None
+    encoded = json.dumps(_canonicalize(picked), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def build_iteration_attempt_snapshot(
@@ -178,8 +228,31 @@ def build_trial_identity(
     quick_mode: bool,
     marker: Optional[Mapping[str, Any]] = None,
     source_model_ids: Optional[Mapping[str, Any]] = None,
+    hash_fields: Optional[Sequence[str]] = None,
+    resolve_mode: str = "declarative",
+    evaluation_context: Optional[Mapping[str, Any]] = None,
+    repeat_index: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Build a duplicate-detection identity for one planned/training attempt.
+    """Build an observation identity for one planned/training attempt.
+
+    Two identities stay separate: the **candidate digest**
+    (``canonical_config_hash`` — what was attempted) and the **observation
+    identity** (this dict — which measured observation of that candidate).
+    An authorized repeat carries a distinct ``repeat_index``/``observation_id``
+    slot, so required replication is admitted while an accidental re-submission
+    of the same observation still deduplicates.
+
+    ``hash_fields`` (manifest ``trial_identity.hash_fields``): when declared,
+    the declarative selection is sufficient — the identity folds exactly the
+    declared fields (resolved from the identity namespace, then the attempt
+    marker) plus the candidate digest, the evaluation-context hash, and the
+    observation slot. Undeclared, the legacy synthesis below is byte-compatible
+    with recorded rows. ``resolve_mode="plugin"`` is rejected explicitly.
+
+    ``evaluation_context`` (evaluator/data/environment/fidelity; falls back to
+    the server-computed ``marker["execution_identity"]`` when declared) folds
+    into the identity so changed evaluation contexts never deduplicate or pool
+    against each other.
 
     ``source_model_ids`` (RL only): the upstream direction/volatility model run-ids
     the enriched training data is derived from.  Folding them into ``data_split_id``
@@ -188,14 +261,15 @@ def build_trial_identity(
     for a manual ``training.seed`` bump).  Omitted/None for direction & volatility.
     """
 
+    if resolve_mode == "plugin":
+        raise UnsupportedIdentityResolveError(
+            "trial_identity.resolve: mode=plugin is not supported; "
+            "declare mode=declarative with hash_fields"
+        )
     marker = marker or {}
     config_payload = canonical_config_payload(config_snapshot)
-    identity = {
-        "schema_version": TRIAL_IDENTITY_SCHEMA_VERSION,
-        "instrument": instrument,
-        "timeframe": timeframe,
-        "model_type": model_type,
-        "canonical_config_hash": canonical_config_hash(config_snapshot),
+    config_hash = canonical_config_hash(config_snapshot)
+    probes = {
         "seed": _resolve_seed(
             command=command,
             config_payload=config_payload,
@@ -210,6 +284,58 @@ def build_trial_identity(
             config_payload, source_model_ids=source_model_ids
         ),
     }
+    if repeat_index is None:
+        for key in ("repeat_index", "observation_slot"):
+            value = marker.get(key)
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                repeat_index = value
+                break
+    context_source = evaluation_context
+    if context_source is None and hash_fields:
+        context_source = _dict_at(marker, "execution_identity") or None
+    context_hash = evaluation_context_hash(context_source)
+
+    if not hash_fields:
+        identity = {
+            "schema_version": TRIAL_IDENTITY_SCHEMA_VERSION,
+            "instrument": instrument,
+            "timeframe": timeframe,
+            "model_type": model_type,
+            "canonical_config_hash": config_hash,
+            **probes,
+        }
+    else:
+        namespace = {
+            "instrument": instrument,
+            "subject_id": instrument,
+            "timeframe": timeframe,
+            "variant": timeframe,
+            "model_type": model_type,
+            "skill_id": model_type,
+            "canonical_config_hash": config_hash,
+            "candidate_digest": config_hash,
+            **probes,
+            "repeat_index": repeat_index,
+            "observation_slot": repeat_index,
+        }
+        identity = {
+            "schema_version": OBSERVATION_IDENTITY_SCHEMA_VERSION,
+            "canonical_config_hash": config_hash,
+        }
+        for name in hash_fields:
+            resolved = IDENTITY_FIELD_ALIASES.get(name, name)
+            if resolved in namespace:
+                identity[name] = namespace[resolved]
+            else:
+                identity[name] = marker.get(name)
+    if context_hash is not None:
+        identity["evaluation_context_hash"] = context_hash
+    if repeat_index is not None:
+        identity["repeat_index"] = repeat_index
+        identity["observation_id"] = str(
+            marker.get("observation_id")
+            or f"obs:{(config_hash or "")[:12]}:r{repeat_index}"
+        )
     return identity
 
 

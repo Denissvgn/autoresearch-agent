@@ -301,6 +301,12 @@ class SignificanceConfig(BaseModel):
     min_samples: int = Field(default=2, ge=1, le=10)
     #: Separation required, in standard errors of the difference.
     min_sigma: float = Field(default=1.0, ge=0.0)
+    #: Predeclared observations per candidate (authorized repeats). Each
+    #: authorized observation gets a distinct observation identity and is
+    #: charged to the run budget like any other iteration.
+    planned_repeats: int = Field(default=1, ge=1, le=10)
+    #: Qualification additionally requires explicit holdout evidence.
+    holdout_required: bool = False
 
 
 class MetricSchema(BaseModel):

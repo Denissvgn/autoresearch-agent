@@ -31,7 +31,7 @@ Design decisions (house style):
 
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 
 from src.core.objective_comparator import ObjectiveComparator
 
@@ -96,7 +96,8 @@ def significance_verdict(
 
 
 def samples_from_rows(
-    rows: Sequence[dict], *, canonical_config_hash: str
+    rows: Sequence[dict], *, canonical_config_hash: str,
+    context_hash: Optional[str] = None,
 ) -> list[float]:
     """Collect primary-metric samples for one config hash from iteration rows.
 
@@ -104,6 +105,11 @@ def samples_from_rows(
     parsed object holds ``canonical_config_hash`` (written by
     ``_record_iteration`` for every trial-identity build). Malformed rows are
     skipped — statistics over partial data beats failing the decision path.
+
+    ``context_hash`` isolates observations by evaluation context: when given,
+    only rows recorded under the same evaluator/data/environment/fidelity
+    context contribute. Changed contexts are different measurements and are
+    never pooled into one sample group.
     """
     import json
 
@@ -115,8 +121,11 @@ def samples_from_rows(
             metrics = json.loads(row.get("metrics_json") or "{}")
         except (TypeError, ValueError):
             continue
-        if metrics.get("canonical_config_hash") == canonical_config_hash:
-            out.append(float(row["primary_metric"]))
+        if metrics.get("canonical_config_hash") != canonical_config_hash:
+            continue
+        if context_hash is not None and metrics.get("evaluation_context_hash") != context_hash:
+            continue
+        out.append(float(row["primary_metric"]))
     return out
 
 
@@ -153,12 +162,92 @@ def best_config_hash(
     return metrics.get("canonical_config_hash") or None
 
 
+def best_other_config_hash(
+    rows: Sequence[dict],
+    *,
+    exclude_hash: Optional[str],
+    direction: str = "higher_is_better",
+) -> Optional[str]:
+    """The best recorded config hash other than ``exclude_hash``.
+
+    The reference side of a candidate comparison: rows belonging to the
+    candidate itself never count as their own reference.
+    """
+    import json
+
+    others: list = []
+    for row in rows:
+        try:
+            metrics = json.loads(row.get("metrics_json") or "{}")
+        except (TypeError, ValueError):
+            continue
+        if metrics.get("canonical_config_hash") != exclude_hash:
+            others.append(row)
+    return best_config_hash(others, direction=direction)
+
+
+def qualification_status(
+    *,
+    candidate: Sequence[float],
+    reference: Optional[Sequence[float]] = None,
+    config: Any = None,
+    verdict: Optional[str] = None,
+    holdout_evidence: Optional[bool] = None,
+) -> dict:
+    """Visible replication/qualification status for one candidate.
+
+    Exploratory point estimates are fine; **production qualification requires
+    the declared sample counts and a conclusive verdict**. Every outcome is
+    explicit — ``not_declared`` is reported, never silent, and an inconclusive
+    verdict can never satisfy qualification (it falls back to the point test
+    for exploration only).
+    """
+    if config is None:
+        return {
+            "status": "not_declared",
+            "qualifies": True,
+            "candidate_samples": len(candidate),
+            "reference_samples": len(reference or ()),
+            "verdict": verdict,
+            "fallback_used": verdict == INCONCLUSIVE,
+            "min_samples": None,
+            "planned_repeats": None,
+            "holdout_required": False,
+            "holdout_evidence": holdout_evidence,
+        }
+    min_samples = int(getattr(config, "min_samples", 2))
+    if len(candidate) < min_samples or (
+        reference is not None and len(reference) < min_samples
+    ):
+        status = "insufficient_samples"
+    elif getattr(config, "holdout_required", False) and holdout_evidence is not True:
+        status = "missing_holdout"
+    elif reference is not None and verdict == INCONCLUSIVE:
+        status = "inconclusive"
+    else:
+        status = "qualified"
+    return {
+        "status": status,
+        "qualifies": status == "qualified",
+        "candidate_samples": len(candidate),
+        "reference_samples": len(reference or ()),
+        "verdict": verdict,
+        "fallback_used": verdict == INCONCLUSIVE,
+        "min_samples": min_samples,
+        "planned_repeats": int(getattr(config, "planned_repeats", 1)),
+        "holdout_required": bool(getattr(config, "holdout_required", False)),
+        "holdout_evidence": holdout_evidence,
+    }
+
+
 __all__ = [
     "INCONCLUSIVE",
     "REGRESSION",
     "SIGNIFICANT",
     "best_config_hash",
+    "best_other_config_hash",
     "mean_std",
+    "qualification_status",
     "samples_from_rows",
     "significance_verdict",
 ]

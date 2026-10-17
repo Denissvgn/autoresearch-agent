@@ -248,6 +248,7 @@ def build_iteration_context_digest(
             f"cost={_money(cost)}/{_money(budget)}"
         ),
         f"- Best so far: {_best_line(rows, comparator=_objective)}",
+        _significance_line(rows, session, comparator=_objective),
         "- Recent attempts:",
     ]
 
@@ -258,7 +259,7 @@ def build_iteration_context_digest(
         lines.append("  - none recorded yet")
 
     lines.append(f"- Current blockers: {_blockers_line(rows)}")
-    lines.append(f"- Do not repeat: {_duplicate_line(rows)}")
+    lines.append(f"- Repeat policy: {_duplicate_line(rows)}")
     # Action 5: within-session foresight — list the distinct configs already tried so
     # the agent avoids spending a turn proposing a duplicate the guard would reject.
     lines.extend(_tried_configs_lines(rows))
@@ -324,7 +325,72 @@ def build_iteration_context_digest(
             fix = detail.get("likely_fix") or ""
             lines.append(f"    - {code}: {label} {fix}".rstrip())
 
-    return _cap_text("\n".join(lines), max_chars)
+    return _cap_text("\n".join(line for line in lines if line), max_chars)
+
+
+def _significance_line(
+    rows: List[Mapping[str, Any]],
+    session: Mapping[str, Any],
+    *,
+    comparator: "ObjectiveComparator",
+) -> str:
+    """Visibility line for the declared significance/replication policy.
+
+    Empty when no policy is declared. An inconclusive verdict is stated
+    explicitly with its point-test fallback so it can never pass unnoticed.
+    """
+    significance_config = None
+    skill_id = session.get("skill_id") or session.get("model_type")
+    if not skill_id:
+        return ""
+    try:
+        from src.core.skill_registry import default_registry
+
+        skill = default_registry.get(skill_id)
+        significance_config = getattr(
+            getattr(getattr(skill, "manifest", None), "metric_schema", None),
+            "significance",
+            None,
+        )
+    except Exception:
+        significance_config = None
+    if significance_config is None:
+        return ""
+    from src.core.significance import (
+        best_config_hash,
+        best_other_config_hash,
+        samples_from_rows,
+        significance_verdict,
+    )
+
+    direction = "higher_is_better" if comparator.direction == "maximize" else "lower_is_better"
+    observation_rows = [dict(row) for row in rows]
+    best_hash = best_config_hash(observation_rows, direction=direction)
+    candidate = samples_from_rows(observation_rows, canonical_config_hash=best_hash or "")
+    reference: List[float] = []
+    verdict = None
+    if best_hash:
+        ref_hash = best_other_config_hash(
+            observation_rows, exclude_hash=best_hash, direction=direction,
+        )
+        if ref_hash:
+            reference = samples_from_rows(observation_rows, canonical_config_hash=ref_hash)
+        if reference:
+            verdict = significance_verdict(
+                candidate,
+                reference,
+                direction=direction,
+                min_sigma=significance_config.min_sigma,
+                min_samples=significance_config.min_samples,
+            )
+    planned = int(getattr(significance_config, "planned_repeats", 1) or 1)
+    min_samples = int(getattr(significance_config, "min_samples", 2))
+    state = verdict or "not_yet_comparable"
+    fallback = "; point-test fallback (exploratory only)" if verdict == "inconclusive" else ""
+    return (
+        f"- Significance: verdict={state}; samples={len(candidate)} of "
+        f"min_samples={min_samples}; planned_repeats={planned}{fallback}"
+    )
 
 
 def _best_line(
@@ -398,7 +464,10 @@ def _duplicate_line(iterations: List[Mapping[str, Any]]) -> str:
         if not hashes:
             return "no duplicate rejections recorded"
         compact = ", ".join(_short(value, 12) for value in hashes[:3])
-        return f"avoid exact config/seed/mode repeats; recent identities={compact}"
+        return (
+            "avoid exact config/seed/mode repeats unless the evaluation policy "
+            f"declares a repeat; recent identities={compact}"
+        )
     row = duplicates[0]
     ref = row.get("duplicate_of_research_id") or "existing session"
     iteration = row.get("duplicate_of_iteration")
@@ -446,7 +515,8 @@ def _tried_configs_lines(iterations: List[Mapping[str, Any]]) -> List[str]:
         return []
     return [
         "- Already tried this session (do NOT re-propose an identical canonical "
-        "config — it will be dedup-rejected; vary a meaningful lever):",
+        "config unless the evaluation policy declares a repeat — undeclared "
+        "identical submissions are dedup-rejected; vary a meaningful lever):",
         *[f"  - {entry}" for entry in entries],
     ]
 
@@ -547,7 +617,8 @@ def _prior_session_tried_lines(
             f"{n_clusters} explored regions"
             f"{' (best=' + _fmt(best_metric) + ')' if best_metric is not None else ''}"
             ". Each line is one region — any YAML matching a region's "
-            "signature is dedup-rejected. Move a salient knob into an "
+            "signature is dedup-rejected (admitted only as a declared "
+            "evaluation-policy repeat). Move a salient knob into an "
             "unexplored band:"
         ),
     ]

@@ -152,6 +152,44 @@
         },
         "blocker_details": []
       },
+      "replication_qualification": {
+        "passed": true,
+        "status": "passed",
+        "mode": "replication_qualification",
+        "scope": "development",
+        "blockers": [],
+        "checks": [
+          {
+            "name": "replication_qualification",
+            "status": "passed",
+            "reason": null,
+            "details": {
+              "status": "not_declared",
+              "qualifies": true,
+              "candidate_samples": 0,
+              "reference_samples": 0,
+              "verdict": null,
+              "fallback_used": false,
+              "min_samples": null,
+              "planned_repeats": null,
+              "holdout_required": false,
+              "holdout_evidence": false
+            }
+          }
+        ],
+        "qualification": {
+          "status": "not_declared",
+          "qualifies": true,
+          "candidate_samples": 0,
+          "reference_samples": 0,
+          "verdict": null,
+          "fallback_used": false,
+          "min_samples": null,
+          "planned_repeats": null,
+          "holdout_required": false,
+          "holdout_evidence": false
+        }
+      },
       "status": "blocked",
       "blockers": [
         "missing_development_gate_bundle"
@@ -535,6 +573,44 @@
           },
           "blocker_details": []
         },
+        "replication_qualification": {
+          "passed": true,
+          "status": "passed",
+          "mode": "replication_qualification",
+          "scope": "development",
+          "blockers": [],
+          "checks": [
+            {
+              "name": "replication_qualification",
+              "status": "passed",
+              "reason": null,
+              "details": {
+                "status": "not_declared",
+                "qualifies": true,
+                "candidate_samples": 0,
+                "reference_samples": 0,
+                "verdict": null,
+                "fallback_used": false,
+                "min_samples": null,
+                "planned_repeats": null,
+                "holdout_required": false,
+                "holdout_evidence": false
+              }
+            }
+          ],
+          "qualification": {
+            "status": "not_declared",
+            "qualifies": true,
+            "candidate_samples": 0,
+            "reference_samples": 0,
+            "verdict": null,
+            "fallback_used": false,
+            "min_samples": null,
+            "planned_repeats": null,
+            "holdout_required": false,
+            "holdout_evidence": false
+          }
+        },
         "status": "blocked",
         "blockers": [
           "missing_development_gate_bundle"
@@ -880,6 +956,6 @@
       }
     ]
   },
-  "source_sha": "f2300939d6fb3252f2dd2f714dce0c4efcd0ec3e",
+  "source_sha": "a544f7394042d213730f60c2059f9fa511405735",
   "recapture": "ARC-011 P3-019: promotion preview now carries the additive canonical skill_id/subject_id/variant fields (P3-017 enrichment, sourced from the manifest's canonical fields which the v2 manifest model back-fills from model_type/instrument/timeframe). Re-captured under the append-only-with-linked-task rule (\u00a71.5). All other fields unchanged."
 }

@@ -98,10 +98,12 @@ DIRECTION_PHASES: List[Dict[str, Any]] = [
             "Confirm finalist stability via the walk-forward fold metrics "
             "(walkforward_auc_cv, fold gates) the best config's run already "
             "emitted — this pipeline is deterministic, so do NOT vary seeds "
-            "or n_seed_trials (inert) and do NOT re-run an unchanged config "
-            "(dedup rejects it). A robustness probe that IS meaningful here: "
-            "one small data-window or fold-count perturbation, judged on "
-            "fold-stability metrics."
+            "or n_seed_trials (inert). An unchanged re-run is admitted only as "
+            "a declared repeat (evaluation-policy planned_repeats; each "
+            "authorized observation is charged), and an undeclared identical "
+            "re-submission is rejected as a duplicate. A robustness probe that "
+            "IS meaningful here: one small data-window or fold-count "
+            "perturbation, judged on fold-stability metrics."
         ),
         "min_iterations": 3,
         "max_iterations": 6,
@@ -226,10 +228,12 @@ VOLATILITY_PHASES: List[Dict[str, Any]] = [
             "Confirm finalist stability via the walk-forward fold metrics "
             "(walkforward_auc_cv, fold gates) the best config's run already "
             "emitted — this pipeline is deterministic, so do NOT vary seeds "
-            "or n_seed_trials (inert) and do NOT re-run an unchanged config "
-            "(dedup rejects it). A robustness probe that IS meaningful here: "
-            "one small data-window or fold-count perturbation, judged on "
-            "fold-stability metrics."
+            "or n_seed_trials (inert). An unchanged re-run is admitted only as "
+            "a declared repeat (evaluation-policy planned_repeats; each "
+            "authorized observation is charged), and an undeclared identical "
+            "re-submission is rejected as a duplicate. A robustness probe that "
+            "IS meaningful here: one small data-window or fold-count "
+            "perturbation, judged on fold-stability metrics."
         ),
         "min_iterations": 3,
         "max_iterations": 6,

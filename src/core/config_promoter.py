@@ -314,6 +314,12 @@ class ConfigPromoter:
             phase_state=phase_state,
             source=QUALITY_BASELINE_MODE,
         )
+        replication_qualification = await self._build_replication_qualification(
+            research_id=research_id,
+            best_iteration=best,
+            comparator=objective,
+            scope=promotion_scope,
+        )
         preview_blocker_details = self._merge_blocker_details(
             gate_bundle_evaluation.get("blocker_details", []),
             consistency_report.get("blocker_details", []),
@@ -331,6 +337,7 @@ class ConfigPromoter:
             and development_gate_bundle_passed
             and consistency_report_passed
             and quality_baseline_passed
+            and bool(replication_qualification.get("passed", False))
         )
         candidate_pool_blockers = self._merge_blockers(
             gate_bundle_evaluation.get("blockers", []),
@@ -365,6 +372,7 @@ class ConfigPromoter:
                 "blocker_details", []
             ),
             "quality_baseline_evaluation": dict(quality_baseline_evaluation),
+            "replication_qualification": dict(replication_qualification),
             "status": "eligible" if promotion_allowed else "blocked",
             "blockers": candidate_pool_blockers,
             "blocker_details": candidate_pool_blocker_details,
@@ -2446,6 +2454,112 @@ class ConfigPromoter:
             "blockers": blockers,
             "checks": checks,
             "comparison": comparison,
+        }
+
+    async def _build_replication_qualification(
+        self,
+        *,
+        research_id: str,
+        best_iteration: Dict[str, Any],
+        comparator: ObjectiveComparator,
+        scope: str,
+    ) -> Dict[str, Any]:
+        """Visible replication status; blocking for production-scope promotion.
+
+        Exploratory point estimates are acceptable for development promotion.
+        Production qualification requires the declared sample counts and a
+        conclusive significance verdict — an inconclusive verdict falls back to
+        the point test for exploration and can never silently qualify.
+        """
+        import json as _json
+
+        from src.core.significance import (
+            best_other_config_hash,
+            qualification_status,
+            samples_from_rows,
+            significance_verdict,
+        )
+
+        session = await self._store.get_session(research_id)
+        skill_id = (session or {}).get("skill_id") or (session or {}).get("model_type")
+        significance_config = None
+        try:
+            from src.core.skill_registry import default_registry
+
+            skill = default_registry.get(skill_id)
+            significance_config = getattr(
+                getattr(getattr(skill, "manifest", None), "metric_schema", None),
+                "significance",
+                None,
+            )
+        except Exception:
+            significance_config = None
+        rows = await self._store.get_iterations(research_id)
+        best_hash = best_iteration.get("canonical_config_hash")
+        try:
+            best_metrics = _json.loads(best_iteration.get("metrics_json") or "{}")
+        except (TypeError, ValueError):
+            best_metrics = {}
+        context_hash = best_metrics.get("evaluation_context_hash")
+        candidate = samples_from_rows(
+            rows, canonical_config_hash=best_hash or "", context_hash=context_hash,
+        )
+        reference: list = []
+        verdict = None
+        if significance_config is not None and best_hash:
+            direction = (
+                "higher_is_better"
+                if comparator.direction == "maximize"
+                else "lower_is_better"
+            )
+            ref_hash = best_other_config_hash(
+                rows, exclude_hash=best_hash, direction=direction,
+            )
+            if ref_hash:
+                reference = samples_from_rows(
+                    rows, canonical_config_hash=ref_hash, context_hash=context_hash,
+                )
+            if reference:
+                verdict = significance_verdict(
+                    candidate,
+                    reference,
+                    direction=direction,
+                    min_sigma=significance_config.min_sigma,
+                    min_samples=significance_config.min_samples,
+                )
+        holdout_evidence = best_metrics.get("holdout_evaluated") is True
+        qualification = qualification_status(
+            candidate=candidate,
+            reference=reference or None,
+            config=significance_config,
+            verdict=verdict,
+            holdout_evidence=holdout_evidence,
+        )
+        production_scope = scope != DEVELOPMENT_PROMOTION_SCOPE
+        blocking = production_scope and not qualification["qualifies"]
+        if qualification["qualifies"]:
+            check_status = "passed"
+        else:
+            check_status = "failed" if production_scope else "warning"
+        return {
+            "passed": not blocking,
+            "status": (
+                "passed"
+                if qualification["qualifies"]
+                else ("blocked" if production_scope else str(qualification["status"]))
+            ),
+            "mode": "replication_qualification",
+            "scope": scope,
+            "blockers": [
+                f"insufficient_replication_evidence: {qualification['status']}"
+            ] if blocking else [],
+            "checks": [{
+                "name": "replication_qualification",
+                "status": check_status,
+                "reason": None if qualification["qualifies"] else qualification["status"],
+                "details": dict(qualification),
+            }],
+            "qualification": dict(qualification),
         }
 
     async def _latest_eligible_development_baseline(

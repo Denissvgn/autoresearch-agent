@@ -25,6 +25,9 @@ class FakePromotionStore:
             "timeframe": "15m",
         }
 
+    async def get_iterations(self, research_id: str) -> list:
+        return []
+
     async def get_best_iteration(self, research_id, **kwargs) -> Dict[str, Any]:
         return self.best
 

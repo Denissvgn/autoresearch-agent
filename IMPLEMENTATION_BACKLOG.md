@@ -689,9 +689,9 @@ Autonomy: Keep candidate digest and observation ID separate. Predeclare repeats/
 requirements in evaluation policy and charge each authorized observation; distinguish
 network replay from an intentional repeat.
 
-- [ ] Honor declarative identity fields and include evaluator/data/environment/fidelity context in comparison identity.
-- [ ] Give each authorized repeat a distinct observation identity; preserve candidate deduplication without rejecting required replication.
-- [ ] Distinguish exploratory point estimates from qualification requiring sample counts/holdouts; revise blanket no-rerun instructions.
+- [x] Honor declarative identity fields and include evaluator/data/environment/fidelity context in comparison identity.
+- [x] Give each authorized repeat a distinct observation identity; preserve candidate deduplication without rejecting required replication.
+- [x] Distinguish exploratory point estimates from qualification requiring sample counts/holdouts; revise blanket no-rerun instructions.
 
 Acceptance: intentional repeats are admitted within budget; accidental duplicate
 submissions do not run twice. Inconclusive significance is visible and cannot
