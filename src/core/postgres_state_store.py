@@ -43,6 +43,7 @@ import asyncpg
 
 from src.core.artifact_reference import normalize_optional_artifact_ref
 from src.core.gate_status import consistency_report_passed
+from src.core.objective_comparator import ObjectiveComparator, select_best_row
 from src.core.observability import log_research_event
 from src.core.pagination import clamp_limit
 
@@ -943,6 +944,7 @@ class PostgresStateStore:
         consistency_report_json: Optional[str] = None,
         search_phase: Optional[str] = None,
         metric_improvement_epsilon: float = 0.0,
+        objective: Optional[ObjectiveComparator] = None,
         lock_epoch: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Record an iteration. ``metrics_json``/``all_gates_passed`` are
@@ -996,15 +998,15 @@ class PostgresStateStore:
             # Best-metric advancement mirrors SQLiteStateStore; the epoch fence
             # (when supplied) prevents a stale worker from advancing the bar.
             if decision == "keep":
+                comparator = objective or ObjectiveComparator(
+                    epsilon=metric_improvement_epsilon,
+                )
                 best_row = await conn.fetchrow(
                     "SELECT best_metric FROM research_sessions WHERE id = $1",
                     research_id,
                 )
                 best_metric = best_row["best_metric"] if best_row else None
-                if primary_metric is not None and (
-                    best_metric is None
-                    or primary_metric > best_metric + metric_improvement_epsilon
-                ):
+                if comparator.is_better(primary_metric, best_metric):
                     set_sql = (
                         "best_iteration = $1, best_metric = $2 WHERE id = $3"
                     )
@@ -1956,27 +1958,32 @@ class PostgresStateStore:
 
     async def get_best_iteration(
         self, research_id: str,
+        *,
+        objective: Optional[ObjectiveComparator] = None,
     ) -> Optional[Dict[str, Any]]:
+        comparator = objective or ObjectiveComparator()
         conn = await self._conn()
         try:
-            row = await conn.fetchrow(
+            rows = await conn.fetch(
                 """SELECT * FROM iterations
                    WHERE research_id = $1 AND all_gates_passed = 1
                      AND primary_metric IS NOT NULL
-                   ORDER BY primary_metric DESC LIMIT 1""",
+                   ORDER BY iteration ASC""",
                 research_id,
             )
-            if row is None:
+            winner = select_best_row([dict(r) for r in rows], comparator)
+            if winner is None:
                 # ML-53 legacy fallback.
-                row = await conn.fetchrow(
+                rows = await conn.fetch(
                     """SELECT * FROM iterations
                        WHERE research_id = $1 AND decision IN ('keep', 'improve')
-                       ORDER BY primary_metric DESC LIMIT 1""",
+                       ORDER BY iteration ASC""",
                     research_id,
                 )
+                winner = select_best_row([dict(r) for r in rows], comparator)
         finally:
             await self._release_short_lived(conn)
-        return _row_to_dict(row) if row else None
+        return dict(winner) if winner is not None else None
 
     async def get_latest_iteration_with_config_snapshot(
         self, research_id: str,

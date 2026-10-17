@@ -36,7 +36,7 @@ class FakeStore:
             None,
         )
 
-    async def get_best_iteration(self, research_id: str):
+    async def get_best_iteration(self, research_id, **kwargs):
         rows = self.iterations.get(research_id, [])
         return rows[0] if rows else None
 

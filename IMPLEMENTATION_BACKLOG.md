@@ -668,9 +668,9 @@ Autonomy: Use declared epsilon, defaulting to exact comparison when absent, and 
 stable tie policy preserving the existing eligible winner. Reject incomparable or
 unknown objective context; migrate only historical rows with enough provenance.
 
-- [ ] Implement the resolved objective comparator with direction, epsilon/ties, gate eligibility, and absent/nonfinite metric behavior.
-- [ ] Use it for decisions, stored bests, aggregate queries, stagnation, promotion eligibility, and displayed rankings.
-- [ ] Define reconciliation of historical best rows using their known objective; leave ambiguous legacy objective data flagged rather than guessed.
+- [x] Implement the resolved objective comparator with direction, epsilon/ties, gate eligibility, and absent/nonfinite metric behavior.
+- [x] Use it for decisions, stored bests, aggregate queries, stagnation, promotion eligibility, and displayed rankings.
+- [x] Define reconciliation of historical best rows using their known objective; leave ambiguous legacy objective data flagged rather than guessed.
 
 Acceptance: 100-to-80 latency improves and 100-to-120 regresses; maximization
 behavior remains correct. SQLite and Postgres choose the same eligible winner.

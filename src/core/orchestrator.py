@@ -94,6 +94,12 @@ from src.core.llm_provider import (
     build_provider,
 )
 from src.core.log_writer import AgentLogWriter
+from src.core.objective_comparator import (
+    ObjectiveComparator,
+    ObjectiveContextError,
+    objective_comparator_for_manifest,
+    objective_comparator_for_skill_id,
+)
 from src.core.output_digest import digest_command_output
 from src.core.output_parser import (
     DelimitedKVParser,
@@ -4151,6 +4157,38 @@ class AgentOrchestrator:
                     blockers.append(blocker_s)
         return blockers
 
+    async def _objective_comparator(
+        self,
+        research_id: str,
+        *,
+        session: Optional[Dict[str, Any]] = None,
+        epsilon: Optional[float] = None,
+    ) -> ObjectiveComparator:
+        """Resolve the one objective comparator for this session's decisions.
+
+        The skill manifest's declared ``metric_schema.primary.direction`` is
+        authoritative (mapped through the contract's vocabulary bridge). A
+        session whose skill cannot be resolved falls back to the legacy
+        maximize comparator — never a guess at a minimization objective.
+        """
+        skill = self._session_skills.get(research_id)
+        manifest = getattr(skill, "manifest", None) if skill else None
+        if manifest is not None:
+            try:
+                return objective_comparator_for_manifest(manifest, epsilon=epsilon)
+            except ObjectiveContextError:
+                pass
+        if session is None:
+            session = await self._store.get_session(research_id)
+        skill_id = (session or {}).get("skill_id") or (session or {}).get("model_type")
+        return objective_comparator_for_skill_id(
+            skill_id,
+            epsilon=epsilon,
+            default=ObjectiveComparator(
+                epsilon=epsilon if epsilon is not None else 0.0,
+            ),
+        )
+
     async def _infer_decision(
         self,
         research_id: str,
@@ -4181,9 +4219,12 @@ class AgentOrchestrator:
         session = await self._store.get_session(research_id)
         best = session.get("best_metric") if session else None
 
-        metric_improved = (best is None) or (
-            primary_metric > best + settings.global_stagnation_epsilon
+        comparator = await self._objective_comparator(
+            research_id,
+            session=session,
+            epsilon=settings.global_stagnation_epsilon,
         )
+        metric_improved = comparator.is_better(primary_metric, best)
         if config_hash is not None and best is not None:
             sig_improved = await self._significance_improved(
                 research_id, primary_metric, config_hash,
@@ -4497,8 +4538,12 @@ class AgentOrchestrator:
                 exc_info=True,
             )
 
+        objective_comparator = await self._objective_comparator(
+            research_id, epsilon=settings.global_stagnation_epsilon,
+        )
         await self._store.add_iteration(
             research_id=research_id,
+            objective=objective_comparator,
             iteration=iteration,
             primary_metric=primary_metric,
             metric_name=metric_name,
@@ -5203,8 +5248,8 @@ class AgentOrchestrator:
         )
         return (
             f"GLOBAL_STAGNATION: {gap} iterations have produced no metric "
-            f"improvement >{epsilon:.0e} above the session best of {best_metric:.4f} "
-            f"(achieved at iteration {best_iteration}). "
+            f"improvement beyond the session best of {best_metric:.4f} by more "
+            f"than {epsilon:.0e} (achieved at iteration {best_iteration}). "
             "Reply on the next turn with a single line beginning "
             "`TERMINATE_REQUEST:` and structured justification listing each "
             "phase still incomplete and why further training is unlikely to "

@@ -14,6 +14,11 @@ except ImportError:  # pragma: no cover — pyyaml is a runtime dep
 
 from src.core.consistency_validator import parse_consistency_report
 from src.core.gate_status import training_gates_passed_from_iteration
+from src.core.objective_comparator import (
+    ObjectiveComparator,
+    objective_comparator_for_skill_id,
+    select_best_row,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +223,10 @@ def build_iteration_context_digest(
     """
 
     rows = list(iterations)
+    _objective = objective_comparator_for_skill_id(
+        session.get("skill_id") or session.get("model_type"),
+        default=ObjectiveComparator(),
+    )
     studies = list(hpo_studies)
     trials = list(planned_trials)
     prior_summary = list(prior_session_summary or [])
@@ -238,7 +247,7 @@ def build_iteration_context_digest(
             f"iterations={len(rows)}/{max_iterations if max_iterations is not None else '?'}; "
             f"cost={_money(cost)}/{_money(budget)}"
         ),
-        f"- Best so far: {_best_line(rows)}",
+        f"- Best so far: {_best_line(rows, comparator=_objective)}",
         "- Recent attempts:",
     ]
 
@@ -318,7 +327,11 @@ def build_iteration_context_digest(
     return _cap_text("\n".join(lines), max_chars)
 
 
-def _best_line(iterations: List[Mapping[str, Any]]) -> str:
+def _best_line(
+    iterations: List[Mapping[str, Any]],
+    *,
+    comparator: "ObjectiveComparator",
+) -> str:
     candidates = [
         row for row in iterations
         if _number(row.get("primary_metric")) is not None
@@ -326,7 +339,7 @@ def _best_line(iterations: List[Mapping[str, Any]]) -> str:
     ]
     if not candidates:
         return "none yet"
-    best = max(candidates, key=lambda row: _number(row.get("primary_metric")) or float("-inf"))
+    best = select_best_row(candidates, comparator) or candidates[-1]
     return (
         f"iteration {best.get('iteration', '?')} "
         f"{best.get('metric_name') or 'metric'}={_fmt(_number(best.get('primary_metric')))} "

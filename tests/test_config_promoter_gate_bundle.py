@@ -41,7 +41,7 @@ class FakePromotionStore:
             "timeframe": "15m",
         }
 
-    async def get_best_iteration(self, research_id: str):
+    async def get_best_iteration(self, research_id, **kwargs):
         return self.best
 
     async def get_iterations(self, research_id: str):

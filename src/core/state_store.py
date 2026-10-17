@@ -72,6 +72,7 @@ from src.core.gate_status import (
     consistency_report_passed,
     normalize_training_gate_aliases,
 )
+from src.core.objective_comparator import ObjectiveComparator, select_best_row
 from src.core.observability import (
     OBSERVABILITY_SCHEMA_VERSION,
     alert_suggestions,
@@ -1017,6 +1018,7 @@ class StateStore(Protocol):
         consistency_report_json: Optional[str] = None,
         search_phase: Optional[str] = None,
         metric_improvement_epsilon: float = 0.0,
+        objective: Optional[ObjectiveComparator] = None,
         lock_epoch: Optional[int] = None,
     ) -> Dict[str, Any]:
         ...
@@ -1056,6 +1058,8 @@ class StateStore(Protocol):
 
     async def get_best_iteration(
         self, research_id: str,
+        *,
+        objective: Optional[ObjectiveComparator] = None,
     ) -> Optional[Dict[str, Any]]:
         ...
 
@@ -2184,6 +2188,7 @@ class SQLiteStateStore:
         consistency_report_json: Optional[str] = None,
         search_phase: Optional[str] = None,
         metric_improvement_epsilon: float = 0.0,
+        objective: Optional[ObjectiveComparator] = None,
         lock_epoch: Optional[int] = None,
     ) -> Dict[str, Any]:
         # ARC-011 P6-004: ``lock_epoch`` is accepted for protocol parity with
@@ -2236,12 +2241,12 @@ class SQLiteStateStore:
             # gates-passing runs get compared against an unpromotable metric
             # and mislabeled 'discard' (observed res_d4b50d19ad9b iter 13).
             if decision == "keep":
+                comparator = objective or ObjectiveComparator(
+                    epsilon=metric_improvement_epsilon,
+                )
                 session = await self.get_session(research_id)
                 best_metric = session["best_metric"] if session else None
-                if session and primary_metric is not None and (
-                    best_metric is None
-                    or primary_metric > best_metric + metric_improvement_epsilon
-                ):
+                if session and comparator.is_better(primary_metric, best_metric):
                     await self.update_session(
                         research_id,
                         best_iteration=iteration,
@@ -2559,7 +2564,10 @@ class SQLiteStateStore:
 
     async def get_best_iteration(
         self, research_id: str,
+        *,
+        objective: Optional[ObjectiveComparator] = None,
     ) -> Optional[Dict[str, Any]]:
+        comparator = objective or ObjectiveComparator()
         async with self.connection() as db:
             db.row_factory = aiosqlite.Row
             # Promotion safety: the best PROMOTABLE iteration is the highest
@@ -2574,23 +2582,25 @@ class SQLiteStateStore:
                 """SELECT * FROM iterations
                    WHERE research_id = ? AND all_gates_passed = 1
                      AND primary_metric IS NOT NULL
-                   ORDER BY primary_metric DESC LIMIT 1""",
+                   ORDER BY iteration ASC""",
                 (research_id,),
             )
-            row = await cursor.fetchone()
-            if row is not None:
-                return dict(row)
+            rows = [dict(r) for r in await cursor.fetchall()]
+            winner = select_best_row(rows, comparator)
+            if winner is not None:
+                return dict(winner)
             # ML-53 legacy fallback: no gates-passing iteration recorded —
             # surface the best keep/improve so callers can still inspect it
             # (confirm will gate-check it).
             cursor = await db.execute(
                 """SELECT * FROM iterations
                    WHERE research_id = ? AND decision IN ('keep', 'improve')
-                   ORDER BY primary_metric DESC LIMIT 1""",
+                   ORDER BY iteration ASC""",
                 (research_id,),
             )
-            row = await cursor.fetchone()
-            return dict(row) if row else None
+            rows = [dict(r) for r in await cursor.fetchall()]
+            winner = select_best_row(rows, comparator)
+            return dict(winner) if winner is not None else None
 
     async def get_latest_iteration_with_config_snapshot(
         self, research_id: str,

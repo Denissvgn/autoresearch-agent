@@ -33,6 +33,8 @@ from __future__ import annotations
 
 from typing import Optional, Sequence
 
+from src.core.objective_comparator import ObjectiveComparator
+
 #: Verdicts: ``significant`` (candidate beats the reference), ``regression``
 #: (candidate is worse), ``inconclusive`` (not enough separation or data).
 SIGNIFICANT = "significant"
@@ -127,6 +129,9 @@ def best_config_hash(
     config). Reads ``best_metric``/``best_iteration`` semantics indirectly:
     the best *row* is the kept iteration with the extreme primary metric.
     """
+    comparator = ObjectiveComparator(
+        direction="maximize" if direction == "higher_is_better" else "minimize",
+    )
     best_row: Optional[dict] = None
     for row in rows:
         metric = row.get("primary_metric")
@@ -135,12 +140,7 @@ def best_config_hash(
         if best_row is None:
             best_row = row
             continue
-        better = (
-            metric > best_row["primary_metric"]
-            if direction == "higher_is_better"
-            else metric < best_row["primary_metric"]
-        )
-        if better:
+        if comparator.is_better(metric, best_row["primary_metric"]):
             best_row = row
     if best_row is None:
         return None

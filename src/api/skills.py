@@ -42,6 +42,7 @@ from src.api.audit import record_api_audit_event
 from src.api.auth import require_api_auth
 from src.config import settings
 from src.core.legacy_alias import skill_id_to_model_type
+from src.core.objective_comparator import ObjectiveComparator, rank_rows
 from src.core.skill_manifest import ResearchSkillManifest
 from src.core.skill_registry import (
     DEFAULT_SKILLS_ROOT,
@@ -294,10 +295,13 @@ async def get_skill_leaderboard(
                     }
                 )
 
-    rows.sort(
-        key=lambda r: (r.get("best_metric") is None, r.get("best_metric") or 0.0),
-        reverse=(direction == "higher_is_better"),
+    comparator = ObjectiveComparator(
+        direction="maximize" if direction == "higher_is_better" else "minimize",
     )
+    rows = [
+        dict(r)
+        for r in rank_rows(rows, comparator, value=lambda r: r.get("best_metric"))
+    ]
     total = len(rows)
     return {
         "skill_id": skill_id,

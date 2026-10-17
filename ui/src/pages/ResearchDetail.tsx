@@ -327,7 +327,7 @@ export default function ResearchDetail() {
           isPaused={session.status === 'paused'}
         />
       )}
-      {tab === 'metrics' && <MetricsTab iterations={iterations ?? []} modelType={session.model_type} chartSeries={skillMetricSchema?.chart_series} />}
+      {tab === 'metrics' && <MetricsTab iterations={iterations ?? []} modelType={session.model_type} chartSeries={skillMetricSchema?.chart_series} primaryDirection={skillMetricSchema?.primary?.direction} />}
       {tab === 'iterations' && <IterationsTab iterations={iterations ?? []} bestIteration={session.best_iteration} researchId={id!} tableColumns={skillMetricSchema?.iteration_table_columns} />}
       {tab === 'log' && <AgentLog researchId={id!} isActive={isActive} />}
     </div>
@@ -856,7 +856,7 @@ function IterationDetails({
   );
 }
 
-function MetricsTab({ iterations, modelType, chartSeries }: { iterations: Iteration[]; modelType: string; chartSeries?: MetricColumn[] }) {
+function MetricsTab({ iterations, modelType, chartSeries, primaryDirection }: { iterations: Iteration[]; modelType: string; chartSeries?: MetricColumn[]; primaryDirection?: string }) {
   const orderedIterations = useMemo(
     () => [...iterations].sort((a, b) => a.iteration - b.iteration),
     [iterations],
@@ -888,9 +888,17 @@ function MetricsTab({ iterations, modelType, chartSeries }: { iterations: Iterat
   const passCount = orderedIterations.filter((it) => it.all_gates_passed).length;
   const passRate = orderedIterations.length ? Math.round((passCount / orderedIterations.length) * 100) : 0;
   const primaryPoints = orderedIterations.filter((it) => it.primary_metric != null);
+  // Winner selection follows the objective direction the skill declares — the
+  // same comparator semantics as the backend: minimize objectives pick
+  // the lowest metric; ties keep the earlier iteration.
+  const lowerIsBetter = primaryDirection === 'lower_is_better';
   const best = primaryPoints.reduce<Iteration | null>((winner, it) => {
     if (!winner) return it;
-    return (it.primary_metric ?? -Infinity) > (winner.primary_metric ?? -Infinity) ? it : winner;
+    const candidate = it.primary_metric ?? null;
+    const incumbent = winner.primary_metric ?? null;
+    if (candidate == null) return winner;
+    if (incumbent == null) return it;
+    return lowerIsBetter ? (candidate < incumbent ? it : winner) : (candidate > incumbent ? it : winner);
   }, null);
   const delta = primaryPoints.length > 1
     ? (primaryPoints[primaryPoints.length - 1].primary_metric ?? 0) - (primaryPoints[0].primary_metric ?? 0)

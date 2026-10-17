@@ -34,6 +34,10 @@ from src.core.consistency_validator import (  # AR-5/AR-6
     check_adaptive_feature_sweep,
     check_evidence_artifact,
 )
+from src.core.objective_comparator import (
+    ObjectiveComparator,
+    objective_comparator_for_skill_id,
+)
 
 
 def build_phase_state(
@@ -63,7 +67,16 @@ def build_phase_state(
     # behavior bit-for-bit.
     phases = list(phases) if phases is not None else phases_for_model(model_type)
 
-    completed = _completed_phase_ids(rows, studies, promotion_rows, model_type)
+    completed = _completed_phase_ids(
+        rows,
+        studies,
+        promotion_rows,
+        model_type,
+        comparator=objective_comparator_for_skill_id(
+            session.get("skill_id") or model_type,
+            default=ObjectiveComparator(),
+        ),
+    )
     blocked = _blocked_reason(rows)
     current_phase = _select_current_phase(phases, completed, blocked)
     all_phases_complete = bool(phases) and all(p["id"] in completed for p in phases)
@@ -257,6 +270,7 @@ def _completed_phase_ids(
     hpo_studies: List[Dict[str, Any]],
     promotions: List[Dict[str, Any]],
     model_type: Optional[str],
+    comparator: Optional["ObjectiveComparator"] = None,
 ) -> set[str]:
     """Mark phases complete using a hybrid contract:
 
@@ -350,7 +364,11 @@ def _completed_phase_ids(
         completed.add("tsfm_sweeps")
     # AR-5: gate promotion-family phases behind artifact validation.
     # AR-6: also gate behind synthetic-iteration detection.
-    _prior_best = _prior_best_metrics(iterations)
+    _prior_best = _prior_best_metrics(
+        iterations,
+        comparator=comparator
+        or objective_comparator_for_skill_id(model_type, default=ObjectiveComparator()),
+    )
     if (
         any(
             _has_metric(it, *_PHASE_ADVANCEMENT_KEYS["calibration_replay_gates"])
@@ -1059,18 +1077,22 @@ def _prior_run_ids_for_phase(
     return frozenset(ids)
 
 
-def _prior_best_metrics(iterations: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _prior_best_metrics(
+    iterations: List[Dict[str, Any]],
+    *,
+    comparator: Optional["ObjectiveComparator"] = None,
+) -> Dict[str, Any]:
     """Return metrics of the best non-promotion-family iteration.
 
     Excludes ``EVIDENCE_ARTIFACT_PHASES`` iterations so the prior best reflects
-    real training work, not phase-family reporting iterations.  Autoresearch
-    phase metrics are treated as higher-is-better here; lower-is-better metric
-    families need an explicit metric-direction contract before sharing this
-    helper.
+    real training work, not phase-family reporting iterations. Winner selection
+    goes through the objective comparator; callers without a declared objective
+    keep the legacy maximize default.
 
     Returns ``{}`` when no qualifying iteration is found (conservative — callers
     must treat an empty dict as "unable to compare" and avoid blocking).
     """
+    comparator = comparator or ObjectiveComparator()
     best_metrics: Dict[str, Any] = {}
     best_value: Optional[float] = None
 
@@ -1089,7 +1111,7 @@ def _prior_best_metrics(iterations: List[Dict[str, Any]]) -> Dict[str, Any]:
             metric = float(raw_metric)
         except (TypeError, ValueError):
             continue
-        if best_value is None or metric > best_value:
+        if best_value is None or comparator.is_better(metric, best_value):
             best_value = metric
             best_metrics = m
     return best_metrics

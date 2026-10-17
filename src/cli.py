@@ -110,6 +110,25 @@ def build_parser() -> argparse.ArgumentParser:
     promote.add_argument("--id", required=True, help="The draft skill id.")
     _add_promote_flags(promote, inline=False)
 
+    reconcile = sub.add_parser(
+        "reconcile-bests",
+        help="Reconcile historical session bests under their known objective.",
+        description=(
+            "Re-derive each session's stored best under its declared objective "
+            "and report inconsistencies. Rows with enough provenance can be "
+            "migrated with --apply; ambiguous legacy objective data is "
+            "flagged, never guessed."
+        ),
+    )
+    reconcile.add_argument(
+        "--db", default=None,
+        help="SQLite DB path (default: settings.db_path).",
+    )
+    reconcile.add_argument(
+        "--apply", action="store_true",
+        help="Write corrections for reconcilable sessions (dry-run otherwise).",
+    )
+
     return parser
 
 
@@ -421,6 +440,52 @@ async def cmd_promote_skill(args: argparse.Namespace) -> int:
     )
 
 
+async def cmd_reconcile_bests(args: argparse.Namespace) -> int:
+    """Report (or with --apply, migrate) historical bests under known objectives."""
+    from src.config import settings
+    from src.core.objective_comparator import reconcile_historical_best
+    from src.core.results_store import ResultsStore
+
+    store = ResultsStore(args.db or settings.db_path)
+    await store.initialize()
+    try:
+        sessions = await store.list_sessions(limit=None)
+        counts: dict[str, int] = {}
+        for session in sessions:
+            iterations = await store.get_iterations(session["id"])
+            report = reconcile_historical_best(
+                session=session, iterations=iterations,
+            )
+            status = str(report["status"])
+            counts[status] = counts.get(status, 0) + 1
+            recomputed = report.get("recomputed") or {}
+            stored = report["stored"]
+            flags = ",".join(report["flags"]) or "-"
+            print(
+                f"{session['id']}: {status} "
+                f"stored=({stored['best_iteration']}, {stored['best_metric']}) "
+                f"recomputed=({recomputed.get('best_iteration')}, "
+                f"{recomputed.get('best_metric')}) "
+                f"objective={report['objective']['direction']} flags={flags}"
+            )
+            if args.apply and status == "reconciled":
+                await store.update_session(
+                    session["id"],
+                    best_iteration=recomputed["best_iteration"],
+                    best_metric=recomputed["best_metric"],
+                )
+        print(
+            "reconcile-bests: "
+            + ", ".join(f"{k}={v}" for k, v in sorted(counts.items()))
+            + (" (applied)" if args.apply else " (dry-run)")
+        )
+    finally:
+        close = getattr(store, "close", None)
+        if callable(close):
+            await close()
+    return EXIT_OK
+
+
 # ---------------------------------------------------------------------------
 # entry point
 # ---------------------------------------------------------------------------
@@ -429,6 +494,7 @@ async def cmd_promote_skill(args: argparse.Namespace) -> int:
 _COMMANDS = {
     "new-skill": cmd_new_skill,
     "promote-skill": cmd_promote_skill,
+    "reconcile-bests": cmd_reconcile_bests,
 }
 
 

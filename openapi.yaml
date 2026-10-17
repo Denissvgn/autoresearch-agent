@@ -749,7 +749,7 @@ paths:
       tags:
       - results
       summary: Get Best Iteration
-      description: Best iteration (highest primary metric with training gates passed).
+      description: Best iteration (the objective comparator's winner among gates-passing runs).
       operationId: get_best_iteration_api_v1_research__research_id__best_get
       security:
       - HTTPBearer: []

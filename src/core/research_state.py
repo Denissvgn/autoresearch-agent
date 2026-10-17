@@ -14,6 +14,12 @@ from src.core.gate_status import (
     training_gates_passed_from,
     training_gates_passed_from_iteration,
 )
+from src.core.objective_comparator import (
+    ObjectiveComparator,
+    objective_comparator_for_skill_id,
+    rank_rows,
+    select_best_row,
+)
 from src.core.observability import alert_suggestions
 from src.core.research_phase_plan import build_phase_state
 
@@ -44,7 +50,13 @@ def build_research_state(
         hpo_studies=study_rows,
         promotions=promotion_rows,
     )
-    top_candidates = _top_candidates(iteration_rows)
+    top_candidates = _top_candidates(
+        iteration_rows,
+        comparator=objective_comparator_for_skill_id(
+            session.get("skill_id") or session.get("model_type"),
+            default=ObjectiveComparator(),
+        ),
+    )
     failed = _failed_or_pruned(iteration_rows)
     latest_promotion = _latest_promotion(session, promotion_rows)
     production_operations = _production_operations_summary(
@@ -117,14 +129,18 @@ def _session_phase_state(session: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return raw if isinstance(raw, dict) else None
 
 
-def _top_candidates(iterations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _top_candidates(
+    iterations: List[Dict[str, Any]],
+    *,
+    comparator: ObjectiveComparator,
+) -> List[Dict[str, Any]]:
     candidates = [
         row for row in iterations
         if row.get("primary_metric") is not None
         and row.get("decision") in {"keep", "improve", "hpo_screening"}
     ]
-    candidates.sort(key=lambda row: row.get("primary_metric") or float("-inf"), reverse=True)
-    return [_candidate_summary(row) for row in candidates[:5]]
+    ranked = rank_rows(candidates, comparator)
+    return [_candidate_summary(row) for row in ranked[:5]]
 
 
 def _failed_or_pruned(iterations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -563,7 +579,13 @@ def _production_operations_summary(
     audit_events: List[Dict[str, Any]],
     phase_state: Dict[str, Any],
 ) -> Dict[str, Any]:
-    best_row = _best_candidate_row(iterations)
+    best_row = _best_candidate_row(
+        iterations,
+        comparator=objective_comparator_for_skill_id(
+            session.get("skill_id") or session.get("model_type"),
+            default=ObjectiveComparator(),
+        ),
+    )
     metrics = _parse_json(best_row.get("metrics_json")) if best_row else {}
     metrics = metrics if isinstance(metrics, dict) else {}
     snapshot = _parse_json(best_row.get("attempt_snapshot_json")) if best_row else {}
@@ -647,7 +669,11 @@ def _production_operations_summary(
     }
 
 
-def _best_candidate_row(iterations: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+def _best_candidate_row(
+    iterations: List[Dict[str, Any]],
+    *,
+    comparator: ObjectiveComparator,
+) -> Optional[Dict[str, Any]]:
     if not iterations:
         return None
     candidates = [row for row in iterations if row.get("primary_metric") is not None]
@@ -657,7 +683,8 @@ def _best_candidate_row(iterations: List[Dict[str, Any]]) -> Optional[Dict[str, 
     ]
     pool = passing or candidates
     if pool:
-        return max(pool, key=lambda row: row.get("primary_metric") or float("-inf"))
+        winner = select_best_row(pool, comparator)
+        return dict(winner) if winner is not None else iterations[-1]
     return iterations[-1]
 
 

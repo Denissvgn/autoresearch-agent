@@ -28,6 +28,10 @@ from src.core.consistency_validator import (
 )
 from src.core.gate_status import training_gates_passed_from
 from src.core.log_writer import AgentLogWriter, _format_entry
+from src.core.objective_comparator import (
+    ObjectiveComparator,
+    objective_comparator_for_skill_id,
+)
 from src.core.pagination import MAX_PAGE_SIZE, build_cursor_page, decode_cursor
 from src.core.research_state import build_research_state
 
@@ -497,11 +501,17 @@ async def get_iteration(research_id: str, iteration_num: int):
 
 @router.get("/research/{research_id}/best")
 async def get_best_iteration(research_id: str):
-    """Best iteration (highest primary metric with training gates passed)."""
+    """Best iteration (the objective comparator's winner among gates-passing runs)."""
     _, session, _ = await _resolve_result_context(research_id)
     if not session:
         raise HTTPException(status_code=404, detail="Phase session not found yet")
-    best = await _store.get_best_iteration(session["id"])
+    best = await _store.get_best_iteration(
+        session["id"],
+        objective=objective_comparator_for_skill_id(
+            session.get("skill_id") or session.get("model_type"),
+            default=ObjectiveComparator(),
+        ),
+    )
     if not best:
         raise HTTPException(
             status_code=404,

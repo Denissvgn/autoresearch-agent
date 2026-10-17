@@ -116,7 +116,7 @@ class FakeStore:
     async def get_iterations(self, research_id: str):
         return []
 
-    async def get_best_iteration(self, research_id: str):
+    async def get_best_iteration(self, research_id, **kwargs):
         return None
 
     async def get_hpo_studies(self, research_id: str):

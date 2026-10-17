@@ -36,6 +36,10 @@ from src.core.development_inference_validation import (
 from src.core.development_signal_health import build_development_signal_health
 from src.core.gate_status import training_gates_passed_from_iteration
 from src.core.legacy_alias import model_type_to_skill_id
+from src.core.objective_comparator import (
+    ObjectiveComparator,
+    objective_comparator_for_skill_id,
+)
 from src.core.promotion_approval import (
     target_identity,
     validate_candidate_binding,
@@ -168,7 +172,12 @@ class ConfigPromoter:
         if not session:
             raise ValueError(f"Session {research_id} not found")
 
-        best = await self._store.get_best_iteration(research_id)
+        objective = objective_comparator_for_skill_id(
+            session.get("skill_id") or session.get("model_type"),
+            epsilon=settings.global_stagnation_epsilon,
+            default=ObjectiveComparator(epsilon=settings.global_stagnation_epsilon),
+        )
+        best = await self._store.get_best_iteration(research_id, objective=objective)
         if not best:
             raise ValueError(f"No winning iteration found for {research_id}")
 
@@ -297,6 +306,7 @@ class ConfigPromoter:
             model_type=model_type,
             instrument=instrument,
             timeframe=timeframe,
+            comparator=objective,
         )
         quality_baseline_evaluation = self._with_blocker_details(
             quality_baseline_evaluation,
@@ -2204,7 +2214,11 @@ class ConfigPromoter:
         model_type: str,
         instrument: str,
         timeframe: str,
+        comparator: Optional[ObjectiveComparator] = None,
     ) -> Dict[str, Any]:
+        comparator = comparator or ObjectiveComparator(
+            epsilon=float(settings.global_stagnation_epsilon),
+        )
         current_metric = self._number(best_iteration.get("primary_metric"))
         current_metric_name = self._clean_metric_name(
             best_iteration.get("metric_name")
@@ -2212,7 +2226,7 @@ class ConfigPromoter:
         current_formula_version = self._formula_version(
             self._best_iteration_payload(best_iteration)
         )
-        epsilon = float(settings.global_stagnation_epsilon)
+        epsilon = comparator.epsilon
         comparison: Dict[str, Any] = {
             "current_research_id": research_id,
             "current_iteration": best_iteration.get("iteration"),
@@ -2401,9 +2415,17 @@ class ConfigPromoter:
             },
         )
         delta = current_metric - baseline_metric
-        threshold = baseline_metric - epsilon
+        threshold = (
+            baseline_metric - epsilon
+            if comparator.direction == "maximize"
+            else baseline_metric + epsilon
+        )
         comparison["delta"] = delta
-        passed = current_metric >= threshold
+        comparison["direction"] = comparator.direction
+        # Regression test through the ONE objective comparator: a candidate is
+        # blocked exactly when the baseline still beats it beyond epsilon —
+        # correct for maximization AND minimization alike.
+        passed = not comparator.is_better(baseline_metric, current_metric)
         blockers = [] if passed else [QUALITY_BASELINE_BLOCKER]
         add_check(
             "best_metric_not_below_development_baseline",
@@ -2414,7 +2436,7 @@ class ConfigPromoter:
                 "baseline_metric": baseline_metric,
                 "delta": delta,
                 "epsilon": epsilon,
-                "minimum_allowed_metric": threshold,
+                "allowed_metric_threshold": threshold,
             },
         )
         return {
