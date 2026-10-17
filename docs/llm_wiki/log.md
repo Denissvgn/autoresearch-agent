@@ -245,3 +245,19 @@ Append-only chronological log.
 - Workflow pages created: 1
 - Dependency pages initialized: 0
 - Surface policy updated: no
+
+## 2026-10-17
+
+### Wiki sync
+- Source: `.`
+- Generator version: `2.5.0`
+- Source selection profile: none (default discovery)
+- Source selection fingerprint: none
+- Source snapshot digest: `sha256:96a817a21504df07bc77d0812dad56aea375fc91400e91300b963a7fd2f3f590`
+- Pages created: 1
+- Pages updated: 25
+- Pages metadata-only: 2
+- Pages skipped (unchanged): 805
+- Pages deprecated: 0
+- Semantic fields preserved: 0
+- Moved entities: none

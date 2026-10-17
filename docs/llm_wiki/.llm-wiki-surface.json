@@ -25,11 +25,11 @@
       "infrastructure": 3,
       "load-order": 1,
       "log": 1,
-      "modules": 256,
+      "modules": 257,
       "workflows": 15
     },
     "dependency_architecture": 2,
-    "total": 837
+    "total": 838
   },
   "dependency_pages": {
     "count": 2,
@@ -51,7 +51,7 @@
           "gaps": [
             {
               "kind": "unresolved_call",
-              "line": 103,
+              "line": 104,
               "step": "allocate_trial_dir",
               "target": "trial_dir.mkdir"
             }
@@ -560,13 +560,13 @@
           "gaps": [
             {
               "kind": "external_call",
-              "line": 94,
+              "line": 95,
               "step": "is_trial_eligible_command",
               "target": "any"
             },
             {
               "kind": "unresolved_call",
-              "line": 103,
+              "line": 104,
               "step": "allocate_trial_dir",
               "target": "trial_dir.mkdir"
             },
@@ -976,7 +976,7 @@
           "gaps": [
             {
               "kind": "external_call",
-              "line": 94,
+              "line": 95,
               "step": "is_trial_eligible_command",
               "target": "any"
             }
@@ -2590,7 +2590,7 @@
           "gaps": [
             {
               "kind": "unresolved_call",
-              "line": 120,
+              "line": 121,
               "step": "stage_trial_workspace",
               "target": "dst.mkdir"
             },
@@ -2650,7 +2650,7 @@
           "gaps": [
             {
               "kind": "unresolved_call",
-              "line": 120,
+              "line": 121,
               "step": "stage_trial_workspace",
               "target": "dst.mkdir"
             },
@@ -9123,6 +9123,7 @@
         "modules/test_terminal_phase_contract.md",
         "modules/test_tool_access.md",
         "modules/test_trial_workspace.md",
+        "modules/test_trust_boundary_qualification.md",
         "modules/test_webhook_promotion.md",
         "modules/test_ws_event_enrichment.md",
         "modules/tests_conftest.md",
@@ -15995,7 +15996,8 @@
         "modules/test_plugin_runner.md",
         "modules/test_process_limits.md",
         "modules/test_prompt_evaluator.md",
-        "modules/test_skill_prompt_engineering_e2e.md"
+        "modules/test_skill_prompt_engineering_e2e.md",
+        "modules/test_trust_boundary_qualification.md"
       ],
       "role": "semantic",
       "source_path": "src/core/plugin_runner.py",
@@ -16088,7 +16090,8 @@
         "modules/command_runner.md",
         "modules/plugin_runner.md",
         "modules/process_limits.md",
-        "modules/test_process_limits.md"
+        "modules/test_process_limits.md",
+        "modules/test_trust_boundary_qualification.md"
       ],
       "role": "semantic",
       "source_path": "src/core/process_limits.py",
@@ -16413,7 +16416,8 @@
         "modules/command_policy.md",
         "modules/execution_contracts.md",
         "modules/result_authority.md",
-        "modules/test_result_authority.md"
+        "modules/test_result_authority.md",
+        "modules/test_trust_boundary_qualification.md"
       ],
       "role": "semantic",
       "source_path": "src/core/result_authority.py",
@@ -18802,6 +18806,24 @@
       "title": "test_trial_workspace Module"
     },
     {
+      "canonical_path": "modules/test_trust_boundary_qualification.md",
+      "id": "test_trust_boundary_qualification",
+      "kind": "modules",
+      "mcp_uri": "llm-wiki://modules/test_trust_boundary_qualification",
+      "outgoing_internal_links": [
+        "modules/agent_tools.md",
+        "modules/command_runner.md",
+        "modules/config.md",
+        "modules/plugin_runner.md",
+        "modules/process_limits.md",
+        "modules/result_authority.md",
+        "modules/test_trust_boundary_qualification.md"
+      ],
+      "role": "semantic",
+      "source_path": "tests/test_trust_boundary_qualification.py",
+      "title": "test_trust_boundary_qualification Module"
+    },
+    {
       "canonical_path": "modules/test_webhook_promotion.md",
       "id": "test_webhook_promotion",
       "kind": "modules",
@@ -21051,6 +21073,7 @@
         "modules/test_terminal_phase_contract.md",
         "modules/test_tool_access.md",
         "modules/test_trial_workspace.md",
+        "modules/test_trust_boundary_qualification.md",
         "modules/test_webhook_promotion.md",
         "modules/test_ws_event_enrichment.md",
         "modules/tests_conftest.md",
@@ -21318,6 +21341,7 @@
         "modules/test_terminal_phase_contract.md",
         "modules/test_tool_access.md",
         "modules/test_trial_workspace.md",
+        "modules/test_trust_boundary_qualification.md",
         "modules/test_webhook_promotion.md",
         "modules/test_ws_event_enrichment.md",
         "modules/tests_conftest.md",
@@ -21339,5 +21363,5 @@
     }
   ],
   "schema_version": "llm-wiki-surface-index/v1",
-  "source_hash": "sha256:f5d18db0afdc2fbfeaa027203349d1cd5c8896f9d2a3641e3fd85f46c1909448"
+  "source_hash": "sha256:6120d1e046658d172b60fbe15f61554b6607ae79c203efbc4e3e1164c4fbc123"
 }

@@ -22,6 +22,7 @@ executable bindings are rejected with migration diagnostics.
 | `json` | `json` |
 | `pathlib` | `Path` |
 | `pytest` | `pytest` |
+| `shutil` | `shutil` |
 | `src.core.agent_tools` | `_config_snapshot_path_from_command`, `_execute_tool` |
 | `src.core.command_policy` | `evaluate_command_policy` |
 | `src.core.command_runner` | `GovernedCommandRunner` |
@@ -30,6 +31,7 @@ executable bindings are rejected with migration diagnostics.
 | `src.core.skill_registry` | `SkillRegistry` |
 | `src.core.skill_runtime` | `ManifestSkillRuntime`, `SkillConfigError` |
 | `src.core.tool_access` | `build_tool_access_context` |
+| `subprocess` | `subprocess` |
 | `sys` | `sys` |
 | `yaml` | `yaml` |
 
@@ -117,3 +119,4 @@ flowchart LR
 | `test_bundled_skills_advertise_only_supported_bindings` | `()` | — | — |
 | `test_result_ingestion_prefers_the_attempt_output_root` | `(tmp_path: Path)` | — | — |
 | `test_pre_run_snapshot_and_request_agree_on_the_config_path` | `(tmp_path: Path)` | — | — |
+| `test_pinned_interpreter_binding_keeps_workspace_venv` | `(tmp_path: Path)` | — | The pinned interpreter reaches argv as the workspace-venv binding. |

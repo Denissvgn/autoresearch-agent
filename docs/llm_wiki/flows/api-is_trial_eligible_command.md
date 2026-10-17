@@ -52,9 +52,9 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| is_trial_eligible_command | str | 89 | `str(...)` |
-| is_trial_eligible_command | any | 94 | `any(...)` |
-| is_trial_eligible_command | str | 94 | `str(script)` |
+| is_trial_eligible_command | str | 90 | `str(...)` |
+| is_trial_eligible_command | any | 95 | `any(...)` |
+| is_trial_eligible_command | str | 95 | `str(script)` |
 
 ### Boundary effects
 
@@ -64,7 +64,7 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| external_call | `is_trial_eligible_command` | `any` | 94 |
+| external_call | `is_trial_eligible_command` | `any` | 95 |
 
 ## Behavior
 

@@ -1,6 +1,6 @@
 # OutputCallback
 
-**Location:** `src/core/command_runner.py:254`
+**Location:** `src/core/command_runner.py:256`
 **Kind:** Type alias
 **Bases:** —
 **Module:** [command_runner](../modules/command_runner.md)

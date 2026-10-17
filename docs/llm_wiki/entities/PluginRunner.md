@@ -93,4 +93,4 @@ flowchart LR
 | `TestPluginFailClosed.test_non_object_json_fails_closed` | call | [test_plugin_runner](../modules/test_plugin_runner.md) | 1 |
 | `TestPluginFailClosed.test_non_zero_exit_fails_closed` | call | [test_plugin_runner](../modules/test_plugin_runner.md) | 1 |
 
-> References: showing 12 of 19 logical references; 7 omitted by the 12-row generated summary limit.
+> References: showing 12 of 22 logical references; 10 omitted by the 12-row generated summary limit.

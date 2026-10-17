@@ -81,7 +81,7 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [TrialContext](../entities/TrialContext.md) | 51 | — | Per-command execution context (P2 per-workdir state). |
+| [TrialContext](../entities/TrialContext.md) | 52 | — | Per-command execution context (P2 per-workdir state). |
 
 ## Functions
 

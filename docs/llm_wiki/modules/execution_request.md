@@ -83,7 +83,7 @@ flowchart LR
 | `_resolve_path_value` | `(raw: str, *, workspace_root: str, workdir: str) -> str` | — | Resolve one path-typed argument exactly once. |
 | `_shell_reason` | `(command: str, argv: Iterable[str]) -> Optional[str]` | — | — |
 | `_secret_reason` | `(argv: Iterable[str]) -> Optional[str]` | — | — |
-| `_pinned_interpreter_path` | `(workspace_root: str) -> Optional[str]` | — | — |
+| `_pinned_interpreter_path` | `(workspace_root: str) -> Optional[str]` | — | The workspace-venv interpreter binding the subprocess is pinned to. |
 | `_strip_legacy_cd` | `(argv: list[str], workspace_root: str) -> list[str]` | — | — |
 | `resolve_execution_request` | `(command: str, *, workspace_root: str, session_workspace: Optional[str], workdir: Optional[str] = None, policy_extension: Optional[Mapping[str, Any]] = None, access: Any = None, timeout_s: int = 7200) -> tuple[Optional[ExecutionRequest], Optional[str]]` | — | Resolve one command into an immutable :class:`ExecutionRequest`. |
 | `_python_script_name` | `(raw: str, workspace_root: str) -> str` | — | Normalize a script argument to its workspace-relative declared name. |

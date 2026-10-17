@@ -61,15 +61,20 @@ flowchart LR
     n1["src/core/plugin_runner.py"]
     n2["src/core/process_limits.py"]
     n3["tests/test_process_limits.py"]
+    n4["tests/test_trust_boundary_qualification.py"]
     n0 --> n2
     n1 --> n2
     n3 --> n0
     n3 --> n1
     n3 --> n2
+    n4 --> n0
+    n4 --> n1
+    n4 --> n2
     click n0 "../modules/command_runner.md"
     click n1 "../modules/plugin_runner.md"
     click n2 "../modules/process_limits.md"
     click n3 "../modules/test_process_limits.md"
+    click n4 "../modules/test_trust_boundary_qualification.md"
 ```
 
 ### Internal neighbors
@@ -79,6 +84,7 @@ flowchart LR
 | Inbound | [command_runner](../modules/command_runner.md) |
 | Inbound | [plugin_runner](../modules/plugin_runner.md) |
 | Inbound | [test_process_limits](../modules/test_process_limits.md) |
+| Inbound | [test_trust_boundary_qualification](../modules/test_trust_boundary_qualification.md) |
 
 ### External packages
 

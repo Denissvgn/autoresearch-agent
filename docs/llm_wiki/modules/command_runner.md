@@ -53,7 +53,7 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Inbound | `src` (2) |
-| Inbound | `tests` (8) |
+| Inbound | `tests` (9) |
 | Outbound | `src` (4) |
 
 ### External packages
@@ -62,7 +62,7 @@ flowchart LR
 |---|---:|---:|
 | python | 1 | 1 |
 
-> All 14 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 15 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
@@ -70,11 +70,11 @@ flowchart LR
 |-------|------|------|----------------|-------------|
 | [_HeadTailBuffer](../entities/HeadTailBuffer.md) | Class | 40 | — | Retain a fixed-size head and rolling tail, including for newline-free data. |
 | [_SessionOutputLog](../entities/SessionOutputLog.md) | Class | 74 | — | Append child output under a shared session logs byte quota. |
-| [OutputStream](../entities/OutputStream.md) | Type alias | 253 | `Literal['stdout', 'stderr']` | — |
-| [OutputCallback](../entities/OutputCallback.md) | Type alias | 254 | `Callable[[OutputStream, str], None]` | — |
-| [CommandRunResult](../entities/CommandRunResult.md) | Class | 258 | — | — |
-| [CommandProcessRegistry](../entities/CommandProcessRegistry.md) | Class | 282 | — | Thread-safe registry of in-flight governed subprocesses, keyed by session. |
-| [GovernedCommandRunner](../entities/GovernedCommandRunner.md) | Class | 344 | — | Validate and execute one approved command without invoking a shell. |
+| [OutputStream](../entities/OutputStream.md) | Type alias | 255 | `Literal['stdout', 'stderr']` | — |
+| [OutputCallback](../entities/OutputCallback.md) | Type alias | 256 | `Callable[[OutputStream, str], None]` | — |
+| [CommandRunResult](../entities/CommandRunResult.md) | Class | 260 | — | — |
+| [CommandProcessRegistry](../entities/CommandProcessRegistry.md) | Class | 284 | — | Thread-safe registry of in-flight governed subprocesses, keyed by session. |
+| [GovernedCommandRunner](../entities/GovernedCommandRunner.md) | Class | 346 | — | Validate and execute one approved command without invoking a shell. |
 
 ## Functions
 

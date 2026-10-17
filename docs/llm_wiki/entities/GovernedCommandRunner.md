@@ -1,6 +1,6 @@
 # GovernedCommandRunner
 
-**Location:** `src/core/command_runner.py:344`
+**Location:** `src/core/command_runner.py:346`
 **Kind:** Class
 **Bases:** —
 **Module:** [command_runner](../modules/command_runner.md)
@@ -88,4 +88,4 @@ flowchart LR
 | `test_command_runner_trusted_boundary_labeled` | call | [test_execution_isolation](../modules/test_execution_isolation.md) | 1 |
 | `test_sequential_and_parallel_requests_stay_at_parity` | call | [test_execution_request](../modules/test_execution_request.md) | 1 |
 
-> References: showing 12 of 17 logical references; 5 omitted by the 12-row generated summary limit.
+> References: showing 12 of 20 logical references; 8 omitted by the 12-row generated summary limit.

@@ -53,9 +53,9 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| allocate_trial_dir | Path | 101 | `Path(session_workspace)` |
-| allocate_trial_dir | trial_dir.mkdir | 103 | `trial_dir.mkdir(parents=True, exist_ok=True)` |
-| allocate_trial_dir | str | 104 | `str(trial_dir)` |
+| allocate_trial_dir | Path | 102 | `Path(session_workspace)` |
+| allocate_trial_dir | trial_dir.mkdir | 104 | `trial_dir.mkdir(parents=True, exist_ok=True)` |
+| allocate_trial_dir | str | 105 | `str(trial_dir)` |
 
 ### Boundary effects
 
@@ -65,7 +65,7 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `allocate_trial_dir` | `trial_dir.mkdir` | 103 |
+| unresolved_call | `allocate_trial_dir` | `trial_dir.mkdir` | 104 |
 
 ## Behavior
 

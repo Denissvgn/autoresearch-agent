@@ -21,7 +21,7 @@ is retained. Other writers outside this helper do not participate.
 ...     first.write("abcde")
 ...     second.write("1234567890")
 ...     assert second.truncated
-...     assert sum(p.stat().st_size for p in Path(workspace, "logs").iterdir()) == 10
+...     assert sum(p.stat().st_size for p in Path(workspace, "command_logs").iterdir()) == 10
 ...     first.close()
 ...     second.close()
 

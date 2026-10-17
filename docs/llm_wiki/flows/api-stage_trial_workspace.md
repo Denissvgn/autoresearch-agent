@@ -143,10 +143,10 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| stage_trial_workspace | Path | 118 | `Path(session_workspace)` |
-| stage_trial_workspace | Path | 119 | `Path(trial_dir)` |
-| stage_trial_workspace | dst.mkdir | 120 | `dst.mkdir(parents=True, exist_ok=True)` |
-| stage_trial_workspace | copy_tree_regular_files | 128 | `fs_safety.copy_tree_regular_files(str(...), str(...), ignore=_STAGE_IGNORE, on_skip=_on_skip)` |
+| stage_trial_workspace | Path | 119 | `Path(session_workspace)` |
+| stage_trial_workspace | Path | 120 | `Path(trial_dir)` |
+| stage_trial_workspace | dst.mkdir | 121 | `dst.mkdir(parents=True, exist_ok=True)` |
+| stage_trial_workspace | copy_tree_regular_files | 129 | `fs_safety.copy_tree_regular_files(str(...), str(...), ignore=_STAGE_IGNORE, on_skip=_on_skip)` |
 | copy_tree_regular_files | os.makedirs | 394 | `os.makedirs(dst_root, exist_ok=True)` |
 | copy_tree_regular_files | _open_root | 395 | `_open_root(src_root, 'copy')` |
 | _open_root | os.open (src/core/fs_safety.py:_open_root) | 81 | `os.open(root, ...)` |
@@ -163,7 +163,7 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `stage_trial_workspace` | `dst.mkdir` | 120 |
+| unresolved_call | `stage_trial_workspace` | `dst.mkdir` | 121 |
 | external_call | `copy_tree_regular_files` | `os.makedirs` | 394 |
 | external_call | `_open_root` | `os.open` | 81 |
 | external_call | `copy_tree_regular_files` | `sorted` | 400 |

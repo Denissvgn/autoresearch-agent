@@ -1,6 +1,6 @@
 # TrialContext
 
-**Location:** `src/core/trial_workspace.py:51`
+**Location:** `src/core/trial_workspace.py:52`
 **Kind:** Class
 **Bases:** —
 **Module:** [trial_workspace](../modules/trial_workspace.md)

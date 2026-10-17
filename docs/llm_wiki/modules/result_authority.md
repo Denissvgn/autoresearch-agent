@@ -48,14 +48,17 @@ flowchart LR
     n1["src/core/execution_contracts.py"]
     n2["src/core/result_authority.py"]
     n3["tests/test_result_authority.py"]
+    n4["tests/test_trust_boundary_qualification.py"]
     n0 --> n2
     n2 --> n1
     n3 --> n1
     n3 --> n2
+    n4 --> n2
     click n0 "../modules/command_policy.md"
     click n1 "../modules/execution_contracts.md"
     click n2 "../modules/result_authority.md"
     click n3 "../modules/test_result_authority.md"
+    click n4 "../modules/test_trust_boundary_qualification.md"
 ```
 
 ### Internal neighbors
@@ -64,6 +67,7 @@ flowchart LR
 |---|---|
 | Inbound | [command_policy](../modules/command_policy.md) |
 | Inbound | [test_result_authority](../modules/test_result_authority.md) |
+| Inbound | [test_trust_boundary_qualification](../modules/test_trust_boundary_qualification.md) |
 | Outbound | [execution_contracts](../modules/execution_contracts.md) |
 
 ## Functions

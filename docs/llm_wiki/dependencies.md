@@ -31,7 +31,7 @@ flowchart TD
 | Module | Fan-in | Fan-out |
 |--------|--------|---------|
 | [results_store](modules/results_store.md) | 44 | 1 |
-| [config](modules/config.md) | 39 | 0 |
+| [config](modules/config.md) | 40 | 0 |
 | [orchestrator](modules/orchestrator.md) | 39 | 22 |
 | [skill_registry](modules/skill_registry.md) | 24 | 2 |
 | [client](modules/client.md) | 23 | 0 |
@@ -47,8 +47,8 @@ flowchart TD
 | [tool_access](modules/tool_access.md) | 12 | 0 |
 | [events](modules/events.md) | 12 | 1 |
 | [artifact_reference](modules/artifact_reference.md) | 11 | 0 |
+| [command_runner](modules/command_runner.md) | 11 | 4 |
 | [useResearch](modules/useResearch.md) | 11 | 2 |
-| [command_runner](modules/command_runner.md) | 10 | 4 |
 | [gate_status](modules/gate_status.md) | 10 | 0 |
 | [iteration_snapshot](modules/iteration_snapshot.md) | 10 | 2 |
 | [promotion_target](modules/promotion_target.md) | 10 | 1 |
@@ -59,11 +59,11 @@ flowchart TD
 | [fs_safety](modules/fs_safety.md) | 9 | 0 |
 | [auth](modules/auth.md) | 8 | 1 |
 | [results](modules/results.md) | 8 | 9 |
+| [agent_tools](modules/agent_tools.md) | 8 | 6 |
 | [core_legacy_alias](modules/core_legacy_alias.md) | 8 | 1 |
+| [plugin_runner](modules/plugin_runner.md) | 8 | 3 |
 | [state_machine](modules/state_machine.md) | 8 | 2 |
-| [agent_tools](modules/agent_tools.md) | 7 | 6 |
 | [command_policy](modules/command_policy.md) | 7 | 4 |
-| [plugin_runner](modules/plugin_runner.md) | 7 | 3 |
 | [postgres_state_store](modules/postgres_state_store.md) | 7 | 5 |
 | [src_api_skills](modules/src_api_skills.md) | 6 | 8 |
 | [observability](modules/observability.md) | 6 | 0 |
@@ -76,6 +76,7 @@ flowchart TD
 | [development_gate_bundle](modules/development_gate_bundle.md) | 4 | 2 |
 | [execution_contracts](modules/execution_contracts.md) | 4 | 1 |
 | [execution_request](modules/execution_request.md) | 4 | 0 |
+| [process_limits](modules/process_limits.md) | 4 | 0 |
 | [promotion_approval](modules/promotion_approval.md) | 4 | 0 |
 | [skill_paths](modules/skill_paths.md) | 4 | 0 |
 | [trial_workspace](modules/trial_workspace.md) | 4 | 1 |
@@ -85,7 +86,7 @@ flowchart TD
 | [isolation](modules/isolation.md) | 3 | 0 |
 | [log_writer](modules/log_writer.md) | 3 | 1 |
 | [preflight](modules/preflight.md) | 3 | 1 |
-| [process_limits](modules/process_limits.md) | 3 | 0 |
+| [result_authority](modules/result_authority.md) | 3 | 1 |
 | [skill_generator](modules/skill_generator.md) | 3 | 3 |
 | [src_main](modules/src_main.md) | 3 | 16 |
 | [compat_legacy_alias](modules/compat_legacy_alias.md) | 2 | 0 |
@@ -94,7 +95,6 @@ flowchart TD
 | [output_digest](modules/output_digest.md) | 2 | 0 |
 | [research_manifest](modules/research_manifest.md) | 2 | 5 |
 | [research_state](modules/research_state.md) | 2 | 6 |
-| [result_authority](modules/result_authority.md) | 2 | 1 |
 | [significance](modules/significance.md) | 2 | 0 |
 | [skill_lifecycle](modules/skill_lifecycle.md) | 2 | 0 |
 | [DynamicFormFields](modules/DynamicFormFields.md) | 2 | 3 |
@@ -269,6 +269,7 @@ flowchart TD
 | [test_terminal_phase_contract](modules/test_terminal_phase_contract.md) | 0 | 1 |
 | [test_tool_access](modules/test_tool_access.md) | 0 | 5 |
 | [test_trial_workspace](modules/test_trial_workspace.md) | 0 | 4 |
+| [test_trust_boundary_qualification](modules/test_trust_boundary_qualification.md) | 0 | 6 |
 | [test_ws_event_enrichment](modules/test_ws_event_enrichment.md) | 0 | 1 |
 | [postcss.config](modules/postcss.config.md) | 0 | 0 |
 | [run-production-ops-tests](modules/run-production-ops-tests.md) | 0 | 0 |

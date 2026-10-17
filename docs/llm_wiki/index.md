@@ -7,7 +7,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 | Surface | Count | Start here |
 |---|---:|---|
 | Entities | 441 | [Open section](#entities) |
-| Modules | 256 | [Open section](#modules) |
+| Modules | 257 | [Open section](#modules) |
 | Workflows | 15 | [Open section](#workflows) |
 | Guides | 0 | No pages |
 | Entry-point flows | 118 | [Open section](#entry-point-flows) |
@@ -710,6 +710,7 @@ Retained history; these declarations are absent from the selected source invento
 - [test_terminal_phase_contract](modules/test_terminal_phase_contract.md) - Fix D/G: terminal-phase contract.
 - [test_tool_access](modules/test_tool_access.md) - Tool-dispatch authorization regressions for the shared file-tool context.
 - [test_trial_workspace](modules/test_trial_workspace.md) - Per-workdir trial state tests (P2 — ``execution.concurrency`` prerequisite).
+- [test_trust_boundary_qualification](modules/test_trust_boundary_qualification.md) - Trusted-execution-boundary qualification lane.
 - [test_webhook_promotion](modules/test_webhook_promotion.md) - Webhook promotion target tests (P1-3).
 - [test_ws_event_enrichment](modules/test_ws_event_enrichment.md) - P3-018 — WebSocket event payload enrichment tests (ARC-011 C-stream).
 - [tests_conftest](modules/tests_conftest.md) - `tests/conftest.py`

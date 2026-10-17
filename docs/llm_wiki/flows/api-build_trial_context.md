@@ -148,17 +148,17 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| build_trial_context | is_trial_eligible_command | 183 | `is_trial_eligible_command(command, allowed_scripts)` |
-| is_trial_eligible_command | str (src/core/trial_workspace.…:is_trial_eligible_command) | 89 | `str(...)` |
-| is_trial_eligible_command | any | 94 | `any(...)` |
-| is_trial_eligible_command | str (src/core/trial_workspace.…:is_trial_eligible_command) | 94 | `str(script)` |
-| build_trial_context | allocate_trial_dir | 186 | `allocate_trial_dir(session_workspace, turn=turn, seq=seq)` |
-| allocate_trial_dir | Path (src/core/trial_workspace.py:allocate_trial_dir) | 101 | `Path(session_workspace)` |
-| allocate_trial_dir | trial_dir.mkdir | 103 | `trial_dir.mkdir(parents=True, exist_ok=True)` |
-| allocate_trial_dir | str (src/core/trial_workspace.py:allocate_trial_dir) | 104 | `str(trial_dir)` |
-| build_trial_context | stage_trial_or_none | 187 | `stage_trial_or_none(session_workspace, candidate)` |
-| stage_trial_or_none | stage_trial_workspace | 140 | `stage_trial_workspace(session_workspace, trial_dir)` |
-| stage_trial_workspace | Path (src/core/trial_workspace.py:stage_trial_workspace) | 118 | `Path(session_workspace)` |
+| build_trial_context | is_trial_eligible_command | 184 | `is_trial_eligible_command(command, allowed_scripts)` |
+| is_trial_eligible_command | str (src/core/trial_workspace.…:is_trial_eligible_command) | 90 | `str(...)` |
+| is_trial_eligible_command | any | 95 | `any(...)` |
+| is_trial_eligible_command | str (src/core/trial_workspace.…:is_trial_eligible_command) | 95 | `str(script)` |
+| build_trial_context | allocate_trial_dir | 187 | `allocate_trial_dir(session_workspace, turn=turn, seq=seq)` |
+| allocate_trial_dir | Path (src/core/trial_workspace.py:allocate_trial_dir) | 102 | `Path(session_workspace)` |
+| allocate_trial_dir | trial_dir.mkdir | 104 | `trial_dir.mkdir(parents=True, exist_ok=True)` |
+| allocate_trial_dir | str (src/core/trial_workspace.py:allocate_trial_dir) | 105 | `str(trial_dir)` |
+| build_trial_context | stage_trial_or_none | 188 | `stage_trial_or_none(session_workspace, candidate)` |
+| stage_trial_or_none | stage_trial_workspace | 141 | `stage_trial_workspace(session_workspace, trial_dir)` |
+| stage_trial_workspace | Path (src/core/trial_workspace.py:stage_trial_workspace) | 119 | `Path(session_workspace)` |
 
 ### Boundary effects
 
@@ -168,8 +168,8 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| external_call | `is_trial_eligible_command` | `any` | 94 |
-| unresolved_call | `allocate_trial_dir` | `trial_dir.mkdir` | 103 |
+| external_call | `is_trial_eligible_command` | `any` | 95 |
+| unresolved_call | `allocate_trial_dir` | `trial_dir.mkdir` | 104 |
 | step_limit | `build_trial_context` | `first 12 steps` | 0 |
 | truncated_flow | `build_trial_context` | `depth limit` | 0 |
 

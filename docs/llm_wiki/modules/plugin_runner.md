@@ -96,6 +96,7 @@ flowchart LR
     n8["tests/test_process_limits.py"]
     n9["tests/test_prompt_evaluator.py"]
     n10["tests/test_skill_prompt_engineering_e2e.py"]
+    n11["tests/test_trust_boundary_qualification.py"]
     n0 --> n3
     n0 --> n5
     n1 --> n3
@@ -112,6 +113,8 @@ flowchart LR
     n9 --> n1
     n9 --> n3
     n10 --> n3
+    n11 --> n3
+    n11 --> n4
     click n0 "../modules/cli.md"
     click n1 "../modules/bootstrap_runner.md"
     click n2 "../modules/isolation.md"
@@ -123,6 +126,7 @@ flowchart LR
     click n8 "../modules/test_process_limits.md"
     click n9 "../modules/test_prompt_evaluator.md"
     click n10 "../modules/test_skill_prompt_engineering_e2e.md"
+    click n11 "../modules/test_trust_boundary_qualification.md"
 ```
 
 ### Internal neighbors
@@ -136,6 +140,7 @@ flowchart LR
 | Inbound | [test_process_limits](../modules/test_process_limits.md) |
 | Inbound | [test_prompt_evaluator](../modules/test_prompt_evaluator.md) |
 | Inbound | [test_skill_prompt_engineering_e2e](../modules/test_skill_prompt_engineering_e2e.md) |
+| Inbound | [test_trust_boundary_qualification](../modules/test_trust_boundary_qualification.md) |
 | Outbound | [isolation](../modules/isolation.md) |
 | Outbound | [process_limits](../modules/process_limits.md) |
 | Outbound | [skill_manifest](../modules/skill_manifest.md) |

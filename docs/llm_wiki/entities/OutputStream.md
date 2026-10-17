@@ -1,6 +1,6 @@
 # OutputStream
 
-**Location:** `src/core/command_runner.py:253`
+**Location:** `src/core/command_runner.py:255`
 **Kind:** Type alias
 **Bases:** —
 **Module:** [command_runner](../modules/command_runner.md)
