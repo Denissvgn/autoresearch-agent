@@ -8,6 +8,7 @@ import logging
 import os
 import secrets
 import shutil
+import socket
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -33,7 +34,7 @@ from src.core.state_machine import (
     SessionState,
     SessionStateMachine,
 )
-from src.core.state_store import StateStore
+from src.core.state_store import CapacityExceeded, StateStore
 from src.ws.events import broadcaster
 
 logger = logging.getLogger(__name__)
@@ -111,6 +112,9 @@ class SessionManager:
         self._orchestrator = AgentOrchestrator(store, state_machine=self._sm)
         self._active: Dict[str, ActiveSession] = {}
         self._active_pipelines: Dict[str, asyncio.Task] = {}
+        self._owner_id = f"{socket.gethostname()}:{os.getpid()}:{uuid.uuid4().hex[:8]}"
+        self._reservations: Dict[str, Dict[str, Any]] = {}
+        self._lease_task: Optional[asyncio.Task] = None
         # ARC-012 P7-009: strong references to fire-and-forget crash
         # finalizer tasks (asyncio only keeps weak refs — an unreferenced
         # task can be GC'd mid-write).
@@ -255,6 +259,71 @@ class SessionManager:
                 "source": "task_done_callback",
             })
 
+    async def _reserve_work(self, config: "ResearchConfig") -> None:
+        """Reserve logical work and a global capacity slot atomically.
+
+        Runs before any bootstrap/filesystem effect so two workers can never
+        both admit the same request or exceed the configured global limit.
+        Duplicate-request semantics: the reservation key is the research id
+        (unique per attempt), so retries of the same attempt map to the same
+        reservation and never double-count capacity.
+        """
+        scope = f"{config.skill_id}/{config.subject_id}/{config.variant}"
+        try:
+            reservation = await self._store.reserve_work(
+                reservation_key=config.id,
+                scope_key=scope,
+                owner_id=self._owner_id,
+                capacity_limit=settings.max_concurrent_sessions,
+                lease_seconds=settings.work_lease_seconds,
+            )
+        except CapacityExceeded as exc:
+            raise RuntimeError(str(exc)) from exc
+        self._reservations[config.id] = reservation
+        self._ensure_lease_renewal()
+
+    async def _commit_work(self, research_id: str) -> None:
+        await self._store.commit_work(
+            reservation_key=research_id, research_id=research_id,
+        )
+
+    async def _release_work(self, research_id: str) -> None:
+        self._reservations.pop(research_id, None)
+        await self._store.release_work(research_id)
+
+    async def _release_uncommitted_work(self) -> None:
+        """Release reservations whose attempt failed before the session row."""
+        for research_id, reservation in list(self._reservations.items()):
+            if reservation.get("state") == "reserved":
+                await self._release_work(research_id)
+
+    def _ensure_lease_renewal(self) -> None:
+        if self._lease_task is None or self._lease_task.done():
+            self._lease_task = asyncio.create_task(self._lease_renewal_loop())
+
+    async def _lease_renewal_loop(self) -> None:
+        interval = max(1.0, float(settings.work_lease_seconds) / 3.0)
+        while self._reservations:
+            await asyncio.sleep(interval)
+            for research_id in list(self._reservations):
+                try:
+                    renewed = await self._store.renew_work_lease(
+                        reservation_key=research_id,
+                        owner_id=self._owner_id,
+                        lease_seconds=settings.work_lease_seconds,
+                    )
+                except Exception:
+                    logger.exception(
+                        "lease renewal failed for %s", research_id,
+                    )
+                    continue
+                if not renewed:
+                    logger.warning(
+                        "lease lost for %s; ownership may have moved",
+                        research_id,
+                    )
+                    self._reservations.pop(research_id, None)
+
     async def recover_orphaned_sessions(self) -> Dict[str, int]:
         """Classify sessions left active by a previous service process."""
         # Phase 4.5: filter at the SQL layer to only candidate statuses;
@@ -309,6 +378,19 @@ class SessionManager:
         session: Dict[str, Any],
     ) -> Dict[str, Any]:
         status = str(session.get("status") or "")
+        reservation = await self._store.get_work_reservation(
+            str(session.get("research_id") or session.get("id") or "")
+        )
+        if reservation and reservation.get("state") in (
+            "reserved", "committed",
+        ):
+            lease = str(reservation.get("lease_expires_at") or "")
+            if lease > datetime.now(timezone.utc).isoformat():
+                return {
+                    "status": "owned_elsewhere",
+                    "orphaned": False,
+                    "reason": "live lease held by another worker",
+                }
         if status in {"stopped", "cancelled"}:
             return {"status": "stopped", "orphaned": False, "reason": None}
         if status in {"failed", "timed_out"}:
@@ -352,6 +434,7 @@ class SessionManager:
             except Exception as exc:
                 if workspace_path and not isinstance(exc, RuntimeError):
                     await self._cleanup_failed_start_workspace(workspace_path)
+                await self._release_uncommitted_work()
                 raise
 
     async def _start_session_unlocked(
@@ -429,6 +512,7 @@ class SessionManager:
         # materialize must not get a row or a background task (201-then-crash).
         self._validate_session_skill(config)
 
+        await self._reserve_work(config)
         preflight = await self._run_preflight(config)
         manifest_overrides = dict(manifest or {})
         manifest_overrides["preflight"] = preflight
@@ -477,6 +561,7 @@ class SessionManager:
             subject_id=subject_id or "",
             variant=variant or "",
         )
+        await self._commit_work(research_id)
         # Spawn background task
         task = asyncio.create_task(
             self._run_and_cleanup(research_id, config),
@@ -553,6 +638,7 @@ class SessionManager:
                 )
         finally:
             self._active.pop(research_id, None)
+            await self._release_work(research_id)
 
     @staticmethod
     def _validate_session_skill(config: ResearchConfig) -> None:
@@ -1150,6 +1236,7 @@ class SessionManager:
         # so it must not be continued into a new zombie.
         self._validate_session_skill(config)
 
+        await self._reserve_work(config)
         preflight = await self._run_preflight(config)
         manifest_overrides = {
             "runtime": {"resumed_from": parent_id},

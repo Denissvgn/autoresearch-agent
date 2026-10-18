@@ -845,9 +845,9 @@ Autonomy: Extend the existing database reservation/fencing approach instead of a
 another coordination service. Select documented lease timing from crash probes;
 validate with actual competing processes and stale writers.
 
-- [ ] Atomically reserve logical work and global capacity before bootstrap/filesystem effects; document duplicate-request and limit semantics.
-- [ ] Add worker ownership/lease lifecycle and monotonically fenced writes for attempts, artifacts, results, and promotion effects.
-- [ ] Reconcile expired reservations without classifying another live worker's sessions as orphaned; retain a simpler correct single-worker SQLite path.
+- [x] Atomically reserve logical work and global capacity before bootstrap/filesystem effects; document duplicate-request and limit semantics.
+- [x] Add worker ownership/lease lifecycle and monotonically fenced writes for attempts, artifacts, results, and promotion effects.
+- [x] Reconcile expired reservations without classifying another live worker's sessions as orphaned; retain a simpler correct single-worker SQLite path.
 
 Acceptance: simultaneous requests through two workers neither exceed the
 configured global limit nor share a mutable directory. A stale owner cannot

@@ -56,10 +56,11 @@ import hashlib
 import json
 import logging
 import os
+import sqlite3
 import uuid
 from collections import Counter, defaultdict
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncIterator, Dict, List, Optional, Protocol, Sequence
 
 import aiosqlite
@@ -113,7 +114,8 @@ CREATE TABLE IF NOT EXISTS research_sessions (
     total_api_cost_usd REAL DEFAULT 0.0,
     best_iteration INTEGER,
     best_metric REAL,
-    error_message TEXT
+    error_message TEXT,
+    lock_epoch INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS iterations (
@@ -287,6 +289,18 @@ CREATE TABLE IF NOT EXISTS session_secret_refs (
     rebind_policy TEXT NOT NULL,
     created_at TEXT NOT NULL,
     PRIMARY KEY (research_id, param_name)
+);
+
+CREATE TABLE IF NOT EXISTS work_reservations (
+    reservation_key TEXT PRIMARY KEY,
+    scope_key TEXT NOT NULL,
+    owner_id TEXT NOT NULL,
+    epoch INTEGER NOT NULL DEFAULT 1,
+    state TEXT NOT NULL,
+    research_id TEXT,
+    lease_expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    released_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_events_timestamp
@@ -770,6 +784,37 @@ async def _migrate_to_v6(db: aiosqlite.Connection) -> None:
         await _add_column_if_missing(db, "research_sessions", column_def)
 
 
+async def _migrate_to_v8(db: aiosqlite.Connection) -> None:
+    """Work reservations: atomic admission and ownership fencing.
+
+    One row per logical work item carries the owning worker, its monotonic
+    fence epoch, and the lease that keeps the reservation alive. Capacity is
+    counted from live reservations so two workers can never both admit the
+    same work or exceed the global limit through filesystem-side races.
+    """
+    try:
+        await db.execute(
+            "ALTER TABLE research_sessions "
+            "ADD COLUMN lock_epoch INTEGER NOT NULL DEFAULT 0"
+        )
+    except sqlite3.OperationalError:
+        # fresh databases create the column in the base schema DDL
+        pass
+    await db.execute(
+        """CREATE TABLE IF NOT EXISTS work_reservations (
+            reservation_key TEXT PRIMARY KEY,
+            scope_key TEXT NOT NULL,
+            owner_id TEXT NOT NULL,
+            epoch INTEGER NOT NULL DEFAULT 1,
+            state TEXT NOT NULL,
+            research_id TEXT,
+            lease_expires_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            released_at TEXT
+        )"""
+    )
+
+
 async def _migrate_to_v7(db: aiosqlite.Connection) -> None:
     """Secret references live separately from the value-bearing manifest.
 
@@ -797,8 +842,17 @@ _MIGRATIONS = (
     (5, _migrate_to_v5),
     (6, _migrate_to_v6),
     (7, _migrate_to_v7),
+    (8, _migrate_to_v8),
 )
 _LATEST_SCHEMA_VERSION = _MIGRATIONS[-1][0]
+
+
+class CapacityExceeded(RuntimeError):
+    """Raised when admitting work would exceed the configured global limit."""
+
+
+class StaleFenceError(ValueError):
+    """Raised when a write carries a fence epoch older than the current one."""
 
 
 class StateStore(Protocol):
@@ -1231,6 +1285,7 @@ class StateStore(Protocol):
         scope: str = "development",
         metadata_path: Optional[str] = None,
         promotion_metadata: Optional[Dict[str, Any]] = None,
+        lock_epoch: Optional[int] = None,
     ) -> Dict[str, Any]:
         ...
 
@@ -1256,6 +1311,43 @@ class StateStore(Protocol):
     ) -> Optional[Dict[str, Any]]:
         ...
 
+    async def require_session_fence(
+        self, session_id: str, lock_epoch: Optional[int]
+    ) -> None:
+        ...
+
+    async def reserve_work(
+        self,
+        *,
+        reservation_key: str,
+        scope_key: str,
+        owner_id: str,
+        capacity_limit: int,
+        lease_seconds: float = 300.0,
+    ) -> Dict[str, Any]:
+        ...
+
+    async def commit_work(
+        self, *, reservation_key: str, research_id: str
+    ) -> Optional[Dict[str, Any]]:
+        ...
+
+    async def release_work(self, reservation_key: str) -> bool:
+        ...
+
+    async def renew_work_lease(
+        self, *, reservation_key: str, owner_id: str, lease_seconds: float
+    ) -> bool:
+        ...
+
+    async def reclaim_expired_reservations(self) -> List[Dict[str, Any]]:
+        ...
+
+    async def get_work_reservation(
+        self, reservation_key: str
+    ) -> Optional[Dict[str, Any]]:
+        ...
+
     async def add_secret_ref(
         self,
         *,
@@ -1274,6 +1366,7 @@ class StateStore(Protocol):
         *,
         promotion_id: int,
         promotion_metadata: Dict[str, Any],
+        lock_epoch: Optional[int] = None,
     ) -> Optional[Dict[str, Any]]:
         ...
 
@@ -1381,6 +1474,10 @@ class SQLiteStateStore:
             await db.execute("PRAGMA busy_timeout = 5000")
             await db.executescript(_SCHEMA_SQL)
 
+            # Serialize schema bootstrap across processes: a second worker
+            # blocks here (busy_timeout) and then observes the applied
+            # version instead of racing the same migration statements.
+            await db.execute("BEGIN IMMEDIATE")
             current_version = await _get_schema_version(db)
             if current_version > _LATEST_SCHEMA_VERSION:
                 raise RuntimeError(
@@ -1451,8 +1548,20 @@ class SQLiteStateStore:
         yield
 
     async def bump_session_epoch(self, session_id: str) -> None:
-        """No-op for SQLite (ARC-011 P6-003). Single-worker ⇒ no stale writers."""
-        return None
+        """Increment the session's fencing epoch (ARC-011 P6-003 / D-fencing).
+
+        Ownership changes bump the epoch monotonically so a stale owner's
+        late writes (carrying the previous epoch) are refused by the write
+        fences on attempts, artifacts, results, and promotion effects.
+        """
+        async with self._write_lock:
+            async with self.connection() as db:
+                await db.execute(
+                    "UPDATE research_sessions "
+                    "SET lock_epoch = lock_epoch + 1 WHERE id = ?",
+                    (session_id,),
+                )
+                await db.commit()
 
     # ------------------------------------------------------------------
     # Idempotency records
@@ -2158,11 +2267,22 @@ class SQLiteStateStore:
     async def update_session(
         self, session_id: str, *, lock_epoch: Optional[int] = None, **fields: Any,
     ) -> Optional[Dict[str, Any]]:
-        # ARC-011 P6-004: ``lock_epoch`` is accepted for protocol parity with
-        # PostgresStateStore (which applies a conditional WHERE on it). SQLite
-        # is single-worker → no stale writers → the epoch is ignored (there is
-        # no lock_epoch column to filter on). It is popped from ``fields`` so
-        # it is never written as a column value.
+        # ARC-011 P6-004 / D-fencing: when ``lock_epoch`` is provided and the
+        # session's epoch has moved on (ownership changed), the write is
+        # refused and ``None`` is returned — the stale-writer contract the
+        # orchestrator's best-metric write path already handles. Omitting the
+        # precondition keeps the write unconditional.
+        if lock_epoch is not None:
+            async with self.connection() as db:
+                row = await (
+                    await db.execute(
+                        "SELECT lock_epoch FROM research_sessions WHERE id = ?",
+                        (session_id,),
+                    )
+                ).fetchone()
+            current = int(row[0]) if row and row[0] is not None else None
+            if current is None or current != int(lock_epoch):
+                return None
         if not fields:
             return await self.get_session(session_id)
         set_clause = ", ".join(f"{k} = ?" for k in fields)
@@ -2242,9 +2362,9 @@ class SQLiteStateStore:
         objective: Optional[ObjectiveComparator] = None,
         lock_epoch: Optional[int] = None,
     ) -> Dict[str, Any]:
-        # ARC-011 P6-004: ``lock_epoch`` is accepted for protocol parity with
-        # PostgresStateStore (which gates the best-metric UPDATE on it). SQLite
-        # is single-worker → no stale writers → the epoch is ignored.
+        # Monotonic fencing: a write carrying a stale ownership epoch is
+        # rejected (single-worker SQLite runs simply never supply one).
+        await self.require_session_fence(research_id, lock_epoch)
         # F2: persist the phase id the orchestrator believed was active when
         # this iteration ran. The `iterations.search_phase` column has existed
         # since v1 but was never written, which left phase-state derivation
@@ -3074,7 +3194,9 @@ class SQLiteStateStore:
         scope: str = "development",
         metadata_path: Optional[str] = None,
         promotion_metadata: Optional[Dict[str, Any]] = None,
+        lock_epoch: Optional[int] = None,
     ) -> Dict[str, Any]:
+        await self.require_session_fence(research_id, lock_epoch)
         now = datetime.now(timezone.utc).isoformat()
         metadata_json = (
             json.dumps(promotion_metadata, sort_keys=True)
@@ -3182,6 +3304,230 @@ class SQLiteStateStore:
             self._decode_promotion_metadata(result)
             return result
 
+    async def require_session_fence(
+        self, session_id: str, lock_epoch: Optional[int]
+    ) -> None:
+        """Reject writes whose fence epoch is not the session's current one.
+
+        Ownership changes bump the epoch monotonically, so a stale owner's
+        late evidence or promotion writes are refused here rather than
+        silently recorded after ownership moved on.
+        """
+        if lock_epoch is None:
+            return
+        async with self.connection() as db:
+            row = await (
+                await db.execute(
+                    "SELECT lock_epoch FROM research_sessions WHERE id = ?",
+                    (session_id,),
+                )
+            ).fetchone()
+        current = int(row[0]) if row and row[0] is not None else None
+        if current is None or current != int(lock_epoch):
+            raise StaleFenceError(
+                f"stale write fence for session {session_id!r}: "
+                f"current epoch {current!r}, write carries {lock_epoch!r}"
+            )
+
+    async def reserve_work(
+        self,
+        *,
+        reservation_key: str,
+        scope_key: str,
+        owner_id: str,
+        capacity_limit: int,
+        lease_seconds: float = 300.0,
+    ) -> Dict[str, Any]:
+        """Atomically reserve logical work and a capacity slot.
+
+        Duplicate-request semantics: the same ``reservation_key`` is
+        idempotent — a retry returns the existing live reservation and never
+        consumes a second slot; a released key is re-reservable and receives
+        a fresh fence epoch. Limit semantics: capacity counts live
+        (reserved/committed, unexpired) reservations, and a request over the
+        limit raises :class:`CapacityExceeded` before any side effect.
+        """
+        now = datetime.now(timezone.utc)
+        expires = now + timedelta(seconds=lease_seconds)
+        async with self._write_lock:
+            async with self.connection() as db:
+                await db.execute("BEGIN IMMEDIATE")
+                try:
+                    db.row_factory = aiosqlite.Row
+                    existing = await (
+                        await db.execute(
+                            "SELECT * FROM work_reservations "
+                            "WHERE reservation_key = ?",
+                            (reservation_key,),
+                        )
+                    ).fetchone()
+                    if existing is not None and existing["state"] in (
+                        "reserved", "committed",
+                    ):
+                        await db.commit()
+                        return dict(existing)
+                    live = await (
+                        await db.execute(
+                            "SELECT COUNT(*) AS n FROM work_reservations "
+                            "WHERE state IN ('reserved', 'committed') "
+                            "AND lease_expires_at > ?",
+                            (now.isoformat(),),
+                        )
+                    ).fetchone()
+                    if int(live["n"]) >= int(capacity_limit):
+                        raise CapacityExceeded(
+                            f"global capacity {capacity_limit} reached; "
+                            f"work {reservation_key!r} cannot be admitted"
+                        )
+                    if existing is not None:
+                        epoch = int(existing["epoch"]) + 1
+                        await db.execute(
+                            "UPDATE work_reservations SET owner_id = ?, "
+                            "epoch = ?, state = 'reserved', research_id = NULL, "
+                            "lease_expires_at = ?, created_at = ?, "
+                            "released_at = NULL WHERE reservation_key = ?",
+                            (
+                                owner_id, epoch, expires.isoformat(),
+                                now.isoformat(), reservation_key,
+                            ),
+                        )
+                    else:
+                        epoch = 1
+                        await db.execute(
+                            "INSERT INTO work_reservations "
+                            "(reservation_key, scope_key, owner_id, epoch, "
+                            "state, research_id, lease_expires_at, created_at) "
+                            "VALUES (?, ?, ?, ?, 'reserved', NULL, ?, ?)",
+                            (
+                                reservation_key, scope_key, owner_id, epoch,
+                                expires.isoformat(), now.isoformat(),
+                            ),
+                        )
+                    await db.commit()
+                except BaseException:
+                    await db.rollback()
+                    raise
+                row = await (
+                    await db.execute(
+                        "SELECT * FROM work_reservations "
+                        "WHERE reservation_key = ?",
+                        (reservation_key,),
+                    )
+                ).fetchone()
+                return dict(row) if row is not None else {}
+
+    async def commit_work(
+        self, *, reservation_key: str, research_id: str
+    ) -> Optional[Dict[str, Any]]:
+        async with self._write_lock:
+            async with self.connection() as db:
+                await db.execute(
+                    "UPDATE work_reservations SET state = 'committed', "
+                    "research_id = ? WHERE reservation_key = ? "
+                    "AND state = 'reserved'",
+                    (research_id, reservation_key),
+                )
+                await db.commit()
+                db.row_factory = aiosqlite.Row
+                row = await (
+                    await db.execute(
+                        "SELECT * FROM work_reservations "
+                        "WHERE reservation_key = ?",
+                        (reservation_key,),
+                    )
+                ).fetchone()
+                return dict(row) if row is not None else None
+
+    async def release_work(self, reservation_key: str) -> bool:
+        async with self._write_lock:
+            async with self.connection() as db:
+                cursor = await db.execute(
+                    "UPDATE work_reservations SET state = 'released', "
+                    "released_at = ?, lease_expires_at = ? "
+                    "WHERE reservation_key = ? "
+                    "AND state IN ('reserved', 'committed')",
+                    (
+                        datetime.now(timezone.utc).isoformat(),
+                        datetime.now(timezone.utc).isoformat(),
+                        reservation_key,
+                    ),
+                )
+                await db.commit()
+                return cursor.rowcount > 0
+
+    async def renew_work_lease(
+        self, *, reservation_key: str, owner_id: str, lease_seconds: float
+    ) -> bool:
+        """Extend an owned, live lease. An expired lease cannot be renewed:
+        the owner must re-reserve (and takes a fresh fence epoch)."""
+        now = datetime.now(timezone.utc)
+        expires = now + timedelta(seconds=lease_seconds)
+        async with self._write_lock:
+            async with self.connection() as db:
+                cursor = await db.execute(
+                    "UPDATE work_reservations SET lease_expires_at = ? "
+                    "WHERE reservation_key = ? AND owner_id = ? "
+                    "AND state IN ('reserved', 'committed') "
+                    "AND lease_expires_at > ?",
+                    (
+                        expires.isoformat(), reservation_key, owner_id,
+                        now.isoformat(),
+                    ),
+                )
+                await db.commit()
+                return cursor.rowcount > 0
+
+    async def reclaim_expired_reservations(self) -> List[Dict[str, Any]]:
+        """Release expired reservations and bump their fence epochs.
+
+        The epoch bump is what fences out a stale owner: any later write
+        carrying the old epoch is rejected. Sessions belonging to live
+        leases are untouched — reclamation never classifies another live
+        worker's work as orphaned.
+        """
+        now = datetime.now(timezone.utc)
+        reclaimed: List[Dict[str, Any]] = []
+        async with self._write_lock:
+            async with self.connection() as db:
+                db.row_factory = aiosqlite.Row
+                rows = await (
+                    await db.execute(
+                        "SELECT * FROM work_reservations "
+                        "WHERE state IN ('reserved', 'committed') "
+                        "AND lease_expires_at <= ?",
+                        (now.isoformat(),),
+                    )
+                ).fetchall()
+                for row in rows:
+                    await db.execute(
+                        "UPDATE work_reservations SET state = 'released', "
+                        "epoch = epoch + 1, released_at = ?, "
+                        "lease_expires_at = ? WHERE reservation_key = ?",
+                        (
+                            now.isoformat(), now.isoformat(),
+                            row["reservation_key"],
+                        ),
+                    )
+                    item = dict(row)
+                    item["epoch"] = int(row["epoch"]) + 1
+                    item["state"] = "released"
+                    reclaimed.append(item)
+                await db.commit()
+        return reclaimed
+
+    async def get_work_reservation(
+        self, reservation_key: str
+    ) -> Optional[Dict[str, Any]]:
+        async with self.connection() as db:
+            db.row_factory = aiosqlite.Row
+            row = await (
+                await db.execute(
+                    "SELECT * FROM work_reservations WHERE reservation_key = ?",
+                    (reservation_key,),
+                )
+            ).fetchone()
+            return dict(row) if row is not None else None
+
     async def add_secret_ref(
         self,
         *,
@@ -3219,8 +3565,18 @@ class SQLiteStateStore:
         *,
         promotion_id: int,
         promotion_metadata: Dict[str, Any],
+        lock_epoch: Optional[int] = None,
     ) -> Optional[Dict[str, Any]]:
         """Update one promotion record's metadata (effect ack/reconciliation)."""
+        if lock_epoch is not None:
+            async with self.connection() as db:
+                promo = await (await db.execute(
+                    "SELECT research_id FROM promotions WHERE id = ?",
+                    (promotion_id,),
+                )).fetchone()
+            await self.require_session_fence(
+                promo[0] if promo else "", lock_epoch
+            )
         async with self.connection() as db:
             db.row_factory = aiosqlite.Row
             await db.execute(

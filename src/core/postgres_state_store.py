@@ -36,7 +36,7 @@ import json
 import logging
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncIterator, Dict, List, Optional, Sequence
 
 import asyncpg
@@ -46,6 +46,7 @@ from src.core.gate_status import consistency_report_passed
 from src.core.objective_comparator import ObjectiveComparator, select_best_row
 from src.core.observability import log_research_event
 from src.core.pagination import clamp_limit
+from src.core.state_store import CapacityExceeded, StaleFenceError
 
 logger = logging.getLogger("src.core.results_store")
 
@@ -108,6 +109,18 @@ CREATE TABLE IF NOT EXISTS research_sessions (
     variant TEXT NOT NULL DEFAULT '',
     -- Phase 6 (P6-002a): fencing-token epoch (D-fencing)
     lock_epoch BIGINT NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS work_reservations (
+    reservation_key TEXT PRIMARY KEY,
+    scope_key TEXT NOT NULL,
+    owner_id TEXT NOT NULL,
+    epoch BIGINT NOT NULL DEFAULT 1,
+    state TEXT NOT NULL,
+    research_id TEXT,
+    lease_expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    released_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS iterations (
@@ -1454,7 +1467,9 @@ class PostgresStateStore:
         scope: str = "development",
         metadata_path: Optional[str] = None,
         promotion_metadata: Optional[Dict[str, Any]] = None,
+        lock_epoch: Optional[int] = None,
     ) -> Dict[str, Any]:
+        await self.require_session_fence(research_id, lock_epoch)
         now = datetime.now(timezone.utc).isoformat()
         metadata_json = (
             json.dumps(promotion_metadata, sort_keys=True)
@@ -1499,6 +1514,191 @@ class PostgresStateStore:
             "promoted_at": now,
         }
 
+    async def commit_work(
+        self, *, reservation_key: str, research_id: str
+    ) -> Optional[Dict[str, Any]]:
+        conn = await self._conn()
+        try:
+            await conn.execute(
+                "UPDATE work_reservations SET state = 'committed', "
+                "research_id = $1 WHERE reservation_key = $2 "
+                "AND state = 'reserved'",
+                research_id, reservation_key,
+            )
+            row = await conn.fetchrow(
+                "SELECT * FROM work_reservations WHERE reservation_key = $1",
+                reservation_key,
+            )
+            return _row_to_dict(row) if row is not None else None
+        finally:
+            await self._release_short_lived(conn)
+
+    async def release_work(self, reservation_key: str) -> bool:
+        conn = await self._conn()
+        try:
+            result = await conn.execute(
+                "UPDATE work_reservations SET state = 'released', "
+                "released_at = $1, lease_expires_at = $1 "
+                "WHERE reservation_key = $2 "
+                "AND state IN ('reserved', 'committed')",
+                datetime.now(timezone.utc).isoformat(), reservation_key,
+            )
+            return result.endswith("1")
+        finally:
+            await self._release_short_lived(conn)
+
+    async def renew_work_lease(
+        self, *, reservation_key: str, owner_id: str, lease_seconds: float
+    ) -> bool:
+        now = datetime.now(timezone.utc)
+        expires = now + timedelta(seconds=lease_seconds)
+        conn = await self._conn()
+        try:
+            result = await conn.execute(
+                "UPDATE work_reservations SET lease_expires_at = $1 "
+                "WHERE reservation_key = $2 AND owner_id = $3 "
+                "AND state IN ('reserved', 'committed') "
+                "AND lease_expires_at > $4",
+                expires.isoformat(), reservation_key, owner_id,
+                now.isoformat(),
+            )
+            return result.endswith("1")
+        finally:
+            await self._release_short_lived(conn)
+
+    async def reclaim_expired_reservations(self) -> List[Dict[str, Any]]:
+        now = datetime.now(timezone.utc)
+        conn = await self._conn()
+        try:
+            async with conn.transaction():
+                rows = await conn.fetch(
+                    "SELECT * FROM work_reservations "
+                    "WHERE state IN ('reserved', 'committed') "
+                    "AND lease_expires_at <= $1 FOR UPDATE",
+                    now.isoformat(),
+                )
+                for row in rows:
+                    await conn.execute(
+                        "UPDATE work_reservations SET state = 'released', "
+                        "epoch = epoch + 1, released_at = $1, "
+                        "lease_expires_at = $1 WHERE reservation_key = $2",
+                        now.isoformat(), row["reservation_key"],
+                    )
+                reclaimed = []
+                for row in rows:
+                    item = _row_to_dict(row)
+                    item["epoch"] = int(row["epoch"]) + 1
+                    item["state"] = "released"
+                    reclaimed.append(item)
+            return reclaimed
+        finally:
+            await self._release_short_lived(conn)
+
+    async def get_work_reservation(
+        self, reservation_key: str
+    ) -> Optional[Dict[str, Any]]:
+        conn = await self._conn()
+        try:
+            row = await conn.fetchrow(
+                "SELECT * FROM work_reservations WHERE reservation_key = $1",
+                reservation_key,
+            )
+            return _row_to_dict(row) if row is not None else None
+        finally:
+            await self._release_short_lived(conn)
+
+
+    async def require_session_fence(
+        self, session_id: str, lock_epoch: Optional[int]
+    ) -> None:
+        """Reject writes whose fence epoch is not the session's current one."""
+        if lock_epoch is None:
+            return
+        conn = await self._conn()
+        try:
+            row = await conn.fetchrow(
+                "SELECT lock_epoch FROM research_sessions WHERE id = $1",
+                session_id,
+            )
+        finally:
+            await self._release_short_lived(conn)
+        current = int(row["lock_epoch"]) if row and row["lock_epoch"] is not None else None
+        if current is None or current != int(lock_epoch):
+            raise StaleFenceError(
+                f"stale write fence for session {session_id!r}: "
+                f"current epoch {current!r}, write carries {lock_epoch!r}"
+            )
+
+    async def reserve_work(
+        self,
+        *,
+        reservation_key: str,
+        scope_key: str,
+        owner_id: str,
+        capacity_limit: int,
+        lease_seconds: float = 300.0,
+    ) -> Dict[str, Any]:
+        """Atomically reserve logical work and a capacity slot (advisory-locked).
+
+        Duplicate semantics match SQLiteStateStore.reserve_work: same key is
+        idempotent; a released key re-reserves with epoch + 1; capacity counts
+        live reservations; over-limit raises CapacityExceeded pre-side-effect.
+        """
+        now = datetime.now(timezone.utc)
+        expires = now + timedelta(seconds=lease_seconds)
+        conn = await self._conn()
+        try:
+            async with conn.transaction():
+                await conn.fetchval(
+                    "SELECT pg_advisory_xact_lock(hashtext('work_reservations'))"
+                )
+                existing = await conn.fetchrow(
+                    "SELECT * FROM work_reservations WHERE reservation_key = $1",
+                    reservation_key,
+                )
+                if existing is not None and existing["state"] in (
+                    "reserved", "committed",
+                ):
+                    return _row_to_dict(existing)
+                live = await conn.fetchval(
+                    "SELECT COUNT(*) FROM work_reservations "
+                    "WHERE state IN ('reserved', 'committed') "
+                    "AND lease_expires_at > $1",
+                    now.isoformat(),
+                )
+                if int(live) >= int(capacity_limit):
+                    raise CapacityExceeded(
+                        f"global capacity {capacity_limit} reached; "
+                        f"work {reservation_key!r} cannot be admitted"
+                    )
+                if existing is not None:
+                    epoch = int(existing["epoch"]) + 1
+                    await conn.execute(
+                        "UPDATE work_reservations SET owner_id = $1, epoch = $2, "
+                        "state = 'reserved', research_id = NULL, "
+                        "lease_expires_at = $3, created_at = $4, "
+                        "released_at = NULL WHERE reservation_key = $5",
+                        owner_id, epoch, expires.isoformat(),
+                        now.isoformat(), reservation_key,
+                    )
+                else:
+                    epoch = 1
+                    await conn.execute(
+                        "INSERT INTO work_reservations "
+                        "(reservation_key, scope_key, owner_id, epoch, state, "
+                        "research_id, lease_expires_at, created_at) "
+                        "VALUES ($1, $2, $3, $4, 'reserved', NULL, $5, $6)",
+                        reservation_key, scope_key, owner_id, epoch,
+                        expires.isoformat(), now.isoformat(),
+                    )
+            row = await conn.fetchrow(
+                "SELECT * FROM work_reservations WHERE reservation_key = $1",
+                reservation_key,
+            )
+            return _row_to_dict(row) if row is not None else {}
+        finally:
+            await self._release_short_lived(conn)
+
     async def add_secret_ref(
         self,
         *,
@@ -1540,8 +1740,21 @@ class PostgresStateStore:
         *,
         promotion_id: int,
         promotion_metadata: Dict[str, Any],
+        lock_epoch: Optional[int] = None,
     ) -> Optional[Dict[str, Any]]:
         """Update one promotion record's metadata (effect ack/reconciliation)."""
+        if lock_epoch is not None:
+            conn = await self._conn()
+            try:
+                promo = await conn.fetchrow(
+                    "SELECT research_id FROM promotions WHERE id = $1",
+                    promotion_id,
+                )
+            finally:
+                await self._release_short_lived(conn)
+            await self.require_session_fence(
+                promo["research_id"] if promo else "", lock_epoch
+            )
         conn = await self._conn()
         try:
             await conn.execute(

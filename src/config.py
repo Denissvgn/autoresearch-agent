@@ -262,6 +262,13 @@ class Settings(BaseSettings):
             "MAX_CONCURRENT_SESSIONS",
         ),
     )
+    work_lease_seconds: float = Field(
+        default=300.0,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_WORK_LEASE_SECONDS",
+            "WORK_LEASE_SECONDS",
+        ),
+    )
 
     # --- API Robustness (ML-68) ---
     anthropic_api_timeout_s: int = Field(

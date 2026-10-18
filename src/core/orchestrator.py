@@ -4530,7 +4530,19 @@ class AgentOrchestrator:
         # effective-iteration-count write below). SQLiteStateStore has no
         # lock_epoch column → get_session returns None for it → the epoch is
         # None → writes are unconditional (single-worker: no stale writers).
-        _fence_epoch = self._session_epochs.get(research_id)
+        # Receipt-authoritative deliveries are verified by their receipt
+        # (result_authority) and deduplicated by their nonce — a late
+        # delivery must still land regardless of session ownership. Owner-side
+        # writes keep the monotonic ownership fence so a stale owner cannot
+        # publish evidence after ownership changes hands.
+        _fence_epoch = (
+            None
+            if marker.get("result_authority") == AUTHORITY_RECEIPT_VERIFIED
+            else self._session_epochs.get(research_id)
+        )
+        # Fence before ANY effect (snapshot file writes included): a stale
+        # owner must not publish evidence artifacts after ownership changed.
+        await self._store.require_session_fence(research_id, _fence_epoch)
 
         # AR-3: For promotion-family phases the agent does not run a fresh
         # training command and legitimately emits no config_snapshot.  Inherit

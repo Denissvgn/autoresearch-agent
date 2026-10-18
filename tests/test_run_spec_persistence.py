@@ -208,7 +208,7 @@ async def _migrated_store(tmp_path):
 @pytest.mark.asyncio
 async def test_sqlite_migration_adds_secret_refs_on_a_legacy_database(tmp_path):
     store, db_path = await _migrated_store(tmp_path)
-    assert await store.get_schema_version() == 7
+    assert await store.get_schema_version() == 8
     await store.add_secret_ref(
         research_id="res_mig",
         param_name="api_token",
