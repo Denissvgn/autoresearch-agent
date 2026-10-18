@@ -154,6 +154,24 @@ CREATE TABLE IF NOT EXISTS budget_reservations (
     actual_usd DOUBLE PRECISION
 );
 
+CREATE TABLE IF NOT EXISTS event_outbox (
+    event_id TEXT PRIMARY KEY,
+    sequence BIGINT NOT NULL,
+    stream_key TEXT NOT NULL,
+    attempt BIGINT,
+    event_type TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    producer TEXT NOT NULL,
+    ownership_epoch BIGINT,
+    redacted BIGINT NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_outbox_stream
+    ON event_outbox (stream_key, sequence);
+CREATE INDEX IF NOT EXISTS idx_event_outbox_sequence
+    ON event_outbox (sequence);
+
 CREATE TABLE IF NOT EXISTS iterations (
     id BIGSERIAL PRIMARY KEY,
     research_id TEXT NOT NULL REFERENCES research_sessions(id),
@@ -1891,6 +1909,216 @@ class PostgresStateStore:
         finally:
             await self._release_short_lived(conn)
         return [_row_to_dict(row) for row in rows]
+
+    async def append_event(
+        self,
+        *,
+        event_id: str,
+        stream_key: str,
+        event_type: str,
+        payload: Mapping[str, Any],
+        producer: str,
+        ownership_epoch: Optional[int] = None,
+        attempt: Optional[int] = None,
+        redacted: bool = False,
+    ) -> Dict[str, Any]:
+        now = datetime.now(timezone.utc).isoformat()
+        conn = await self._conn()
+        try:
+            async with conn.transaction():
+                await conn.fetchval(
+                    "SELECT pg_advisory_xact_lock(hashtext('event_outbox'))"
+                )
+                existing = await conn.fetchrow(
+                    "SELECT * FROM event_outbox WHERE event_id = $1",
+                    event_id,
+                )
+                if existing is not None:
+                    item = _row_to_dict(existing)
+                    item["payload"] = json.loads(
+                        item.pop("payload_json") or "{}"
+                    )
+                    return item
+                sequence = int(
+                    await conn.fetchval(
+                        "SELECT COALESCE(MAX(sequence), 0) FROM event_outbox"
+                    )
+                ) + 1
+                await conn.execute(
+                    "INSERT INTO event_outbox "
+                    "(event_id, sequence, stream_key, attempt, event_type, "
+                    "payload_json, producer, ownership_epoch, redacted, "
+                    "created_at) "
+                    "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) "
+                    "ON CONFLICT (event_id) DO NOTHING",
+                    event_id,
+                    sequence,
+                    stream_key,
+                    attempt,
+                    event_type,
+                    json.dumps(dict(payload), sort_keys=True),
+                    producer,
+                    ownership_epoch,
+                    1 if redacted else 0,
+                    now,
+                )
+            row = await conn.fetchrow(
+                "SELECT * FROM event_outbox WHERE event_id = $1", event_id,
+            )
+            item = _row_to_dict(row) if row is not None else {}
+            if item:
+                item["payload"] = json.loads(item.pop("payload_json") or "{}")
+            return item
+        finally:
+            await self._release_short_lived(conn)
+
+    async def list_events(
+        self,
+        *,
+        stream_key: Optional[str] = None,
+        after_sequence: int = 0,
+        limit: int = 200,
+    ) -> List[Dict[str, Any]]:
+        conn = await self._conn()
+        try:
+            if stream_key is None:
+                rows = await conn.fetch(
+                    "SELECT * FROM event_outbox "
+                    "WHERE sequence > $1 ORDER BY sequence LIMIT $2",
+                    int(after_sequence), int(limit),
+                )
+            else:
+                rows = await conn.fetch(
+                    "SELECT * FROM event_outbox "
+                    "WHERE stream_key = $1 AND sequence > $2 "
+                    "ORDER BY sequence LIMIT $3",
+                    stream_key, int(after_sequence), int(limit),
+                )
+        finally:
+            await self._release_short_lived(conn)
+        events: List[Dict[str, Any]] = []
+        for row in rows:
+            item = _row_to_dict(row)
+            item["payload"] = json.loads(item.pop("payload_json") or "{}")
+            events.append(item)
+        return events
+
+    async def event_cursor(self, stream_key: Optional[str] = None) -> int:
+        conn = await self._conn()
+        try:
+            if stream_key is None:
+                value = await conn.fetchval(
+                    "SELECT COALESCE(MAX(sequence), 0) FROM event_outbox"
+                )
+            else:
+                value = await conn.fetchval(
+                    "SELECT COALESCE(MAX(sequence), 0) FROM event_outbox "
+                    "WHERE stream_key = $1",
+                    stream_key,
+                )
+        finally:
+            await self._release_short_lived(conn)
+        return int(value)
+
+    async def min_event_cursor(self, stream_key: Optional[str] = None) -> int:
+        conn = await self._conn()
+        try:
+            if stream_key is None:
+                value = await conn.fetchval(
+                    "SELECT COALESCE(MIN(sequence), 0) FROM event_outbox"
+                )
+            else:
+                value = await conn.fetchval(
+                    "SELECT COALESCE(MIN(sequence), 0) FROM event_outbox "
+                    "WHERE stream_key = $1",
+                    stream_key,
+                )
+        finally:
+            await self._release_short_lived(conn)
+        return int(value)
+
+    async def record_state_event(
+        self,
+        session_id: str,
+        *,
+        fields: Mapping[str, Any],
+        event_id: str,
+        event_type: str,
+        payload: Mapping[str, Any],
+        producer: str,
+        attempt: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Atomic state change plus durable event publication."""
+        now = datetime.now(timezone.utc).isoformat()
+        conn = await self._conn()
+        try:
+            async with conn.transaction():
+                await conn.fetchval(
+                    "SELECT pg_advisory_xact_lock(hashtext('event_outbox'))"
+                )
+                session = await conn.fetchrow(
+                    "SELECT lock_epoch FROM research_sessions WHERE id = $1",
+                    session_id,
+                )
+                epoch = (
+                    int(session["lock_epoch"])
+                    if session and session["lock_epoch"] is not None
+                    else None
+                )
+                clean_fields = {
+                    key: value
+                    for key, value in dict(fields).items()
+                    if key != "lock_epoch"
+                }
+                if clean_fields:
+                    assignments = ", ".join(
+                        f"{key} = ${index + 1}"
+                        for index, key in enumerate(clean_fields)
+                    )
+                    values = list(clean_fields.values())
+                    values.append(session_id)
+                    await conn.execute(
+                        f"UPDATE research_sessions SET {assignments} "
+                        f"WHERE id = ${len(values)}",
+                        *values,
+                    )
+                existing = await conn.fetchrow(
+                    "SELECT * FROM event_outbox WHERE event_id = $1",
+                    event_id,
+                )
+                if existing is None:
+                    sequence = int(
+                        await conn.fetchval(
+                            "SELECT COALESCE(MAX(sequence), 0) "
+                            "FROM event_outbox"
+                        )
+                    ) + 1
+                    await conn.execute(
+                        "INSERT INTO event_outbox "
+                        "(event_id, sequence, stream_key, attempt, "
+                        "event_type, payload_json, producer, ownership_epoch, "
+                        "redacted, created_at) "
+                        "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0,$9) "
+                        "ON CONFLICT (event_id) DO NOTHING",
+                        event_id,
+                        sequence,
+                        session_id,
+                        attempt,
+                        event_type,
+                        json.dumps(dict(payload), sort_keys=True),
+                        producer,
+                        epoch,
+                        now,
+                    )
+            row = await conn.fetchrow(
+                "SELECT * FROM event_outbox WHERE event_id = $1", event_id,
+            )
+            item = _row_to_dict(row) if row is not None else {}
+            if item:
+                item["payload"] = json.loads(item.pop("payload_json") or "{}")
+            return item
+        finally:
+            await self._release_short_lived(conn)
 
     async def add_secret_ref(
         self,

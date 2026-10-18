@@ -330,6 +330,24 @@ CREATE TABLE IF NOT EXISTS budget_reservations (
     actual_usd REAL
 );
 
+CREATE TABLE IF NOT EXISTS event_outbox (
+    event_id TEXT PRIMARY KEY,
+    sequence INTEGER NOT NULL,
+    stream_key TEXT NOT NULL,
+    attempt INTEGER,
+    event_type TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    producer TEXT NOT NULL,
+    ownership_epoch INTEGER,
+    redacted INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_outbox_stream
+    ON event_outbox (stream_key, sequence);
+CREATE INDEX IF NOT EXISTS idx_event_outbox_sequence
+    ON event_outbox (sequence);
+
 CREATE INDEX IF NOT EXISTS idx_audit_events_timestamp
     ON audit_events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_audit_events_action
@@ -811,6 +829,38 @@ async def _migrate_to_v6(db: aiosqlite.Connection) -> None:
         await _add_column_if_missing(db, "research_sessions", column_def)
 
 
+async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
+    """Transactional event outbox for cross-worker delivery and replay.
+
+    One append-only stream of versioned, correlated events with a global
+    monotonic sequence (the replay cursor), keyed for idempotent append.
+    State transitions commit their event in the same transaction, so state
+    and publication cannot diverge.
+    """
+    await db.execute(
+        """CREATE TABLE IF NOT EXISTS event_outbox (
+            event_id TEXT PRIMARY KEY,
+            sequence INTEGER NOT NULL,
+            stream_key TEXT NOT NULL,
+            attempt INTEGER,
+            event_type TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            producer TEXT NOT NULL,
+            ownership_epoch INTEGER,
+            redacted INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
+        )"""
+    )
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_event_outbox_stream "
+        "ON event_outbox (stream_key, sequence)"
+    )
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_event_outbox_sequence "
+        "ON event_outbox (sequence)"
+    )
+
+
 async def _migrate_to_v9(db: aiosqlite.Connection) -> None:
     """Usage ledger and budget reservations (append-only accounting).
 
@@ -909,6 +959,7 @@ _MIGRATIONS = (
     (7, _migrate_to_v7),
     (8, _migrate_to_v8),
     (9, _migrate_to_v9),
+    (10, _migrate_to_v10),
 )
 _LATEST_SCHEMA_VERSION = _MIGRATIONS[-1][0]
 
@@ -1417,6 +1468,48 @@ class StateStore(Protocol):
     ) -> List[Dict[str, Any]]:
         ...
 
+    async def append_event(
+        self,
+        *,
+        event_id: str,
+        stream_key: str,
+        event_type: str,
+        payload: Mapping[str, Any],
+        producer: str,
+        ownership_epoch: Optional[int] = None,
+        attempt: Optional[int] = None,
+        redacted: bool = False,
+    ) -> Dict[str, Any]:
+        ...
+
+    async def list_events(
+        self,
+        *,
+        stream_key: Optional[str] = None,
+        after_sequence: int = 0,
+        limit: int = 200,
+    ) -> List[Dict[str, Any]]:
+        ...
+
+    async def event_cursor(self, stream_key: Optional[str] = None) -> int:
+        ...
+
+    async def min_event_cursor(self, stream_key: Optional[str] = None) -> int:
+        ...
+
+    async def record_state_event(
+        self,
+        session_id: str,
+        *,
+        fields: Mapping[str, Any],
+        event_id: str,
+        event_type: str,
+        payload: Mapping[str, Any],
+        producer: str,
+        attempt: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        ...
+
     async def reserve_work(
         self,
         *,
@@ -1576,13 +1669,33 @@ class SQLiteStateStore:
             # instantly with "database is locked").
             await db.execute("PRAGMA busy_timeout = 5000")
             await db.execute("PRAGMA foreign_keys = ON")
-            for _attempt in range(5):
+            for _attempt in range(20):
                 try:
                     await db.execute("PRAGMA journal_mode = WAL")
                     break
                 except sqlite3.OperationalError:
-                    await asyncio.sleep(0.1)
-            await db.executescript(_SCHEMA_SQL)
+                    await asyncio.sleep(0.25)
+            else:  # pragma: no cover - exhausted retries under contention
+                raise RuntimeError(
+                    "SQLiteStateStore could not set WAL journal mode under "
+                    "concurrent initialization"
+                )
+            # The schema script's implicit per-statement transactions can
+            # still hit "database is locked" while another process is
+            # initializing the same database; the script is idempotent, so
+            # bounded retry (matching the busy_timeout scale) makes
+            # concurrent bootstrap safe.
+            for _attempt in range(40):
+                try:
+                    await db.executescript(_SCHEMA_SQL)
+                    break
+                except sqlite3.OperationalError:
+                    await asyncio.sleep(0.25)
+            else:  # pragma: no cover - exhausted retries under contention
+                raise RuntimeError(
+                    "SQLiteStateStore could not apply its schema under "
+                    "concurrent initialization"
+                )
 
             # Serialize schema bootstrap across processes: a second worker
             # blocks here (busy_timeout) and then observes the applied
@@ -3830,6 +3943,261 @@ class SQLiteStateStore:
                     )
                 ).fetchall()
         return [dict(row) for row in rows]
+
+    async def append_event(
+        self,
+        *,
+        event_id: str,
+        stream_key: str,
+        event_type: str,
+        payload: Mapping[str, Any],
+        producer: str,
+        ownership_epoch: Optional[int] = None,
+        attempt: Optional[int] = None,
+        redacted: bool = False,
+    ) -> Dict[str, Any]:
+        """Append one event to the outbox (idempotent on ``event_id``).
+
+        The global ``sequence`` is assigned inside the write transaction and
+        doubles as the replay cursor. A retried append returns the original
+        row — a producer retry can never create a second event. Producers
+        version their payloads under ``payload['schema_version']`` so a
+        replayed stream can be interpreted without guessing.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        async with self._write_lock:
+            async with self.connection() as db:
+                await db.execute("BEGIN IMMEDIATE")
+                try:
+                    db.row_factory = aiosqlite.Row
+                    existing = await (
+                        await db.execute(
+                            "SELECT * FROM event_outbox WHERE event_id = ?",
+                            (event_id,),
+                        )
+                    ).fetchone()
+                    if existing is not None:
+                        await db.commit()
+                        item = dict(existing)
+                        item["payload"] = json.loads(
+                            item.pop("payload_json") or "{}"
+                        )
+                        return item
+                    row = await (
+                        await db.execute(
+                            "SELECT COALESCE(MAX(sequence), 0) AS m "
+                            "FROM event_outbox"
+                        )
+                    ).fetchone()
+                    sequence = int(row["m"]) + 1
+                    await db.execute(
+                        "INSERT INTO event_outbox "
+                        "(event_id, sequence, stream_key, attempt, "
+                        "event_type, payload_json, producer, ownership_epoch, "
+                        "redacted, created_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            event_id,
+                            sequence,
+                            stream_key,
+                            attempt,
+                            event_type,
+                            json.dumps(dict(payload), sort_keys=True),
+                            producer,
+                            ownership_epoch,
+                            1 if redacted else 0,
+                            now,
+                        ),
+                    )
+                    await db.commit()
+                except BaseException:
+                    await db.rollback()
+                    raise
+                row = await (
+                    await db.execute(
+                        "SELECT * FROM event_outbox WHERE event_id = ?",
+                        (event_id,),
+                    )
+                ).fetchone()
+                item = dict(row) if row is not None else {}
+                if item:
+                    item["payload"] = json.loads(
+                        item.pop("payload_json") or "{}"
+                    )
+                return item
+
+    async def list_events(
+        self,
+        *,
+        stream_key: Optional[str] = None,
+        after_sequence: int = 0,
+        limit: int = 200,
+    ) -> List[Dict[str, Any]]:
+        """Bounded cursor read: the replay/catch-up primitive.
+
+        ``limit`` is the backpressure knob — a slow consumer catches up in
+        bounded batches instead of an unbounded dump.
+        """
+        async with self.connection() as db:
+            db.row_factory = aiosqlite.Row
+            if stream_key is None:
+                rows = await (
+                    await db.execute(
+                        "SELECT * FROM event_outbox "
+                        "WHERE sequence > ? ORDER BY sequence LIMIT ?",
+                        (int(after_sequence), int(limit)),
+                    )
+                ).fetchall()
+            else:
+                rows = await (
+                    await db.execute(
+                        "SELECT * FROM event_outbox "
+                        "WHERE stream_key = ? AND sequence > ? "
+                        "ORDER BY sequence LIMIT ?",
+                        (stream_key, int(after_sequence), int(limit)),
+                    )
+                ).fetchall()
+        events: List[Dict[str, Any]] = []
+        for row in rows:
+            item = dict(row)
+            item["payload"] = json.loads(item.pop("payload_json") or "{}")
+            events.append(item)
+        return events
+
+    async def event_cursor(self, stream_key: Optional[str] = None) -> int:
+        async with self.connection() as db:
+            if stream_key is None:
+                row = await (
+                    await db.execute(
+                        "SELECT COALESCE(MAX(sequence), 0) AS m "
+                        "FROM event_outbox"
+                    )
+                ).fetchone()
+            else:
+                row = await (
+                    await db.execute(
+                        "SELECT COALESCE(MAX(sequence), 0) AS m "
+                        "FROM event_outbox WHERE stream_key = ?",
+                        (stream_key,),
+                    )
+                ).fetchone()
+        return int(row[0])
+
+    async def min_event_cursor(self, stream_key: Optional[str] = None) -> int:
+        async with self.connection() as db:
+            if stream_key is None:
+                row = await (
+                    await db.execute(
+                        "SELECT COALESCE(MIN(sequence), 0) AS m "
+                        "FROM event_outbox"
+                    )
+                ).fetchone()
+            else:
+                row = await (
+                    await db.execute(
+                        "SELECT COALESCE(MIN(sequence), 0) AS m "
+                        "FROM event_outbox WHERE stream_key = ?",
+                        (stream_key,),
+                    )
+                ).fetchone()
+        return int(row[0])
+
+    async def record_state_event(
+        self,
+        session_id: str,
+        *,
+        fields: Mapping[str, Any],
+        event_id: str,
+        event_type: str,
+        payload: Mapping[str, Any],
+        producer: str,
+        attempt: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Apply a session state change and publish its event atomically.
+
+        The status/field write and the outbox append commit in one
+        transaction — a restart between commit and notification can lose a
+        broadcast but never the event, and state and publication cannot
+        diverge silently. The event carries the session's current ownership
+        epoch for correlated, fenced replay.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        async with self._write_lock:
+            async with self.connection() as db:
+                await db.execute("BEGIN IMMEDIATE")
+                try:
+                    db.row_factory = aiosqlite.Row
+                    session = await (
+                        await db.execute(
+                            "SELECT lock_epoch FROM research_sessions "
+                            "WHERE id = ?",
+                            (session_id,),
+                        )
+                    ).fetchone()
+                    epoch = int(session[0]) if session else None
+                    clean_fields = {
+                        key: value
+                        for key, value in dict(fields).items()
+                        if key != "lock_epoch"
+                    }
+                    if clean_fields:
+                        set_clause = ", ".join(
+                            f"{key} = ?" for key in clean_fields
+                        )
+                        values = list(clean_fields.values()) + [session_id]
+                        await db.execute(
+                            f"UPDATE research_sessions SET {set_clause} "
+                            "WHERE id = ?",
+                            values,
+                        )
+                    existing = await (
+                        await db.execute(
+                            "SELECT * FROM event_outbox WHERE event_id = ?",
+                            (event_id,),
+                        )
+                    ).fetchone()
+                    if existing is None:
+                        row = await (
+                            await db.execute(
+                                "SELECT COALESCE(MAX(sequence), 0) AS m "
+                                "FROM event_outbox"
+                            )
+                        ).fetchone()
+                        sequence = int(row["m"]) + 1
+                        await db.execute(
+                            "INSERT INTO event_outbox "
+                            "(event_id, sequence, stream_key, attempt, "
+                            "event_type, payload_json, producer, "
+                            "ownership_epoch, redacted, created_at) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
+                            (
+                                event_id,
+                                sequence,
+                                session_id,
+                                attempt,
+                                event_type,
+                                json.dumps(dict(payload), sort_keys=True),
+                                producer,
+                                epoch,
+                                now,
+                            ),
+                        )
+                    await db.commit()
+                except BaseException:
+                    await db.rollback()
+                    raise
+                row = await (
+                    await db.execute(
+                        "SELECT * FROM event_outbox WHERE event_id = ?",
+                        (event_id,),
+                    )
+                ).fetchone()
+                item = dict(row) if row is not None else {}
+                if item:
+                    item["payload"] = json.loads(
+                        item.pop("payload_json") or "{}"
+                    )
+                return item
 
     async def add_secret_ref(
         self,

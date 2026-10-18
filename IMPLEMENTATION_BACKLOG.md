@@ -933,9 +933,9 @@ Autonomy: Start with a transactional database outbox and bounded cursor
 polling/replay, using the existing stores. Add another broker only if measured
 requirements cannot be met; persist events before treating notification as delivery.
 
-- [ ] Persist versioned correlated events with event ID, run/attempt, producer, cursor/sequence, timestamp, and ownership epoch.
-- [ ] Tie committed state transitions to durable event publication; add cross-worker delivery and cursor-based catch-up with backpressure.
-- [ ] Define duplicate/out-of-order ingestion, expired cursor behavior, redaction, and atomic snapshot-plus-cursor resynchronization.
+- [x] Persist versioned correlated events with event ID, run/attempt, producer, cursor/sequence, timestamp, and ownership epoch.
+- [x] Tie committed state transitions to durable event publication; add cross-worker delivery and cursor-based catch-up with backpressure.
+- [x] Define duplicate/out-of-order ingestion, expired cursor behavior, redaction, and atomic snapshot-plus-cursor resynchronization.
 
 Acceptance: a client connected to worker B observes a run on worker A and can
 recover missed updates. State and event publication cannot diverge silently;

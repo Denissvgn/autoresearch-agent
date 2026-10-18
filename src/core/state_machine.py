@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from enum import Enum
@@ -522,14 +523,38 @@ class SessionStateMachine:
         if spec.transitional is not None and spec.transitional is not spec.terminal:
             await self._store.update_session(session_id, status=spec.transitional.value)
             path.append(spec.transitional)
-        await self._store.update_session(
-            session_id, status=spec.terminal.value, **extra
+        broadcast_event = spec.broadcast_event
+        payload: Dict[str, Any] = {
+            "event": broadcast_event or "session.transition",
+            "research_id": session_id,
+        }
+        if spec.terminal in _TERMINAL and spec.terminal not in _RECOVERY_TERMINAL:
+            payload["status"] = spec.terminal.value
+        if broadcast_fields:
+            payload.update(broadcast_fields)
+        # Durable first (transactional outbox): the state change and its
+        # correlated event commit in one transaction — a restart between
+        # commit and notification can lose the broadcast but never the event,
+        # and state and publication cannot diverge silently. The event
+        # carries the session's ownership epoch for fenced replay.
+        await self._store.record_state_event(
+            session_id,
+            fields={"status": spec.terminal.value, **extra},
+            event_id=f"{session_id}:transition:{uuid.uuid4().hex}",
+            event_type=str(broadcast_event or "session.transition"),
+            payload={
+                **payload,
+                "schema_version": "session-event.v1",
+                "from": from_state.value,
+                "transition_event": evt.value,
+            },
+            producer=actor_id or "state_machine",
         )
         path.append(spec.terminal)
         # ARC-011 P6-003: bump the fencing epoch after the terminal status
         # write so any command dispatched before this transition is
-        # deauthorized (its captured epoch no longer matches). No-op on
-        # SQLiteStateStore (single-worker); increments lock_epoch on Postgres.
+        # deauthorized (its captured epoch no longer matches). The bump is
+        # real on both stores (lock_epoch = lock_epoch + 1).
         await self._store.bump_session_epoch(session_id)
 
         await self._store.record_audit_event(
@@ -546,16 +571,8 @@ class SessionStateMachine:
             },
         )
 
-        broadcast_event = spec.broadcast_event
         if broadcast_event is not None:
-            payload: Dict[str, Any] = {
-                "event": broadcast_event,
-                "research_id": session_id,
-            }
-            if spec.terminal in _TERMINAL and spec.terminal not in _RECOVERY_TERMINAL:
-                payload["status"] = spec.terminal.value
-            if broadcast_fields:
-                payload.update(broadcast_fields)
+            # Notification only — the durable outbox record already exists.
             await self._broadcaster.broadcast(payload)
 
         should_promote = (

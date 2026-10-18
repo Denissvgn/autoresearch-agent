@@ -356,6 +356,16 @@ async def test_complete_writes_completing_then_completed(tmp_path: Path) -> None
 
     store.update_session = _record  # type: ignore[method-assign]
 
+    orig_state_event = store.record_state_event
+
+    async def _record_state_event(
+        session_id: str, *, fields: Any, **kwargs: Any
+    ) -> Any:
+        calls.append((session_id, dict(fields)))
+        return await orig_state_event(session_id, fields=fields, **kwargs)
+
+    store.record_state_event = _record_state_event  # type: ignore[method-assign]
+
     result = await sm.transition(sid, SessionEvent.COMPLETE)
 
     statuses = [c[1].get("status") for c in calls if "status" in c[1]]

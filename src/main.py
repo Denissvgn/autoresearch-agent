@@ -27,7 +27,12 @@ from src.core.postgres_state_store import build_state_store
 from src.core.service_preflight import build_not_run_preflight, run_service_preflight
 from src.core.session_manager import SessionManager
 from src.core.state_store import StateStore
-from src.ws.events import broadcaster
+from src.ws.events import (
+    broadcaster,
+    plan_catchup,
+    poll_events,
+    snapshot_with_cursor,
+)
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
@@ -373,6 +378,45 @@ async def websocket_events(websocket: WebSocket) -> None:
     if not connected:
         return
     try:
+        # Cursor-based catch-up: a reconnecting client presents its last
+        # cursor and receives bounded replay batches, or an explicit
+        # snapshot-plus-cursor resync when its cursor has expired.
+        raw_cursor = websocket.query_params.get("cursor")
+        if raw_cursor is not None:
+            try:
+                cursor = int(raw_cursor)
+            except ValueError:
+                cursor = 0
+            stream_key = websocket.query_params.get("stream") or None
+            min_seq = await _store.min_event_cursor(stream_key=stream_key)
+            plan = plan_catchup(cursor=cursor, min_sequence=min_seq)
+            if plan["mode"] == "resync":
+                resync: dict = {
+                    "event": "events.resync",
+                    "reason": plan["reason"],
+                    "cursor": cursor,
+                }
+                if stream_key:
+                    resync.update(
+                        await snapshot_with_cursor(_store, stream_key)
+                    )
+                await websocket.send_json(resync)
+            else:
+                for event in await poll_events(
+                    _store,
+                    cursor=cursor,
+                    stream_key=stream_key,
+                    limit=100,
+                ):
+                    await websocket.send_json(
+                        {
+                            "event": event.get("event_type"),
+                            "research_id": event.get("stream_key"),
+                            "sequence": event.get("sequence"),
+                            "event_id": event.get("event_id"),
+                            **dict(event.get("payload") or {}),
+                        }
+                    )
         # Server-side ping loop keeps the TCP connection alive during long
         # training runs when no application-level events are being sent.
         heartbeat_failed = asyncio.Event()
