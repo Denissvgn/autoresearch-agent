@@ -1418,6 +1418,21 @@ class AgentOrchestrator:
             return Path(claude_md_path).read_text(encoding="utf-8")
         return ""
 
+    # ── SkillHostServices — the explicit host surface for skill runtimes ──
+    # Skill runtimes consume these stable value contracts, never the
+    # orchestrator's private helpers (skill_host_services.SkillHostServices).
+    def load_claude_md(self) -> str:
+        return self._load_claude_md()
+
+    def load_research_resume(self, config: ResearchConfig) -> str:
+        return self._load_research_resume(config)
+
+    def build_phase_contract_block(self, config: ResearchConfig) -> str:
+        return self._build_phase_contract_block(config)
+
+    def research_resume_path(self, config: ResearchConfig) -> str:
+        return self._research_resume_path(config)
+
     # ── Evaluator-result authority ─────────────────────────────────────────
     # Model-visible nonces never establish authority: provenance labels are
     # assigned at ingestion from the channel a result arrived on, and only

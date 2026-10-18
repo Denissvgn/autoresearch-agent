@@ -478,5 +478,5 @@ def test_skill_manifest_evaluation_data_declaration_is_enforced() -> None:
         assert expected in manifest.command_policy.write_protected_files
         # The runtime extension carries the declaration to the enforcement
         # layer — the field is load-bearing, not advisory.
-        ext = ManifestSkillRuntime(manifest, orchestrator=MagicMock()).command_policy_extension()
+        ext = ManifestSkillRuntime(manifest, host=MagicMock()).command_policy_extension()
         assert expected in ext.get("write_protected_files", [])

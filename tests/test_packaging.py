@@ -131,7 +131,7 @@ def test_installed_package_resolves_pinned_evaluators_outside_checkout(tmp_path)
         "assert pathlib.Path(src.core.__file__).resolve().is_relative_to(root)\n"
         "assert DEFAULT_SKILLS_ROOT == root / 'skills', DEFAULT_SKILLS_ROOT\n"
         "ext = ManifestSkillRuntime(\n"
-        "    SkillRegistry().get('prompt-engineering'), orchestrator=None\n"
+        "    SkillRegistry().get('prompt-engineering'), host=None\n"
         ").command_policy_extension()\n"
         "assert 'eval/run.py' in ext['script_paths']\n"
         "for name, path in ext['script_paths'].items():\n"

@@ -406,7 +406,7 @@ def test_manifest_runtime_extension_pins_packaged_scripts_with_digests():
     from src.core.skill_runtime import ManifestSkillRuntime
 
     manifest = SkillRegistry().get("prompt-engineering")
-    ext = ManifestSkillRuntime(manifest, orchestrator=None).command_policy_extension()
+    ext = ManifestSkillRuntime(manifest, host=None).command_policy_extension()
 
     assert "eval/run.py" in ext["script_paths"]
     assert set(ext["script_digests"]) == set(ext["script_paths"])

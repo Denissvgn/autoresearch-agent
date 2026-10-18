@@ -979,9 +979,9 @@ Autonomy: Extract one kernel responsibility at a time behind characterization te
 Keep the corrected built-in path runnable between commits; a broad rewrite is not
 required to remove provider types from the kernel.
 
-- [ ] Extract attempt scheduling, objective/phase decisions, budgets, verified evidence, and promotion eligibility behind kernel-facing operations.
-- [ ] Replace skill-runtime callbacks into orchestrator-private helpers with explicit context/services and stable value contracts.
-- [ ] Keep provider conversation, tool serialization, context compaction, and model retry behavior inside the built-in driver boundary.
+- [x] Extract attempt scheduling, objective/phase decisions, budgets, verified evidence, and promotion eligibility behind kernel-facing operations.
+- [x] Replace skill-runtime callbacks into orchestrator-private helpers with explicit context/services and stable value contracts.
+- [x] Keep provider conversation, tool serialization, context compaction, and model retry behavior inside the built-in driver boundary.
 
 Acceptance: the kernel completes a research lifecycle with a deterministic
 driver and no provider SDK/message-block dependency. Existing corrected behavior

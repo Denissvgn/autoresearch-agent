@@ -33,7 +33,7 @@ def _runtime_for(primary_overrides: dict | None = None, execution=None):
     if execution is not None:
         base["execution"] = execution
     manifest = load_skill_manifest(yaml.safe_dump(base))
-    return ManifestSkillRuntime(manifest, orchestrator=MagicMock())
+    return ManifestSkillRuntime(manifest, host=MagicMock())
 
 
 def test_manifest_without_execution_defaults_to_sequential():

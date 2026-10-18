@@ -157,7 +157,7 @@ def test_runtime_webhook_kind_builds_webhook_target():
         "auth_secret": "RECEIVER_TOKEN",
     }
     rt = ManifestSkillRuntime(
-        load_skill_manifest(yaml.safe_dump(base)), orchestrator=MagicMock(),
+        load_skill_manifest(yaml.safe_dump(base)), host=MagicMock(),
     )
     target = rt.promotion_target()
     assert isinstance(target, WebhookPromotionTarget)
@@ -173,7 +173,7 @@ def test_runtime_artifact_store_kind_still_raises_loudly():
         "kind": "artifact_store", "path_template": "artifacts/x/",
     }
     rt = ManifestSkillRuntime(
-        load_skill_manifest(yaml.safe_dump(base)), orchestrator=MagicMock(),
+        load_skill_manifest(yaml.safe_dump(base)), host=MagicMock(),
     )
     with pytest.raises(SkillConfigError, match="artifact_store"):
         rt.promotion_target()

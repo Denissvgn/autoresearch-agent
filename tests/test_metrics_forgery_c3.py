@@ -284,7 +284,7 @@ def test_nonce_env_only_for_declared_skill_scripts():
 def test_requires_signed_metrics_capability_properties():
     pe = ManifestSkillRuntime(
         load_skill_manifest(SKILLS_ROOT / "prompt-engineering" / "SKILL.yaml"),
-        orchestrator=MagicMock(),
+        host=MagicMock(),
     )
     assert pe.requires_signed_metrics is True
     assert pe.nonce_field == "server_nonce"

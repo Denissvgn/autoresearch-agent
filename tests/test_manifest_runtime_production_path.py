@@ -247,7 +247,7 @@ def test_load_packaged_skill_md_honors_declared_primer_filename(monkeypatch, tmp
 
 
 def test_manifest_runtime_exposes_declared_primer_filename():
-    rt = ManifestSkillRuntime(_manifest("prompt-engineering"), orchestrator=MagicMock())
+    rt = ManifestSkillRuntime(_manifest("prompt-engineering"), host=MagicMock())
     assert rt.primer_filename == "SKILL.md"  # declared in llm.system_prompt
 
 
@@ -311,7 +311,7 @@ def test_policy_extension_cannot_reallow_rejected_config_target():
 
 
 def test_manifest_runtime_policy_extension_carries_manifest_scripts():
-    rt = ManifestSkillRuntime(_manifest("prompt-engineering"), orchestrator=MagicMock())
+    rt = ManifestSkillRuntime(_manifest("prompt-engineering"), host=MagicMock())
     ext = rt.command_policy_extension()
     assert "eval/run.py" in ext["allowed_scripts"]
 
@@ -322,7 +322,7 @@ def test_manifest_runtime_policy_extension_carries_manifest_scripts():
 
 
 def test_manifest_runtime_blocker_classification_non_empty():
-    rt = ManifestSkillRuntime(_manifest("prompt-engineering"), orchestrator=MagicMock())
+    rt = ManifestSkillRuntime(_manifest("prompt-engineering"), host=MagicMock())
     bc = rt.blocker_classification()
     assert bc["actionable_blockers"], "prompt-engineering declares actionable blockers"
     assert "phase_evidence_keys" in bc
@@ -376,7 +376,7 @@ async def test_phase_advancement_not_genuine_without_the_key():
 
 
 def test_manifest_runtime_file_path_kind_returns_file_target():
-    rt = ManifestSkillRuntime(_file_path_manifest(), orchestrator=MagicMock())
+    rt = ManifestSkillRuntime(_file_path_manifest(), host=MagicMock())
     assert isinstance(rt.promotion_target(), FilePathPromotionTarget)
 
 
@@ -385,7 +385,7 @@ def test_manifest_runtime_registry_api_kind_raises_loudly():
     target (was: loud SkillConfigError skip). A ``registry_api`` *without* an
     endpoint still fails loudly — nowhere to deliver is a config error."""
     rt = ManifestSkillRuntime(
-        _manifest("prompt-engineering"), orchestrator=MagicMock(),
+        _manifest("prompt-engineering"), host=MagicMock(),
     )
     target = rt.promotion_target()
     from src.core.promotion_target import WebhookPromotionTarget
@@ -401,7 +401,7 @@ def test_manifest_runtime_registry_api_kind_raises_loudly():
         "kind": "registry_api", "registry": "prompt-registry",
     }
     rt2 = ManifestSkillRuntime(
-        load_skill_manifest(yaml.safe_dump(data)), orchestrator=MagicMock(),
+        load_skill_manifest(yaml.safe_dump(data)), host=MagicMock(),
     )
     with pytest.raises(SkillConfigError, match="without an endpoint"):
         rt2.promotion_target()

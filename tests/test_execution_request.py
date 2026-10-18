@@ -312,7 +312,7 @@ def test_template_shape_is_enforced_at_run_start(tmp_path: Path):
 
     manifest = SkillRegistry(root=skills_root).get("prompt-engineering")
     with pytest.raises(SkillConfigError, match="migrate"):
-        ManifestSkillRuntime(manifest, orchestrator=None).command_policy_extension()
+        ManifestSkillRuntime(manifest, host=None).command_policy_extension()
 
 
 def test_unsupported_executable_bindings_are_rejected(tmp_path: Path):
@@ -346,7 +346,7 @@ def test_unsupported_executable_bindings_are_rejected(tmp_path: Path):
     (skill_dir / "SKILL.yaml").write_text(declaring, encoding="utf-8")
     manifest = SkillRegistry(root=skills_root).get("prompt-engineering")
     with pytest.raises(SkillConfigError, match="unsupported executable binding"):
-        ManifestSkillRuntime(manifest, orchestrator=None).command_policy_extension()
+        ManifestSkillRuntime(manifest, host=None).command_policy_extension()
 
 
 def test_python_bindings_must_be_explicitly_qualified(tmp_path: Path):
@@ -365,13 +365,13 @@ def test_python_bindings_must_be_explicitly_qualified(tmp_path: Path):
 
     manifest = SkillRegistry(root=skills_root).get("prompt-engineering")
     with pytest.raises(SkillConfigError, match="explicitly qualified"):
-        ManifestSkillRuntime(manifest, orchestrator=None).command_policy_extension()
+        ManifestSkillRuntime(manifest, host=None).command_policy_extension()
 
 
 def test_bundled_skills_advertise_only_supported_bindings():
     for skill_id in ("code-refactor", "db-config-tuning", "prompt-engineering"):
         manifest = SkillRegistry().get(skill_id)
-        ext = ManifestSkillRuntime(manifest, orchestrator=None).command_policy_extension()
+        ext = ManifestSkillRuntime(manifest, host=None).command_policy_extension()
         assert set(ext.get("allowed_executables") or ()) <= {"cp", "cat"}
         assert set(ext.get("allowed_python") or ()) <= {
             ".venv/bin/python",

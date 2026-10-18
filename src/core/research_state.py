@@ -503,12 +503,11 @@ def _iteration_budget_reached(
     session: Dict[str, Any],
     iterations: List[Dict[str, Any]],
 ) -> bool:
-    max_iterations = _first_number(session.get("max_iterations"))
-    return (
-        max_iterations is not None
-        and max_iterations > 0
-        and len(iterations) >= int(max_iterations)
-    )
+    # The kernel owns the budget policy; this delegate keeps the
+    # research-state projection on the same decisions.
+    from src.core.research_kernel import decide_budget
+
+    return not decide_budget(session=session, iterations=iterations).within_budget
 
 
 def _has_unfinished_phase(phase_state: Dict[str, Any]) -> bool:

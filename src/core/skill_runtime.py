@@ -59,6 +59,7 @@ if TYPE_CHECKING:
     from src.core.output_parser import OutputParser
     from src.core.preflight import PreflightCheck
     from src.core.promotion_target import PromotionTarget
+    from src.core.skill_host_services import SkillHostServices
     from src.core.state_store import StateStore
 
 
@@ -390,15 +391,16 @@ class SkillRuntime(Protocol):
 class ManifestSkillRuntime:
     """A ``SkillRuntime`` driven entirely by a ``ResearchSkillManifest`` (P2-007).
 
-    Holds a reference to the orchestrator (which owns the prompt-builder,
-    skill-loader, resume-generator, and trial-identity helpers) and reaches every
-    domain-specific decision through the manifest. ``materialize_skill_runtime``
-    constructs this when ``config.skill_id`` resolves in the registry.
+    Holds the host's explicit ``SkillHostServices`` (prompt material, resume
+    reads, and contract blocks — never orchestrator-private helpers) and
+    reaches every domain-specific decision through the manifest.
+    ``materialize_skill_runtime`` constructs this when ``config.skill_id``
+    resolves in the registry.
     """
 
-    def __init__(self, manifest: Any, orchestrator: Any) -> None:
+    def __init__(self, manifest: Any, host: "SkillHostServices") -> None:
         self._manifest = manifest
-        self._orch = orchestrator
+        self._host = host
         # Locate the skill package dir (sibling of SKILL.yaml) for file reads.
         from src.core.skill_registry import DEFAULT_SKILLS_ROOT
 
@@ -448,7 +450,7 @@ class ManifestSkillRuntime:
         primer_path = self._skill_dir / primer_name
         # Delegates to the orchestrator's claude.md loader + reads the skill
         # primer, mirroring the transitional runtime's assembly exactly.
-        claude_md = self._orch._load_claude_md()
+        claude_md = self._host.load_claude_md()
         skill_content = primer_path.read_text(encoding="utf-8")
         return f"{claude_md}\n\n---\n\n{skill_content}"
 
@@ -639,10 +641,10 @@ class ManifestSkillRuntime:
         )
         if config.focus_hint:
             parts.append(f"Focus hint: {config.focus_hint}")
-        resume_block = self._orch._load_research_resume(config)
+        resume_block = self._host.load_research_resume(config)
         if resume_block:
             parts.append(resume_block.strip())
-        phase_contract = self._orch._build_phase_contract_block(config)
+        phase_contract = self._host.build_phase_contract_block(config)
         if phase_contract:
             parts.append(phase_contract.strip())
         return "\n\n".join(p for p in parts if p)
@@ -731,7 +733,7 @@ class ManifestSkillRuntime:
         ]
         if config.focus_hint:
             parts.append(f"Focus hint: {config.focus_hint}")
-        resume_block = self._orch._load_research_resume(config)
+        resume_block = self._host.load_research_resume(config)
         if resume_block:
             parts.append(resume_block.strip())
         return "\n\n".join(p for p in parts if p)
@@ -1087,14 +1089,14 @@ class ManifestSkillRuntime:
 
     # ── Cross-session memory (delegate to orchestrator) ───────────
     def research_resume_path(self, config: "ResearchConfig") -> Path:
-        return Path(self._orch._research_resume_path(config))
+        return Path(self._host.research_resume_path(config))
 
     def generate_research_resume(
         self,
         config: "ResearchConfig",
         store: "StateStore",
     ) -> str:
-        return self._orch._load_research_resume(config)
+        return self._host.load_research_resume(config)
 
     # ── Structured HPO (reserved) ─────────────────────────────────
     def structured_hpo_plan(

@@ -81,7 +81,7 @@ class TestPromptEngineeringSkillManifest:
         assert manifest.prompt.demo_experiment_command, (
             "the skill must declare prompt.demo_experiment_command"
         )
-        runtime = ManifestSkillRuntime(manifest, orchestrator=MagicMock())
+        runtime = ManifestSkillRuntime(manifest, host=MagicMock())
         config = ResearchConfig(
             id="res_demo", instrument="default", timeframe="production",
             model_type="", skill_id="prompt-engineering",
@@ -166,7 +166,7 @@ class TestManifestSkillRuntimeNonceValidation:
     @pytest.fixture
     def runtime(self):
         manifest = load_skill_manifest(SKILL_YAML, settings_obj=types.SimpleNamespace())
-        return ManifestSkillRuntime(manifest, orchestrator=MagicMock())
+        return ManifestSkillRuntime(manifest, host=MagicMock())
 
     def test_valid_nonce_accepted(self, runtime):
         nonce = "aabbccdd" * 8
