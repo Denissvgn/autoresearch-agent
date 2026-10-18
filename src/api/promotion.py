@@ -109,6 +109,9 @@ def _inject_target_kind(
 
 class PromotionRollbackRequest(BaseModel):
     reason: str | None = None
+    #: Explicit reconciliation for ambiguous legacy records (no canonical
+    #: skill/target identity and no recorded rollback routing).
+    reconcile_legacy: bool = False
 
 
 class PromotionApproval(BaseModel):
@@ -446,6 +449,7 @@ async def rollback_development_promotion(
             instrument=instrument,
             timeframe=timeframe,
             reason=request.reason,
+            reconcile_legacy=request.reconcile_legacy,
         )
         await _audit(
             http_request,

@@ -755,9 +755,9 @@ Autonomy: Use temporary file targets and an agent-owned test webhook receiver.
 Implement the product's approval contract with test identities and fault injection; no
 real production approval or target is needed to close this card.
 
-- [ ] Compile declared scope dependencies and domain evidence requirements beneath mandatory operator approval/policy constraints.
-- [ ] Bind decisions to verified candidate and target identities; use canonical skill/target keys for prior promotion and rollback lookup.
-- [ ] Define file/webhook effect intent, idempotency, reconciliation, and rollback behavior for failures between external effect and database acknowledgement.
+- [x] Compile declared scope dependencies and domain evidence requirements beneath mandatory operator approval/policy constraints.
+- [x] Bind decisions to verified candidate and target identities; use canonical skill/target keys for prior promotion and rollback lookup.
+- [x] Define file/webhook effect intent, idempotency, reconciliation, and rollback behavior for failures between external effect and database acknowledgement.
 
 Acceptance: a non-ML development-to-production policy needs no fabricated ML
 evidence, and stale approvals cannot promote a changed winner. Legacy records

@@ -230,6 +230,7 @@ class FakePromoter:
         instrument: str,
         timeframe: str,
         reason: str | None = None,
+        reconcile_legacy: bool = False,
     ):
         if instrument == "MISSING":
             raise ValueError("No development promotion found")

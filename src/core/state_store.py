@@ -1227,6 +1227,14 @@ class StateStore(Protocol):
     ) -> Optional[Dict[str, Any]]:
         ...
 
+    async def update_promotion_metadata(
+        self,
+        *,
+        promotion_id: int,
+        promotion_metadata: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        ...
+
     async def record_promotion_rollback(
         self,
         *,
@@ -3126,6 +3134,30 @@ class SQLiteStateStore:
             )
             row = await cursor.fetchone()
             if not row:
+                return None
+            result = dict(row)
+            self._decode_promotion_metadata(result)
+            return result
+
+    async def update_promotion_metadata(
+        self,
+        *,
+        promotion_id: int,
+        promotion_metadata: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """Update one promotion record's metadata (effect ack/reconciliation)."""
+        async with self.connection() as db:
+            db.row_factory = aiosqlite.Row
+            await db.execute(
+                "UPDATE promotions SET promotion_metadata_json = ? WHERE id = ?",
+                (json.dumps(promotion_metadata, sort_keys=True), promotion_id),
+            )
+            await db.commit()
+            cursor = await db.execute(
+                "SELECT * FROM promotions WHERE id = ?", (promotion_id,),
+            )
+            row = await cursor.fetchone()
+            if row is None:
                 return None
             result = dict(row)
             self._decode_promotion_metadata(result)

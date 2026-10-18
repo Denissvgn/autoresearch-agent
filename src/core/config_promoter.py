@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 import httpx
 import yaml
@@ -43,6 +43,13 @@ from src.core.objective_comparator import (
 from src.core.promotion_approval import (
     target_identity,
     validate_candidate_binding,
+)
+from src.core.promotion_approval import target_identity as canonical_target_identity
+from src.core.promotion_policy import (
+    SCOPE_EVIDENCE_VALIDATORS,
+    ScopePolicyError,
+    compile_scope_graph,
+    scope_requirements,
 )
 from src.core.promotion_target import (
     FilePathPromotionTarget,
@@ -617,47 +624,181 @@ class ConfigPromoter:
         # mid-promotion never leaves an active config without provenance
         # metadata; then atomically swap the config.
         metadata_path = self._metadata_sidecar_path(target_path, preview["iteration"])
+        # Effect intent (idempotent): the canonical key binds skill, target,
+        # candidate, and scope; a repeat confirm under the same key never
+        # performs the external effect twice.
+        effect_key = self._effect_idempotency_key(
+            skill_id=str(preview.get("skill_id") or model_type),
+            target_identity=str(preview.get("target_identity") or ""),
+            iteration=preview["iteration"],
+            config_yaml=preview["new_config"],
+            scope=DEVELOPMENT_PROMOTION_SCOPE,
+        )
+        prior_attempt = await self._promotion_by_effect_key(effect_key)
+        existing_record: Optional[Dict[str, Any]] = None
+        if prior_attempt is not None:
+            prior_effect = (prior_attempt.get("promotion_metadata") or {}).get("effect") or {}
+            if prior_effect.get("status") == "applied":
+                return prior_attempt
+            if prior_effect.get("status") == "pending_effect":
+                # Crash window: the external effect may already have landed.
+                # Reconcile first; only a confirmed divergence retries below.
+                reconciled = await self.reconcile_promotion_effect(prior_attempt)
+                reconciled_effect = (
+                    reconciled.get("promotion_metadata") or {}
+                ).get("effect") or {}
+                if reconciled_effect.get("status") == "applied":
+                    return reconciled
+                prior_attempt = reconciled
+            # Known failed effect (or reconciled divergence): retry the effect
+            # on the same record — one record per effect key, converging to
+            # ``applied``, never a second record for one effect.
+            existing_record = prior_attempt
+
+        now = datetime.now(timezone.utc).isoformat()
+        metadata["skill_id"] = str(preview.get("skill_id") or model_type)
+        metadata["target_identity"] = str(preview.get("target_identity") or "")
+        metadata["effect"] = {
+            "status": "pending_effect",
+            "idempotency_key": effect_key,
+            "intent_at": now,
+        }
         metadata = self._finalize_development_promotion_metadata(
             metadata=metadata,
             metadata_path=metadata_path,
             promotion_record_created=True,
         )
+        # The effect intent is recorded BEFORE any external write so a crash
+        # between the external effect and the database acknowledgement is
+        # reconcilable (never an unrecorded write).
+        if existing_record is not None:
+            promotion = (
+                await self._update_promotion_metadata(existing_record, metadata)
+                or existing_record
+            )
+        else:
+            promotion = await self._store.record_promotion(
+                research_id=research_id,
+                iteration=preview["iteration"],
+                model_type=model_type,
+                instrument=instrument,
+                timeframe=timeframe,
+                target_path=target_path,
+                config_yaml=preview["new_config"],
+                previous_yaml=preview["current_config"],
+                scope=DEVELOPMENT_PROMOTION_SCOPE,
+                metadata_path=metadata_path,
+                promotion_metadata=metadata,
+            )
+        try:
+            await self._write_text_file(target_path, preview["new_config"])
+        except Exception as exc:
+            failed = dict(metadata)
+            failed["effect"] = {
+                **metadata["effect"],
+                "status": "effect_failed",
+                "error": str(exc),
+            }
+            await self._update_promotion_metadata(promotion, failed)
+            raise
+        logger.info("Wrote promoted config to %s", target_path)
+        acked = dict(metadata)
+        acked["effect"] = {
+            **metadata["effect"],
+            "status": "applied",
+            "acked_at": datetime.now(timezone.utc).isoformat(),
+        }
+        promotion = await self._update_promotion_metadata(promotion, acked) or promotion
         await self._write_text_file(
             metadata_path,
-            json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+            json.dumps(acked, indent=2, sort_keys=True) + "\n",
         )
-        await self._write_text_file(target_path, preview["new_config"])
-        logger.info("Wrote promoted config to %s", target_path)
-        metadata_already_written = True
-
-        if not metadata_already_written:
-            metadata_path = self._metadata_sidecar_path(target_path, preview["iteration"])
-            metadata = self._finalize_development_promotion_metadata(
-                metadata=metadata,
-                metadata_path=metadata_path,
-                promotion_record_created=True,
-            )
-            await self._write_text_file(
-                metadata_path,
-                json.dumps(metadata, indent=2, sort_keys=True) + "\n",
-            )
-
-        # Record promotion
-        promotion = await self._store.record_promotion(
-            research_id=research_id,
-            iteration=preview["iteration"],
-            model_type=model_type,
-            instrument=instrument,
-            timeframe=timeframe,
-            target_path=target_path,
-            config_yaml=preview["new_config"],
-            previous_yaml=preview["current_config"],
-            scope=DEVELOPMENT_PROMOTION_SCOPE,
-            metadata_path=metadata_path,
-            promotion_metadata=metadata,
-        )
-
         return promotion
+
+    @staticmethod
+    def _effect_idempotency_key(
+        *, skill_id: str, target_identity: str, iteration: Any,
+        config_yaml: str, scope: str,
+    ) -> str:
+        """Canonical idempotency key for one promotion effect."""
+        from src.core.promotion_approval import canonical_json
+
+        return hashlib.sha256(canonical_json({
+            "skill_id": skill_id,
+            "target_identity": target_identity,
+            "iteration": iteration,
+            "config_sha256": hashlib.sha256(
+                (config_yaml or "").encode("utf-8")
+            ).hexdigest(),
+            "scope": scope,
+        })).hexdigest()
+
+    async def _promotion_by_effect_key(
+        self, effect_key: str,
+    ) -> Optional[Dict[str, Any]]:
+        """An existing promotion recorded under this effect key, if any."""
+        list_promotions = getattr(self._store, "list_promotions", None)
+        if list_promotions is None:
+            return None
+        matches = []
+        for row in await list_promotions():
+            if not isinstance(row, dict):
+                continue
+            effect = (row.get("promotion_metadata") or {}).get("effect") or {}
+            if effect.get("idempotency_key") == effect_key:
+                matches.append(row)
+        if not matches:
+            return None
+        matches.sort(key=lambda r: str(r.get("promoted_at") or ""), reverse=True)
+        return matches[0]
+
+    async def _update_promotion_metadata(
+        self, promotion: Mapping[str, Any], metadata: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        update = getattr(self._store, "update_promotion_metadata", None)
+        promotion_id = promotion.get("id") if isinstance(promotion, Mapping) else None
+        if update is None or promotion_id is None:
+            return None
+        return await update(
+            promotion_id=int(promotion_id), promotion_metadata=metadata,
+        )
+
+    async def reconcile_promotion_effect(
+        self, promotion: Mapping[str, Any],
+    ) -> Dict[str, Any]:
+        """Resolve one pending effect intent against the external target.
+
+        The intent recorded before the effect decides: a target carrying the
+        intended content marks the effect ``applied`` (only the database
+        acknowledgement was lost); anything else is ``effect_failed`` with
+        rollback available. Ambiguous states are never guessed into success.
+        """
+        record: Mapping[str, Any] = promotion
+        if record.get("config_yaml") is None:
+            fetched = None
+            list_promotions = getattr(self._store, "list_promotions", None)
+            if list_promotions is not None:
+                for row in await list_promotions():
+                    if isinstance(row, dict) and row.get("id") == promotion.get("id"):
+                        fetched = row
+                        break
+            record = fetched or promotion
+        metadata = dict(record.get("promotion_metadata") or {})
+        effect = dict(metadata.get("effect") or {})
+        target_path = str(record.get("target_path") or "")
+        intended = record.get("config_yaml") or ""
+        try:
+            current = Path(target_path).read_text(encoding="utf-8") if target_path else None
+        except Exception:
+            current = None
+        now = datetime.now(timezone.utc).isoformat()
+        if current is not None and self._sha256_text(current) == self._sha256_text(intended):
+            effect.update(status="applied", reconciled_at=now)
+        else:
+            effect.update(status="effect_failed", reconciled_at=now)
+        metadata["effect"] = effect
+        updated = await self._update_promotion_metadata(promotion, metadata)
+        return updated or dict(promotion)
 
     async def _confirm_scoped_promotion(
         self,
@@ -793,7 +934,14 @@ class ConfigPromoter:
         model_type = preview["model_type"]
         instrument = preview["instrument"]
         timeframe = preview["timeframe"]
-        required_prior_scopes = self._required_prior_scopes(scope)
+        scope_graph = self._compiled_scope_graph(session)
+        scope_node = scope_requirements(scope_graph, scope) if scope_graph else None
+        if scope_node is not None:
+            required_prior_scopes = list(scope_node.prior_scopes)
+        else:
+            required_prior_scopes = self._required_prior_scopes(scope)
+        canonical_skill_id = preview.get("skill_id") or session.get("skill_id") or None
+        canonical_target = preview.get("target_identity") or None
         prior_promotions: dict[str, Optional[Dict[str, Any]]] = {}
         for prior_scope in required_prior_scopes:
             prior_promotions[prior_scope] = await self._latest_promotion_record(
@@ -801,6 +949,8 @@ class ConfigPromoter:
                 instrument=instrument,
                 timeframe=timeframe,
                 scope=prior_scope,
+                skill_id=canonical_skill_id,
+                target_identity=canonical_target,
             )
 
         approval_record = self._approval_record(approval, scope=scope)
@@ -863,12 +1013,20 @@ class ConfigPromoter:
                 f"missing_{prior_scope}_promotion",
                 self._compact_promotion_record(promotion),
             )
-        add_check(
-            "scope_approval",
-            bool(approval_record.get("satisfied")),
-            f"missing_{scope}_approval",
-            approval_record,
-        )
+        if scope_node is not None and not scope_node.approval_required:
+            add_check(
+                "scope_approval",
+                True,
+                None,
+                {"required": False, "satisfied": True},
+            )
+        else:
+            add_check(
+                "scope_approval",
+                bool(approval_record.get("satisfied")),
+                f"missing_{scope}_approval",
+                approval_record,
+            )
         add_check(
             "rollback_target_addressable",
             bool(rollback_target),
@@ -876,14 +1034,25 @@ class ConfigPromoter:
             {"rollback_target": rollback_target},
         )
 
-        if scope in {CANARY_PROMOTION_SCOPE, PRODUCTION_PROMOTION_SCOPE}:
+        if scope_node is not None:
+            # Declared policy: exactly the declared domain evidence is
+            # required — a non-ML scope needs no fabricated ML artifacts.
+            for evidence_name in scope_node.evidence:
+                evidence_key = SCOPE_EVIDENCE_VALIDATORS[evidence_name]
+                add_check(
+                    f"{evidence_name}_passed",
+                    bool(evidence[evidence_key].get("passed")),
+                    f"missing_{evidence_name}",
+                    evidence[evidence_key],
+                )
+        elif scope in {CANARY_PROMOTION_SCOPE, PRODUCTION_PROMOTION_SCOPE}:
             add_check(
                 "paper_validation_passed",
                 bool(evidence["paper_validation"].get("passed")),
                 "missing_paper_validation",
                 evidence["paper_validation"],
             )
-        if scope == PRODUCTION_PROMOTION_SCOPE:
+        if scope_node is None and scope == PRODUCTION_PROMOTION_SCOPE:
             add_check(
                 "production_gate_bundle_loaded",
                 bool(production_bundle.get("loaded")),
@@ -998,6 +1167,7 @@ class ConfigPromoter:
         instrument: str,
         timeframe: str,
         reason: Optional[str] = None,
+        reconcile_legacy: bool = False,
     ) -> Dict[str, Any]:
         """Restore the latest development promotion for an instrument/timeframe."""
         get_latest = getattr(
@@ -1015,6 +1185,44 @@ class ConfigPromoter:
                 "No development promotion found for "
                 f"{model_type} {instrument}/{timeframe}"
             )
+
+        # Canonical identity guard: a promotion recorded for a different
+        # target never rolls back this one. Legacy records (pre-identity) are
+        # ambiguous and require explicit reconciliation.
+        identity_metadata = promotion.get("promotion_metadata") or {}
+        recorded_target = identity_metadata.get("target_identity")
+        if recorded_target:
+            try:
+                current_target = canonical_target_identity(
+                    self._target_descriptor(str(promotion.get("target_path") or ""))
+                )
+            except Exception:
+                current_target = None
+            if current_target and recorded_target != current_target:
+                raise ValueError(
+                    "rollback refused: the promotion record belongs to a "
+                    "different target identity; reconcile the correct target "
+                    "explicitly"
+                )
+        else:
+            # Legacy record: the destination must be explicitly routed,
+            # otherwise the rollback is ambiguous and needs reconciliation.
+            routed = (
+                identity_metadata.get("target_descriptor")
+                or identity_metadata.get("rollback_target")
+                or (identity_metadata.get("rollback_readiness") or {}).get(
+                    "rollback_target"
+                )
+                or (identity_metadata.get("rollback_readiness") or {}).get(
+                    "rollback_target_path"
+                )
+            )
+            if not routed and not reconcile_legacy:
+                raise ValueError(
+                    "ambiguous legacy rollback: the record predates canonical "
+                    "skill/target identity and records no rollback routing; "
+                    "reconcile explicitly and pass reconcile_legacy=True"
+                )
 
         previous_yaml = promotion.get("previous_yaml")
         promotion_metadata = promotion.get("promotion_metadata") or {}
@@ -1318,6 +1526,34 @@ class ConfigPromoter:
         return normalized
 
     @staticmethod
+    def _compiled_scope_graph(session: Optional[Dict[str, Any]]):
+        """The declared scope graph for the session skill, or None (legacy).
+
+        Sessions whose skill declares no scopes keep the legacy policy path;
+        declared graphs are re-validated at use (load already rejects invalid
+        or cyclic declarations).
+        """
+        skill_id = (session or {}).get("skill_id") or (session or {}).get("model_type")
+        if not skill_id:
+            return None
+        try:
+            from src.core.skill_registry import default_registry
+
+            skill = default_registry.get(skill_id)
+            manifest = getattr(skill, "manifest", skill)
+            promotion_target = getattr(manifest, "promotion_target", None)
+            scopes = getattr(promotion_target, "scopes", None) or []
+            if not scopes:
+                return None
+            return compile_scope_graph(scopes)
+        except ScopePolicyError:
+            # A declared-but-uncompilable policy must never silently degrade
+            # to the legacy path.
+            raise
+        except Exception:
+            return None
+
+    @staticmethod
     def _required_prior_scopes(scope: str) -> list[str]:
         if scope == PAPER_PROMOTION_SCOPE:
             return [DEVELOPMENT_PROMOTION_SCOPE]
@@ -1338,7 +1574,58 @@ class ConfigPromoter:
         instrument: str,
         timeframe: str,
         scope: str,
+        skill_id: Optional[str] = None,
+        target_identity: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
+        """The latest promotion record for one scope.
+
+        Canonical skill/target identity separates skills and targets: rows
+        recorded with those keys match only the same skill and target. Rows
+        recorded before the keys existed remain readable via the legacy
+        model/instrument/timeframe keys but are flagged
+        ``_identity_provenance: legacy_ambiguous`` — never silently treated as
+        canonical.
+        """
+        if skill_id and target_identity:
+            list_promotions = getattr(self._store, "list_promotions", None)
+            if list_promotions is not None:
+                candidates: List[Dict[str, Any]] = []
+                for row in await list_promotions():
+                    if not isinstance(row, dict) or row.get("scope") != scope:
+                        continue
+                    metadata = row.get("promotion_metadata") or {}
+                    recorded_skill = metadata.get("skill_id")
+                    recorded_target = metadata.get("target_identity")
+                    if recorded_skill or recorded_target:
+                        if (
+                            recorded_skill == skill_id
+                            and recorded_target == target_identity
+                        ):
+                            match = dict(row)
+                            match["_identity_provenance"] = "canonical"
+                            candidates.append(match)
+                        continue
+                    if (
+                        row.get("model_type") == model_type
+                        and row.get("instrument") == instrument
+                        and row.get("timeframe") == timeframe
+                    ):
+                        match = dict(row)
+                        match["_identity_provenance"] = "legacy_ambiguous"
+                        candidates.append(match)
+                if candidates:
+                    candidates.sort(
+                        key=lambda r: str(r.get("promoted_at") or ""), reverse=True,
+                    )
+                    # A canonical identity match is authoritative; legacy
+                    # rows are readable fallbacks, never preferred.
+                    candidates.sort(
+                        key=lambda r: (
+                            0 if r.get("_identity_provenance") == "canonical" else 1
+                        ),
+                    )
+                    return candidates[0]
+                return None
         get_latest = getattr(self._store, "get_latest_promotion", None)
         if get_latest is not None:
             return await get_latest(

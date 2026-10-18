@@ -1489,6 +1489,31 @@ class PostgresStateStore:
             "promoted_at": now,
         }
 
+    async def update_promotion_metadata(
+        self,
+        *,
+        promotion_id: int,
+        promotion_metadata: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """Update one promotion record's metadata (effect ack/reconciliation)."""
+        conn = await self._conn()
+        try:
+            await conn.execute(
+                "UPDATE promotions SET promotion_metadata_json = $1 WHERE id = $2",
+                json.dumps(promotion_metadata, sort_keys=True),
+                promotion_id,
+            )
+            row = await conn.fetchrow(
+                "SELECT * FROM promotions WHERE id = $1", promotion_id,
+            )
+        finally:
+            await self._release_short_lived(conn)
+        if row is None:
+            return None
+        result = _row_to_dict(row)
+        self._decode_promotion_metadata(result)
+        return result
+
     async def record_promotion_rollback(
         self,
         *,

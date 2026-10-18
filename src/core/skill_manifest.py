@@ -691,6 +691,10 @@ class PromotionScope(BaseModel):
     approval_required: bool = False
     #: Scopes that must precede this one in the chain (G5).
     prior_scopes: list[str] = Field(default_factory=list)
+    #: Declared domain evidence requirements for this scope. An empty list
+    #: means the scope needs no domain evidence (non-ML skills need no
+    #: fabricated ML artifacts); names must map to known validators.
+    evidence: list[str] = Field(default_factory=list)
 
 
 class FilePathPromotionTarget(BaseModel):
@@ -832,6 +836,12 @@ class PromotionTarget(BaseModel):
                 raise ValueError(
                     "promotion_target: registry_api primary requires a 'production' scope"
                 )
+        # The declared scope graph must compile: undeclared priors, unknown
+        # evidence names, and cycles are rejected at load, never approximated.
+        if self.scopes:
+            from src.core.promotion_policy import compile_scope_graph
+
+            compile_scope_graph(self.scopes)
         return self
 
 

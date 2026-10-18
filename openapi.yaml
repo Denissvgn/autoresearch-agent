@@ -1197,7 +1197,8 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/PromotionRollbackRequest'
-              default: {}
+              default:
+                reconcile_legacy: false
       responses:
         '200':
           description: Successful Response
@@ -2105,6 +2106,10 @@ components:
           - type: string
           - type: 'null'
           title: Reason
+        reconcile_legacy:
+          default: false
+          title: Reconcile Legacy
+          type: boolean
       type: object
       title: PromotionRollbackRequest
     PromotionScopeRequest:
