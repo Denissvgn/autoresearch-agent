@@ -151,21 +151,33 @@ def build_run_spec(
     policy: Mapping[str, Any],
     effective_config: Mapping[str, Any],
     parent_snapshot: Optional[Mapping[str, Any]] = None,
+    pinned_param_state: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Build the resolved, nonsecret run spec with its content digest."""
+    """Build the resolved, nonsecret run spec with its content digest.
+
+    ``pinned_param_state`` is the restore path: the recorded ``skill_params``
+    and ``param_defaults_applied`` are reproduced exactly and today's schema
+    defaults are never applied on top of them.
+    """
     from src.core.skill_params import apply_defaults
 
-    resolved = dict(skill_params or {})
-    if param_schema is not None:
-        try:
-            resolved = apply_defaults(param_schema, resolved)
-        except Exception:  # noqa: BLE001 - record raw values if schema rejects
-            resolved = dict(skill_params or {})
-    defaults_applied = {
-        name: value
-        for name, value in resolved.items()
-        if name not in (skill_params or {})
-    }
+    if pinned_param_state is not None:
+        resolved = dict(pinned_param_state.get("skill_params") or {})
+        defaults_applied = dict(
+            pinned_param_state.get("param_defaults_applied") or {}
+        )
+    else:
+        resolved = dict(skill_params or {})
+        if param_schema is not None:
+            try:
+                resolved = apply_defaults(param_schema, resolved)
+            except Exception:  # noqa: BLE001 - record raw values if schema rejects
+                resolved = dict(skill_params or {})
+        defaults_applied = {
+            name: value
+            for name, value in resolved.items()
+            if name not in (skill_params or {})
+        }
     values, refs = split_secret_params(resolved)
     package = package_digests(skill_dir)
     spec: Dict[str, Any] = {

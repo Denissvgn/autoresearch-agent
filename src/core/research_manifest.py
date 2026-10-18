@@ -273,6 +273,7 @@ def build_research_manifest(
     skill_id: Optional[str] = None,
     skill_params: Optional[Dict[str, Any]] = None,
     parent_snapshot: Optional[Dict[str, Any]] = None,
+    pinned_run_spec_sections: Optional[Mapping[str, Any]] = None,
 ) -> ResearchSessionManifest:
     """Build and validate a complete manifest from request/server state."""
 
@@ -316,6 +317,7 @@ def build_research_manifest(
             skill_manifest=skill_manifest,
             skill_params=skill_params,
             parent_snapshot=parent_snapshot,
+            pinned_run_spec_sections=pinned_run_spec_sections,
         )
 
     payload = _deep_merge(defaults, overrides or {})
@@ -491,6 +493,7 @@ def _skill_manifest_defaults(
     skill_manifest: Any,
     skill_params: Optional[Dict[str, Any]] = None,
     parent_snapshot: Optional[Dict[str, Any]] = None,
+    pinned_run_spec_sections: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Skill-driven sections (ARC-012 P7-003): everything is sourced from the
     skill's SKILL.yaml — no invented ML artifacts. A manifest must never
@@ -512,22 +515,41 @@ def _skill_manifest_defaults(
         skill_id=skill_id,
         skill_version=getattr(skill_manifest, "version", None),
         skill_dir=_skill_package_dir(skill_id),
-        objective_policy={
-            "objective": _default_objective(skill_id),
-            "goal": getattr(skill_manifest.metric_schema, "goal", None),
-            "direction": getattr(
-                skill_manifest.metric_schema.primary, "direction", None,
-            ),
-            "epsilon": settings.global_stagnation_epsilon,
-        },
-        policy={
-            "command_policy_sha256": _canonical_digest(
-                getattr(skill_manifest, "command_policy", None)
-            ),
-            "parameter_bindings_sha256": _canonical_digest(
-                getattr(skill_manifest, "parameter_bindings", None)
-            ),
-        },
+        objective_policy=(
+            dict(pinned_run_spec_sections.get("objective_policy") or {})
+            if pinned_run_spec_sections
+            and pinned_run_spec_sections.get("objective_policy")
+            else {
+                "objective": _default_objective(skill_id),
+                "goal": getattr(skill_manifest.metric_schema, "goal", None),
+                "direction": getattr(
+                    skill_manifest.metric_schema.primary, "direction", None,
+                ),
+                "epsilon": settings.global_stagnation_epsilon,
+            }
+        ),
+        policy=(
+            dict(pinned_run_spec_sections.get("policy") or {})
+            if pinned_run_spec_sections and pinned_run_spec_sections.get("policy")
+            else {
+                "command_policy_sha256": _canonical_digest(
+                    getattr(skill_manifest, "command_policy", None)
+                ),
+                "parameter_bindings_sha256": _canonical_digest(
+                    getattr(skill_manifest, "parameter_bindings", None)
+                ),
+            }
+        ),
+        pinned_param_state=(
+            {
+                "skill_params": dict(skill_params or {}),
+                "param_defaults_applied": dict(
+                    pinned_run_spec_sections.get("param_defaults_applied") or {}
+                ),
+            }
+            if pinned_run_spec_sections is not None
+            else None
+        ),
         effective_config={
             "environment": settings.environment,
             "anthropic_model": settings.anthropic_model,

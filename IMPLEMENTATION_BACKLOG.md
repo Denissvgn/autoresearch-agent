@@ -867,9 +867,9 @@ Autonomy: Resume from pinned inputs/checkpoints, preserving lineage. Unavailable
 credentials or changed versions become explicit recovery states; implement and test
 migration/rebinding rather than silently substituting current defaults.
 
-- [ ] Reconstruct continuation from pinned spec/artifacts, including nondefault parameters, scorer references, limits, and objective policy.
-- [ ] Distinguish pause, native harness resume, research continuation into a new session, and restart recovery with unknown in-flight effects.
-- [ ] Require explicit migration/rebinding when versions, artifacts, or credentials cannot satisfy the original contract; preserve parent lineage.
+- [x] Reconstruct continuation from pinned spec/artifacts, including nondefault parameters, scorer references, limits, and objective policy.
+- [x] Distinguish pause, native harness resume, research continuation into a new session, and restart recovery with unknown in-flight effects.
+- [x] Require explicit migration/rebinding when versions, artifacts, or credentials cannot satisfy the original contract; preserve parent lineage.
 
 Acceptance: restart cannot silently change scorer, dataset, model configuration,
 or fixed parameters. A missing checkpoint/artifact produces an actionable

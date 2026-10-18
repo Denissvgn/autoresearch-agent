@@ -13,7 +13,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from src.config import settings
 from src.core import fs_safety
@@ -23,6 +23,7 @@ from src.core.research_manifest import (
     load_persisted_manifest,
     manifest_pretty_json,
 )
+from src.core.run_restore import assess_recovery, raise_unless_ready
 from src.core.service_preflight import (
     ServicePreflightTarget,
     require_preflight_ready,
@@ -38,6 +39,10 @@ from src.core.state_store import CapacityExceeded, StateStore
 from src.ws.events import broadcaster
 
 logger = logging.getLogger(__name__)
+
+_TERMINAL_STATUSES = frozenset(
+    {"completed", "failed", "timed_out", "stopped", "cancelled"}
+)
 
 
 def _derive_workspace_path(
@@ -885,6 +890,7 @@ class SessionManager:
         *,
         overrides: Optional[Dict[str, Any]] = None,
         parent_snapshot: Optional[Dict[str, Any]] = None,
+        pinned_run_spec_sections: Optional[Mapping[str, Any]] = None,
     ) -> tuple[str, str, str]:
         manifest = build_research_manifest(
             research_id=config.id,
@@ -903,6 +909,7 @@ class SessionManager:
             focus_hint=config.focus_hint,
             skill_params=config.skill_params or None,
             parent_snapshot=parent_snapshot,
+            pinned_run_spec_sections=pinned_run_spec_sections,
             overrides=overrides,
         )
         # ARC-011 P4-002, revised by review C3 (2026-08-15): the per-session
@@ -985,6 +992,31 @@ class SessionManager:
             logger.warning("Secret reference persistence failed: %s", exc)
 
     @staticmethod
+    @staticmethod
+    def _manifest_integrity(parent: Mapping[str, Any]) -> Dict[str, Any]:
+        """Whether the parent's manifest claims a pinned spec it cannot read.
+
+        A manifest that carries ``run_spec`` but fails to parse or validate is
+        an unreadable checkpoint — reported so the restore assessment can
+        refuse it instead of treating it as a legacy parent.
+        """
+        raw_text = str(parent.get("manifest_json") or "")
+        _, report = load_persisted_manifest(raw_text)
+        claims_pinned_spec = False
+        if raw_text:
+            try:
+                raw_claims = json.loads(raw_text)
+                claims_pinned_spec = isinstance(raw_claims, dict) and (
+                    "run_spec" in raw_claims
+                )
+            except (TypeError, ValueError):
+                claims_pinned_spec = False
+        return {
+            "claims_pinned_spec": claims_pinned_spec,
+            "manifest_error": report.get("error"),
+        }
+
+    @staticmethod
     def _parent_run_spec(
         parent: Mapping[str, Any],
     ) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
@@ -1023,6 +1055,24 @@ class SessionManager:
                     f"an explicit operator-supplied value"
                 )
             params[name] = value
+
+    @staticmethod
+    def _installed_skill_pin(
+        skill_id: str,
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """The currently installed skill version and manifest digest."""
+        try:
+            from src.core.run_spec import package_digests, skill_package_dir
+            from src.core.skill_registry import default_registry
+
+            current = default_registry.get(skill_id)
+            version = getattr(current, "version", None)
+            digest = package_digests(
+                skill_package_dir(skill_id)
+            ).get("SKILL.yaml")
+            return version, digest
+        except Exception:  # noqa: BLE001 - unresolvable = unverifiable
+            return None, None
 
     def _check_skill_pin(
         self,
@@ -1116,17 +1166,26 @@ class SessionManager:
         return str(path)
 
     async def continue_session(
-        self, parent_id: str, *, allow_skill_drift: bool = False, **kwargs: Any
+        self,
+        parent_id: str,
+        *,
+        allow_skill_drift: bool = False,
+        recovery_kind: str = "continuation",
+        **kwargs: Any,
     ) -> Dict:
         async with self._session_spawn_lock:
             return await self._continue_session_unlocked(
-                parent_id, allow_skill_drift=allow_skill_drift, **kwargs,
+                parent_id,
+                allow_skill_drift=allow_skill_drift,
+                recovery_kind=recovery_kind,
+                **kwargs,
             )
 
     async def _continue_session_unlocked(
         self,
         parent_id: str,
         *,
+        recovery_kind: str = "continuation",
         max_iterations: Optional[int] = None,
         max_budget_usd: Optional[float] = None,
         timeout_minutes: Optional[int] = None,
@@ -1199,6 +1258,44 @@ class SessionManager:
         continuation_params, continuation_secret_refs, parent_run_spec = (
             self._parent_run_spec(parent)
         )
+        # Explicit recovery assessment: a restore must satisfy the pinned
+        # contract exactly. Blockers (registry drift, unbound credentials,
+        # tampered or absent spec) raise RecoveryRequired with remediations
+        # — never a silent fresh run and never a silent substitution of
+        # today's defaults for the pinned ones.
+        current_version, current_digest = self._installed_skill_pin(
+            parent_skill_id or model_type
+        )
+        # The parent's retained snapshot bundle must resolve: a missing
+        # content-addressed artifact is an actionable recovery state, never
+        # a fresh run disguised as a resume.
+        parent_snapshot = parent_run_spec.get("parent_snapshot") or {}
+        snapshot_digest = (
+            parent_snapshot.get("digest")
+            if isinstance(parent_snapshot, Mapping)
+            else None
+        )
+        artifact_store = None
+        artifact_digests: List[str] = []
+        if snapshot_digest:
+            from src.core.run_artifacts import ArtifactStore, default_artifact_root
+
+            artifact_store = ArtifactStore(default_artifact_root())
+            artifact_digests = [str(snapshot_digest)]
+        raise_unless_ready(
+            assess_recovery(
+                kind=recovery_kind,
+                session_id=parent_id,
+                run_spec=parent_run_spec,
+                secret_refs=continuation_secret_refs,
+                current_skill_version=current_version,
+                current_skill_digest=current_digest,
+                manifest_integrity=self._manifest_integrity(parent),
+                allow_skill_drift=allow_skill_drift,
+                artifact_digests=artifact_digests,
+                artifact_store=artifact_store,
+            )
+        )
         self._rebind_secret_params(
             continuation_params, continuation_secret_refs,
         )
@@ -1220,8 +1317,16 @@ class SessionManager:
             tag=effective_tag,
             quick_mode=bool(parent.get("quick_mode")),
             max_iterations=max_iterations or remaining,
-            max_budget_usd=max_budget_usd or settings.max_budget_usd,
-            timeout_s=timeout_minutes * 60 if timeout_minutes else 0,
+            max_budget_usd=(
+                max_budget_usd
+                if max_budget_usd is not None
+                else (parent.get("max_budget_usd") or settings.max_budget_usd)
+            ),
+            timeout_s=(
+                timeout_minutes * 60
+                if timeout_minutes
+                else (parent.get("timeout_s") or 0)
+            ),
             focus_hint=focus_hint or parent.get("focus_hint"),
             workspace_path=workspace_path,
             resumed_from=parent_id,
@@ -1239,7 +1344,10 @@ class SessionManager:
         await self._reserve_work(config)
         preflight = await self._run_preflight(config)
         manifest_overrides = {
-            "runtime": {"resumed_from": parent_id},
+            "runtime": {
+                "resumed_from": parent_id,
+                "recovery_kind": recovery_kind,
+            },
             "preflight": preflight,
         }
         manifest_json, manifest_hash, session_nonce = self._build_manifest_payload(
@@ -1248,6 +1356,15 @@ class SessionManager:
             parent_snapshot=self._capture_parent_snapshot(
                 parent.get("workspace_path") or "",
             ),
+            pinned_run_spec_sections={
+                "objective_policy": parent_run_spec.get("objective_policy"),
+                "policy": parent_run_spec.get("policy"),
+                "param_defaults_applied": parent_run_spec.get(
+                    "param_defaults_applied"
+                ),
+            }
+            if parent_run_spec
+            else None,
         )
         await self._persist_secret_refs(config.id, manifest_json)
         # ARC-011 P4-002: carry the nonce into the orchestrator (continue path).
@@ -1325,8 +1442,23 @@ class SessionManager:
                 f"Runtime resume requires parent status {expected}, "
                 f"got: {parent['status']}"
             )
+        # Duplicate-resume guard: a previous recovery child that is still
+        # live means this call is a double trigger, not a new recovery.
+        for row in await self._store.list_sessions():
+            child_status = str(row.get("status") or "")
+            if (
+                row.get("resumed_from") == parent_id
+                and child_status not in _TERMINAL_STATUSES
+            ):
+                raise RuntimeError(
+                    f"duplicate resume: recovery child "
+                    f"{row.get('research_id')!r} of {parent_id!r} is "
+                    f"still {child_status!r}; resume is refused until "
+                    f"it settles"
+                )
         session = await self.continue_session(
             parent_id,
+            recovery_kind="restart_recovery",
             max_iterations=max_iterations,
             max_budget_usd=max_budget_usd,
             timeout_minutes=timeout_minutes,
