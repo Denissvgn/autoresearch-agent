@@ -889,9 +889,9 @@ Autonomy: Use explicitly configured provider/model roles and demonstrated
 capabilities; do not choose a new paid model to bypass an unsupported setting. Test
 request construction offline, then use only authorized live identities.
 
-- [ ] Apply primary/insight model and output/context settings for all provider paths, including the default provider.
-- [ ] Validate required capabilities before session side effects and persist requested versus effective configuration/model identity.
-- [ ] Move provider-specific request options and error classification behind their adapters; reject unsupported settings with actionable diagnostics.
+- [x] Apply primary/insight model and output/context settings for all provider paths, including the default provider.
+- [x] Validate required capabilities before session side effects and persist requested versus effective configuration/model identity.
+- [x] Move provider-specific request options and error classification behind their adapters; reject unsupported settings with actionable diagnostics.
 
 Acceptance: Anthropic and OpenAI selections honor the resolved run configuration,
 including insight roles and caps. Unsupported model/context combinations do not

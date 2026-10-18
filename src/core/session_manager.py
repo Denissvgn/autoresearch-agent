@@ -670,6 +670,24 @@ class SessionManager:
                 for d in diagnostics
             )
             raise SkillConfigError(f"unsupported skill declaration(s): {details}")
+        # Provider/model roles and capabilities must resolve before any side
+        # effect: an unsupported model/context combination is refused here —
+        # never surfaced as a first-call failure after the run exists. The
+        # same router and capability rules the orchestrator applies validate
+        # the request (fail-closed diagnostics, no silent model substitution).
+        from src.core.llm_provider import (
+            RequiredCapabilities,
+            build_provider,
+            resolve_model_roles,
+        )
+
+        llm_cfg = getattr(getattr(runtime, "manifest", None), "llm", None)
+        if llm_cfg is not None:
+            resolve_model_roles(llm_cfg)
+            build_provider(
+                str(getattr(llm_cfg, "provider", "") or ""),
+                required_capabilities=RequiredCapabilities.from_llm_config(llm_cfg),
+            )
 
     async def _run_skill_bootstrap(self, config: ResearchConfig) -> None:
         """Render the session workspace with the skill's ``bootstrap.py``

@@ -89,6 +89,7 @@ from src.core.llm_provider import (
     LLMProvider,
     Message,
     MockProvider,
+    ModelRoles,
     ProviderCapabilityMismatch,
     ProviderResponse,
     RequestBlock,
@@ -100,6 +101,8 @@ from src.core.llm_provider import (
     ToolUseBlock,
     Usage,
     build_provider,
+    clamp_output_tokens,
+    resolve_model_roles,
 )
 from src.core.log_writer import AgentLogWriter
 from src.core.objective_comparator import (
@@ -158,9 +161,12 @@ logger = logging.getLogger(__name__)
 
 
 
-# Pricing constants (_CLAUDE_INPUT_USD_PER_TOKEN / _CLAUDE_OUTPUT_USD_PER_TOKEN /
-# _CLAUDE_MAX_OUTPUT_TOKENS) moved to src.core.llm_provider (P1-002); imported
-# above. They back the pre-spend budget gate and post-call cost accounting.
+# Pricing constants (_CLAUDE_INPUT_USD_PER_TOKEN / _CLAUDE_OUTPUT_USD_PER_TOKEN)
+# moved to src.core.llm_provider (P1-002); imported above. They back the
+# pre-spend budget gate and post-call cost accounting. Request-side output
+# ceilings are provider-owned now (ProviderCapabilities.max_output_tokens);
+# _CLAUDE_MAX_OUTPUT_TOKENS remains the conservative projected-output
+# constant in the budget gate until provider estimators land.
 _COMMAND_OUTPUT_LOG_INTERVAL_S = 2.0
 _COMMAND_OUTPUT_LOG_MAX_CHARS = 2000
 
@@ -369,6 +375,7 @@ class AgentOrchestrator:
         # self._provider / settings.anthropic_model when no override is set.
         self._session_providers: Dict[str, LLMProvider] = {}
         self._session_models: Dict[str, str] = {}
+        self._session_model_roles: Dict[str, ModelRoles] = {}
         # ARC-011 P1-013: experiment output is parsed only through the
         # OutputParser protocol. The two transitional implementations
         # (DelimitedKVParser for the --- block, JSONMarkerParser for the
@@ -481,10 +488,25 @@ class AgentOrchestrator:
         """
         max_retries = settings.max_api_retries
         backoff_base = 30  # seconds
-        # P4-010: use the per-session provider/model if the skill declared a
-        # non-anthropic provider; fall back to the default otherwise.
+        # Provider/model roles come from the resolved run configuration
+        # (manifest primary_model / output cap) on every provider path; the
+        # provider adapter owns its request ceiling.
         provider = self._session_providers.get(research_id, self._provider)
-        model = self._session_models.get(research_id, settings.anthropic_model)
+        roles = self._session_model_roles.get(research_id)
+        model = (
+            roles.primary_model
+            if roles is not None
+            else settings.anthropic_model
+        )
+        output_cap = clamp_output_tokens(
+            provider.capabilities(),
+            requested=(
+                roles.max_output_tokens
+                if roles is not None
+                else settings.max_output_tokens_per_call
+            ),
+            settings_cap=settings.max_output_tokens_per_call,
+        )
 
         for attempt in range(max_retries + 1):
             try:
@@ -493,12 +515,7 @@ class AgentOrchestrator:
                     system=system_prompt,
                     messages=messages,
                     tools=AGENT_TOOLS,
-                    # P2 per-token budget: operator-tunable cap, clamped at
-                    # the historical 8192 ceiling (default == byte-identical).
-                    max_tokens=min(
-                        _CLAUDE_MAX_OUTPUT_TOKENS,
-                        settings.max_output_tokens_per_call,
-                    ),
+                    max_tokens=output_cap,
                 )
             except Exception as exc:
                 err = provider.classify_error(exc)
@@ -1779,10 +1796,27 @@ class AgentOrchestrator:
             # the bare messages.create Haiku call). No tools, no retry. Uses the
             # per-session provider when the skill declared a non-anthropic one.
             insights_provider = self._session_providers.get(research_id, self._provider)
+            # Insight role and cap come from the resolved run configuration:
+            # the manifest's insight_model (falling back to its primary model),
+            # clamped by the skill's output cap and the adapter's ceiling.
+            insight_roles = self._session_model_roles.get(research_id)
             insights = await insights_provider.complete(
-                model=settings.anthropic_default_haiku_model,
+                model=(
+                    insight_roles.insight_model
+                    if insight_roles is not None
+                    else settings.anthropic_default_haiku_model
+                ),
                 prompt=prompt,
-                max_tokens=300,
+                max_tokens=clamp_output_tokens(
+                    insights_provider.capabilities(),
+                    requested=min(
+                        300,
+                        insight_roles.max_output_tokens
+                        if insight_roles is not None
+                        else 300,
+                    ),
+                    settings_cap=settings.max_output_tokens_per_call,
+                ),
             )
 
             # Trim to 500 chars max
@@ -2694,25 +2728,23 @@ class AgentOrchestrator:
                 )
                 nonce_bytes = None
 
-        # ARC-011 P4-010: per-skill provider selection. If the skill manifest
-        # declares a non-anthropic provider, construct it via the router and
-        # store it per-session. _call_llm_with_retry and the insights path read
-        # from _session_providers / _session_models (falling back to the default
-        # self._provider / settings.anthropic_model).
+        # ARC-011 P4-010, revised for provider/model role consistency: every
+        # skill — including anthropic ones — resolves its provider and model
+        # roles through the same path. The manifest's primary_model override
+        # and required capabilities apply to the default provider too, and
+        # build_provider raises ProviderCapabilityMismatch (fail-closed) when
+        # the selected provider cannot serve this skill — surfacing the
+        # misconfiguration at session start, before any LLM call.
         manifest = getattr(skill, "_manifest", None)
         if manifest is not None:
             llm_cfg = manifest.llm
-            if llm_cfg.provider != "anthropic":
-                # ARC-011 P4-009: validate the skill's required capabilities
-                # against the provider's advertisement. build_provider raises
-                # ProviderCapabilityMismatch (fail-closed) if the selected
-                # provider cannot serve this skill — surfacing the misconfig at
-                # session start, before any LLM call.
-                self._session_providers[config.id] = build_provider(
-                    llm_cfg.provider,
-                    required_capabilities=RequiredCapabilities.from_llm_config(llm_cfg),
-                )
-                self._session_models[config.id] = llm_cfg.primary_model
+            roles = resolve_model_roles(llm_cfg, settings)
+            self._session_providers[config.id] = build_provider(
+                llm_cfg.provider,
+                required_capabilities=RequiredCapabilities.from_llm_config(llm_cfg),
+            )
+            self._session_models[config.id] = roles.primary_model
+            self._session_model_roles[config.id] = roles
 
         # ARC-012 P7-011: in demo mode every session runs on the scripted
         # MockProvider — wired per-session so it drives THIS skill's declared

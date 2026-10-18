@@ -243,12 +243,15 @@ class ProviderCapabilities:
     In v1 all targeted providers set ``native_tool_use=True`` and
     ``system_prompt=True``; the flags are forward-looking (e.g. a local model
     without native tool use would need a prompt-based tool-use shim).
+    ``max_output_tokens`` is the adapter's per-request output ceiling;
+    ``None`` means the adapter imposes no ceiling of its own.
     """
 
     native_tool_use: bool
     streaming: bool
     system_prompt: bool
     max_context_tokens: int
+    max_output_tokens: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -595,6 +598,7 @@ class AnthropicProvider:
             streaming=False,
             system_prompt=True,
             max_context_tokens=200_000,
+            max_output_tokens=_CLAUDE_MAX_OUTPUT_TOKENS,
         )
 
     def classify_error(self, exc: Exception) -> ErrorClass:
@@ -1078,23 +1082,27 @@ class RequiredCapabilities:
         native_tool_use: Optional[bool] = None,
         system_prompt: Optional[bool] = None,
         max_context_tokens: Optional[int] = None,
+        max_output_tokens: Optional[int] = None,
     ) -> None:
         self.native_tool_use = native_tool_use
         self.system_prompt = system_prompt
         self.max_context_tokens = max_context_tokens
+        self.max_output_tokens = max_output_tokens
 
     @classmethod
     def from_llm_config(cls, llm_cfg: Any) -> "RequiredCapabilities":
         """Build from a skill manifest's ``LLMConfig`` (P4-009).
 
         Reads ``required_native_tool_use`` / ``required_system_prompt`` /
-        ``required_max_context_tokens``. Tolerates an older manifest that
-        lacks the fields (treats absent fields as unconstrained).
+        ``required_max_context_tokens`` and the requested output cap
+        ``max_output_tokens``. Tolerates an older manifest that lacks the
+        fields (treats absent fields as unconstrained).
         """
         return cls(
             native_tool_use=getattr(llm_cfg, "required_native_tool_use", None),
             system_prompt=getattr(llm_cfg, "required_system_prompt", None),
             max_context_tokens=getattr(llm_cfg, "required_max_context_tokens", None),
+            max_output_tokens=getattr(llm_cfg, "max_output_tokens", None),
         )
 
     def check(self, caps: ProviderCapabilities, provider_id: str) -> None:
@@ -1112,11 +1120,95 @@ class RequiredCapabilities:
                 f"max_context_tokens (need >= {self.max_context_tokens}, "
                 f"have {caps.max_context_tokens})"
             )
+        if (
+            self.max_output_tokens is not None
+            and caps.max_output_tokens is not None
+            and caps.max_output_tokens < self.max_output_tokens
+        ):
+            problems.append(
+                f"max_output_tokens (skill requests {self.max_output_tokens}, "
+                f"provider ceiling {caps.max_output_tokens}; reduce the "
+                f"skill's max_output_tokens or select a provider that can "
+                f"serve it)"
+            )
         if problems:
             raise ProviderCapabilityMismatch(
                 f"provider {provider_id!r} does not satisfy the skill's required "
                 f"capabilities: {', '.join(problems)}"
             )
+
+
+class UnsupportedModelSetting(ValueError):
+    """A provider/model role combination the runtime cannot serve.
+
+    Raised with an actionable diagnostic before any session side effect —
+    never worked around by silently selecting a different (paid) model.
+    """
+
+
+@dataclass(frozen=True)
+class ModelRoles:
+    """The effective model roles and output cap for a session."""
+
+    primary_model: str
+    insight_model: str
+    max_output_tokens: int
+
+
+def resolve_model_roles(llm_cfg: Any, settings_obj: Any = None) -> ModelRoles:
+    """Resolve primary/insight model roles and the output cap for a skill.
+
+    The manifest's ``primary_model`` and ``insight_model`` are the requested
+    roles and apply on every provider path, including the default one. The
+    insight role falls back to the primary model (provider-agnostic) when the
+    manifest does not declare one. A non-anthropic provider without an
+    explicit ``primary_model`` is rejected — the runtime has no default for
+    it and will not silently substitute another model.
+    """
+    if settings_obj is None:
+        from src.config import settings as settings_obj  # noqa: PLC0415
+    provider_id = str(getattr(llm_cfg, "provider", "") or "")
+    requested_primary = str(getattr(llm_cfg, "primary_model", "") or "")
+    if requested_primary:
+        primary = requested_primary
+    elif provider_id == "anthropic":
+        primary = str(settings_obj.anthropic_model)
+    else:
+        raise UnsupportedModelSetting(
+            f"skill manifest declares provider {provider_id!r} without a "
+            f"primary_model; no default model is configured for it — set "
+            f"llm.primary_model explicitly instead of substituting another "
+            f"model"
+        )
+    insight = str(getattr(llm_cfg, "insight_model", "") or "") or primary
+    requested_cap = getattr(llm_cfg, "max_output_tokens", None)
+    cap = int(
+        requested_cap
+        if requested_cap
+        else settings_obj.max_output_tokens_per_call
+    )
+    return ModelRoles(
+        primary_model=primary,
+        insight_model=insight,
+        max_output_tokens=cap,
+    )
+
+
+def clamp_output_tokens(
+    caps: ProviderCapabilities,
+    *,
+    requested: int,
+    settings_cap: int,
+) -> int:
+    """The output cap actually sent: the adapter's ceiling governs.
+
+    Provider-specific request options stay behind the adapter — the loop
+    only ever asks for a clamped, provider-legal value.
+    """
+    limit = min(int(requested), int(settings_cap))
+    if caps.max_output_tokens is not None:
+        limit = min(limit, int(caps.max_output_tokens))
+    return max(1, limit)
 
 
 def build_provider(

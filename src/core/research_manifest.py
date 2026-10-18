@@ -478,6 +478,35 @@ def _ml_manifest_defaults(
     }
 
 
+def _model_identity(skill_manifest: Any) -> Dict[str, Any]:
+    """Requested versus effective provider/model identity — reported, never
+    invented. An unresolvable request is recorded with its error."""
+    from src.core.llm_provider import resolve_model_roles
+
+    llm_cfg = getattr(skill_manifest, "llm", None)
+    if llm_cfg is None:
+        return {"requested": None, "effective": None}
+    requested = {
+        "provider": getattr(llm_cfg, "provider", None),
+        "primary_model": getattr(llm_cfg, "primary_model", None),
+        "insight_model": getattr(llm_cfg, "insight_model", None),
+        "max_output_tokens": getattr(llm_cfg, "max_output_tokens", None),
+    }
+    try:
+        roles = resolve_model_roles(llm_cfg)
+    except Exception as exc:  # noqa: BLE001 - recorded, never invented
+        return {"requested": requested, "effective": None, "error": str(exc)}
+    return {
+        "requested": requested,
+        "effective": {
+            "provider": getattr(llm_cfg, "provider", None),
+            "primary_model": roles.primary_model,
+            "insight_model": roles.insight_model,
+            "max_output_tokens": roles.max_output_tokens,
+        },
+    }
+
+
 def _skill_manifest_defaults(
     *,
     research_id: str,
@@ -557,6 +586,7 @@ def _skill_manifest_defaults(
             "max_iterations": max_iterations,
             "max_budget_usd": max_budget_usd,
             "timeout_s": timeout_s,
+            "model_identity": _model_identity(skill_manifest),
         },
         parent_snapshot=parent_snapshot,
     )
