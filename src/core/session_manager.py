@@ -5,18 +5,23 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import secrets
 import shutil
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Mapping, Optional, Tuple
 
 from src.config import settings
 from src.core import fs_safety
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig
-from src.core.research_manifest import build_research_manifest, manifest_pretty_json
+from src.core.research_manifest import (
+    build_research_manifest,
+    load_persisted_manifest,
+    manifest_pretty_json,
+)
 from src.core.service_preflight import (
     ServicePreflightTarget,
     require_preflight_ready,
@@ -424,6 +429,7 @@ class SessionManager:
         manifest_json, manifest_hash, session_nonce = self._build_manifest_payload(
             config, overrides=manifest_overrides,
         )
+        await self._persist_secret_refs(config.id, manifest_json)
         # ARC-011 P4-002: carry the nonce into the orchestrator so it reaches
         # the eval subprocess env and the marker verifier.
         config.session_nonce = session_nonce
@@ -802,6 +808,7 @@ class SessionManager:
             max_budget_usd=config.max_budget_usd,
             timeout_s=config.timeout_s,
             focus_hint=config.focus_hint,
+            skill_params=config.skill_params or None,
             overrides=overrides,
         )
         # ARC-011 P4-002, revised by review C3 (2026-08-15): the per-session
@@ -820,6 +827,138 @@ class SessionManager:
             manifest.manifest_hash or "",
             session_nonce,
         )
+
+    async def _persist_secret_refs(
+        self, research_id: str, manifest_json: str
+    ) -> None:
+        """Persist the run spec's secret *references* — never any value."""
+        add_ref = getattr(self._store, "add_secret_ref", None)
+        if add_ref is None:
+            return
+        try:
+            raw = json.loads(manifest_json or "{}")
+            refs = ((raw.get("run_spec") or {}).get("secret_refs") or {})
+            for name, ref in sorted(refs.items()):
+                await add_ref(
+                    research_id=research_id,
+                    param_name=str(name),
+                    env_var=str(ref.get("env_var") or ""),
+                    rebind_policy=str(ref.get("rebind_policy") or ""),
+                )
+        except Exception as exc:  # noqa: BLE001 - references never block runs
+            logger.warning("Secret reference persistence failed: %s", exc)
+
+    @staticmethod
+    def _parent_run_spec(
+        parent: Mapping[str, Any],
+    ) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+        """The parent's pinned resolved spec for continuation.
+
+        Returns ``(skill_params, secret_refs, run_spec)``. A legacy parent
+        without a spec continues with empty parameters — reported, never
+        back-filled from today's defaults.
+        """
+        manifest, _report = load_persisted_manifest(
+            str(parent.get("manifest_json") or "")
+        )
+        run_spec = dict((getattr(manifest, "run_spec", None) or {}))
+        params = dict(run_spec.get("skill_params") or {})
+        refs = dict(run_spec.get("secret_refs") or {})
+        return params, refs, run_spec
+
+    @staticmethod
+    def _rebind_secret_params(
+        params: Dict[str, Any], secret_refs: Mapping[str, Any]
+    ) -> None:
+        """Re-bind secret parameters from their named environment variables.
+
+        The rebinding policy demands an explicit operator-supplied value: a
+        missing binding is an error naming the reference, never a silent
+        default and never a value recovered from any artifact.
+        """
+        for name, ref in sorted(secret_refs.items()):
+            env_var = str(ref.get("env_var") or "")
+            value = os.environ.get(env_var) if env_var else None
+            if value is None:
+                raise RuntimeError(
+                    f"continuation requires the secret binding for parameter "
+                    f"{name!r} (environment variable {env_var!r}); the "
+                    f"rebinding policy {ref.get('rebind_policy')!r} demands "
+                    f"an explicit operator-supplied value"
+                )
+            params[name] = value
+
+    def _check_skill_pin(
+        self,
+        *,
+        skill_id: str,
+        run_spec: Mapping[str, Any],
+        allow_skill_drift: bool,
+    ) -> None:
+        """Refuse to silently re-resolve a pinned run against a new skill.
+
+        A recorded skill version or package digest that no longer matches the
+        installed skill is an explicit incompatibility: continue only with
+        ``allow_skill_drift=True`` (an operator's explicit migration choice).
+        """
+        pinned_version = run_spec.get("skill_version")
+        pinned_digest = (run_spec.get("digests") or {}).get(
+            "skill_manifest_sha256"
+        )
+        if not pinned_version and not pinned_digest:
+            return
+        if allow_skill_drift:
+            return
+        try:
+            from src.core.run_spec import package_digests, skill_package_dir
+            from src.core.skill_registry import default_registry
+
+            current = default_registry.get(skill_id)
+        except Exception:  # noqa: BLE001 - unresolvable = unverifiable
+            return
+        current_version = getattr(current, "version", None)
+        drift = (
+            pinned_version is not None
+            and current_version is not None
+            and pinned_version != current_version
+        )
+        current_digest = package_digests(
+            skill_package_dir(skill_id)
+        ).get("SKILL.yaml")
+        if (
+            not drift
+            and pinned_digest
+            and current_digest
+            and pinned_digest != current_digest
+        ):
+            drift = True
+        if drift:
+            raise RuntimeError(
+                f"skill {skill_id!r} has changed since the run was pinned "
+                f"(recorded version {pinned_version!r}, installed "
+                f"{current_version!r}); continuing would silently re-resolve "
+                f"against today's skill — migrate explicitly by continuing "
+                f"with allow_skill_drift=True"
+            )
+
+    async def inspect_run_spec(self, research_id: str) -> Dict[str, Any]:
+        """Inspect one run's immutable resolved spec and provenance.
+
+        Reads only the persisted artifact — independent of the current
+        registry and settings — and reports unknown fields and missing
+        provenance rather than inventing current facts.
+        """
+        row = await self._store.get_session(research_id)
+        if not row:
+            raise RuntimeError(f"session {research_id} not found")
+        manifest, report = load_persisted_manifest(
+            str(row.get("manifest_json") or "")
+        )
+        return {
+            "research_id": research_id,
+            "run_spec": dict((getattr(manifest, "run_spec", None) or {})),
+            "provenance": report,
+        }
 
     async def _write_manifest(
         self,
@@ -840,9 +979,13 @@ class SessionManager:
         )
         return str(path)
 
-    async def continue_session(self, parent_id: str, **kwargs: Any) -> Dict:
+    async def continue_session(
+        self, parent_id: str, *, allow_skill_drift: bool = False, **kwargs: Any
+    ) -> Dict:
         async with self._session_spawn_lock:
-            return await self._continue_session_unlocked(parent_id, **kwargs)
+            return await self._continue_session_unlocked(
+                parent_id, allow_skill_drift=allow_skill_drift, **kwargs,
+            )
 
     async def _continue_session_unlocked(
         self,
@@ -852,6 +995,7 @@ class SessionManager:
         max_budget_usd: Optional[float] = None,
         timeout_minutes: Optional[int] = None,
         focus_hint: Optional[str] = None,
+        allow_skill_drift: bool = False,
     ) -> Dict:
         """ML-62: Continue a timed-out session as a new chained session.
 
@@ -913,6 +1057,21 @@ class SessionManager:
         parent_max = parent.get("max_iterations") or settings.max_iterations
         remaining = max(parent_max - parent_iter_count, 5)  # at least 5
 
+        # Continue from the parent's pinned resolved spec — never from
+        # today's registry or defaults. Secret parameters re-bind from their
+        # named environment variables under the explicit rebinding policy.
+        continuation_params, continuation_secret_refs, parent_run_spec = (
+            self._parent_run_spec(parent)
+        )
+        self._rebind_secret_params(
+            continuation_params, continuation_secret_refs,
+        )
+        self._check_skill_pin(
+            skill_id=parent_skill_id or model_type,
+            run_spec=parent_run_spec,
+            allow_skill_drift=allow_skill_drift,
+        )
+
         research_id = f"res_{uuid.uuid4().hex[:12]}"
         effective_tag = f"cont-{parent_id[-8:]}"
         workspace_path = parent["workspace_path"]
@@ -931,6 +1090,7 @@ class SessionManager:
             workspace_path=workspace_path,
             resumed_from=parent_id,
             skill_id=parent_skill_id,
+            skill_params=continuation_params,
             subject_id=parent_subject_id,
             variant=parent_variant,
         )
@@ -949,6 +1109,7 @@ class SessionManager:
             config,
             overrides=manifest_overrides,
         )
+        await self._persist_secret_refs(config.id, manifest_json)
         # ARC-011 P4-002: carry the nonce into the orchestrator (continue path).
         config.session_nonce = session_nonce
         manifest_path = await self._write_manifest(config, manifest_json)

@@ -276,6 +276,15 @@ CREATE TABLE IF NOT EXISTS idempotency_records (
     completed_at TEXT,
     PRIMARY KEY (operation, parent_id, key_hash)
 );
+
+CREATE TABLE IF NOT EXISTS session_secret_refs (
+    research_id TEXT NOT NULL,
+    param_name TEXT NOT NULL,
+    env_var TEXT NOT NULL,
+    rebind_policy TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (research_id, param_name)
+);
 """
 
 _INDEXES_SQL_PG = """
@@ -775,6 +784,7 @@ class PostgresStateStore:
                     "planned_trials",
                     "promotions",
                     "hpo_studies",
+                    "session_secret_refs",
                 ):
                     await conn.execute(
                         f"DELETE FROM {child} WHERE research_id = $1", session_id,
@@ -1488,6 +1498,42 @@ class PostgresStateStore:
             "promotion_metadata": promotion_metadata,
             "promoted_at": now,
         }
+
+    async def add_secret_ref(
+        self,
+        *,
+        research_id: str,
+        param_name: str,
+        env_var: str,
+        rebind_policy: str,
+    ) -> None:
+        """Persist a secret parameter *reference* — never a credential value."""
+        conn = await self._conn()
+        try:
+            await conn.execute(
+                """INSERT INTO session_secret_refs
+                   (research_id, param_name, env_var, rebind_policy, created_at)
+                   VALUES ($1, $2, $3, $4, $5)
+                   ON CONFLICT (research_id, param_name) DO UPDATE SET
+                     env_var = EXCLUDED.env_var,
+                     rebind_policy = EXCLUDED.rebind_policy""",
+                research_id, param_name, env_var, rebind_policy,
+                datetime.now(timezone.utc).isoformat(),
+            )
+        finally:
+            await self._release_short_lived(conn)
+
+    async def get_secret_refs(self, research_id: str) -> List[Dict[str, Any]]:
+        conn = await self._conn()
+        try:
+            rows = await conn.fetch(
+                "SELECT * FROM session_secret_refs WHERE research_id = $1 "
+                "ORDER BY param_name",
+                research_id,
+            )
+        finally:
+            await self._release_short_lived(conn)
+        return [_row_to_dict(row) for row in rows]
 
     async def update_promotion_metadata(
         self,

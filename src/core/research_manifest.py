@@ -5,7 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Dict, Mapping, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -135,6 +136,12 @@ class ResearchSessionManifest(BaseModel):
     # never invented by the builder. Absent on legacy-ML manifests, which keep
     # their byte-identical v2 shape.
     skill: Optional[Dict[str, Any]] = None
+    # Resolved run spec: the canonical immutable inputs (resolved parameters
+    # and defaults, objective/policy, content digests, runtime identity,
+    # effective configuration, secret references). Optional so legacy
+    # artifacts — which never recorded one — load unchanged and are
+    # *reported* as missing provenance rather than backfilled.
+    run_spec: Optional[Dict[str, Any]] = None
 
     @field_validator("schema_version", mode="before")
     @classmethod
@@ -214,6 +221,39 @@ class ResearchSessionManifest(BaseModel):
         return payload.model_copy(update={"manifest_hash": digest})
 
 
+from src.core.run_spec import build_run_spec, skill_package_dir
+
+
+def _schema_dict(schema: Any) -> Optional[Dict[str, Any]]:
+    if schema is None:
+        return None
+    if hasattr(schema, "model_dump"):
+        return schema.model_dump()
+    if isinstance(schema, Mapping):
+        return dict(schema)
+    return None
+
+
+def _skill_package_dir(skill_id: str) -> Optional[str]:
+    return skill_package_dir(skill_id)
+
+
+def _canonical_digest(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if hasattr(value, "model_dump"):
+        payload = value.model_dump()
+    elif isinstance(value, Mapping):
+        payload = dict(value)
+    else:
+        return None
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+
+
 def build_research_manifest(
     *,
     research_id: str,
@@ -231,6 +271,7 @@ def build_research_manifest(
     # authoritative and the legacy ``model_type`` alias is derived here —
     # the single place that knows the translation.
     skill_id: Optional[str] = None,
+    skill_params: Optional[Dict[str, Any]] = None,
 ) -> ResearchSessionManifest:
     """Build and validate a complete manifest from request/server state."""
 
@@ -272,6 +313,7 @@ def build_research_manifest(
             timeout_s=timeout_s,
             focus_hint=focus_hint,
             skill_manifest=skill_manifest,
+            skill_params=skill_params,
         )
 
     payload = _deep_merge(defaults, overrides or {})
@@ -445,6 +487,7 @@ def _skill_manifest_defaults(
     timeout_s: int,
     focus_hint: Optional[str],
     skill_manifest: Any,
+    skill_params: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Skill-driven sections (ARC-012 P7-003): everything is sourced from the
     skill's SKILL.yaml — no invented ML artifacts. A manifest must never
@@ -459,6 +502,37 @@ def _skill_manifest_defaults(
         scope.id
         for scope in (getattr(skill_manifest.promotion_target, "scopes", None) or [])
     ]
+    run_spec = build_run_spec(
+        skill_params=skill_params or {},
+        param_schema=_schema_dict(getattr(skill_manifest, "param_schema", None)),
+        skill_id=skill_id,
+        skill_version=getattr(skill_manifest, "version", None),
+        skill_dir=_skill_package_dir(skill_id),
+        objective_policy={
+            "objective": _default_objective(skill_id),
+            "goal": getattr(skill_manifest.metric_schema, "goal", None),
+            "direction": getattr(
+                skill_manifest.metric_schema.primary, "direction", None,
+            ),
+            "epsilon": settings.global_stagnation_epsilon,
+        },
+        policy={
+            "command_policy_sha256": _canonical_digest(
+                getattr(skill_manifest, "command_policy", None)
+            ),
+            "parameter_bindings_sha256": _canonical_digest(
+                getattr(skill_manifest, "parameter_bindings", None)
+            ),
+        },
+        effective_config={
+            "environment": settings.environment,
+            "anthropic_model": settings.anthropic_model,
+            "quick_mode": quick_mode,
+            "max_iterations": max_iterations,
+            "max_budget_usd": max_budget_usd,
+            "timeout_s": timeout_s,
+        },
+    )
     return {
         "research_id": research_id,
         "instrument": instrument,
@@ -507,6 +581,9 @@ def _skill_manifest_defaults(
             "timesteps": None,
         },
         "focus_hint": focus_hint,
+        # The resolved run spec: canonical immutable inputs with content
+        # digests and secret references (never credential values).
+        "run_spec": run_spec,
         # P7-003: the skill-sourced section — the manifest's claims about the
         # skill, read straight from its descriptor.
         "skill": {
@@ -575,3 +652,43 @@ def _deep_merge(base: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, An
         else:
             merged[key] = value
     return merged
+
+
+def load_persisted_manifest(
+    text: str,
+) -> Tuple[Optional["ResearchSessionManifest"], Dict[str, Any]]:
+    """Read a persisted artifact with its provenance report — never invent.
+
+    Unknown fields carried by the artifact are reported by name and excluded
+    from the model; missing immutable provenance (run spec, digests, runtime
+    identity) is reported as missing. Nothing is back-filled with current
+    registry or settings facts — the artifact's own recorded values are the
+    only source.
+    """
+    from src.core.run_spec import provenance_report
+
+    empty_report: Dict[str, Any] = {
+        "unknown_fields": [],
+        "missing_provenance": [],
+        "spec_digest_verified": None,
+        "reported_not_backfilled": True,
+    }
+    try:
+        raw = json.loads(text)
+    except (TypeError, ValueError) as exc:
+        report = dict(empty_report)
+        report["error"] = f"manifest artifact is not valid JSON: {exc}"
+        return None, report
+    if not isinstance(raw, dict):
+        report = dict(empty_report)
+        report["error"] = "manifest artifact is not a JSON object"
+        return None, report
+    report = provenance_report(raw)
+    known = set(ResearchSessionManifest.model_fields)
+    payload = {key: value for key, value in raw.items() if key in known}
+    try:
+        manifest = ResearchSessionManifest(**payload)
+    except Exception as exc:  # noqa: BLE001 - surfaced in the report
+        report["error"] = f"manifest does not validate: {exc}"
+        return None, report
+    return manifest, report

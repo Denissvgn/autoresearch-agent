@@ -280,6 +280,15 @@ CREATE TABLE IF NOT EXISTS idempotency_records (
     PRIMARY KEY (operation, parent_id, key_hash)
 );
 
+CREATE TABLE IF NOT EXISTS session_secret_refs (
+    research_id TEXT NOT NULL,
+    param_name TEXT NOT NULL,
+    env_var TEXT NOT NULL,
+    rebind_policy TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (research_id, param_name)
+);
+
 CREATE INDEX IF NOT EXISTS idx_audit_events_timestamp
     ON audit_events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_audit_events_action
@@ -761,6 +770,25 @@ async def _migrate_to_v6(db: aiosqlite.Connection) -> None:
         await _add_column_if_missing(db, "research_sessions", column_def)
 
 
+async def _migrate_to_v7(db: aiosqlite.Connection) -> None:
+    """Secret references live separately from the value-bearing manifest.
+
+    ``session_secret_refs`` persists parameter *references* (environment
+    variable + rebinding policy) for credential-bearing skill parameters;
+    credential values never enter any row or artifact.
+    """
+    await db.execute(
+        """CREATE TABLE IF NOT EXISTS session_secret_refs (
+            research_id TEXT NOT NULL,
+            param_name TEXT NOT NULL,
+            env_var TEXT NOT NULL,
+            rebind_policy TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (research_id, param_name)
+        )"""
+    )
+
+
 _MIGRATIONS = (
     (1, _migrate_to_v1),
     (2, _migrate_to_v2),
@@ -768,6 +796,7 @@ _MIGRATIONS = (
     (4, _migrate_to_v4),
     (5, _migrate_to_v5),
     (6, _migrate_to_v6),
+    (7, _migrate_to_v7),
 )
 _LATEST_SCHEMA_VERSION = _MIGRATIONS[-1][0]
 
@@ -1225,6 +1254,19 @@ class StateStore(Protocol):
         timeframe: str,
         scope: str,
     ) -> Optional[Dict[str, Any]]:
+        ...
+
+    async def add_secret_ref(
+        self,
+        *,
+        research_id: str,
+        param_name: str,
+        env_var: str,
+        rebind_policy: str,
+    ) -> None:
+        ...
+
+    async def get_secret_refs(self, research_id: str) -> List[Dict[str, Any]]:
         ...
 
     async def update_promotion_metadata(
@@ -2155,6 +2197,7 @@ class SQLiteStateStore:
                 "planned_trials",
                 "promotions",
                 "hpo_studies",
+                "session_secret_refs",
             ):
                 await db.execute(
                     f"DELETE FROM {child} WHERE research_id = ?", (session_id,),
@@ -3138,6 +3181,38 @@ class SQLiteStateStore:
             result = dict(row)
             self._decode_promotion_metadata(result)
             return result
+
+    async def add_secret_ref(
+        self,
+        *,
+        research_id: str,
+        param_name: str,
+        env_var: str,
+        rebind_policy: str,
+    ) -> None:
+        """Persist a secret parameter *reference* — never a credential value."""
+        async with self.connection() as db:
+            await db.execute(
+                """INSERT OR REPLACE INTO session_secret_refs
+                   (research_id, param_name, env_var, rebind_policy, created_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (
+                    research_id, param_name, env_var, rebind_policy,
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            )
+            await db.commit()
+
+    async def get_secret_refs(self, research_id: str) -> List[Dict[str, Any]]:
+        async with self.connection() as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "SELECT * FROM session_secret_refs WHERE research_id = ? "
+                "ORDER BY param_name",
+                (research_id,),
+            )
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
 
     async def update_promotion_metadata(
         self,

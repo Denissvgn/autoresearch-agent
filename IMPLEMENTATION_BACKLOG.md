@@ -801,9 +801,9 @@ Autonomy: Persist a versioned canonical nonsecret run snapshot plus content dige
 store secret references separately from values. Preserve unknown legacy provenance
 explicitly and test migrations on copies/disposable databases.
 
-- [ ] Store canonical parameters/defaults, objective, policy, evaluator/dataset/package digests, runtime identity, and effective configuration.
-- [ ] Persist secret references with an explicit rebinding policy, never credential values; hash the nonsecret resolved spec.
-- [ ] Add schema migrations and legacy-read behavior; separate immutable inputs from mutable status/usage/checkpoints.
+- [x] Store canonical parameters/defaults, objective, policy, evaluator/dataset/package digests, runtime identity, and effective configuration.
+- [x] Persist secret references with an explicit rebinding policy, never credential values; hash the nonsecret resolved spec.
+- [x] Add schema migrations and legacy-read behavior; separate immutable inputs from mutable status/usage/checkpoints.
 
 Acceptance: a completed or interrupted run can be inspected independently of
 the current registry/defaults. Unknown old fields or missing provenance are
