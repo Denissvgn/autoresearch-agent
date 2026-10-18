@@ -61,7 +61,7 @@ import uuid
 from collections import Counter, defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
-from typing import Any, AsyncIterator, Dict, List, Optional, Protocol, Sequence
+from typing import Any, AsyncIterator, Dict, List, Mapping, Optional, Protocol, Sequence
 
 import aiosqlite
 
@@ -301,6 +301,33 @@ CREATE TABLE IF NOT EXISTS work_reservations (
     lease_expires_at TEXT NOT NULL,
     created_at TEXT NOT NULL,
     released_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS usage_events (
+    event_key TEXT PRIMARY KEY,
+    research_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    iteration INTEGER,
+    turn INTEGER,
+    usage_json TEXT NOT NULL,
+    cost_status TEXT NOT NULL,
+    cost_usd REAL,
+    pricing_basis_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS budget_reservations (
+    reservation_id TEXT PRIMARY KEY,
+    research_id TEXT NOT NULL,
+    amount_usd REAL NOT NULL,
+    state TEXT NOT NULL,
+    enforcement TEXT NOT NULL,
+    lease_expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    reconciled_at TEXT,
+    actual_usd REAL
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_events_timestamp
@@ -784,6 +811,44 @@ async def _migrate_to_v6(db: aiosqlite.Connection) -> None:
         await _add_column_if_missing(db, "research_sessions", column_def)
 
 
+async def _migrate_to_v9(db: aiosqlite.Connection) -> None:
+    """Usage ledger and budget reservations (append-only accounting).
+
+    ``usage_events`` is append-only and keyed for idempotency so replays and
+    retries cannot double-charge; ``budget_reservations`` carries atomic
+    strict-budget reservations with their enforcement label and lease.
+    """
+    await db.execute(
+        """CREATE TABLE IF NOT EXISTS usage_events (
+            event_key TEXT PRIMARY KEY,
+            research_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            model TEXT NOT NULL,
+            iteration INTEGER,
+            turn INTEGER,
+            usage_json TEXT NOT NULL,
+            cost_status TEXT NOT NULL,
+            cost_usd REAL,
+            pricing_basis_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )"""
+    )
+    await db.execute(
+        """CREATE TABLE IF NOT EXISTS budget_reservations (
+            reservation_id TEXT PRIMARY KEY,
+            research_id TEXT NOT NULL,
+            amount_usd REAL NOT NULL,
+            state TEXT NOT NULL,
+            enforcement TEXT NOT NULL,
+            lease_expires_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            reconciled_at TEXT,
+            actual_usd REAL
+        )"""
+    )
+
+
 async def _migrate_to_v8(db: aiosqlite.Connection) -> None:
     """Work reservations: atomic admission and ownership fencing.
 
@@ -843,12 +908,17 @@ _MIGRATIONS = (
     (6, _migrate_to_v6),
     (7, _migrate_to_v7),
     (8, _migrate_to_v8),
+    (9, _migrate_to_v9),
 )
 _LATEST_SCHEMA_VERSION = _MIGRATIONS[-1][0]
 
 
 class CapacityExceeded(RuntimeError):
     """Raised when admitting work would exceed the configured global limit."""
+
+
+class BudgetExceeded(RuntimeError):
+    """Raised when a reservation would oversubscribe the strict known budget."""
 
 
 class StaleFenceError(ValueError):
@@ -1316,6 +1386,37 @@ class StateStore(Protocol):
     ) -> None:
         ...
 
+    async def record_usage_event(self, event: Mapping[str, Any]) -> bool:
+        ...
+
+    async def get_usage_events(self, research_id: str) -> List[Dict[str, Any]]:
+        ...
+
+    async def reserve_budget(
+        self,
+        *,
+        reservation_id: str,
+        research_id: str,
+        amount_usd: float,
+        strict_cap_usd: Optional[float],
+        enforcement: str,
+        lease_seconds: float = 300.0,
+    ) -> Dict[str, Any]:
+        ...
+
+    async def reconcile_budget_reservation(
+        self, reservation_id: str, *, actual_usd: float
+    ) -> Optional[Dict[str, Any]]:
+        ...
+
+    async def release_budget_reservation(self, reservation_id: str) -> bool:
+        ...
+
+    async def list_budget_reservations(
+        self, research_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        ...
+
     async def reserve_work(
         self,
         *,
@@ -1469,9 +1570,18 @@ class SQLiteStateStore:
         db.row_factory = aiosqlite.Row
         self._conn = db
         try:
-            await db.execute("PRAGMA foreign_keys = ON")
-            await db.execute("PRAGMA journal_mode = WAL")
+            # busy_timeout must be set first: it covers the lock waits of the
+            # journal-mode conversion when several processes initialize the
+            # same database concurrently (the conversion can otherwise fail
+            # instantly with "database is locked").
             await db.execute("PRAGMA busy_timeout = 5000")
+            await db.execute("PRAGMA foreign_keys = ON")
+            for _attempt in range(5):
+                try:
+                    await db.execute("PRAGMA journal_mode = WAL")
+                    break
+                except sqlite3.OperationalError:
+                    await asyncio.sleep(0.1)
             await db.executescript(_SCHEMA_SQL)
 
             # Serialize schema bootstrap across processes: a second worker
@@ -3527,6 +3637,199 @@ class SQLiteStateStore:
                 )
             ).fetchone()
             return dict(row) if row is not None else None
+
+    async def record_usage_event(self, event: Mapping[str, Any]) -> bool:
+        """Append one usage event; False when its key was already recorded."""
+        row = dict(event)
+        usage = dict(row.get("usage") or {})
+        basis = dict(row.get("pricing_basis") or {})
+        async with self._write_lock:
+            async with self.connection() as db:
+                cursor = await db.execute(
+                    "INSERT OR IGNORE INTO usage_events "
+                    "(event_key, research_id, role, provider, model, "
+                    "iteration, turn, usage_json, cost_status, cost_usd, "
+                    "pricing_basis_json, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        row.get("event_key"),
+                        row.get("research_id"),
+                        row.get("role"),
+                        row.get("provider"),
+                        row.get("model"),
+                        row.get("iteration"),
+                        row.get("turn"),
+                        json.dumps(usage, sort_keys=True),
+                        row.get("cost_status"),
+                        row.get("cost_usd"),
+                        json.dumps(basis, sort_keys=True),
+                        datetime.now(timezone.utc).isoformat(),
+                    ),
+                )
+                await db.commit()
+                return cursor.rowcount > 0
+
+    async def get_usage_events(self, research_id: str) -> List[Dict[str, Any]]:
+        async with self.connection() as db:
+            db.row_factory = aiosqlite.Row
+            rows = await (
+                await db.execute(
+                    "SELECT * FROM usage_events WHERE research_id = ? "
+                    "ORDER BY created_at, event_key",
+                    (research_id,),
+                )
+            ).fetchall()
+        events: List[Dict[str, Any]] = []
+        for row in rows:
+            item = dict(row)
+            item["usage"] = json.loads(item.pop("usage_json") or "{}")
+            item["pricing_basis"] = json.loads(
+                item.pop("pricing_basis_json") or "{}"
+            )
+            events.append(item)
+        return events
+
+    async def reserve_budget(
+        self,
+        *,
+        reservation_id: str,
+        research_id: str,
+        amount_usd: float,
+        strict_cap_usd: Optional[float],
+        enforcement: str,
+        lease_seconds: float = 300.0,
+    ) -> Dict[str, Any]:
+        """Atomically reserve bounded spend before work.
+
+        Idempotent per ``reservation_id`` (a retried request returns the
+        existing live reservation). With a strict cap the sum of live
+        reservations plus this request must fit — oversubscription raises
+        :class:`BudgetExceeded` before any work starts. An advisory
+        reservation records its enforcement label and never pretends to be
+        a hard ceiling.
+        """
+        now = datetime.now(timezone.utc)
+        expires = now + timedelta(seconds=lease_seconds)
+        async with self._write_lock:
+            async with self.connection() as db:
+                await db.execute("BEGIN IMMEDIATE")
+                try:
+                    db.row_factory = aiosqlite.Row
+                    existing = await (
+                        await db.execute(
+                            "SELECT * FROM budget_reservations "
+                            "WHERE reservation_id = ?",
+                            (reservation_id,),
+                        )
+                    ).fetchone()
+                    if existing is not None and existing["state"] == "reserved":
+                        await db.commit()
+                        return dict(existing)
+                    if strict_cap_usd is not None:
+                        live = await (
+                            await db.execute(
+                                "SELECT COALESCE(SUM(amount_usd), 0) AS s "
+                                "FROM budget_reservations "
+                                "WHERE state = 'reserved' "
+                                "AND lease_expires_at > ?",
+                                (now.isoformat(),),
+                            )
+                        ).fetchone()
+                        if float(live["s"]) + float(amount_usd) > float(
+                            strict_cap_usd
+                        ):
+                            raise BudgetExceeded(
+                                f"reserving ${amount_usd:.4f} for "
+                                f"{research_id!r} would oversubscribe the "
+                                f"strict budget cap ${strict_cap_usd:.4f} "
+                                f"(live reservations ${float(live['s']):.4f})"
+                            )
+                    await db.execute(
+                        "INSERT INTO budget_reservations "
+                        "(reservation_id, research_id, amount_usd, state, "
+                        "enforcement, lease_expires_at, created_at) "
+                        "VALUES (?, ?, ?, 'reserved', ?, ?, ?)",
+                        (
+                            reservation_id,
+                            research_id,
+                            float(amount_usd),
+                            enforcement,
+                            expires.isoformat(),
+                            now.isoformat(),
+                        ),
+                    )
+                    await db.commit()
+                except BaseException:
+                    await db.rollback()
+                    raise
+                row = await (
+                    await db.execute(
+                        "SELECT * FROM budget_reservations "
+                        "WHERE reservation_id = ?",
+                        (reservation_id,),
+                    )
+                ).fetchone()
+                return dict(row) if row is not None else {}
+
+    async def reconcile_budget_reservation(
+        self, reservation_id: str, *, actual_usd: float
+    ) -> Optional[Dict[str, Any]]:
+        async with self._write_lock:
+            async with self.connection() as db:
+                await db.execute(
+                    "UPDATE budget_reservations SET state = 'reconciled', "
+                    "reconciled_at = ?, actual_usd = ? "
+                    "WHERE reservation_id = ? AND state = 'reserved'",
+                    (
+                        datetime.now(timezone.utc).isoformat(),
+                        float(actual_usd),
+                        reservation_id,
+                    ),
+                )
+                await db.commit()
+                db.row_factory = aiosqlite.Row
+                row = await (
+                    await db.execute(
+                        "SELECT * FROM budget_reservations "
+                        "WHERE reservation_id = ?",
+                        (reservation_id,),
+                    )
+                ).fetchone()
+                return dict(row) if row is not None else None
+
+    async def release_budget_reservation(self, reservation_id: str) -> bool:
+        async with self._write_lock:
+            async with self.connection() as db:
+                cursor = await db.execute(
+                    "UPDATE budget_reservations SET state = 'released' "
+                    "WHERE reservation_id = ? AND state = 'reserved'",
+                    (reservation_id,),
+                )
+                await db.commit()
+                return cursor.rowcount > 0
+
+    async def list_budget_reservations(
+        self, research_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        async with self.connection() as db:
+            db.row_factory = aiosqlite.Row
+            if research_id is None:
+                rows = await (
+                    await db.execute(
+                        "SELECT * FROM budget_reservations "
+                        "ORDER BY created_at, reservation_id"
+                    )
+                ).fetchall()
+            else:
+                rows = await (
+                    await db.execute(
+                        "SELECT * FROM budget_reservations "
+                        "WHERE research_id = ? "
+                        "ORDER BY created_at, reservation_id",
+                        (research_id,),
+                    )
+                ).fetchall()
+        return [dict(row) for row in rows]
 
     async def add_secret_ref(
         self,

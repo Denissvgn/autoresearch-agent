@@ -155,6 +155,27 @@ class Usage:
     output_tokens: int
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
+    reasoning_tokens: int = 0
+
+
+COST_ESTIMATED = "estimated"
+COST_BILLED = "billed"
+COST_UNAVAILABLE = "unavailable"
+
+
+@dataclass(frozen=True)
+class CostEstimate:
+    """Money knowledge for one call — never conflated with zero.
+
+    ``money_usd`` is ``None`` exactly when the cost is unavailable (unknown
+    pricing); a zero is a real, priced zero. ``basis`` snapshots the pricing
+    the estimate used (versioned), so later price changes cannot silently
+    rewrite history.
+    """
+
+    status: str
+    money_usd: Optional[float]
+    basis: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -343,6 +364,14 @@ class LLMProvider(Protocol):
 
     def estimate_cost(self, model: str, usage: Usage) -> float:
         """Per-provider, per-model USD cost for a call (→ P1-003)."""
+        ...
+
+    def price_quote(self, model: str, usage: Usage) -> CostEstimate:
+        """Basis-snapshotted cost knowledge for a call.
+
+        Unknown pricing yields ``COST_UNAVAILABLE`` (``money_usd is None``) —
+        never a silent zero and never a substitute rate.
+        """
         ...
 
     def capabilities(self) -> ProviderCapabilities:
@@ -585,11 +614,43 @@ class AnthropicProvider:
         """Flat Sonnet-3.5-baseline USD cost (parity with pre-refactor accounting).
 
         Per-model pricing is P1-003; this preserves the cache-blind math the
-        orchestrator used before P1-002.
+        orchestrator used before P1-002. ``price_quote`` is the authoritative
+        basis-aware surface.
         """
         return (
             usage.input_tokens * _CLAUDE_INPUT_USD_PER_TOKEN
             + usage.output_tokens * _CLAUDE_OUTPUT_USD_PER_TOKEN
+        )
+
+    def price_quote(self, model: str, usage: Usage) -> CostEstimate:
+        """Basis-snapshotted Anthropic cost: flat baseline plus cache tokens.
+
+        The basis records the cache multipliers it applied (published cache
+        pricing: writes 1.25x input, reads 0.1x input) so the approximation is
+        auditable; reasoning tokens are folded into output (Anthropic bills
+        them as output).
+        """
+        cache_write_rate = _CLAUDE_INPUT_USD_PER_TOKEN * 1.25
+        cache_read_rate = _CLAUDE_INPUT_USD_PER_TOKEN * 0.1
+        money = (
+            usage.input_tokens * _CLAUDE_INPUT_USD_PER_TOKEN
+            + usage.output_tokens * _CLAUDE_OUTPUT_USD_PER_TOKEN
+            + usage.cache_write_tokens * cache_write_rate
+            + usage.cache_read_tokens * cache_read_rate
+        )
+        return CostEstimate(
+            status=COST_ESTIMATED,
+            money_usd=money,
+            basis={
+                "version": "anthropic-flat-sonnet.v1",
+                "provider": self.name,
+                "model": model,
+                "input_usd_per_token": _CLAUDE_INPUT_USD_PER_TOKEN,
+                "output_usd_per_token": _CLAUDE_OUTPUT_USD_PER_TOKEN,
+                "cache_write_multiplier": 1.25,
+                "cache_read_multiplier": 0.1,
+                "reasoning_tokens_priced_as": "output",
+            },
         )
 
     def capabilities(self) -> ProviderCapabilities:
@@ -876,6 +937,49 @@ class OpenAIProvider:
         )
         return usage.input_tokens * in_rate + usage.output_tokens * out_rate
 
+    def price_quote(self, model: str, usage: Usage) -> CostEstimate:
+        """Basis-snapshotted OpenAI cost; unknown models are unavailable.
+
+        A model missing from the pricing table is ``COST_UNAVAILABLE`` — the
+        default-rate approximation stays only in the legacy ``estimate_cost``
+        advisory surface and is never silently billed as an estimate here.
+        Cached input is priced at the input rate and reasoning tokens at the
+        output rate (the basis records both approximations).
+        """
+        rates = _OPENAI_PRICING.get(model)
+        if rates is None:
+            return CostEstimate(
+                status=COST_UNAVAILABLE,
+                money_usd=None,
+                basis={
+                    "version": "openai-table.v1",
+                    "provider": self.name,
+                    "model": model,
+                    "note": "no pricing entry for this model",
+                },
+            )
+        in_rate, out_rate = rates
+        money = (
+            usage.input_tokens * in_rate
+            + usage.output_tokens * out_rate
+            + usage.cache_read_tokens * in_rate
+            + usage.cache_write_tokens * in_rate
+            + usage.reasoning_tokens * out_rate
+        )
+        return CostEstimate(
+            status=COST_ESTIMATED,
+            money_usd=money,
+            basis={
+                "version": "openai-table.v1",
+                "provider": self.name,
+                "model": model,
+                "input_usd_per_token": in_rate,
+                "output_usd_per_token": out_rate,
+                "cached_input_priced_as": "input",
+                "reasoning_tokens_priced_as": "output",
+            },
+        )
+
     def capabilities(self) -> ProviderCapabilities:
         return ProviderCapabilities(
             native_tool_use=True,
@@ -1043,6 +1147,19 @@ class MockProvider:
 
     def estimate_cost(self, model: str, usage: Usage) -> float:
         return 0.0
+
+    def price_quote(self, model: str, usage: Usage) -> CostEstimate:
+        """A real, priced zero — not an unavailable cost."""
+        return CostEstimate(
+            status=COST_ESTIMATED,
+            money_usd=0.0,
+            basis={
+                "version": "mock-zero.v1",
+                "provider": self.name,
+                "model": model,
+                "note": "zero-cost mock provider",
+            },
+        )
 
     def capabilities(self) -> ProviderCapabilities:
         return ProviderCapabilities(

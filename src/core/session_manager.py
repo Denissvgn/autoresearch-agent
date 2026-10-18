@@ -35,7 +35,7 @@ from src.core.state_machine import (
     SessionState,
     SessionStateMachine,
 )
-from src.core.state_store import CapacityExceeded, StateStore
+from src.core.state_store import BudgetExceeded, CapacityExceeded, StateStore
 from src.ws.events import broadcaster
 
 logger = logging.getLogger(__name__)
@@ -264,6 +264,42 @@ class SessionManager:
                 "source": "task_done_callback",
             })
 
+    async def _reserve_budget(self, config: ResearchConfig) -> None:
+        """Reserve bounded spend before work starts.
+
+        With an authorized cap the reservation is strict (atomic
+        oversubscription refusal); without one it is recorded as advisory —
+        labeled with its limits, never presented as a hard money ceiling.
+        """
+        cap = settings.authorized_spend_cap_usd
+        enforcement = "strict" if cap is not None else "advisory"
+        try:
+            await self._store.reserve_budget(
+                reservation_id=f"budget:{config.id}",
+                research_id=config.id,
+                amount_usd=float(
+                    config.max_budget_usd or settings.max_budget_usd
+                ),
+                strict_cap_usd=cap,
+                enforcement=enforcement,
+                lease_seconds=settings.work_lease_seconds,
+            )
+        except BudgetExceeded as exc:
+            raise RuntimeError(str(exc)) from exc
+
+    async def _reconcile_budget(self, research_id: str) -> None:
+        """Reconcile the reservation against recorded spend at the end."""
+        try:
+            row = await self._store.get_session(research_id)
+            actual = float((row or {}).get("total_api_cost_usd") or 0.0)
+            await self._store.reconcile_budget_reservation(
+                f"budget:{research_id}", actual_usd=actual,
+            )
+        except Exception:
+            logger.exception(
+                "budget reconciliation failed for %s", research_id,
+            )
+
     async def _reserve_work(self, config: "ResearchConfig") -> None:
         """Reserve logical work and a global capacity slot atomically.
 
@@ -301,6 +337,10 @@ class SessionManager:
         for research_id, reservation in list(self._reservations.items()):
             if reservation.get("state") == "reserved":
                 await self._release_work(research_id)
+        for research_id in list(self._reservations):
+            await self._store.release_budget_reservation(
+                f"budget:{research_id}"
+            )
 
     def _ensure_lease_renewal(self) -> None:
         if self._lease_task is None or self._lease_task.done():
@@ -518,6 +558,7 @@ class SessionManager:
         self._validate_session_skill(config)
 
         await self._reserve_work(config)
+        await self._reserve_budget(config)
         preflight = await self._run_preflight(config)
         manifest_overrides = dict(manifest or {})
         manifest_overrides["preflight"] = preflight
@@ -643,6 +684,7 @@ class SessionManager:
                 )
         finally:
             self._active.pop(research_id, None)
+            await self._reconcile_budget(research_id)
             await self._release_work(research_id)
 
     @staticmethod
@@ -1360,6 +1402,7 @@ class SessionManager:
         self._validate_session_skill(config)
 
         await self._reserve_work(config)
+        await self._reserve_budget(config)
         preflight = await self._run_preflight(config)
         manifest_overrides = {
             "runtime": {

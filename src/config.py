@@ -269,6 +269,13 @@ class Settings(BaseSettings):
             "WORK_LEASE_SECONDS",
         ),
     )
+    authorized_spend_cap_usd: Optional[float] = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_AUTHORIZED_SPEND_CAP_USD",
+            "AUTHORIZED_SPEND_CAP_USD",
+        ),
+    )
 
     # --- API Robustness (ML-68) ---
     anthropic_api_timeout_s: int = Field(

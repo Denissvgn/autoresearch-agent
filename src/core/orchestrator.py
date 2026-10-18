@@ -155,6 +155,7 @@ from src.core.trial_workspace import (
     is_trial_eligible_command,
     trial_marker_candidates,
 )
+from src.core.usage_ledger import ROLE_AGENT, ROLE_INSIGHT
 from src.ws.events import broadcaster
 
 logger = logging.getLogger(__name__)
@@ -462,6 +463,51 @@ class AgentOrchestrator:
     # 429/502/503/529) are preserved verbatim — the decision is identical to
     # the pre-refactor _call_claude_with_retry; only the classification source
     # moved into AnthropicProvider.
+
+    async def _record_usage(
+        self,
+        *,
+        research_id: str,
+        role: str,
+        provider: LLMProvider,
+        model: str,
+        usage: Usage,
+        turn: Optional[int] = None,
+        iteration: Any = None,
+    ) -> Optional[float]:
+        """Record one metered provider call in the usage ledger (idempotent).
+
+        Returns the call's known money (estimated); ``None`` means the cost
+        is unavailable and must never be treated as zero by callers. The
+        event key is the logical call identity, so a retried call or a
+        replayed event stream cannot double-charge.
+        """
+        from src.core.usage_ledger import event_from_quote, record_usage_event
+
+        try:
+            quote = provider.price_quote(model, usage)
+            event = event_from_quote(
+                event_key=(
+                    f"{research_id}:{role}:"
+                    f"{turn if turn is not None else iteration}"
+                ),
+                research_id=research_id,
+                role=role,
+                provider=getattr(provider, "name", "unknown"),
+                model=model,
+                usage=usage,
+                quote=quote,
+                iteration=iteration,
+                turn=turn,
+            )
+            await record_usage_event(self._store, event)
+        except Exception as exc:  # accounting must not crash the loop
+            logger.warning(
+                "Research %s: usage event not recorded (%s): %s",
+                research_id, role, exc,
+            )
+            return None
+        return event.cost_usd
 
     async def _call_llm_with_retry(
         self,
@@ -1800,23 +1846,45 @@ class AgentOrchestrator:
             # the manifest's insight_model (falling back to its primary model),
             # clamped by the skill's output cap and the adapter's ceiling.
             insight_roles = self._session_model_roles.get(research_id)
-            insights = await insights_provider.complete(
-                model=(
-                    insight_roles.insight_model
+            insight_model = (
+                insight_roles.insight_model
+                if insight_roles is not None
+                else settings.anthropic_default_haiku_model
+            )
+            insight_cap = clamp_output_tokens(
+                insights_provider.capabilities(),
+                requested=min(
+                    300,
+                    insight_roles.max_output_tokens
                     if insight_roles is not None
-                    else settings.anthropic_default_haiku_model
+                    else 300,
                 ),
-                prompt=prompt,
-                max_tokens=clamp_output_tokens(
-                    insights_provider.capabilities(),
-                    requested=min(
-                        300,
-                        insight_roles.max_output_tokens
-                        if insight_roles is not None
-                        else 300,
-                    ),
-                    settings_cap=settings.max_output_tokens_per_call,
-                ),
+                settings_cap=settings.max_output_tokens_per_call,
+            )
+            # The insight call goes through the normalized messages surface
+            # so its usage is metered like any other provider call — the
+            # insight/evaluator role is part of the session's spend, not a
+            # free side channel.
+            insight_response = await insights_provider.messages_create(
+                model=insight_model,
+                system=None,
+                messages=[Message(role="user", content=prompt)],
+                tools=[],
+                max_tokens=insight_cap,
+            )
+            await self._record_usage(
+                research_id=research_id,
+                role=ROLE_INSIGHT,
+                provider=insights_provider,
+                model=getattr(insight_response, "raw_model", None)
+                or insight_model,
+                usage=insight_response.usage,
+                iteration="final",
+            )
+            insights = "".join(
+                block.text
+                for block in insight_response.content
+                if isinstance(block, TextBlock)
             )
 
             # Trim to 500 chars max
@@ -2940,22 +3008,33 @@ class AgentOrchestrator:
                     remaining_budget_s=max(0.0, _timeout - elapsed),
                 )
 
-                # Track cost (approximate from usage). response.usage is a
-                # normalized Usage (always present post-P1-002); the truthiness
-                # guard is dropped since Usage is a frozen dataclass (always truthy).
+                # Cost knowledge comes from the provider's versioned pricing
+                # basis (price_quote): known money accumulates into the spend
+                # gate; an unavailable cost is recorded in the ledger as
+                # unavailable and never folded in as zero.
                 last_input_tokens = response.usage.input_tokens
-                turn_cost = (
-                    response.usage.input_tokens * _CLAUDE_INPUT_USD_PER_TOKEN
-                    + response.usage.output_tokens * _CLAUDE_OUTPUT_USD_PER_TOKEN
+                _provider = self._session_providers.get(
+                    research_id, self._provider
                 )
-                total_cost += turn_cost
+                _model = self._session_models.get(
+                    research_id, settings.anthropic_model
+                )
+                turn_cost = await self._record_usage(
+                    research_id=research_id,
+                    role=ROLE_AGENT,
+                    provider=_provider,
+                    model=getattr(response, "raw_model", None) or _model,
+                    usage=response.usage,
+                    turn=turn,
+                )
+                total_cost += turn_cost or 0.0
                 # P3: persist the running spend to the session row each turn so
                 # total_api_cost_usd is visible mid-run (UI/API + any external
                 # budget check) and survives a crash — the DB previously stayed
                 # $0 until completion. Best-effort: a transient DB error must not
                 # abort the research loop. The completion write remains the
                 # authoritative final value.
-                if turn_cost > 0:
+                if turn_cost:
                     try:
                         await self._store.update_session(
                             research_id,

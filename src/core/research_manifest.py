@@ -478,6 +478,41 @@ def _ml_manifest_defaults(
     }
 
 
+def _spend_enforcement(
+    max_iterations: int, timeout_s: int
+) -> Dict[str, Any]:
+    """How the run's spend is bounded — labeled with its limits.
+
+    A strict money cap is enforced by atomic reservation; an advisory one is
+    labeled with the explicit time/resource caps that actually bound the
+    work, and never presented as a hard monetary ceiling.
+    """
+    from src.config import settings
+
+    cap = settings.authorized_spend_cap_usd
+    bounds = {
+        "max_iterations": max_iterations,
+        "timeout_s": timeout_s,
+    }
+    if cap is not None:
+        return {
+            "mode": "strict",
+            "authorized_cap_usd": cap,
+            "enforced_by": "atomic budget reservation",
+            "bounds": bounds,
+        }
+    return {
+        "mode": "advisory",
+        "authorized_cap_usd": None,
+        "enforced_by": "time/resource caps only",
+        "bounds": bounds,
+        "note": (
+            "no authorized spend cap is configured: the monetary limit is "
+            "advisory and the run is bounded by the listed time/resource caps"
+        ),
+    }
+
+
 def _model_identity(skill_manifest: Any) -> Dict[str, Any]:
     """Requested versus effective provider/model identity — reported, never
     invented. An unresolvable request is recorded with its error."""
@@ -587,6 +622,9 @@ def _skill_manifest_defaults(
             "max_budget_usd": max_budget_usd,
             "timeout_s": timeout_s,
             "model_identity": _model_identity(skill_manifest),
+            "spend_enforcement": _spend_enforcement(
+                max_iterations, timeout_s
+            ),
         },
         parent_snapshot=parent_snapshot,
     )

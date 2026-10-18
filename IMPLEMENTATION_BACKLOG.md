@@ -911,9 +911,9 @@ Autonomy: Use one append-only/idempotent usage ledger and atomic reservations.
 Snapshot the pricing basis, distinguish unknown from zero, and never increase an
 authorized spending cap to make qualification finish.
 
-- [ ] Record per-attempt/provider/model agent and evaluator usage with idempotent cost attribution and a versioned pricing basis.
-- [ ] Distinguish reported usage, estimated money, billed money, and unavailable cost; handle cached/reasoning tokens where supported.
-- [ ] Reserve budget atomically before bounded work, reconcile afterward, and use explicit time/resource caps when a driver cannot enforce a money ceiling.
+- [x] Record per-attempt/provider/model agent and evaluator usage with idempotent cost attribution and a versioned pricing basis.
+- [x] Distinguish reported usage, estimated money, billed money, and unavailable cost; handle cached/reasoning tokens where supported.
+- [x] Reserve budget atomically before bounded work, reconcile afterward, and use explicit time/resource caps when a driver cannot enforce a money ceiling.
 
 Acceptance: unknown cost is never displayed as zero; retries/replayed events do
 not double-charge. Concurrent reservations cannot oversubscribe a strict known

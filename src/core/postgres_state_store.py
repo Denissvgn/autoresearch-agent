@@ -37,7 +37,7 @@ import logging
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
-from typing import Any, AsyncIterator, Dict, List, Optional, Sequence
+from typing import Any, AsyncIterator, Dict, List, Mapping, Optional, Sequence
 
 import asyncpg
 
@@ -46,7 +46,11 @@ from src.core.gate_status import consistency_report_passed
 from src.core.objective_comparator import ObjectiveComparator, select_best_row
 from src.core.observability import log_research_event
 from src.core.pagination import clamp_limit
-from src.core.state_store import CapacityExceeded, StaleFenceError
+from src.core.state_store import (
+    BudgetExceeded,
+    CapacityExceeded,
+    StaleFenceError,
+)
 
 logger = logging.getLogger("src.core.results_store")
 
@@ -121,6 +125,33 @@ CREATE TABLE IF NOT EXISTS work_reservations (
     lease_expires_at TEXT NOT NULL,
     created_at TEXT NOT NULL,
     released_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS usage_events (
+    event_key TEXT PRIMARY KEY,
+    research_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    iteration BIGINT,
+    turn BIGINT,
+    usage_json TEXT NOT NULL,
+    cost_status TEXT NOT NULL,
+    cost_usd DOUBLE PRECISION,
+    pricing_basis_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS budget_reservations (
+    reservation_id TEXT PRIMARY KEY,
+    research_id TEXT NOT NULL,
+    amount_usd DOUBLE PRECISION NOT NULL,
+    state TEXT NOT NULL,
+    enforcement TEXT NOT NULL,
+    lease_expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    reconciled_at TEXT,
+    actual_usd DOUBLE PRECISION
 );
 
 CREATE TABLE IF NOT EXISTS iterations (
@@ -1698,6 +1729,168 @@ class PostgresStateStore:
             return _row_to_dict(row) if row is not None else {}
         finally:
             await self._release_short_lived(conn)
+
+    async def record_usage_event(self, event: Mapping[str, Any]) -> bool:
+        row = dict(event)
+        usage = dict(row.get("usage") or {})
+        basis = dict(row.get("pricing_basis") or {})
+        conn = await self._conn()
+        try:
+            result = await conn.execute(
+                "INSERT INTO usage_events "
+                "(event_key, research_id, role, provider, model, iteration, "
+                "turn, usage_json, cost_status, cost_usd, pricing_basis_json, "
+                "created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) "
+                "ON CONFLICT (event_key) DO NOTHING",
+                row.get("event_key"),
+                row.get("research_id"),
+                row.get("role"),
+                row.get("provider"),
+                row.get("model"),
+                row.get("iteration"),
+                row.get("turn"),
+                json.dumps(usage, sort_keys=True),
+                row.get("cost_status"),
+                row.get("cost_usd"),
+                json.dumps(basis, sort_keys=True),
+                datetime.now(timezone.utc).isoformat(),
+            )
+            return result.endswith("1")
+        finally:
+            await self._release_short_lived(conn)
+
+    async def get_usage_events(self, research_id: str) -> List[Dict[str, Any]]:
+        conn = await self._conn()
+        try:
+            rows = await conn.fetch(
+                "SELECT * FROM usage_events WHERE research_id = $1 "
+                "ORDER BY created_at, event_key",
+                research_id,
+            )
+        finally:
+            await self._release_short_lived(conn)
+        events: List[Dict[str, Any]] = []
+        for row in rows:
+            item = _row_to_dict(row)
+            item["usage"] = json.loads(item.pop("usage_json") or "{}")
+            item["pricing_basis"] = json.loads(
+                item.pop("pricing_basis_json") or "{}"
+            )
+            events.append(item)
+        return events
+
+    async def reserve_budget(
+        self,
+        *,
+        reservation_id: str,
+        research_id: str,
+        amount_usd: float,
+        strict_cap_usd: Optional[float],
+        enforcement: str,
+        lease_seconds: float = 300.0,
+    ) -> Dict[str, Any]:
+        now = datetime.now(timezone.utc)
+        expires = now + timedelta(seconds=lease_seconds)
+        conn = await self._conn()
+        try:
+            async with conn.transaction():
+                await conn.fetchval(
+                    "SELECT pg_advisory_xact_lock(hashtext('budget_reservations'))"
+                )
+                existing = await conn.fetchrow(
+                    "SELECT * FROM budget_reservations "
+                    "WHERE reservation_id = $1",
+                    reservation_id,
+                )
+                if existing is not None and existing["state"] == "reserved":
+                    return _row_to_dict(existing)
+                if strict_cap_usd is not None:
+                    live = await conn.fetchval(
+                        "SELECT COALESCE(SUM(amount_usd), 0) "
+                        "FROM budget_reservations "
+                        "WHERE state = 'reserved' AND lease_expires_at > $1",
+                        now.isoformat(),
+                    )
+                    if float(live) + float(amount_usd) > float(strict_cap_usd):
+                        raise BudgetExceeded(
+                            f"reserving ${amount_usd:.4f} for "
+                            f"{research_id!r} would oversubscribe the "
+                            f"strict budget cap ${strict_cap_usd:.4f} "
+                            f"(live reservations ${float(live):.4f})"
+                        )
+                await conn.execute(
+                    "INSERT INTO budget_reservations "
+                    "(reservation_id, research_id, amount_usd, state, "
+                    "enforcement, lease_expires_at, created_at) "
+                    "VALUES ($1, $2, $3, 'reserved', $4, $5, $6)",
+                    reservation_id,
+                    research_id,
+                    float(amount_usd),
+                    enforcement,
+                    expires.isoformat(),
+                    now.isoformat(),
+                )
+            row = await conn.fetchrow(
+                "SELECT * FROM budget_reservations WHERE reservation_id = $1",
+                reservation_id,
+            )
+            return _row_to_dict(row) if row is not None else {}
+        finally:
+            await self._release_short_lived(conn)
+
+    async def reconcile_budget_reservation(
+        self, reservation_id: str, *, actual_usd: float
+    ) -> Optional[Dict[str, Any]]:
+        conn = await self._conn()
+        try:
+            await conn.execute(
+                "UPDATE budget_reservations SET state = 'reconciled', "
+                "reconciled_at = $1, actual_usd = $2 "
+                "WHERE reservation_id = $3 AND state = 'reserved'",
+                datetime.now(timezone.utc).isoformat(),
+                float(actual_usd),
+                reservation_id,
+            )
+            row = await conn.fetchrow(
+                "SELECT * FROM budget_reservations WHERE reservation_id = $1",
+                reservation_id,
+            )
+            return _row_to_dict(row) if row is not None else None
+        finally:
+            await self._release_short_lived(conn)
+
+    async def release_budget_reservation(self, reservation_id: str) -> bool:
+        conn = await self._conn()
+        try:
+            result = await conn.execute(
+                "UPDATE budget_reservations SET state = 'released' "
+                "WHERE reservation_id = $1 AND state = 'reserved'",
+                reservation_id,
+            )
+            return result.endswith("1")
+        finally:
+            await self._release_short_lived(conn)
+
+    async def list_budget_reservations(
+        self, research_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        conn = await self._conn()
+        try:
+            if research_id is None:
+                rows = await conn.fetch(
+                    "SELECT * FROM budget_reservations "
+                    "ORDER BY created_at, reservation_id"
+                )
+            else:
+                rows = await conn.fetch(
+                    "SELECT * FROM budget_reservations "
+                    "WHERE research_id = $1 "
+                    "ORDER BY created_at, reservation_id",
+                    research_id,
+                )
+        finally:
+            await self._release_short_lived(conn)
+        return [_row_to_dict(row) for row in rows]
 
     async def add_secret_ref(
         self,

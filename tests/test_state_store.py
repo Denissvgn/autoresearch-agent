@@ -47,7 +47,7 @@ def test_state_store_protocol_surface_matches_sqlite_impl():
     # The protocol mirrors 48 of the 49 public methods (connection() excluded)
     # + the 2 ARC-011 P6-003 cross-process-lock methods (session_lock,
     # bump_session_epoch).
-    assert len(proto_methods) == 60, f"expected 60 protocol methods, got {len(proto_methods)}"
+    assert len(proto_methods) == 66, f"expected 66 protocol methods, got {len(proto_methods)}"
     assert "connection" not in proto_methods  # excluded — leaks backend type
 
     for name in proto_methods:
