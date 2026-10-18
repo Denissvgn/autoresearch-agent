@@ -1680,16 +1680,22 @@ class SQLiteStateStore:
                     "SQLiteStateStore could not set WAL journal mode under "
                     "concurrent initialization"
                 )
-            # The schema script's implicit per-statement transactions can
-            # still hit "database is locked" while another process is
-            # initializing the same database; the script is idempotent, so
-            # bounded retry (matching the busy_timeout scale) makes
-            # concurrent bootstrap safe.
+            # The schema script must run inside one explicit transaction:
+            # statement-by-statement autocommit lets two processes deadlock
+            # on lock upgrades (each holding a read the other's commit
+            # needs). The script is idempotent, so bounded retry plus
+            # rollback-on-failure makes concurrent bootstrap safe.
             for _attempt in range(40):
                 try:
-                    await db.executescript(_SCHEMA_SQL)
+                    await db.executescript(
+                        "BEGIN IMMEDIATE;\n" + _SCHEMA_SQL + "\nCOMMIT;"
+                    )
                     break
                 except sqlite3.OperationalError:
+                    try:
+                        await db.execute("ROLLBACK")
+                    except sqlite3.OperationalError:
+                        pass
                     await asyncio.sleep(0.25)
             else:  # pragma: no cover - exhausted retries under contention
                 raise RuntimeError(

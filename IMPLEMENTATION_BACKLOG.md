@@ -955,9 +955,9 @@ Autonomy: Own the worker processes, disposable databases, and fault injector. Ki
 only test-owned resources and inspect persisted state after restart; a mocked race or
 single-worker run cannot replace multi-process evidence.
 
-- [ ] Exercise process death during bootstrap, evaluation, result acceptance, event publication, and promotion intent handling.
-- [ ] Validate upgraded SQLite/Postgres databases, old manifests, preserved artifact references, and documented backup/restore recovery.
-- [ ] Run real simultaneous worker admission and resumed-run scenarios with nondefault settings and usage reservations.
+- [x] Exercise process death during bootstrap, evaluation, result acceptance, event publication, and promotion intent handling.
+- [x] Validate upgraded SQLite/Postgres databases, old manifests, preserved artifact references, and documented backup/restore recovery.
+- [x] Run real simultaneous worker admission and resumed-run scenarios with nondefault settings and usage reservations.
 
 Acceptance: no duplicate authoritative result/effect, silent configuration drift,
 shared mutable workspace, or stale-owner write occurs in the qualified cases.

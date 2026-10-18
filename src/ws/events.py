@@ -293,7 +293,7 @@ async def relay_new_events(
             )
         delivered += 1
     new_cursor = (
-        int(events[-1].get("sequence")) if events else int(cursor)
+        int(events[-1].get("sequence") or 0) if events else int(cursor)
     )
     return delivered, new_cursor
 

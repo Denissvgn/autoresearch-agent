@@ -388,7 +388,11 @@ async def websocket_events(websocket: WebSocket) -> None:
             except ValueError:
                 cursor = 0
             stream_key = websocket.query_params.get("stream") or None
-            min_seq = await _store.min_event_cursor(stream_key=stream_key)
+            min_seq = (
+                await _store.min_event_cursor(stream_key=stream_key)
+                if _store is not None
+                else 0
+            )
             plan = plan_catchup(cursor=cursor, min_sequence=min_seq)
             if plan["mode"] == "resync":
                 resync: dict = {
