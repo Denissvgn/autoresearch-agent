@@ -215,6 +215,7 @@ def test_demo_workspace_bootstrap_files_exist(demo_workspace: Path) -> None:
             session_ws = (
                 demo_workspace / "runs" / skill_id
                 / started.json()["subject_id"] / started.json()["variant"]
+                / started.json()["id"]
             )
             assert (session_ws / expected_file).is_file(), (
                 f"{skill_id} bootstrap must render {expected_file} in the "

@@ -823,9 +823,9 @@ Autonomy: Use local content-addressed bundles with server-created run/attempt ro
 and atomic publication. Implement retention from live references; test partial cleanup
 in a disposable store rather than deleting user artifacts.
 
-- [ ] Allocate unique run/attempt roots and retain logical subject/variant as metadata; stop archiving an unrelated active or historical run path.
-- [ ] Introduce local content-addressed candidate bundles, results, and parent snapshots with safe import limits and digest verification.
-- [ ] Make publication atomic and separate references from mutable workspace files; define partial-write cleanup and retention that respects live references.
+- [x] Allocate unique run/attempt roots and retain logical subject/variant as metadata; stop archiving an unrelated active or historical run path.
+- [x] Introduce local content-addressed candidate bundles, results, and parent snapshots with safe import limits and digest verification.
+- [x] Make publication atomic and separate references from mutable workspace files; define partial-write cleanup and retention that respects live references.
 
 Acceptance: fresh runs and continuations cannot replace older run artifacts.
 Multi-file candidate changes can be snapshotted and reconstructed exactly;

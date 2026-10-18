@@ -272,6 +272,7 @@ def build_research_manifest(
     # the single place that knows the translation.
     skill_id: Optional[str] = None,
     skill_params: Optional[Dict[str, Any]] = None,
+    parent_snapshot: Optional[Dict[str, Any]] = None,
 ) -> ResearchSessionManifest:
     """Build and validate a complete manifest from request/server state."""
 
@@ -314,6 +315,7 @@ def build_research_manifest(
             focus_hint=focus_hint,
             skill_manifest=skill_manifest,
             skill_params=skill_params,
+            parent_snapshot=parent_snapshot,
         )
 
     payload = _deep_merge(defaults, overrides or {})
@@ -488,6 +490,7 @@ def _skill_manifest_defaults(
     focus_hint: Optional[str],
     skill_manifest: Any,
     skill_params: Optional[Dict[str, Any]] = None,
+    parent_snapshot: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Skill-driven sections (ARC-012 P7-003): everything is sourced from the
     skill's SKILL.yaml — no invented ML artifacts. A manifest must never
@@ -497,6 +500,7 @@ def _skill_manifest_defaults(
         skill_id=skill_id,
         subject_id=instrument,
         variant=timeframe,
+        research_id=research_id or None,
     )
     promotion_scopes = [
         scope.id
@@ -532,6 +536,7 @@ def _skill_manifest_defaults(
             "max_budget_usd": max_budget_usd,
             "timeout_s": timeout_s,
         },
+        parent_snapshot=parent_snapshot,
     )
     return {
         "research_id": research_id,

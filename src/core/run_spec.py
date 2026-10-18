@@ -150,6 +150,7 @@ def build_run_spec(
     objective_policy: Mapping[str, Any],
     policy: Mapping[str, Any],
     effective_config: Mapping[str, Any],
+    parent_snapshot: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build the resolved, nonsecret run spec with its content digest."""
     from src.core.skill_params import apply_defaults
@@ -183,6 +184,9 @@ def build_run_spec(
         },
         "runtime_identity": runtime_identity(),
         "effective_config": dict(effective_config),
+        "parent_snapshot": (
+            dict(parent_snapshot) if parent_snapshot else None
+        ),
     }
     spec["spec_sha256"] = hashlib.sha256(
         canonical_spec_json(spec).encode("utf-8")

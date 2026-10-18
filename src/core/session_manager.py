@@ -45,6 +45,7 @@ def _derive_workspace_path(
     instrument: str,
     timeframe: str,
     model_type: str,
+    research_id: str = "",
 ) -> str:
     """Session workspace path (ARC-012 P7-005 / D1).
 
@@ -69,10 +70,14 @@ def _derive_workspace_path(
                 skill_id=skill_id,
                 subject_id=instrument,
                 variant=timeframe,
+                research_id=research_id or None,
             )
             if rendered:
                 return f"{settings.workspace_root}/{rendered}"
-    return f"{settings.runs_dir}/{instrument}_{timeframe}/{model_type}"
+    base = f"{settings.runs_dir}/{instrument}_{timeframe}/{model_type}"
+    # Run roots are unique per research session: a fresh run must never
+    # share — or archive — an older run's workspace.
+    return f"{base}/{research_id}" if research_id else base
 
 
 def _hard_timeout_grace_s(soft_timeout_s: int) -> int:
@@ -395,6 +400,7 @@ class SessionManager:
         research_id = f"res_{uuid.uuid4().hex[:12]}"
         effective_tag = tag or f"run-{research_id[-8:]}"
         workspace_path = _derive_workspace_path(
+            research_id=research_id,
             skill_id=skill_id or "",
             instrument=instrument,
             timeframe=timeframe,
@@ -792,6 +798,7 @@ class SessionManager:
         config: ResearchConfig,
         *,
         overrides: Optional[Dict[str, Any]] = None,
+        parent_snapshot: Optional[Dict[str, Any]] = None,
     ) -> tuple[str, str, str]:
         manifest = build_research_manifest(
             research_id=config.id,
@@ -809,6 +816,7 @@ class SessionManager:
             timeout_s=config.timeout_s,
             focus_hint=config.focus_hint,
             skill_params=config.skill_params or None,
+            parent_snapshot=parent_snapshot,
             overrides=overrides,
         )
         # ARC-011 P4-002, revised by review C3 (2026-08-15): the per-session
@@ -827,6 +835,48 @@ class SessionManager:
             manifest.manifest_hash or "",
             session_nonce,
         )
+
+    def _capture_parent_snapshot(
+        self, parent_workspace: str,
+    ) -> Optional[Dict[str, Any]]:
+        """The retained parent reference: a bundle of the parent's candidate
+        and result files, content-addressed so a continuation can never
+        replace or lose the artifacts it builds on.
+        """
+        if not parent_workspace:
+            return None
+        root = Path(parent_workspace)
+        if not root.is_dir():
+            return None
+        try:
+            from src.core.run_artifacts import (
+                ArtifactStore,
+                default_artifact_root,
+                snapshot_parent_workspace,
+            )
+
+            scratch_suffixes = (".tmp", ".partial", ".swp", ".log")
+            includes = sorted(
+                entry.name
+                for entry in root.iterdir()
+                if entry.is_file()
+                and not entry.name.startswith(".")
+                and not entry.name.endswith(scratch_suffixes)
+            )
+            if not includes:
+                return None
+            store = ArtifactStore(default_artifact_root())
+            descriptor = snapshot_parent_workspace(
+                root, store, includes=includes,
+            )
+            return {
+                "bundle_digest": descriptor["digest"],
+                "file_count": len(descriptor.get("files") or {}),
+                "source_research_id": None,
+            }
+        except Exception as exc:  # noqa: BLE001 - snapshotting never blocks
+            logger.warning("Parent snapshot capture failed: %s", exc)
+            return None
 
     async def _persist_secret_refs(
         self, research_id: str, manifest_json: str
@@ -1108,6 +1158,9 @@ class SessionManager:
         manifest_json, manifest_hash, session_nonce = self._build_manifest_payload(
             config,
             overrides=manifest_overrides,
+            parent_snapshot=self._capture_parent_snapshot(
+                parent.get("workspace_path") or "",
+            ),
         )
         await self._persist_secret_refs(config.id, manifest_json)
         # ARC-011 P4-002: carry the nonce into the orchestrator (continue path).

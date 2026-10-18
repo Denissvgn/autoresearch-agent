@@ -125,21 +125,34 @@ def session_workspace_path(
     skill_id: str,
     subject_id: str,
     variant: str,
+    research_id: Optional[str] = None,
 ) -> Optional[str]:
     """Render a skill's ``workspace.session_path_template``.
 
     Returns the workspace-relative path (callers join it under
     ``settings.workspace_root``), or ``None`` when the skill declares no
     template — callers then fall back to their incumbent layout.
+
+    When ``research_id`` is given it is appended as the final segment: the
+    declared template renders the *logical* subject/variant identity (kept as
+    path metadata), while the run root is unique per research session. Two
+    runs of the same skill/subject/variant therefore never share — or
+    archive — each other's workspace.
     """
     template = getattr(
         getattr(skill_manifest, "workspace", None), "session_path_template", None
     )
     if not template:
         return None
-    return render_path_template(
+    rendered = render_path_template(
         template, skill_id=skill_id, subject_id=subject_id, variant=variant
     )
+    if research_id:
+        rendered = (
+            f"{rendered}/"
+            f"{sanitize_path_segment(research_id, field='research_id')}"
+        )
+    return rendered
 
 
 __all__ = [

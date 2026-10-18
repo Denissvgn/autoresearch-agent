@@ -238,7 +238,9 @@ async def test_workspace_manifest_omits_nonce(monkeypatch, tmp_path):
     assert cfg is not None
     assert cfg.session_nonce and len(cfg.session_nonce) == 64
 
-    manifest_path = manifest_dir / "research_manifest.json"
+    # Run roots are unique per research session (the research id is the
+    # final workspace segment).
+    manifest_path = manifest_dir / cfg.id / "research_manifest.json"
     assert manifest_path.is_file(), "workspace manifest must still be written"
     text = manifest_path.read_text(encoding="utf-8")
     assert '"session_nonce": null' in text
