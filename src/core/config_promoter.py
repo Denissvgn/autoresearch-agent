@@ -418,7 +418,10 @@ class ConfigPromoter:
             "instrument": instrument,
             "timeframe": timeframe,
             # P3-017: canonical skill fields (dual-shape, §10 guarantee #4).
-            "skill_id": model_type_to_skill_id(model_type) if model_type else "",
+            "skill_id": (
+                model_type_to_skill_id(model_type) if model_type
+                else str((session or {}).get("skill_id") or "")
+            ),
             "subject_id": instrument,
             "variant": timeframe,
             "scope": DEVELOPMENT_PROMOTION_SCOPE,
@@ -1594,15 +1597,22 @@ class ConfigPromoter:
                     if not isinstance(row, dict) or row.get("scope") != scope:
                         continue
                     metadata = row.get("promotion_metadata") or {}
-                    recorded_skill = metadata.get("skill_id")
-                    recorded_target = metadata.get("target_identity")
+                    recorded_skill = metadata.get("skill_id") or None
+                    recorded_target = metadata.get("target_identity") or None
                     if recorded_skill or recorded_target:
                         if (
-                            recorded_skill == skill_id
-                            and recorded_target == target_identity
+                            (not recorded_skill or recorded_skill == skill_id)
+                            and (
+                                not recorded_target
+                                or recorded_target == target_identity
+                            )
                         ):
                             match = dict(row)
-                            match["_identity_provenance"] = "canonical"
+                            match["_identity_provenance"] = (
+                                "canonical"
+                                if recorded_skill and recorded_target
+                                else "legacy_ambiguous"
+                            )
                             candidates.append(match)
                         continue
                     if (

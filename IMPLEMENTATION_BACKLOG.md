@@ -777,9 +777,9 @@ Autonomy: Create a small new fixture skill with a fresh identity and drive real
 API/session paths. Run persistent selection/promotion checks on both stores; parsing
 fixtures alone cannot close semantic acceptance.
 
-- [ ] Run one complete workflow per supported objective, parser, parameter binding, and promotion-scope shape.
-- [ ] Introduce a small fixture skill without core/UI edits and verify unsupported extensions fail before side effects.
-- [ ] Exercise sequential and parallel observation paths with identical domain semantics and isolated data.
+- [x] Run one complete workflow per supported objective, parser, parameter binding, and promotion-scope shape.
+- [x] Introduce a small fixture skill without core/UI edits and verify unsupported extensions fail before side effects.
+- [x] Exercise sequential and parallel observation paths with identical domain semantics and isolated data.
 
 Acceptance: all supported declarations have execution evidence; no skill-ID
 branch is needed for a conforming new skill. F05/F06/F09/F11/F12 closure is

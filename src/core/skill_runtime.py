@@ -1087,7 +1087,7 @@ class ManifestSkillRuntime:
 
     # ── Cross-session memory (delegate to orchestrator) ───────────
     def research_resume_path(self, config: "ResearchConfig") -> Path:
-        return self._orch._read_research_resume(config)
+        return Path(self._orch._research_resume_path(config))
 
     def generate_research_resume(
         self,

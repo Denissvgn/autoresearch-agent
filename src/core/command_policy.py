@@ -272,12 +272,13 @@ def _authorize_python_request(
                     attempt_access.authorize_write(request.config_path)
                 except ValueError:
                     return _reject(
-                        "--config must point inside the session workspace: "
-                        f"{first_error}"
+                        f"{str(ext.get('config_flag') or '--config')} must "
+                        f"point inside the session workspace: {first_error}"
                     )
         if os.path.basename(request.config_path) not in copyable_files:
             return _reject(
-                "--config may only target files the skill declares copyable"
+                f"{str(ext.get('config_flag') or '--config')} may only "
+                "target files the skill declares copyable"
             )
 
     interpreter = _pinned_interpreter(workspace_root)

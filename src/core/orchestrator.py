@@ -1559,24 +1559,64 @@ class AgentOrchestrator:
                 return content
         return None
 
-    def _load_research_resume(self, config: ResearchConfig) -> str:
-        """Load the research resume for this instrument if it exists."""
+    def _research_resume_path(self, config: ResearchConfig) -> str:
+        """Where this session's cross-session resume file lives."""
         instrument_underscore = config.subject_id.replace("-", "_")
-        resume_path = os.path.join(
+        return os.path.join(
             settings.runs_dir,
             f"{instrument_underscore}_{config.variant}",
             "research_resume.md",
         )
-        content = self._read_research_resume_file(resume_path)
-        if not content:
-            try:
-                self._generate_research_resume_file(
-                    config=config,
-                    resume_path=resume_path,
-                )
-            except Exception as exc:
-                logger.warning("Research resume fallback raised: %s", exc)
-            content = self._read_research_resume_file(resume_path)
+
+    async def _generate_research_resume_file(
+        self, *, config: ResearchConfig, resume_path: str,
+    ) -> None:
+        """Render the cross-session resume from prior recorded experiments.
+
+        Domain-neutral: summarizes the recorded cross-session iteration
+        summary (tried candidates, best metrics, decisions) for this subject
+        and variant so later sessions build on — rather than repeat — prior
+        work. Runs at session setup; the sync prompt builders only read the
+        rendered file.
+        """
+        try:
+            from src.core.research_resume import cross_session_summary
+
+            rows = await cross_session_summary(
+                self._store,
+                config,
+                exclude_research_id=config.id,
+                limit=20,
+            )
+        except Exception as exc:  # noqa: BLE001 - resume is best-effort context
+            logger.warning("Research resume summary unavailable: %s", exc)
+            return
+        if not rows:
+            return
+        lines = [
+            "Prior candidates for this subject and variant "
+            "(config digest — best metric — attempts — decisions):",
+            "",
+        ]
+        for row in rows[:10]:
+            lines.append(
+                f"- {str(row.get('canonical_config_hash') or 'unknown')[:12]}"
+                f" — best={row.get('best_metric')} — "
+                f"{row.get('attempts', 0)} attempt(s) — "
+                f"decisions={row.get('decisions') or 'none'}"
+            )
+        try:
+            os.makedirs(os.path.dirname(resume_path) or ".", exist_ok=True)
+            with open(resume_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines) + "\n")
+        except OSError as exc:
+            logger.warning("Research resume write failed: %s", exc)
+
+    def _load_research_resume(self, config: ResearchConfig) -> str:
+        """Load the research resume for this instrument if it exists."""
+        content = self._read_research_resume_file(
+            self._research_resume_path(config),
+        )
         if not content:
             return ""
         return (
@@ -2708,6 +2748,12 @@ class AgentOrchestrator:
 
         # Build initial user message. Continuation sessions get the skill
         # runtime's resume prompt; fresh sessions its directive prompt.
+        # Cross-session memory: render the research resume from prior
+        # recorded experiments before the prompt builders read it.
+        await self._generate_research_resume_file(
+            config=config,
+            resume_path=self._research_resume_path(config),
+        )
         if config.resumed_from:
             parent_session = await self._store.get_session(config.resumed_from)
             parent_iterations = await self._store.get_iterations(
