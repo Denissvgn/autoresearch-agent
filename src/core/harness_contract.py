@@ -9,7 +9,7 @@ native transcript resume.
 """
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional, TypedDict
+from typing import Any, Mapping, NotRequired, Optional, TypedDict
 
 HARNESS_CONTRACT_VERSION = "autoresearch_harness.v1"
 
@@ -36,6 +36,10 @@ class HarnessIdentity(TypedDict):
     version: str
     contract_version: str
     permissions: Mapping[str, Any]
+    interface: NotRequired[str]
+    schema_pin: NotRequired[str]
+    attach_modes: NotRequired[list[str]]
+    resume_mode: NotRequired[str]
 
 
 class HarnessEvent(TypedDict, total=False):

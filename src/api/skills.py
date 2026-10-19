@@ -41,8 +41,8 @@ from pydantic import BaseModel, Field
 from src.api.audit import record_api_audit_event
 from src.api.auth import require_api_auth
 from src.config import settings
+from src.core.comparison_context import describe_comparison_context
 from src.core.legacy_alias import skill_id_to_model_type
-from src.core.objective_comparator import ObjectiveComparator, rank_rows
 from src.core.skill_manifest import ResearchSkillManifest
 from src.core.skill_registry import (
     DEFAULT_SKILLS_ROOT,
@@ -267,63 +267,69 @@ async def get_skill_metric_schema(skill_id: str):
 async def get_skill_leaderboard(
     skill_id: str,
     limit: int = Query(default=20, ge=1, le=100, title="Limit"),
+    offset: int = Query(default=0, ge=0, title="Offset"),
 ):
-    """Cross-session leaderboard for one skill.
+    """Cross-session leaderboard for one skill — comparable groups only.
 
-    Aggregates every session recorded for the skill (by ``skill_id`` and its
-    legacy ``model_type`` alias) that produced a best metric, sorted by the
-    skill's declared primary-metric direction. The comparison surface the
-    Dashboard lacked: best metric, iterations spent, cost, subject/variant.
+    Results rank inside explicit comparable-context groups (objective,
+    units, dataset/scorer/fidelity pins, subject/variant constraints),
+    computed in storage over the full history — there is no recent-N
+    prefilter, so older champions are never dropped while the ranking is
+    described as global. Contexts are never merged into one champion
+    table: sessions without a recorded context rank only in their own
+    unknown/legacy group.
     """
     manifest = _get_or_404(skill_id)
     metric_dump = manifest.metric_schema.model_dump(exclude_none=True, mode="json")
     primary = metric_dump.get("primary", {}) or {}
     direction = primary.get("direction", "higher_is_better")
+    direction_name = "maximize" if direction == "higher_is_better" else "minimize"
 
-    rows: List[Dict[str, Any]] = []
-    seen_ids: set[str] = set()
+    groups: List[Dict[str, Any]] = []
     if _store is not None:
-        # Non-legacy skills are their own model_type alias; legacy skills also
-        # match on the short name, so query both shapes and merge by id.
-        model_type_aliases = {skill_id, skill_id_to_model_type(skill_id)}
-        for alias in sorted(model_type_aliases):
-            if not alias:
-                continue
-            for session in await _store.list_sessions(model_type=alias, limit=500):
-                rid = str(session.get("id") or "")
-                if not rid or rid in seen_ids:
-                    continue
-                if session.get("best_metric") is None:
-                    continue
-                seen_ids.add(rid)
-                rows.append(
-                    {
-                        "research_id": rid,
-                        "subject_id": session.get("subject_id")
-                        or session.get("instrument"),
-                        "variant": session.get("variant") or session.get("timeframe"),
-                        "tag": session.get("tag"),
-                        "status": session.get("status"),
-                        "best_metric": session.get("best_metric"),
-                        "metric_name": session.get("metric_name"),
-                        "best_iteration": session.get("best_iteration"),
-                        "iterations": session.get("effective_iteration_count")
-                        or session.get("best_iteration")
-                        or 0,
-                        "total_api_cost_usd": session.get("total_api_cost_usd") or 0.0,
-                        "started_at": session.get("started_at"),
-                        "completed_at": session.get("completed_at"),
-                    }
-                )
-
-    comparator = ObjectiveComparator(
-        direction="maximize" if direction == "higher_is_better" else "minimize",
-    )
-    rows = [
-        dict(r)
-        for r in rank_rows(rows, comparator, value=lambda r: r.get("best_metric"))
-    ]
-    total = len(rows)
+        aliases = sorted(
+            {skill_id, skill_id_to_model_type(skill_id)} - {""}
+        )
+        raw_groups = await _store.rank_leaderboard_groups(
+            model_types=aliases,
+            direction=direction_name,
+            limit=limit,
+            offset=offset,
+        )
+        for group in raw_groups:
+            label = describe_comparison_context(group.get("comparison_context"))
+            groups.append(
+                {
+                    "context": label["context"],
+                    "label": label["label"],
+                    "known_context": label["known"],
+                    "items": [
+                        {
+                            "research_id": row.get("id"),
+                            "subject_id": row.get("subject_id")
+                            or row.get("instrument"),
+                            "variant": row.get("variant")
+                            or row.get("timeframe"),
+                            "tag": row.get("tag"),
+                            "status": row.get("status"),
+                            "best_metric": row.get("best_metric"),
+                            "metric_name": row.get("metric_name"),
+                            "best_iteration": row.get("best_iteration"),
+                            "iterations": row.get("effective_iteration_count")
+                            or row.get("best_iteration")
+                            or 0,
+                            "total_api_cost_usd": row.get("total_api_cost_usd")
+                            or 0.0,
+                            "started_at": row.get("started_at"),
+                            "completed_at": row.get("completed_at"),
+                        }
+                        for row in group.get("items", [])
+                    ],
+                    "total": group.get("total", 0),
+                    "limit": group.get("limit", limit),
+                    "offset": group.get("offset", offset),
+                }
+            )
     return {
         "skill_id": skill_id,
         "metric": {
@@ -332,8 +338,8 @@ async def get_skill_leaderboard(
             "direction": direction,
             "format": primary.get("format", ".4f"),
         },
-        "items": rows[:limit],
-        "total": total,
+        "ranking_scope": "global within comparable-context groups",
+        "groups": groups,
     }
 
 

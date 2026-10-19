@@ -1463,16 +1463,22 @@ paths:
       tags:
       - skills
       summary: Get Skill Leaderboard
-      description: 'Cross-session leaderboard for one skill.
+      description: 'Cross-session leaderboard for one skill — comparable groups only.
 
 
-        Aggregates every session recorded for the skill (by ``skill_id`` and its
+        Results rank inside explicit comparable-context groups (objective,
 
-        legacy ``model_type`` alias) that produced a best metric, sorted by the
+        units, dataset/scorer/fidelity pins, subject/variant constraints),
 
-        skill''s declared primary-metric direction. The comparison surface the
+        computed in storage over the full history — there is no recent-N
 
-        Dashboard lacked: best metric, iterations spent, cost, subject/variant.'
+        prefilter, so older champions are never dropped while the ranking is
+
+        described as global. Contexts are never merged into one champion
+
+        table: sessions without a recorded context rank only in their own
+
+        unknown/legacy group.'
       operationId: get_skill_leaderboard_api_v1_skills__skill_id__leaderboard_get
       security:
       - HTTPBearer: []
@@ -1492,6 +1498,14 @@ paths:
           minimum: 1
           title: Limit
           default: 20
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          title: Offset
+          default: 0
       - name: X-Request-ID
         in: header
         required: false

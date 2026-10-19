@@ -549,11 +549,21 @@ export interface LeaderboardEntry {
   completed_at: string | null;
 }
 
+export interface SkillLeaderboardGroup {
+  context: Record<string, unknown> | null;
+  label: string;
+  known_context: boolean;
+  items: LeaderboardEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface SkillLeaderboard {
   skill_id: string;
   metric: { field: string; label: string; direction: string; format: string };
-  items: LeaderboardEntry[];
-  total: number;
+  ranking_scope: string;
+  groups: SkillLeaderboardGroup[];
 }
 
 export function getAutoresearchApiToken(): string | null {

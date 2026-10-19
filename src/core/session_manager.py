@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from src.config import settings
 from src.core import fs_safety
+from src.core.comparison_context import build_comparison_context
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig
 from src.core.research_manifest import (
     build_research_manifest,
@@ -594,6 +595,22 @@ class SessionManager:
         await self._run_local_file_preflight(config, stage="generated")
 
         # Persist session to DB
+        # Comparable-context identity: results rank only within one context
+        # (objective/units + dataset/scorer/fidelity pins + subject/variant).
+        try:
+            _manifest_probe = json.loads(manifest_json or "{}")
+        except Exception:
+            _manifest_probe = {}
+        _primary_metric = (
+            (_manifest_probe.get("metric_schema") or {}).get("primary") or {}
+        )
+        comparison_context = build_comparison_context(
+            objective=str(_primary_metric.get("field") or "primary_metric"),
+            units=str(_primary_metric.get("units") or "unknown"),
+            subject=subject_id or None,
+            variant=variant or None,
+            pins=skill_params or {},
+        )
         session_dict = await self._store.create_session(
             session_id=research_id,
             instrument=instrument,
@@ -614,6 +631,7 @@ class SessionManager:
             skill_id=skill_id or "",
             subject_id=subject_id or "",
             variant=variant or "",
+            comparison_context=comparison_context,
         )
         await self._commit_work(research_id)
         # Spawn background task

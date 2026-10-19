@@ -18,7 +18,7 @@ API_TOKEN = "test-autoresearch-token"
 
 
 class _FakeStore:
-    """Minimal list_sessions double: two scored sessions + one unscored."""
+    """Ranking double: grouped, direction-aware, windowed rows."""
 
     def __init__(self) -> None:
         self.rows = [
@@ -26,17 +26,21 @@ class _FakeStore:
                 "id": "res_aaa", "skill_id": "prompt-engineering",
                 "subject_id": "default", "variant": "production",
                 "tag": "run-a", "status": "completed", "best_metric": 0.42,
-                "best_iteration": 7, "effective_iteration_count": 12,
+                "metric_name": "score", "best_iteration": 7,
+                "effective_iteration_count": 12,
                 "total_api_cost_usd": 1.25, "started_at": "2026-09-01T00:00:00",
                 "completed_at": "2026-09-01T01:00:00",
+                "comparison_context": '{"schema":"comparison-context.v1","objective":"score"}',
             },
             {
                 "id": "res_bbb", "skill_id": "prompt-engineering",
                 "subject_id": "default", "variant": "production",
                 "tag": "run-b", "status": "completed", "best_metric": 0.91,
-                "best_iteration": 5, "effective_iteration_count": 9,
+                "metric_name": "score", "best_iteration": 5,
+                "effective_iteration_count": 9,
                 "total_api_cost_usd": 0.75, "started_at": "2026-09-02T00:00:00",
                 "completed_at": "2026-09-02T01:00:00",
+                "comparison_context": '{"schema":"comparison-context.v1","objective":"score"}',
             },
             {
                 "id": "res_ccc", "skill_id": "prompt-engineering",
@@ -44,18 +48,46 @@ class _FakeStore:
                 "tag": None, "status": "failed", "best_metric": None,
                 "best_iteration": None, "total_api_cost_usd": 0.1,
                 "started_at": "2026-09-03T00:00:00", "completed_at": None,
+                "comparison_context": None,
+            },
+            {
+                "id": "res_ddd", "skill_id": "prompt-engineering",
+                "subject_id": "legacy", "variant": "v1",
+                "tag": "legacy-run", "status": "completed", "best_metric": 0.99,
+                "metric_name": "score", "best_iteration": 3,
+                "effective_iteration_count": 3,
+                "total_api_cost_usd": 0.5, "started_at": "2026-08-01T00:00:00",
+                "completed_at": "2026-08-01T01:00:00",
+                "comparison_context": None,
             },
         ]
 
-    async def list_sessions(
-        self, status=None, model_type=None, instrument=None,
-        status_in=None, limit=None, offset=0, cursor=None, reverse=False,
+    async def rank_leaderboard_groups(
+        self, *, model_types, direction="maximize", limit=20, offset=0,
     ):
-        rows = [r for r in self.rows if r.get("best_metric") is not None]
-        if model_type:
-            rows = [r for r in rows if r.get("skill_id") == model_type]
-        capped = limit if limit is not None else len(rows)
-        return rows[:capped]
+        eligible = [
+            r for r in self.rows
+            if r.get("best_metric") is not None and r.get("skill_id") in model_types
+        ]
+        contexts = sorted(
+            {r.get("comparison_context") for r in eligible},
+            key=lambda c: (c is None, c or ""),
+        )
+        order = -1 if direction == "maximize" else 1
+        groups = []
+        for context in contexts:
+            rows = [r for r in eligible if r.get("comparison_context") == context]
+            rows = sorted(rows, key=lambda r: (order * r["best_metric"], r["id"]))
+            groups.append(
+                {
+                    "comparison_context": context,
+                    "items": rows[offset:offset + limit],
+                    "total": len(rows),
+                    "limit": limit,
+                    "offset": offset,
+                }
+            )
+        return groups
 
 
 def create_test_app() -> FastAPI:
@@ -90,7 +122,7 @@ def test_leaderboard_requires_auth(client: TestClient):
     assert r.status_code in (401, 403)
 
 
-def test_leaderboard_sorts_and_filters(client: TestClient, monkeypatch):
+def test_leaderboard_ranks_within_comparable_groups(client: TestClient, monkeypatch):
     monkeypatch.setattr(skills_module, "_store", _FakeStore())
     r = client.get(
         "/api/v1/skills/prompt-engineering/leaderboard",
@@ -100,21 +132,39 @@ def test_leaderboard_sorts_and_filters(client: TestClient, monkeypatch):
     body = r.json()
     assert body["skill_id"] == "prompt-engineering"
     assert body["metric"]["direction"] == "higher_is_better"
-    ids = [item["research_id"] for item in body["items"]]
+    assert body["ranking_scope"] == "global within comparable-context groups"
+    known = [g for g in body["groups"] if g["known_context"]]
+    unknown = [g for g in body["groups"] if not g["known_context"]]
+    assert len(known) == 1 and len(unknown) == 1
+    ids = [item["research_id"] for item in known[0]["items"]]
     # higher_is_better -> best first; unscored sessions excluded.
     assert ids == ["res_bbb", "res_aaa"]
-    assert body["total"] == 2
+    assert known[0]["total"] == 2
+    # the legacy/unknown-context session ranks only in its own group —
+    # its 0.99 never becomes the known group's shared winner
+    assert [i["research_id"] for i in unknown[0]["items"]] == ["res_ddd"]
+    assert "unknown" in unknown[0]["label"]
 
 
-def test_leaderboard_respects_limit(client: TestClient, monkeypatch):
+def test_leaderboard_window_semantics(client: TestClient, monkeypatch):
     monkeypatch.setattr(skills_module, "_store", _FakeStore())
     r = client.get(
         "/api/v1/skills/prompt-engineering/leaderboard?limit=1",
         headers=auth_headers(),
     )
     assert r.status_code == 200
-    assert len(r.json()["items"]) == 1
-    assert r.json()["total"] == 2
+    known = [g for g in r.json()["groups"] if g["known_context"]][0]
+    assert len(known["items"]) == 1
+    assert known["total"] == 2
+    assert known["limit"] == 1
+    # the next window continues the same ranking
+    r2 = client.get(
+        "/api/v1/skills/prompt-engineering/leaderboard?limit=1&offset=1",
+        headers=auth_headers(),
+    )
+    known2 = [g for g in r2.json()["groups"] if g["known_context"]][0]
+    assert [i["research_id"] for i in known2["items"]] == ["res_aaa"]
+    assert known2["offset"] == 1
 
 
 def test_leaderboard_graceful_without_store(client: TestClient, monkeypatch):
@@ -124,5 +174,4 @@ def test_leaderboard_graceful_without_store(client: TestClient, monkeypatch):
         headers=auth_headers(),
     )
     assert r.status_code == 200
-    assert r.json()["items"] == []
-    assert r.json()["total"] == 0
+    assert r.json()["groups"] == []

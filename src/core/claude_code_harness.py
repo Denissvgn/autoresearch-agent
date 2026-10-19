@@ -39,6 +39,7 @@ from src.core.harness_contract import (
     CAPABILITY_RESUME,
     HARNESS_CONTRACT_VERSION,
     HarnessContractError,
+    HarnessIdentity,
     HarnessLifecycleError,
 )
 
@@ -214,7 +215,7 @@ class ClaudeCodeHarnessAdapter:
             ]
         }
 
-    def identity(self) -> Mapping[str, Any]:
+    def identity(self) -> HarnessIdentity:
         return {
             "name": self._name,
             "version": self._version,

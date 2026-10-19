@@ -33,6 +33,7 @@ from src.core.harness_contract import (
     ATTACH_MODE_CONTINUATION,
     HARNESS_CONTRACT_VERSION,
     HarnessContractError,
+    HarnessIdentity,
     HarnessLifecycleError,
 )
 
@@ -203,7 +204,7 @@ class CodexHarnessAdapter:
             ]
         }
 
-    def identity(self) -> Mapping[str, Any]:
+    def identity(self) -> HarnessIdentity:
         return {
             "name": self._name,
             "version": self._version,

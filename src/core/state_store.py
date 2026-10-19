@@ -861,6 +861,26 @@ async def _migrate_to_v10(db: aiosqlite.Connection) -> None:
     )
 
 
+async def _migrate_to_v11(db: aiosqlite.Connection) -> None:
+    """Comparable-context identity for direction-aware leaderboard ranking.
+
+    ``comparison_context`` is the canonical context identity (objective,
+    units, dataset/scorer/fidelity pins, subject/variant constraints)
+    under which a session's results are comparable. Rows without it are
+    legacy/unknown: they rank only in their own group and are never
+    merged into a champion table.
+    """
+    await _add_column_if_missing(
+        db,
+        "research_sessions",
+        "comparison_context TEXT",
+    )
+    await db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sessions_leaderboard "
+        "ON research_sessions (model_type, comparison_context, best_metric)"
+    )
+
+
 async def _migrate_to_v9(db: aiosqlite.Connection) -> None:
     """Usage ledger and budget reservations (append-only accounting).
 
@@ -960,6 +980,7 @@ _MIGRATIONS = (
     (8, _migrate_to_v8),
     (9, _migrate_to_v9),
     (10, _migrate_to_v10),
+    (11, _migrate_to_v11),
 )
 _LATEST_SCHEMA_VERSION = _MIGRATIONS[-1][0]
 
@@ -1111,6 +1132,7 @@ class StateStore(Protocol):
         skill_id: Optional[str] = None,
         subject_id: Optional[str] = None,
         variant: Optional[str] = None,
+        comparison_context: Optional[str] = None,
     ) -> Dict[str, Any]:
         ...
 
@@ -1258,6 +1280,21 @@ class StateStore(Protocol):
     async def get_iteration(
         self, research_id: str, iteration: int,
     ) -> Optional[Dict[str, Any]]:
+        ...
+
+    async def rank_leaderboard_groups(
+        self,
+        *,
+        model_types: Sequence[str],
+        direction: str = "maximize",
+        limit: int = 20,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        ...
+
+    async def rank_leaderboard_explain(
+        self, *, model_types: Sequence[str]
+    ) -> str:
         ...
 
     async def get_best_iteration(
@@ -1988,6 +2025,7 @@ class SQLiteStateStore:
         skill_id: Optional[str] = None,
         subject_id: Optional[str] = None,
         variant: Optional[str] = None,
+        comparison_context: Optional[str] = None,
     ) -> Dict[str, Any]:
         # ARC-011 review C4 (P4-016): canonical non-ML sessions carry
         # model_type="" (the API's translation for skills with no legacy
@@ -2007,14 +2045,15 @@ class SQLiteStateStore:
                     skill_id, subject_id, variant,
                     status, quick_mode, max_iterations, max_budget_usd,
                     focus_hint, workspace_path, manifest_json, manifest_path,
-                    manifest_hash, started_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    manifest_hash, started_at, comparison_context)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     session_id, instrument, timeframe, model_type, tag,
                     skill_name, skill_id or "", subject_id or "", variant or "",
                     int(quick_mode), max_iterations,
                     max_budget_usd, focus_hint, workspace_path,
                     manifest_json, manifest_path, manifest_hash, now,
+                    comparison_context,
                 ),
             )
             await db.commit()
@@ -2560,6 +2599,84 @@ class SQLiteStateStore:
     # ------------------------------------------------------------------
     # Iterations
     # ------------------------------------------------------------------
+
+    async def rank_leaderboard_groups(
+        self,
+        *,
+        model_types: Sequence[str],
+        direction: str = "maximize",
+        limit: int = 20,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """Direction-aware rankings grouped by comparable context.
+
+        Every eligible session ranks inside its own context-group window
+        over the FULL table — there is no recent-N prefilter, so an older
+        champion is never dropped while the ranking is described as
+        global. Contexts are never merged: sessions without a recorded
+        context rank only in their own unknown/legacy group.
+        """
+        if not model_types:
+            return []
+        placeholders = ",".join("?" for _ in model_types)
+        order = "DESC" if direction == "maximize" else "ASC"
+        groups: List[Dict[str, Any]] = []
+        async with self.connection() as db:
+            db.row_factory = aiosqlite.Row
+            cursor = await db.execute(
+                "SELECT DISTINCT comparison_context FROM research_sessions "
+                f"WHERE model_type IN ({placeholders}) "
+                "AND best_metric IS NOT NULL",
+                tuple(model_types),
+            )
+            contexts = [row[0] for row in await cursor.fetchall()]
+            for context in sorted(contexts, key=lambda c: (c is None, c or "")):
+                where = (
+                    f"FROM research_sessions WHERE model_type IN ({placeholders}) "
+                    "AND best_metric IS NOT NULL AND comparison_context IS ?"
+                )
+                cursor = await db.execute(
+                    "SELECT COUNT(*) " + where, (*model_types, context)
+                )
+                total = int((await cursor.fetchone())[0])
+                cursor = await db.execute(
+                    "SELECT id, instrument, subject_id, variant, tag, status, "
+                    "best_metric, best_iteration, "
+                    "effective_iteration_count, total_api_cost_usd, "
+                    "started_at, completed_at, comparison_context "
+                    + where
+                    + f" ORDER BY best_metric {order}, id ASC LIMIT ? OFFSET ?",
+                    (*model_types, context, limit, offset),
+                )
+                groups.append(
+                    {
+                        "comparison_context": context,
+                        "items": [dict(r) for r in await cursor.fetchall()],
+                        "total": total,
+                        "limit": limit,
+                        "offset": offset,
+                    }
+                )
+        return groups
+
+    async def rank_leaderboard_explain(
+        self, *, model_types: Sequence[str]
+    ) -> str:
+        """Bounded query-plan inspection for the ranking path (tests)."""
+        placeholders = ",".join("?" for _ in model_types)
+        async with self.connection() as db:
+            cursor = await db.execute(
+                "EXPLAIN QUERY PLAN "
+                "SELECT best_metric FROM research_sessions "
+                f"WHERE model_type IN ({placeholders}) "
+                "AND best_metric IS NOT NULL AND comparison_context IS ? "
+                "ORDER BY best_metric DESC, id ASC LIMIT 20",
+                (*model_types, None),
+            )
+            rows = await cursor.fetchall()
+            return "\n".join(
+                " | ".join(str(cell) for cell in tuple(row)) for row in rows
+            )
 
     async def add_iteration(
         self,

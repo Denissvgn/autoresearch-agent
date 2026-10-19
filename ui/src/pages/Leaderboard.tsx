@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSkills, useSkillLeaderboard } from '../hooks/useResearch';
 import { Icon, StatusBadge } from '../components/hifi/primitives';
-import { LeaderboardEntry } from '../api/client';
 
 function fmtMetric(v: number | null, format = '.4f') {
   if (v == null) return '—';
@@ -36,7 +35,7 @@ export default function Leaderboard() {
     }
   }, [skills, selectedSkillId]);
 
-  const items: LeaderboardEntry[] = useMemo(() => board?.items ?? [], [board]);
+  const groups = useMemo(() => board?.groups ?? [], [board]);
   const metricLabel = board?.metric.label ?? 'Best metric';
 
   return (
@@ -45,6 +44,11 @@ export default function Leaderboard() {
         <div className="col gap-1 grow">
           <span className="label">comparison</span>
           <h1 className="h1">Leaderboard</h1>
+          {board?.ranking_scope && (
+            <span className="subtle" data-testid="ranking-scope">
+              ranking scope: {board.ranking_scope} · metric: {metricLabel}
+            </span>
+          )}
         </div>
         <div className="field" style={{ minWidth: 260 }}>
           <div className="field__lbl">Skill</div>
@@ -62,13 +66,36 @@ export default function Leaderboard() {
         </div>
       </div>
 
-      <section className="card" style={{ padding: 0 }}>
-        <div className="row" style={{ justifyContent: 'space-between', padding: '14px 16px' }}>
-          <span className="label">
-            {metricLabel} · {board?.total ?? 0} scored sessions
+      {groups.length === 0 && !isLoading && (
+        <section className="card" style={{ padding: 24 }}>
+          <span className="subtle">
+            No scored sessions for this skill yet — start one from New Research.
           </span>
-          {isLoading && <span className="subtle">loading…</span>}
-        </div>
+        </section>
+      )}
+
+      {/* One champion table per comparable context. Incomparable and
+          legacy contexts are separate groups — never merged. */}
+      {groups.map((group) => (
+        <section
+          key={group.label}
+          className="card"
+          style={{ padding: 0 }}
+          data-testid={`leaderboard-group-${group.known_context ? 'known' : 'unknown'}`}
+        >
+          <div className="row" style={{ justifyContent: 'space-between', padding: '14px 16px' }}>
+            <span className="label">
+              {group.label} · {group.total} scored sessions
+            </span>
+            {!group.known_context && (
+              <span
+                className="pill pill--ghost"
+                title="legacy or unrecorded context: ranked only within this group"
+              >
+                unknown / legacy context
+              </span>
+            )}
+          </div>
         <div style={{ overflowX: 'auto' }}>
           <table className="tbl">
             <thead>
@@ -84,10 +111,10 @@ export default function Leaderboard() {
                 <th />
               </tr>
             </thead>
-            <tbody>
-              {items.map((row, i) => (
-                <tr key={row.research_id}>
-                  <td className="mono">{i + 1}</td>
+              <tbody>
+                {group.items.map((row, i) => (
+                  <tr key={row.research_id}>
+                    <td className="mono">{group.offset + i + 1}</td>
                   <td className="mono">
                     <Link to={`/research/${row.research_id}`} className="lnk">
                       {row.research_id.slice(0, 12)}
@@ -107,10 +134,10 @@ export default function Leaderboard() {
                   </td>
                 </tr>
               ))}
-              {items.length === 0 && !isLoading && (
+              {group.items.length === 0 && (
                 <tr>
                   <td colSpan={9} className="subtle" style={{ textAlign: 'center', padding: 24 }}>
-                    No scored sessions for this skill yet — start one from New Research.
+                    No scored sessions in this comparable context.
                   </td>
                 </tr>
               )}
@@ -118,6 +145,7 @@ export default function Leaderboard() {
           </table>
         </div>
       </section>
+      ))}
     </div>
   );
 }
