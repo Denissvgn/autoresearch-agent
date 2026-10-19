@@ -17,6 +17,10 @@ if str(REPO_ROOT) not in sys.path:
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
+# The refactor-project fixture carries its own protected behavior tests:
+# they run only inside the isolated evaluator, never in this suite.
+collect_ignore_glob = ["fixtures/refactor_project/*"]
+
 from src.core.results_store import ResultsStore
 
 
