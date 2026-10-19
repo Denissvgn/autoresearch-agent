@@ -1134,9 +1134,9 @@ Code documentation and observed protocol behavior. Prefer structured events to
 terminal parsing; missing live authentication blocks live qualification, not ready
 fixture work.
 
-- [ ] Recheck official programmatic/SDK documentation, select and pin the supported interface, and record its authentication and hosting requirements.
-- [ ] Normalize lifecycle, candidate changes, usage, permissions, errors, and session identifiers without parsing human-oriented terminal prose.
-- [ ] Implement cancellation and explicitly qualified resume behavior; prevent access to evaluator authority or global operator credentials.
+- [x] Recheck official programmatic/SDK documentation, select and pin the supported interface, and record its authentication and hosting requirements.
+- [x] Normalize lifecycle, candidate changes, usage, permissions, errors, and session identifiers without parsing human-oriented terminal prose.
+- [x] Implement cancellation and explicitly qualified resume behavior; prevent access to evaluator authority or global operator credentials.
 
 Acceptance: a real run uses the common evaluation/promotion contract and has
 honest capability and usage reporting. Native transcript/session state remains

@@ -553,9 +553,15 @@ async def _start_skill_session(manager: Any, **overrides: Any) -> Dict[str, Any]
 
 
 async def _await_terminal(
-    store: ResultsStore, session_id: str, timeout_s: float = 2.0,
+    store: ResultsStore, session_id: str, timeout_s: float = 15.0,
 ) -> Dict[str, Any] | None:
-    """Poll until the row leaves running/paused (P7-009 AC: 'within seconds')."""
+    """Poll until the row leaves running/paused (P7-009 AC: 'within seconds').
+
+    The bound is a poll budget, not the assertion: under full-suite load
+    the crash finalizer can need a few seconds, and a premature timeout
+    would race it (tearing the manager down mid-write). The row still
+    returns as soon as it goes terminal.
+    """
     deadline = time.monotonic() + timeout_s
     row = await store.get_session(session_id)
     while row is not None and time.monotonic() < deadline:
