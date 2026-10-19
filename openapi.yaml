@@ -1378,7 +1378,16 @@ paths:
       tags:
       - skills
       summary: Get Skill Support
-      description: "Machine-readable support descriptor + actionable diagnostics.\n\nPublishes the support matrix (which declarations have implementing\nbehavior), any unsupported-declaration diagnostics with remedies, and\ntoolchain availability notes (path lookup only \u2014 never an authority\ngrant)."
+      description: 'Machine-readable support descriptor + actionable diagnostics.
+
+
+        Publishes the support matrix (which declarations have implementing
+
+        behavior), any unsupported-declaration diagnostics with remedies, and
+
+        toolchain availability notes (path lookup only — never an authority
+
+        grant).'
       operationId: get_skill_support_api_v1_skills__skill_id__support_get
       security:
       - HTTPBearer: []
@@ -1396,9 +1405,9 @@ paths:
           anyOf:
           - type: string
           - type: 'null'
-          description: 'Correlation identifier; auto-generated UUID4 when missing.'
+          description: Correlation identifier; auto-generated UUID4 when missing.
           title: X-Request-Id
-        description: 'Correlation identifier; auto-generated UUID4 when missing.'
+        description: Correlation identifier; auto-generated UUID4 when missing.
       responses:
         '200':
           description: Successful Response
@@ -1411,7 +1420,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-
   /api/v1/skills/{skill_id}/metric-schema:
     get:
       tags:
@@ -1787,6 +1795,306 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/agent/runs:
+    post:
+      tags:
+      - attached-agent
+      summary: Create Or Attach Run
+      description: Create (or attach to) this credential's run. Paths are server-side.
+      operationId: create_or_attach_run_api_v1_agent_runs_post
+      parameters:
+      - name: X-Request-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Correlation identifier; auto-generated UUID4 when missing.
+          title: X-Request-Id
+        description: Correlation identifier; auto-generated UUID4 when missing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentRunRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Create Or Attach Run Api V1 Agent Runs Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/agent/runs/{run_id}/constraints:
+    get:
+      tags:
+      - attached-agent
+      summary: Run Constraints
+      description: The run's declared budgets and the submission limits.
+      operationId: run_constraints_api_v1_agent_runs__run_id__constraints_get
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      - name: X-Request-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Correlation identifier; auto-generated UUID4 when missing.
+          title: X-Request-Id
+        description: Correlation identifier; auto-generated UUID4 when missing.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Run Constraints Api V1 Agent Runs  Run Id  Constraints Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/agent/runs/{run_id}/candidates:
+    post:
+      tags:
+      - attached-agent
+      summary: Submit Candidate
+      description: Submit one candidate. Digest-validated, idempotent, size-limited.
+      operationId: submit_candidate_api_v1_agent_runs__run_id__candidates_post
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Idempotency-Key
+      - name: X-Request-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Correlation identifier; auto-generated UUID4 when missing.
+          title: X-Request-Id
+        description: Correlation identifier; auto-generated UUID4 when missing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CandidateSubmission'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Submit Candidate Api V1 Agent Runs  Run Id  Candidates Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/agent/runs/{run_id}/evaluations:
+    post:
+      tags:
+      - attached-agent
+      summary: Request Evaluation
+      description: Request evaluation. The trusted channel produces verified results.
+      operationId: request_evaluation_api_v1_agent_runs__run_id__evaluations_post
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      - name: X-Request-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Correlation identifier; auto-generated UUID4 when missing.
+          title: X-Request-Id
+        description: Correlation identifier; auto-generated UUID4 when missing.
+      responses:
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Request Evaluation Api V1 Agent Runs  Run Id  Evaluations Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/agent/runs/{run_id}/results:
+    get:
+      tags:
+      - attached-agent
+      summary: Inspect Results
+      description: 'Inspect results with their recorded authority labels.
+
+
+        An attached agent can never declare its own results verified: the
+
+        authority label is recorded at ingestion from the channel a result
+
+        arrived on.'
+      operationId: inspect_results_api_v1_agent_runs__run_id__results_get
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      - name: X-Request-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Correlation identifier; auto-generated UUID4 when missing.
+          title: X-Request-Id
+        description: Correlation identifier; auto-generated UUID4 when missing.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Inspect Results Api V1 Agent Runs  Run Id  Results Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/agent/runs/{run_id}/lifecycle:
+    post:
+      tags:
+      - attached-agent
+      summary: Lifecycle Control
+      description: Control this run's lifecycle through the bound harness.
+      operationId: lifecycle_control_api_v1_agent_runs__run_id__lifecycle_post
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      - name: X-Request-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Correlation identifier; auto-generated UUID4 when missing.
+          title: X-Request-Id
+        description: Correlation identifier; auto-generated UUID4 when missing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LifecycleRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Lifecycle Control Api V1 Agent Runs  Run Id  Lifecycle Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/agent/runs/{run_id}/promotion-preview:
+    get:
+      tags:
+      - attached-agent
+      summary: Promotion Preview
+      description: Preview promotion eligibility. Approval is never available here.
+      operationId: promotion_preview_api_v1_agent_runs__run_id__promotion_preview_get
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      - name: X-Request-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Correlation identifier; auto-generated UUID4 when missing.
+          title: X-Request-Id
+        description: Correlation identifier; auto-generated UUID4 when missing.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Promotion Preview Api V1 Agent Runs  Run Id  Promotion Preview Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /health:
     get:
       summary: Health
@@ -1941,6 +2249,49 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
+    AgentRunRequest:
+      properties:
+        mode:
+          type: string
+          title: Mode
+          description: create or attach
+          default: create
+        instrument:
+          type: string
+          title: Instrument
+          default: EURUSD
+        timeframe:
+          type: string
+          title: Timeframe
+          default: 1h
+        tag:
+          type: string
+          title: Tag
+          default: ''
+        max_iterations:
+          type: integer
+          title: Max Iterations
+          default: 3
+        max_budget_usd:
+          type: number
+          title: Max Budget Usd
+          default: 7.5
+      type: object
+      title: AgentRunRequest
+    CandidateSubmission:
+      properties:
+        digest:
+          type: string
+          title: Digest
+          description: sha256 of the submitted content
+        content:
+          type: string
+          title: Content
+          default: ''
+      type: object
+      required:
+      - digest
+      title: CandidateSubmission
     ContinueResearchRequest:
       properties:
         max_iterations:
@@ -1974,7 +2325,7 @@ components:
           description: Optional hint for what to focus on in the continuation
       type: object
       title: ContinueResearchRequest
-      description: 'Request body for continuing a timed-out/completed session.'
+      description: Request body for continuing a timed-out/completed session.
     EstimateCostRequest:
       properties:
         max_iterations:
@@ -2039,6 +2390,16 @@ components:
           title: Detail
       type: object
       title: HTTPValidationError
+    LifecycleRequest:
+      properties:
+        action:
+          type: string
+          title: Action
+          description: pause, resume, or stop
+      type: object
+      required:
+      - action
+      title: LifecycleRequest
     PromotionApproval:
       properties:
         approver:
@@ -2107,9 +2468,9 @@ components:
           - type: 'null'
           title: Reason
         reconcile_legacy:
-          default: false
-          title: Reconcile Legacy
           type: boolean
+          title: Reconcile Legacy
+          default: false
       type: object
       title: PromotionRollbackRequest
     PromotionScopeRequest:

@@ -174,6 +174,7 @@ app.add_middleware(
 )
 
 # Include API routers
+from src.api.agent import router as agent_router
 from src.api.promotion import router as promotion_router
 from src.api.research import router as research_router
 from src.api.results import router as results_router
@@ -195,6 +196,7 @@ def _include_api_routers(prefix: str, *, include_in_schema: bool = True) -> None
     app.include_router(promotion_router, prefix=prefix, include_in_schema=include_in_schema)
     app.include_router(skills_router, prefix=prefix, include_in_schema=include_in_schema)
     app.include_router(subjects_router, prefix=prefix, include_in_schema=include_in_schema)
+    app.include_router(agent_router, prefix=prefix, include_in_schema=include_in_schema)
 
 
 _include_api_routers(_API_V1_PREFIX)

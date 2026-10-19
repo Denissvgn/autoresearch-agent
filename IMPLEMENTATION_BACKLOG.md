@@ -1045,9 +1045,9 @@ Autonomy: Derive paths and scoped authority server-side; expose only research
 operations and promotion preview to attached agents. Use test-issued scoped
 credentials and prove revocation/cross-run denial without global operator access.
 
-- [ ] Expose create/attach, constraints, candidate submission, evaluation request, verified-result inspection, lifecycle control, and promotion preview.
-- [ ] Issue short-lived run/attempt-scoped credentials with revocation and permissions distinct from operator/promotion approver authority.
-- [ ] Validate candidate digests and idempotency keys; derive storage paths server-side and rate/size-limit submitted data and events.
+- [x] Expose create/attach, constraints, candidate submission, evaluation request, verified-result inspection, lifecycle control, and promotion preview.
+- [x] Issue short-lived run/attempt-scoped credentials with revocation and permissions distinct from operator/promotion approver authority.
+- [x] Validate candidate digests and idempotency keys; derive storage paths server-side and rate/size-limit submitted data and events.
 
 Acceptance: an attached agent can complete research without the global operator
 token, modify only its authorized run, and cannot declare its own results verified
