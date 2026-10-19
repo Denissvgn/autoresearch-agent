@@ -393,6 +393,10 @@ class AgentOrchestrator:
         # routing) reach the session's skill through this map — mirrors
         # _session_providers / _session_models.
         self._session_skills: Dict[str, SkillRuntime] = {}
+        # Harness-owned: which workspace instruction file this loop reads.
+        # The built-in adapter sets its own convention (CLAUDE.md); core
+        # behavior never depends on the filename itself.
+        self._workspace_instruction_filename: str = "CLAUDE.md"
         # ARC-011 P6-004: per-session captured lock_epoch. Captured once at
         # run() entry (the owning worker holds the advisory lock for the run's
         # lifetime); threaded to the state-advancing writes in _record_iteration
@@ -1413,10 +1417,38 @@ class AgentOrchestrator:
         )
 
     def _load_claude_md(self) -> str:
-        claude_md_path = os.path.join(settings.workspace_root, "CLAUDE.md")
+        claude_md_path = os.path.join(
+            settings.workspace_root, self._workspace_instruction_filename
+        )
         if os.path.exists(claude_md_path):
             return Path(claude_md_path).read_text(encoding="utf-8")
         return ""
+
+    def set_workspace_instruction_filename(self, filename: str) -> None:
+        """The harness adapter names the workspace instruction file."""
+        self._workspace_instruction_filename = filename
+
+    def release_session(self, research_id: str) -> None:
+        """Close per-session state at lifecycle end.
+
+        Pops every per-session map and closes any client the session's
+        provider owns. Safe to call repeatedly (idempotent teardown).
+        """
+        provider = self._session_providers.pop(research_id, None)
+        self._session_models.pop(research_id, None)
+        self._session_model_roles.pop(research_id, None)
+        self._stop_flags.pop(research_id, None)
+        self._pause_flags.pop(research_id, None)
+        self._blocker_attempt_counters.pop(research_id, None)
+        self._session_skills.pop(research_id, None)
+        close = getattr(provider, "close", None)
+        if callable(close):
+            close()
+        aclose = getattr(provider, "aclose", None)
+        if callable(aclose):
+            result = aclose()
+            if asyncio.iscoroutine(result):
+                asyncio.get_event_loop().create_task(result)
 
     # ── SkillHostServices — the explicit host surface for skill runtimes ──
     # Skill runtimes consume these stable value contracts, never the

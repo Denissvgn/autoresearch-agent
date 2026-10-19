@@ -1023,9 +1023,9 @@ Autonomy: Wrap the corrected loop first, then separate common and harness-specif
 instructions. Test rendered prompts as product assets; those prompts do not control
 the implementation agent's repository workflow.
 
-- [ ] Implement BuiltinHarnessAdapter using the existing provider/tool loop and route its proposals through the kernel.
-- [ ] Separate common research instructions from tool/harness-specific instructions; render workspace instruction files only through adapters.
-- [ ] Preserve bounded context/retry behavior while closing clients/tasks and per-session state at lifecycle end.
+- [x] Implement BuiltinHarnessAdapter using the existing provider/tool loop and route its proposals through the kernel.
+- [x] Separate common research instructions from tool/harness-specific instructions; render workspace instruction files only through adapters.
+- [x] Preserve bounded context/retry behavior while closing clients/tasks and per-session state at lifecycle end.
 
 Acceptance: users can select the built-in adapter explicitly and obtain the
 corrected lifecycle. Core behavior does not depend on a `CLAUDE.md` filename or
