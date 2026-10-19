@@ -1,0 +1,19 @@
+{
+  "adapters": {
+    "builtin": "1.0.0",
+    "claude-code": "1.0.0",
+    "codex": "1.0.0"
+  },
+  "benchmark_workload_digest": "4a3acab1bd18e485b01ba47ee4e5d842c979b4adfaf8a34a243b7a61a5100f84",
+  "contract_version": "autoresearch_harness.v1",
+  "prompt_eval_sources": {
+    "dataset.py": "f8dc446d08c085853ef97eb6e97b6057f6b7cb415201f021d0a87a15d4f2d8b3",
+    "run.py": "347d217f2adef2637a74e4fcf8f70f03b2d36b2fc85671f2a5abb1c55eae0019"
+  },
+  "refactor_fixture": {
+    "calc/__init__.py": "bab41c2adad34c768b7efbbcea648d0029fe8dc0ca4058cd24b0b56387d8fb09",
+    "calc/pricing.py": "bf7ba4bd0df84364532dc8d73b31039a244844912c94b208b6da1cd7d2cfd1bb",
+    "calc/totals.py": "00188f44acbc6e66f9b559fda6a8d885c66217233683ee1a6bfbe3019983d6fd",
+    "tests/test_behavior.py": "c673232ff968f10ec03fd4e9dd832416dd98b72235828f8c19aab1885d696ca1"
+  }
+}

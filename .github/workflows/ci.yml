@@ -6,6 +6,15 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      run_live:
+        description: "Run opt-in live qualification (external harness CLIs)"
+        type: boolean
+        default: false
+      live_budget_usd:
+        description: "Budget cap for live qualification jobs"
+        type: string
+        default: "5.00"
 
 env:
   PYTHON_VERSION: "3.12"
@@ -216,3 +225,86 @@ jobs:
       - name: Production ops tests
         working-directory: ui
         run: node scripts/run-production-ops-tests.mjs
+
+  qualification-gates:
+    # Named deterministic qualification gates: trust, domain semantics,
+    # migrations, cross-store behavior, adapters, API/CLI/UI, deployment
+    # artifacts. Missing coverage, unowned skips, drifted qualification
+    # inputs, incomplete unsupported-capability reports, and secrets in
+    # evidence all fail this job.
+    name: Qualification Gates
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+
+      - name: Install dependencies
+        run: poetry install --no-interaction --no-ansi --no-root
+
+      - name: Run qualification gates
+        env:
+          ANTHROPIC_BASE_URL: http://anthropic.invalid
+          ANTHROPIC_AUTH_TOKEN: test-token
+        run: poetry run python scripts/ci_qualification_gates.py
+
+      - name: Archive sanitized gate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qualification-gates-evidence
+          path: workspace/qualification/ci/
+          if-no-files-found: warn
+
+  live-qualification:
+    # Opt-in live external checks — visibly separate from the mock and
+    # fixture lanes above. Requires scoped credentials (repository
+    # secrets, never archived) and a declared budget cap.
+    name: Live Qualification (opt-in)
+    if: github.event_name == 'workflow_dispatch' && inputs.run_live
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+
+      - name: Install dependencies
+        run: poetry install --no-interaction --no-ansi --no-root
+
+      - name: Run live qualification gates
+        env:
+          AUTORESEARCH_LIVE_JOBS: "1"
+          AUTORESEARCH_LIVE_BUDGET_USD: ${{ inputs.live_budget_usd }}
+          AUTORESEARCH_CODEX_LIVE: "1"
+          AUTORESEARCH_CLAUDE_LIVE: "1"
+          ANTHROPIC_AUTH_TOKEN: ${{ secrets.LIVE_ANTHROPIC_AUTH_TOKEN }}
+          CODEX_API_KEY: ${{ secrets.LIVE_CODEX_API_KEY }}
+        run: poetry run python scripts/ci_qualification_gates.py --live --gate live-external
+
+      - name: Archive sanitized live evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-qualification-evidence
+          path: workspace/qualification/ci/
+          if-no-files-found: warn
