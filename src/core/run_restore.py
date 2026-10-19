@@ -114,6 +114,9 @@ def restore_contract(run_spec: Mapping[str, Any]) -> Dict[str, Any]:
         "objective_policy": dict(run_spec.get("objective_policy") or {}),
         "policy": dict(run_spec.get("policy") or {}),
         "effective_config": dict(run_spec.get("effective_config") or {}),
+        # the pinned harness/scorer endpoint and dataset configuration is
+        # part of what continuation must reproduce exactly
+        "harness": dict(run_spec.get("harness") or {}),
     }
 
 

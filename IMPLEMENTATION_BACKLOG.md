@@ -1181,9 +1181,9 @@ against pinned held-out examples. Prefer an already available local endpoint whe
 equivalent; retain offline endpoint fixtures as separate evidence, never as a live
 substitute.
 
-- [ ] Define pinned test/holdout datasets, scorer identity/version, request/result schema, and failure behavior using a controlled real scoring endpoint.
-- [ ] Account for scorer usage and preserve fixed endpoint/data configuration across continuation; protect held-out data from candidate mutation.
-- [ ] Add repeatability/qualification rules and a candidate-bound promotion fixture; retain a clearly separated offline demo mode.
+- [x] Define pinned test/holdout datasets, scorer identity/version, request/result schema, and failure behavior using a controlled real scoring endpoint.
+- [x] Account for scorer usage and preserve fixed endpoint/data configuration across continuation; protect held-out data from candidate mutation.
+- [x] Add repeatability/qualification rules and a candidate-bound promotion fixture; retain a clearly separated offline demo mode.
 
 Acceptance: measured results come from the declared real scorer, its failure
 cannot silently invoke a simulator, and optimization evidence is distinguishable
