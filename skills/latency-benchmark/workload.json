@@ -1,0 +1,25 @@
+{
+  "skill": "latency-benchmark",
+  "workload": {
+    "workload_id": "latency-min-1",
+    "size": 20000,
+    "request_mix_seed": 20261019,
+    "request_count": 120
+  },
+  "protocol": {
+    "protocol_id": "latency-min-protocol-v1",
+    "warmup_requests": 20,
+    "repeats": 3,
+    "requests_per_repeat": 40,
+    "p_target": 0.95,
+    "guardrails": {
+      "max_error_rate": 0.0,
+      "min_throughput_rps": 0.0
+    },
+    "max_uncertainty": 0.35,
+    "min_improvement": 0.1,
+    "resource_envelope_threads": 8
+  },
+  "context_digest": "6632be9225d6bb9759f2bcba163b5e0f94a3079d56acb30853d2e7f12399e799",
+  "environment_limits": "results are machine- and load-specific"
+}
