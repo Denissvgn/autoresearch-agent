@@ -61,6 +61,23 @@ class BuiltinHarnessAdapter:
                 setter(BUILTIN_WORKSPACE_INSTRUCTION_FILE)
 
     # -- HarnessAdapter (harness contract) ----------------------------
+    def preflight(self) -> dict[str, Any]:
+        """Diagnostics for capability/preflight surfaces (no authority)."""
+        return {
+            "checks": [
+                {
+                    "name": "identity",
+                    "status": "ok",
+                    "detail": f"{self._name} {self._version}",
+                },
+                {
+                    "name": "executable",
+                    "status": "ok",
+                    "detail": "the built-in loop runs in-process",
+                },
+            ]
+        }
+
     def identity(self) -> HarnessIdentity:
         return {
             "name": self._name,

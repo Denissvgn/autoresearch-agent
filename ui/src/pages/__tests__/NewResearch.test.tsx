@@ -36,6 +36,27 @@ vi.mock('../../hooks/useResearch', () => ({
   }),
   useSkillFormFields: () => ({ data: { form_fields: [] } }),
   useCostEstimate: () => ({ data: null, isLoading: false }),
+  useHarnesses: () => ({
+    data: {
+      harnesses: [
+        {
+          name: 'builtin',
+          version: '1.0.0',
+          contract_version: 'autoresearch_harness.v1',
+          capabilities: ['pause', 'resume'],
+          unsupported_capabilities: [
+            { capability: 'steering', reason: 'not advertised; refused explicitly' },
+          ],
+          preflight: {
+            checks: [
+              { name: 'identity', status: 'ok' },
+              { name: 'executable', status: 'ok', detail: 'in-process' },
+            ],
+          },
+        },
+      ],
+    },
+  }),
   useStartResearch: () => ({
     mutate: (
       req: unknown,

@@ -210,6 +210,7 @@ export interface ScopedPromotionMetadata {
 }
 
 export interface StartResearchRequest {
+  harness?: string;
   /** Canonical skill shape; legacy instrument/timeframe/model_type aliases
    *  are still accepted by the server for old clients. */
   skill_id?: string;
@@ -655,7 +656,64 @@ function makeIdempotencyKey(scope: string, id: string): string {
   return `${scope}:${id}:${random}`;
 }
 
+export interface HarnessPreflightCheck {
+  name: string;
+  status: 'ok' | 'missing' | 'unknown' | string;
+  detail?: string;
+}
+
+export interface HarnessCapabilityEntry {
+  capability: string;
+  reason: string;
+}
+
+export interface HarnessDescriptor {
+  name: string;
+  version: string;
+  contract_version: string;
+  interface?: string;
+  schema_pin?: string;
+  capabilities: string[];
+  unsupported_capabilities: HarnessCapabilityEntry[];
+  attach_modes?: string[];
+  resume_mode?: string;
+  permissions?: Record<string, boolean>;
+  preflight: { checks: HarnessPreflightCheck[] };
+}
+
+export interface LifecycleAction {
+  action: 'pause' | 'resume' | 'stop' | 'promote' | string;
+  enabled: boolean;
+  reason: string;
+}
+
+export interface HarnessContext {
+  research_id: string;
+  harness: HarnessDescriptor;
+  resume_mode: string;
+  evidence: {
+    authority_counts: Record<string, number>;
+    verified: boolean;
+    imported: number;
+  };
+  candidate_evaluator_context: Record<string, unknown>;
+  usage_quality: {
+    cost_known_usd: number;
+    cost_unknown_events: number;
+    total_usage_events: number;
+    cost_status: 'known' | 'partial' | 'unknown' | string;
+  };
+  viewer: { kind: string; subject: string; permissions: string[] };
+  lifecycle: { actions: LifecycleAction[] };
+}
+
 export const api = {
+  // Harness capability descriptors (the UI renders from these — never
+  // from branches on a harness name).
+  listHarnesses: () => request<{ harnesses: HarnessDescriptor[] }>('/harnesses'),
+  getHarness: (name: string) => request<HarnessDescriptor>(`/harnesses/${name}`),
+  getHarnessContext: (researchId: string) =>
+    request<HarnessContext>(`/research/${researchId}/harness-context`),
   // Research sessions
   startResearch: (req: StartResearchRequest) =>
     request<ResearchSession>('/research/start', { method: 'POST', body: JSON.stringify(req) }),

@@ -73,6 +73,7 @@ class FakeSessionManager:
 class FakeStore:
     def __init__(self) -> None:
         self.audit_events: list[dict[str, Any]] = []
+        self.appended_events: list[dict[str, Any]] = []
         self._sessions: list[dict[str, Any]] = [
             {
                 "id": "res_test0001",
@@ -95,6 +96,10 @@ class FakeStore:
                 "skill_name": "direction",
             }
         ]
+
+    async def append_event(self, **kwargs: Any) -> None:
+        self.appended_events.append(dict(kwargs))
+        return None
 
     async def ping(self) -> bool:
         return True

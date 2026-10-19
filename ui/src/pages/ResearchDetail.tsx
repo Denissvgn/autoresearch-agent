@@ -7,6 +7,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   useIterations,
   useAgentLog,
+  useHarnessContext,
   usePauseSession,
   useResearchState,
   useResumeSession,
@@ -15,6 +16,7 @@ import {
   useStopSession,
 } from '../hooks/useResearch';
 import { api, Iteration, MetricColumn, ResearchState } from '../api/client';
+import HarnessContextPanel from '../components/HarnessContextPanel';
 import {
   Icon,
   PhaseBar,
@@ -26,7 +28,7 @@ import IterationsTable from '../components/IterationsTable';
 import MetricsTrendChart from '../components/MetricsChart';
 import { useWebSocket } from '../hooks/useWebSocket';
 
-type Tab = 'state' | 'metrics' | 'iterations' | 'log';
+type Tab = 'state' | 'metrics' | 'iterations' | 'log' | 'harness';
 
 function fmtElapsed(startIso?: string | null, endIso?: string | null, nowMs = Date.now()) {
   if (!startIso) return '—';
@@ -314,6 +316,9 @@ export default function ResearchDetail() {
         <div className={`tab ${tab === 'log' ? 'on' : ''}`} onClick={() => setTab('log')}>
           <Icon name="bolt" /> Agent log
         </div>
+        <div className={`tab ${tab === 'harness' ? 'on' : ''}`} onClick={() => setTab('harness')}>
+          <Icon name="bolt" /> Harness
+        </div>
       </div>
 
       {tab === 'state' && (
@@ -330,11 +335,40 @@ export default function ResearchDetail() {
       {tab === 'metrics' && <MetricsTab iterations={iterations ?? []} modelType={session.model_type} chartSeries={skillMetricSchema?.chart_series} primaryDirection={skillMetricSchema?.primary?.direction} />}
       {tab === 'iterations' && <IterationsTab iterations={iterations ?? []} bestIteration={session.best_iteration} researchId={id!} tableColumns={skillMetricSchema?.iteration_table_columns} />}
       {tab === 'log' && <AgentLog researchId={id!} isActive={isActive} />}
+      {tab === 'harness' && <HarnessTab researchId={id!} />}
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────
+function HarnessTab({ researchId }: { researchId: string }) {
+  const { data: context, isLoading, error } = useHarnessContext(researchId);
+  const pauseMut = usePauseSession();
+  const resumeMut = useResumeSession();
+  const stopMut = useStopSession();
+
+  if (isLoading) return <p className="subtle">loading harness context…</p>;
+  if (error || !context) {
+    return (
+      <p className="subtle" data-testid="harness-context-unavailable">
+        harness context unavailable — controls stay consistent with server
+        authorization
+      </p>
+    );
+  }
+  return (
+    <HarnessContextPanel
+      context={context}
+      onAction={(action) => {
+        // only enabled actions reach the server; the panel disables the rest
+        if (action === 'pause') pauseMut.mutate(researchId);
+        else if (action === 'resume') resumeMut.mutate(researchId);
+        else if (action === 'stop') stopMut.mutate(researchId);
+      }}
+    />
+  );
+}
+
 function StateTab({
   state,
   session: modelType,

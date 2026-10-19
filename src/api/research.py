@@ -72,6 +72,7 @@ def _start_metadata(req: "StartResearchRequest") -> dict[str, Any]:
         "max_iterations": req.max_iterations,
         "max_budget_usd": req.max_budget_usd,
         "timeout_minutes": req.timeout_minutes,
+        "harness": req.harness,
         "manifest_supplied": req.manifest is not None,
     }
 
@@ -493,6 +494,13 @@ class StartResearchRequest(BaseModel):
         ),
     )
     tag: Optional[str] = Field(default=None, examples=["doge-apr01"])
+    harness: Optional[str] = Field(
+        default=None,
+        description=(
+            "the registered harness name for this run (default: builtin); "
+            "resolved through the capability descriptors, never branched on"
+        ),
+    )
     quick_mode: Optional[bool] = Field(
         default=None,
         description="If null, uses server default (standard/full mode)",
@@ -638,6 +646,19 @@ async def start_research(request: Request, req: StartResearchRequest):
             research_id=session.get("id"),
             metadata=metadata,
         )
+        # The run's harness binding is stream state: capability views and
+        # the UI read it from here, not from a name branch.
+        if _store is not None and session.get("id"):
+            await _store.append_event(
+                event_id=f"research-run-created:{session['id']}",
+                stream_key=session["id"],
+                event_type="research.run.created",
+                payload={
+                    "harness": req.harness or "builtin",
+                    "attach_mode": "not_attached",
+                },
+                producer="research-api",
+            )
         return _dual_shape_session(session)
     except SkillConfigError as e:
         # ARC-012 P7-010: a session that cannot materialize its skill runtime

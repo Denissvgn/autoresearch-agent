@@ -2148,6 +2148,110 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/harnesses:
+    get:
+      summary: List Harnesses
+      description: Capability descriptors for every registered harness.
+      operationId: list_harnesses_api_v1_harnesses_get
+      parameters:
+      - name: X-Request-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Correlation identifier; auto-generated UUID4 when missing.
+          title: X-Request-Id
+        description: Correlation identifier; auto-generated UUID4 when missing.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response List Harnesses Api V1 Harnesses Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/harnesses/{name}:
+    get:
+      summary: Get Harness
+      operationId: get_harness_api_v1_harnesses__name__get
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Name
+      - name: X-Request-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Correlation identifier; auto-generated UUID4 when missing.
+          title: X-Request-Id
+        description: Correlation identifier; auto-generated UUID4 when missing.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Harness Api V1 Harnesses  Name  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/research/{research_id}/harness-context:
+    get:
+      summary: Research Harness Context
+      description: 'Run-bound view: harness, evidence authority, usage quality, resume.'
+      operationId: research_harness_context_api_v1_research__research_id__harness_context_get
+      parameters:
+      - name: research_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Research Id
+      - name: X-Request-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Correlation identifier; auto-generated UUID4 when missing.
+          title: X-Request-Id
+        description: Correlation identifier; auto-generated UUID4 when missing.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Research Harness Context Api V1 Research  Research Id  Harness Context Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /health:
     get:
       summary: Health
@@ -2606,10 +2710,7 @@ components:
           - type: string
           - type: 'null'
           title: Model Type
-          description: 'Legacy alias for skill_id. Known legacy short names (direction/volatility/rl)
-            map to their canonical skill ids; any other value is used as the skill_id directly. Unknown
-            skills are rejected with 404 skill_not_found. In responses this is a derived legacy alias:
-            the trio for ML skills, or "" for skills without one — never a skill id.'
+          description: 'Legacy alias for skill_id. Known legacy short names (direction/volatility/rl) map to their canonical skill ids; any other value is used as the skill_id directly. Unknown skills are rejected with 404 skill_not_found. In responses this is a derived legacy alias: the trio for ML skills, or "" for skills without one — never a skill id.'
         skill_id:
           anyOf:
           - type: string
@@ -2637,8 +2738,7 @@ components:
             type: object
           - type: 'null'
           title: Skill Params
-          description: Canonical skill parameters, validated against the skill's param_schema. Sent alongside
-            skill_id; ignored for legacy shape.
+          description: Canonical skill parameters, validated against the skill's param_schema. Sent alongside skill_id; ignored for legacy shape.
         tag:
           anyOf:
           - type: string
@@ -2646,6 +2746,12 @@ components:
           title: Tag
           examples:
           - doge-apr01
+        harness:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Harness
+          description: 'the registered harness name for this run (default: builtin); resolved through the capability descriptors, never branched on'
         quick_mode:
           anyOf:
           - type: boolean
@@ -2687,8 +2793,7 @@ components:
             type: object
           - type: 'null'
           title: Manifest
-          description: Optional research-session manifest overrides. Immutable identity fields must still
-            match the server-generated session.
+          description: Optional research-session manifest overrides. Immutable identity fields must still match the server-generated session.
       type: object
       title: StartResearchRequest
     ValidationError:

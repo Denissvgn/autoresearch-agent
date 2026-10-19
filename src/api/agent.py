@@ -276,13 +276,24 @@ async def inspect_results(run_id: str, request: Request) -> dict[str, Any]:
     if _store is None:
         raise HTTPException(status_code=503, detail="store is not initialized")
     rows = await _store.get_iterations(run_id)
+
+    def _authority(row: dict) -> str:
+        label = row.get("result_authority")
+        if not label:
+            try:
+                marker = json.loads(row.get("metrics_json") or "{}")
+            except Exception:
+                marker = {}
+            label = marker.get("result_authority")
+        return label or "model_proposed"
+
     return {
         "run_id": run_id,
         "results": [
             {
                 "iteration": row.get("iteration"),
                 "metrics": row.get("metrics_json"),
-                "authority": row.get("result_authority") or "model_proposed",
+                "authority": _authority(row),
             }
             for row in rows
         ],

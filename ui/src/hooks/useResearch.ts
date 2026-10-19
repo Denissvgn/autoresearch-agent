@@ -13,6 +13,11 @@ function useWSInvalidation() {
 
   useEffect(() => {
     const unsubs = [
+      // a reconnect or an expired cursor restores authoritative state:
+      // refetch everything instead of trusting stale client caches
+      on('resync', () => {
+        qc.invalidateQueries();
+      }),
       on('iteration_complete', () => {
         qc.invalidateQueries({ queryKey: ['sessions'] });
         qc.invalidateQueries({ queryKey: ['session'] });
@@ -155,6 +160,23 @@ export function useAgentLog(id: string, isActive = false) {
   });
 }
 
+
+export function useHarnesses() {
+  return useQuery({
+    queryKey: ['harnesses'],
+    queryFn: api.listHarnesses,
+    staleTime: 60_000,
+  });
+}
+
+export function useHarnessContext(researchId: string | null, isActive = true) {
+  return useQuery({
+    queryKey: ['harness-context', researchId],
+    queryFn: () => api.getHarnessContext(researchId as string),
+    enabled: Boolean(researchId) && isActive,
+    refetchInterval: isActive ? 30_000 : false,
+  });
+}
 
 export function useModels() {
   return useQuery({ queryKey: ['models'], queryFn: api.getModels, staleTime: 60_000 });

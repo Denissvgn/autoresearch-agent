@@ -92,6 +92,9 @@ class FakeStore:
         self.audit_events: list[dict] = []
         self.idempotency_records: dict[tuple[str, str, str], dict] = {}
 
+    async def append_event(self, **kwargs):
+        return None
+
     async def list_sessions(self, **kwargs):
         return []
 

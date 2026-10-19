@@ -83,6 +83,9 @@ class _StubStore:
     def __init__(self) -> None:
         self.audit_events: list[dict[str, Any]] = []
 
+    async def append_event(self, **kwargs: Any) -> None:
+        return None
+
     async def record_audit_event(self, **kwargs: Any) -> None:
         self.audit_events.append(kwargs)
 

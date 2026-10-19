@@ -116,7 +116,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     _promoter = ConfigPromoter(_store)
 
     # Wire API modules
-    from src.api import promotion, research, results, skills, subjects
+    from src.api import harnesses, promotion, research, results, skills, subjects
     from src.core.skill_registry import SkillRegistry
 
     # P3-001..011: discover installed skill manifests and wire the skill /
@@ -129,6 +129,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     research.init(_session_manager, _store)  # type: ignore[no-untyped-call]
     results.init(_store, mlflow_external_url=settings.mlflow_external_url)
     promotion.init(_promoter, _store, skill_registry=_skill_registry)  # type: ignore[no-untyped-call]
+    harnesses.init(_session_manager, _store)
 
     logger.info("Autoresearch-agent ready")
 
@@ -175,6 +176,7 @@ app.add_middleware(
 
 # Include API routers
 from src.api.agent import router as agent_router
+from src.api.harnesses import router as harnesses_router
 from src.api.promotion import router as promotion_router
 from src.api.research import router as research_router
 from src.api.results import router as results_router
@@ -197,6 +199,7 @@ def _include_api_routers(prefix: str, *, include_in_schema: bool = True) -> None
     app.include_router(skills_router, prefix=prefix, include_in_schema=include_in_schema)
     app.include_router(subjects_router, prefix=prefix, include_in_schema=include_in_schema)
     app.include_router(agent_router, prefix=prefix, include_in_schema=include_in_schema)
+    app.include_router(harnesses_router, prefix=prefix, include_in_schema=include_in_schema)
 
 
 _include_api_routers(_API_V1_PREFIX)

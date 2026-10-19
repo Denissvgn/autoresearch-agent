@@ -3,10 +3,11 @@
 // manifest (GET /skills); falls back to a subject/variant free-form pair.
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useModels, useStartResearch, useSkills, useSkillFormFields, useCostEstimate } from '../hooks/useResearch';
+import { useModels, useStartResearch, useSkills, useSkillFormFields, useCostEstimate, useHarnesses } from '../hooks/useResearch';
 import { Field, Icon } from '../components/hifi/primitives';
 import SkillPicker from '../components/SkillPicker';
 import DynamicFormFields from '../components/DynamicFormFields';
+import HarnessPicker from '../components/HarnessPicker';
 
 const FOCUS_EXAMPLES = [
   'improve robustness',
@@ -34,6 +35,12 @@ export default function NewResearch() {
   const { data: skillFormFieldsData } = useSkillFormFields(selectedSkillId);
   const [skillParams, setSkillParams] = useState<Record<string, unknown>>({});
   const skillFormFields = skillFormFieldsData?.form_fields ?? [];
+
+  // Harness selection: capability descriptors, no name branches.
+  const { data: harnessesData } = useHarnesses();
+  const harnessList = harnessesData?.harnesses ?? [];
+  const [selectedHarness, setSelectedHarness] = useState<string | null>(null);
+  const effectiveHarness = selectedHarness ?? harnessList[0]?.name ?? null;
 
   // Default the subject/variant to the selected skill's first enumeration.
   useEffect(() => {
@@ -89,6 +96,7 @@ export default function NewResearch() {
         variant,
         skill_params: Object.keys(skillParams).length > 0 ? skillParams : undefined,
         tag: tag || undefined,
+        harness: effectiveHarness ?? undefined,
         quick_mode: quickMode,
         max_iterations: maxIterations,
         max_budget_usd: maxBudget,
@@ -141,6 +149,17 @@ export default function NewResearch() {
                 </span>
               )}
             </Field>
+
+            {/* Harness selection and capability/preflight diagnostics —
+                rendered from API descriptors, preserving the skill-driven
+                parameter forms below. */}
+            {harnessList.length > 0 && (
+              <HarnessPicker
+                harnesses={harnessList}
+                selected={effectiveHarness}
+                onSelect={setSelectedHarness}
+              />
+            )}
 
             {skillFormFields.length > 0 ? (
               /* P3-022: dynamic form fields from the selected skill's manifest */

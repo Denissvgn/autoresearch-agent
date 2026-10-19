@@ -176,6 +176,33 @@ class CodexHarnessAdapter:
         self._runs: dict[str, dict[str, Any]] = {}
 
     # -- HarnessAdapter (harness contract) ----------------------------
+    def preflight(self) -> dict[str, Any]:
+        """Diagnostics for capability/preflight surfaces (no authority)."""
+        import shutil
+
+        found = shutil.which("codex")
+        return {
+            "checks": [
+                {
+                    "name": "identity",
+                    "status": "ok",
+                    "detail": f"{self._name} {self._version}",
+                },
+                {
+                    "name": "executable",
+                    "status": "ok" if found else "missing",
+                    "detail": (
+                        found or "the codex executable is not on PATH"
+                    ),
+                },
+                {
+                    "name": "auth",
+                    "status": "unknown",
+                    "detail": "auth mode is recorded at launch",
+                },
+            ]
+        }
+
     def identity(self) -> Mapping[str, Any]:
         return {
             "name": self._name,
