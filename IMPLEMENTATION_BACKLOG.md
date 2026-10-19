@@ -1088,9 +1088,9 @@ Autonomy: Start with the documented JSONL custom-driver transport under the qual
 process host. Bound event size/queues and supervise descendants; ordinary driver tool
 access never becomes evaluator or promotion authority.
 
-- [ ] Launch drivers in the qualified isolation context with explicit environment, workspace, instruction artifacts, credentials, and executable identity.
-- [ ] Implement versioned structured event/proposal transport, bounded stderr/stdout, backpressure, start deadlines, and process supervision.
-- [ ] Provide a custom JSONL driver example; keep its ordinary shell activity distinct from trusted evaluator execution and promotion authority.
+- [x] Launch drivers in the qualified isolation context with explicit environment, workspace, instruction artifacts, credentials, and executable identity.
+- [x] Implement versioned structured event/proposal transport, bounded stderr/stdout, backpressure, start deadlines, and process supervision.
+- [x] Provide a custom JSONL driver example; keep its ordinary shell activity distinct from trusted evaluator execution and promotion authority.
 
 Acceptance: a custom driver can propose candidates and request evaluation,
 but cannot bypass evidence, budget, or filesystem policy. Driver crash/timeout
