@@ -1001,9 +1001,9 @@ Autonomy: Make required operations minimal and versioned; advertise optional
 capabilities individually. Use a deterministic fake adapter to specify behavior before
 integrations, including unknown events and unsupported lifecycle actions.
 
-- [ ] Implement versioned start/attach, event stream, cancel, close, and optional pause/resume/steering capabilities.
-- [ ] Resolve adapter identity/version and permissions into the run spec; validate skill/operator requirements before launch.
-- [ ] Define event/proposal/error schemas and a reusable fake adapter plus conformance tests, including unsupported capability behavior.
+- [x] Implement versioned start/attach, event stream, cancel, close, and optional pause/resume/steering capabilities.
+- [x] Resolve adapter identity/version and permissions into the run spec; validate skill/operator requirements before launch.
+- [x] Define event/proposal/error schemas and a reusable fake adapter plus conformance tests, including unsupported capability behavior.
 
 Acceptance: registering an adapter requires no kernel branch for its name.
 An unsupported pause/resume is explicit; kill is not presented as successful

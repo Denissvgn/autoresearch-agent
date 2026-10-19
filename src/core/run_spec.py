@@ -152,6 +152,7 @@ def build_run_spec(
     effective_config: Mapping[str, Any],
     parent_snapshot: Optional[Mapping[str, Any]] = None,
     pinned_param_state: Optional[Mapping[str, Any]] = None,
+    harness: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build the resolved, nonsecret run spec with its content digest.
 
@@ -200,6 +201,10 @@ def build_run_spec(
             dict(parent_snapshot) if parent_snapshot else None
         ),
     }
+    if harness is not None:
+        # Resolved adapter identity/version/permissions — pinned with the
+        # rest of the spec (harness_adapter.resolve_harness_spec).
+        spec["harness"] = dict(harness)
     spec["spec_sha256"] = hashlib.sha256(
         canonical_spec_json(spec).encode("utf-8")
     ).hexdigest()
