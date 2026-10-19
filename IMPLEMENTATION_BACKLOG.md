@@ -1067,9 +1067,9 @@ Autonomy: Extend the existing CLI and publish JSON schemas/exit codes. Use
 reference-based credentials and bounded waits; prove the workflow from an installed
 package outside the checkout.
 
-- [ ] Add machine-readable commands for run creation/attach, constraints, candidate staging, evaluation, results, and preview.
-- [ ] Support scoped credential handling, event cursor persistence, bounded waits, and stable exit/error codes without leaking credentials in arguments/logs.
-- [ ] Publish a minimal external-driver example and deterministic shell/SDK conformance fixture.
+- [x] Add machine-readable commands for run creation/attach, constraints, candidate staging, evaluation, results, and preview.
+- [x] Support scoped credential handling, event cursor persistence, bounded waits, and stable exit/error codes without leaking credentials in arguments/logs.
+- [x] Publish a minimal external-driver example and deterministic shell/SDK conformance fixture.
 
 Acceptance: a simple external program completes the same verified workflow via
 the CLI/API, including reconnect, with no knowledge of internal Python classes.

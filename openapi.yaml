@@ -2095,6 +2095,59 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/agent/runs/{run_id}/events:
+    get:
+      tags:
+      - attached-agent
+      summary: Run Events
+      description: Bounded event replay from a cursor (for reconnect).
+      operationId: run_events_api_v1_agent_runs__run_id__events_get
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Cursor
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 100
+          title: Limit
+      - name: X-Request-ID
+        in: header
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Correlation identifier; auto-generated UUID4 when missing.
+          title: X-Request-Id
+        description: Correlation identifier; auto-generated UUID4 when missing.
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Run Events Api V1 Agent Runs  Run Id  Events Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /health:
     get:
       summary: Health

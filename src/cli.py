@@ -59,6 +59,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
+    from src.agent_cli import build_agent_parser
+
+    build_agent_parser(sub)
+
     new_skill = sub.add_parser(
         "new-skill",
         help="Draft a new skill package from a natural-language goal (LLM).",
@@ -491,10 +495,13 @@ async def cmd_reconcile_bests(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 
+from src.agent_cli import cmd_agent as _agent_command_handler
+
 _COMMANDS = {
     "new-skill": cmd_new_skill,
     "promote-skill": cmd_promote_skill,
     "reconcile-bests": cmd_reconcile_bests,
+    "agent": _agent_command_handler,
 }
 
 

@@ -343,3 +343,38 @@ async def promotion_preview(run_id: str, request: Request) -> dict[str, Any]:
         "status": decision.status,
         "reasons": list(decision.reasons),
     }
+
+
+@router.get("/agent/runs/{run_id}/events")
+async def run_events(
+    run_id: str,
+    request: Request,
+    cursor: int = 0,
+    limit: int = 100,
+) -> dict[str, Any]:
+    """Bounded event replay from a cursor (for reconnect)."""
+    await _require_agent(request, run_id, PERM_READ)
+    if _store is None:
+        raise HTTPException(status_code=503, detail="store is not initialized")
+    from src.ws.events import poll_events
+
+    batch = max(1, min(limit, 500))
+    events = await poll_events(
+        _store, stream_key=run_id, cursor=cursor, limit=batch
+    )
+    next_cursor = (
+        int(events[-1].get("sequence") or cursor) if events else int(cursor)
+    )
+    return {
+        "run_id": run_id,
+        "events": [
+            {
+                "event_id": event.get("event_id"),
+                "type": event.get("event_type"),
+                "sequence": event.get("sequence"),
+                "payload": event.get("payload"),
+            }
+            for event in events
+        ],
+        "cursor": next_cursor,
+    }
