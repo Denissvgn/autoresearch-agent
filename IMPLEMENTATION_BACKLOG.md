@@ -1111,9 +1111,9 @@ structured interface satisfying required lifecycle/permission events. Pin the ac
 version, record unsupported optional features, and run live checks only within
 inventoried authority/budget.
 
-- [ ] Recheck official integration documentation at implementation time, choose and pin a supported structured interface, and record the tested version/transport.
-- [ ] Map native lifecycle, candidate changes, usage, permission/approval outcomes, and cancellation into the common contracts.
-- [ ] Implement only demonstrated native resume/pause features; enforce scoped research/evaluator authority even when the harness has its own tools.
+- [x] Recheck official integration documentation at implementation time, choose and pin a supported structured interface, and record the tested version/transport.
+- [x] Map native lifecycle, candidate changes, usage, permission/approval outcomes, and cancellation into the common contracts.
+- [x] Implement only demonstrated native resume/pause features; enforce scoped research/evaluator authority even when the harness has its own tools.
 
 Acceptance: the adapter executes a small real research lifecycle through the
 same trusted evaluator as the built-in driver; denied permissions do not hang
