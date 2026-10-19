@@ -1156,9 +1156,9 @@ Autonomy: Use one shared conformance contract with explicit per-adapter capabili
 Report fixture and live runs separately; do not infer compatibility or native resume
 from another adapter's success.
 
-- [ ] Run one shared contract suite for built-in, custom process, Codex, and Claude Code adapters and the attached API/CLI workflow.
-- [ ] Exercise permissions, unsupported capabilities, duplicate/out-of-order events, unknown usage, cancel, unavailable executable, and version mismatch.
-- [ ] Verify no managed/attached path can bypass G1 evidence or scope rules, including reusing a receipt across drivers/runs.
+- [x] Run one shared contract suite for built-in, custom process, Codex, and Claude Code adapters and the attached API/CLI workflow.
+- [x] Exercise permissions, unsupported capabilities, duplicate/out-of-order events, unknown usage, cancel, unavailable executable, and version mismatch.
+- [x] Verify no managed/attached path can bypass G1 evidence or scope rules, including reusing a receipt across drivers/runs.
 
 Acceptance: each advertised adapter passes required semantics; optional features
 are declared individually. Fixture success and actual live-version success are

@@ -164,11 +164,19 @@ class FakeHarnessAdapter:
 # ---------------------------------------------------------------------------
 
 
-def run_conformance(adapter: HarnessAdapter) -> list[str]:
-    """Conformance findings for one adapter; empty means conforming."""
+def run_conformance(
+    adapter: HarnessAdapter, *, start_request: Mapping[str, Any] | None = None
+) -> list[str]:
+    """Conformance findings for one adapter; empty means conforming.
+
+    ``start_request`` supplies the run configuration for adapters that
+    require one (process-backed harnesses); without it the generic
+    contract shape is used and a refused start is a finding.
+    """
     findings: list[str] = []
     identity = adapter.identity()
     name = str(identity.get("name") or "?")
+    request = dict(start_request) if start_request else {"run": "conformance"}
 
     # identity coherence and contract version
     if identity.get("contract_version") != HARNESS_CONTRACT_VERSION:
@@ -211,8 +219,19 @@ def run_conformance(adapter: HarnessAdapter) -> list[str]:
     except Exception as exc:  # noqa: BLE001 — wrong error shape
         findings.append(f"{name}: unknown-handle events raised {exc!r}")
 
+    def _start(tag: str):
+        probe_request = dict(request)
+        probe_request["run"] = tag
+        try:
+            return adapter.start(probe_request)
+        except HarnessContractError as exc:
+            findings.append(f"{name}: start refused: {exc}")
+            return None
+
     # cancelled start and cleanup
-    started = adapter.start({"run": "conformance"})
+    started = _start("conformance")
+    if started is None:
+        return findings
     handle = str(started.get("handle") or "")
     if not handle:
         findings.append(f"{name}: start returned no handle")
@@ -229,8 +248,11 @@ def run_conformance(adapter: HarnessAdapter) -> list[str]:
         findings.append(f"{name}: closed-handle events raised {exc!r}")
 
     # unsupported capabilities are explicit; kill is never a pause
-    handle2 = str(adapter.start({"run": "conformance-2"}).get("handle") or "")
-    for capability, request in (
+    started2 = _start("conformance-2")
+    if started2 is None:
+        return findings
+    handle2 = str(started2.get("handle") or "")
+    for capability, send in (
         (CAPABILITY_PAUSE, lambda: request_pause(adapter, handle2)),
         (CAPABILITY_RESUME, lambda: request_resume(adapter, handle2)),
         (
@@ -243,18 +265,23 @@ def run_conformance(adapter: HarnessAdapter) -> list[str]:
     ):
         if capability in advertised:
             try:
-                request()
+                send()
             except UnsupportedCapabilityError:
                 findings.append(
                     f"{name}: advertised {capability!r} refused its request"
                 )
+            except HarnessContractError:
+                # an advertised capability may carry a documented
+                # precondition (qualified resume needs a session): an
+                # explicit refusal is not a lie
+                pass
             except Exception as exc:  # noqa: BLE001 — misbehaving op
                 findings.append(
                     f"{name}: advertised {capability!r} raised {exc!r}"
                 )
         else:
             try:
-                request()
+                send()
                 findings.append(
                     f"{name}: unadvertised {capability!r} was accepted"
                 )
@@ -262,18 +289,21 @@ def run_conformance(adapter: HarnessAdapter) -> list[str]:
                 pass
     # a pause must not kill the run it pauses
     if CAPABILITY_PAUSE in advertised:
-        probe = str(adapter.start({"run": "pause-probe"}).get("handle") or "")
-        try:
-            request_pause(adapter, probe)
-        except Exception:  # noqa: BLE001 — already reported above
-            pass
-        try:
-            list(adapter.events(probe))
-        except HarnessLifecycleError:
-            findings.append(
-                f"{name}: pause terminated the run (kill presented as pause)"
-            )
-        adapter.close(probe)
+        started_probe = _start("pause-probe")
+        if started_probe is not None:
+            probe = str(started_probe.get("handle") or "")
+            try:
+                request_pause(adapter, probe)
+            except Exception:  # noqa: BLE001 — already reported above
+                pass
+            try:
+                list(adapter.events(probe))
+            except HarnessLifecycleError:
+                findings.append(
+                    f"{name}: pause terminated the run (kill presented as"
+                    " pause)"
+                )
+            adapter.close(probe)
     adapter.close(handle2)
 
     # cross-harness attach never claims native transcript resume

@@ -340,15 +340,20 @@ class ClaudeCodeHarnessAdapter:
         ]
         if config.resume_session_id:
             command += ["--resume", config.resume_session_id]
-        process = subprocess.Popen(
-            command,
-            cwd=config.workspace,
-            env=env,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
+        try:
+            process = subprocess.Popen(
+                command,
+                cwd=config.workspace,
+                env=env,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except OSError as exc:
+            raise HarnessContractError(
+                f"claude executable unavailable: {exc}"
+            ) from None
         state["process"] = process
         assert process.stdin is not None
         process.stdin.write(config.prompt.encode("utf-8"))

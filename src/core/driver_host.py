@@ -182,14 +182,19 @@ class DriverHost:
         if self._config.credential:
             env["AUTORESEARCH_AGENT_CREDENTIAL"] = self._config.credential
         self._started_at = time.monotonic()
-        self._process = subprocess.Popen(
-            list(self._config.executable),
-            cwd=self._config.workspace,
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            start_new_session=True,  # its own process group: descendants
-        )
+        try:
+            self._process = subprocess.Popen(
+                list(self._config.executable),
+                cwd=self._config.workspace,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                start_new_session=True,  # its own process group: descendants
+            )
+        except OSError as exc:
+            raise HarnessContractError(
+                f"driver executable unavailable: {exc}"
+            ) from None
         self._reader = _EventReader(
             self._process.stdout, self._config, self._record
         )

@@ -218,51 +218,59 @@ class SessionManager:
         so clients still observe the crash.
         """
         error_text = str(exc)[:2000]
-        try:
-            result = await self._sm.transition(
-                research_id,
-                SessionEvent.FAIL,
-                status_fields={
-                    "completed_at": datetime.now(timezone.utc).isoformat(),
-                    "error_message": error_text,
-                    "terminal_reason": (
-                        f"background_task_crashed:{type(exc).__name__}"
-                    ),
-                },
-                broadcast_fields={
+        # A crashed task's terminal state must be durable: transient store
+        # failures are retried (bounded) before falling back to broadcast.
+        for attempt in range(3):
+            try:
+                result = await self._sm.transition(
+                    research_id,
+                    SessionEvent.FAIL,
+                    status_fields={
+                        "completed_at": datetime.now(timezone.utc).isoformat(),
+                        "error_message": error_text,
+                        "terminal_reason": (
+                            f"background_task_crashed:{type(exc).__name__}"
+                        ),
+                    },
+                    broadcast_fields={
+                        "error": str(exc)[:500],
+                        "source": "task_done_callback",
+                    },
+                )
+                if not result.changed:
+                    logger.info(
+                        "Crashed task for research %s: status already %s — "
+                        "not overwritten",
+                        research_id, result.new_state.value,
+                    )
+                return
+            except (IllegalTransitionError, LookupError) as tie:
+                logger.warning(
+                    "Crashed task for research %s could not finalize via the "
+                    "state machine (%s); broadcasting only",
+                    research_id, tie,
+                )
+                await broadcaster.broadcast({
+                    "event": "research_failed",
+                    "research_id": research_id,
                     "error": str(exc)[:500],
                     "source": "task_done_callback",
-                },
-            )
-            if not result.changed:
-                logger.info(
-                    "Crashed task for research %s: status already %s — "
-                    "not overwritten",
-                    research_id, result.new_state.value,
-                )
-        except (IllegalTransitionError, LookupError) as tie:
-            logger.warning(
-                "Crashed task for research %s could not finalize via the "
-                "state machine (%s); broadcasting only",
-                research_id, tie,
-            )
-            await broadcaster.broadcast({
-                "event": "research_failed",
-                "research_id": research_id,
-                "error": str(exc)[:500],
-                "source": "task_done_callback",
-            })
-        except Exception:
-            logger.exception(
-                "Failed to persist terminal state for crashed research %s",
-                research_id,
-            )
-            await broadcaster.broadcast({
-                "event": "research_failed",
-                "research_id": research_id,
-                "error": str(exc)[:500],
-                "source": "task_done_callback",
-            })
+                })
+                return
+            except Exception:
+                if attempt == 2:
+                    break
+                await asyncio.sleep(0.05 * (attempt + 1))
+        logger.exception(
+            "Failed to persist terminal state for crashed research %s",
+            research_id,
+        )
+        await broadcaster.broadcast({
+            "event": "research_failed",
+            "research_id": research_id,
+            "error": str(exc)[:500],
+            "source": "task_done_callback",
+        })
 
     async def _reserve_budget(self, config: ResearchConfig) -> None:
         """Reserve bounded spend before work starts.
