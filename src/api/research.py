@@ -12,7 +12,7 @@ from typing import Any, Dict, Mapping, Optional
 
 import yaml
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.api.audit import record_api_audit_event
 from src.api.auth import require_api_auth
@@ -468,6 +468,8 @@ async def _run_idempotent(
 
 
 class StartResearchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     # Legacy shape (§10 #1: still accepted identically).
     instrument: Optional[str] = Field(default=None, examples=["subject-a"])
     timeframe: Optional[str] = Field(default=None, examples=["v1"])
@@ -543,6 +545,8 @@ class StartResearchRequest(BaseModel):
 
 class EstimateCostRequest(BaseModel):
     """Body for ``POST /research/estimate-cost`` — the New-Research preview."""
+
+    model_config = ConfigDict(extra="forbid")
 
     max_iterations: int = Field(default=30, ge=1, le=500)
     quick_mode: bool = Field(
@@ -868,6 +872,8 @@ async def resume_research(request: Request, research_id: str):
 
 class ContinueResearchRequest(BaseModel):
     """Request body for continuing a timed-out/completed session."""
+
+    model_config = ConfigDict(extra="forbid")
     max_iterations: Optional[int] = Field(default=None, ge=1, le=500)
     max_budget_usd: Optional[float] = Field(default=None, ge=0.1, le=500.0)
     timeout_minutes: Optional[int] = Field(
@@ -916,7 +922,7 @@ async def continue_research(
             operation="research.continue",
             parent_id=research_id,
             key=idempotency_key,
-            request_payload=req.model_dump(),
+            request_payload=req.model_dump(mode="json"),
             call=lambda: _session_manager.continue_session(
                 research_id,
                 max_iterations=req.max_iterations,
@@ -971,7 +977,7 @@ async def runtime_resume_research(
             operation="research.runtime_resume",
             parent_id=research_id,
             key=idempotency_key,
-            request_payload=req.model_dump(),
+            request_payload=req.model_dump(mode="json"),
             call=lambda: _session_manager.resume_interrupted_session(
                 research_id,
                 reason=req.reason,

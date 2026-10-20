@@ -7,7 +7,7 @@ import hmac
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from src.api.audit import record_api_audit_event
 from src.api.auth import require_api_auth
@@ -108,6 +108,8 @@ def _inject_target_kind(
 
 
 class PromotionRollbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     reason: str | None = None
     #: Explicit reconciliation for ambiguous legacy records (no canonical
     #: skill/target identity and no recorded rollback routing).
@@ -115,6 +117,8 @@ class PromotionRollbackRequest(BaseModel):
 
 
 class PromotionApproval(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     approver: str | None = None
     reason: str | None = None
     method: str | None = None
@@ -127,6 +131,8 @@ class PromotionApproval(BaseModel):
 
 class PromotionPreviewRequest(BaseModel):
     """Unsigned discovery must be possible before an operator can sign a candidate."""
+
+    model_config = ConfigDict(extra="forbid")
     scope: str = "development"
     approval: PromotionApproval | None = None
 
@@ -139,6 +145,8 @@ class PromotionPreviewRequest(BaseModel):
 
 
 class PromotionScopeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     scope: str = "development"
     approval: PromotionApproval | None = None
 
@@ -175,7 +183,7 @@ class PromotionScopeRequest(BaseModel):
                 "Production-scope promotion requires a signed approval; "
                 f"missing or invalid: {', '.join(missing)}"
             )
-        candidate_fields(approval.model_dump() if approval is not None else None)
+        candidate_fields(approval.model_dump(mode="json") if approval is not None else None)
         if approval is not None and approval.method != APPROVAL_METHOD:
             raise ValueError(
                 "Production approval requires hmac-sha256-v2; "

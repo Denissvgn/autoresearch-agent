@@ -462,7 +462,7 @@ class ManifestSkillRuntime:
         review C2 — consumed by the orchestrator's promotion-readiness
         advisory). An empty dict means "no override — use the module-level
         defaults" (``_AGENT_ACTIONABLE_BLOCKERS``)."""
-        bc = getattr(self._manifest, "blocker_classification", None)
+        bc = self._manifest.blocker_classification
         if bc is None:
             return {}
         return {
@@ -483,7 +483,7 @@ class ManifestSkillRuntime:
         drop them — the execution-request resolver enforces both. No provider
         credential is exposed to the child.
         """
-        bindings = getattr(self._manifest, "parameter_bindings", None)
+        bindings = self._manifest.parameter_bindings
         if bindings is None:
             return {}
         params = getattr(config, "skill_params", None) or {}
@@ -941,7 +941,7 @@ class ManifestSkillRuntime:
         advancement keeps the explicit rejection (an unsupported declaration
         must never silently substitute declarative behavior).
         """
-        advancement = getattr(self._manifest, "phase_advancement", None)
+        advancement = self._manifest.phase_advancement
         top_level_plugin = (
             getattr(advancement, "mode", "declarative") == "plugin"
         )
@@ -952,7 +952,7 @@ class ManifestSkillRuntime:
         ]
         if not top_level_plugin and not per_phase_plugin:
             return
-        entries = getattr(self._manifest.plugins, "entries", []) or []
+        entries = list(self._manifest.plugins.entries)
         declared = [
             e for e in entries if getattr(e, "kind", None) == "phase_advancement"
         ]
@@ -975,9 +975,9 @@ class ManifestSkillRuntime:
         capability rules; ``None`` means the phase uses the declarative
         share only.
         """
-        entries = getattr(self._manifest.plugins, "entries", []) or []
+        entries = list(self._manifest.plugins.entries)
         for entry in entries:
-            if getattr(entry, "kind", None) == "phase_advancement":
+            if entry.kind == "phase_advancement":
                 return entry
         return None
 
@@ -1010,7 +1010,7 @@ class ManifestSkillRuntime:
         from src.core.iteration_snapshot import build_trial_identity
 
         model_type = getattr(config, "model_type", "") or ""
-        trial_config = getattr(self._manifest, "trial_identity", None)
+        trial_config = self._manifest.trial_identity
         return build_trial_identity(
             instrument=config.instrument,
             timeframe=config.timeframe,
@@ -1068,7 +1068,7 @@ class ManifestSkillRuntime:
     # ── Execution (P1-4) ───────────────────────────────────────────────
     def execution_concurrency(self) -> int:
         """The manifest's ``execution.concurrency`` (default 1 = sequential)."""
-        execution = getattr(self._manifest, "execution", None)
+        execution = self._manifest.execution
         if execution is None:
             return 1
         return int(getattr(execution, "concurrency", 1) or 1)

@@ -2447,6 +2447,7 @@ components:
           type: number
           title: Max Budget Usd
           default: 7.5
+      additionalProperties: false
       type: object
       title: AgentRunRequest
     CandidateSubmission:
@@ -2459,6 +2460,7 @@ components:
           type: string
           title: Content
           default: ''
+      additionalProperties: false
       type: object
       required:
       - digest
@@ -2494,6 +2496,7 @@ components:
           - type: 'null'
           title: Focus Hint
           description: Optional hint for what to focus on in the continuation
+      additionalProperties: false
       type: object
       title: ContinueResearchRequest
       description: Request body for continuing a timed-out/completed session.
@@ -2518,6 +2521,7 @@ components:
           - type: 'null'
           title: Max Budget Usd
           description: When set, the response reports whether the estimate would be capped by this budget.
+      additionalProperties: false
       type: object
       title: EstimateCostRequest
       description: Body for ``POST /research/estimate-cost`` — the New-Research preview.
@@ -2547,6 +2551,7 @@ components:
           - type: 'null'
           title: Model
           description: 'Model id (default: settings.anthropic_model).'
+      additionalProperties: false
       type: object
       required:
       - goal
@@ -2567,6 +2572,7 @@ components:
           type: string
           title: Action
           description: pause, resume, or stop
+      additionalProperties: false
       type: object
       required:
       - action
@@ -2616,6 +2622,7 @@ components:
             pattern: ^[0-9a-f]{64}$
           - type: 'null'
           title: Target Identity
+      additionalProperties: false
       type: object
       title: PromotionApproval
     PromotionPreviewRequest:
@@ -2628,6 +2635,7 @@ components:
           anyOf:
           - $ref: '#/components/schemas/PromotionApproval'
           - type: 'null'
+      additionalProperties: false
       type: object
       title: PromotionPreviewRequest
       description: Unsigned discovery must be possible before an operator can sign a candidate.
@@ -2642,6 +2650,7 @@ components:
           type: boolean
           title: Reconcile Legacy
           default: false
+      additionalProperties: false
       type: object
       title: PromotionRollbackRequest
     PromotionScopeRequest:
@@ -2654,6 +2663,7 @@ components:
           anyOf:
           - $ref: '#/components/schemas/PromotionApproval'
           - type: 'null'
+      additionalProperties: false
       type: object
       title: PromotionScopeRequest
     RuntimeResumeRequest:
@@ -2698,6 +2708,7 @@ components:
           title: Allow Interrupted
           description: Allow resume from interrupted state when evidence is incomplete.
           default: false
+      additionalProperties: false
       type: object
       required:
       - reason
@@ -2808,6 +2819,7 @@ components:
           - type: 'null'
           title: Manifest
           description: Optional research-session manifest overrides. Immutable identity fields must still match the server-generated session.
+      additionalProperties: false
       type: object
       title: StartResearchRequest
     ValidationError:

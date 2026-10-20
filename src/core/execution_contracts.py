@@ -80,6 +80,8 @@ class VersionedContract(BaseModel):
     writer or a corrupted artifact — fails explicitly at parse time.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     EXPECTED_SCHEMA_VERSION: ClassVar[str] = ""
     schema_version: str
 

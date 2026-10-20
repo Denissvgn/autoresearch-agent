@@ -34,6 +34,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        # deliberate (pydantic-settings): env files carry unrelated keys
         extra="ignore",
         populate_by_name=True,
     )

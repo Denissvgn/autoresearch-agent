@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.api.audit import record_api_audit_event
 from src.api.auth import require_api_auth
@@ -473,6 +473,8 @@ async def reload_skills(request: Request):
 
 class GenerateSkillRequest(BaseModel):
     """Body for ``POST /skills/generate``."""
+
+    model_config = ConfigDict(extra="forbid")
 
     goal: str = Field(
         min_length=8,

@@ -215,6 +215,7 @@ class VariantsConfig(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+# extra=allow: JSON Schema property vocabulary passes through unvalidated.
 class ParamSchemaProperty(BaseModel):
     """One property in the ``param_schema`` JSON Schema (a subset of JSON-Schema
     draft-07 property descriptors is carried verbatim as a dict — P2-001 does
@@ -227,6 +228,7 @@ class ParamSchemaProperty(BaseModel):
     description: Optional[str] = None
 
 
+# extra=allow: JSON Schema keywords pass through (only the wrapper is validated).
 class ParamSchema(BaseModel):
     """JSON Schema describing the ``skill_params`` a skill accepts (ARC-011
     §9 ``param_schema``). Lifted from ``ResearchConfig`` flat fields + the HTTP
@@ -276,6 +278,7 @@ class PrimaryMetric(BaseModel):
     primary_metric_jsonpath: Optional[list[str]] = Field(default=None)
 
 
+# extra=allow: presentation columns carry authoring-specific format/kind vocabularies.
 class MetricColumn(BaseModel):
     """One gate badge, chart series, or iteration-table column."""
 
@@ -622,6 +625,7 @@ class OutputParserFallback(BaseModel):
     marker_dir_template: Optional[str] = None
 
 
+# extra=allow: parser coercion hints carry parser-specific type vocabularies.
 class FieldTypes(BaseModel):
     """Type hints for parser fields used during coercion.
 
@@ -734,6 +738,7 @@ class GateBundles(BaseModel):
     overrides_location: Optional[str] = None
 
 
+# extra=allow: scope declarations carry target-specific fields (see each Target kind).
 class PromotionScope(BaseModel):
     """One promotion scope declaration (ARC-011 §9 ``promotion_target.scopes``)."""
 

@@ -193,7 +193,10 @@ def test_forged_authority_is_never_upgraded(client):
     )
     content = "self-declared"
     digest = hashlib.sha256(content.encode()).hexdigest()
-    submitted = http.post(
+    # a forged authority field is refused at the contract boundary: the
+    # request model forbids unknown keys, so self-declared authority can
+    # never even reach the handler
+    forged = http.post(
         "/api/v1/agent/runs/res-scoped/candidates",
         json={
             "digest": digest,
@@ -202,8 +205,15 @@ def test_forged_authority_is_never_upgraded(client):
         },
         headers={**_auth(token), "Idempotency-Key": "forged"},
     )
+    assert forged.status_code == 422
+    # and for an accepted submission the authority label comes from the
+    # channel, never from the payload
+    submitted = http.post(
+        "/api/v1/agent/runs/res-scoped/candidates",
+        json={"digest": digest, "content": content},
+        headers={**_auth(token), "Idempotency-Key": "clean"},
+    )
     assert submitted.status_code == 201
-    # the authority label comes from the channel, never from the payload
     assert submitted.json()["authority"] == "model_proposed"
 
 

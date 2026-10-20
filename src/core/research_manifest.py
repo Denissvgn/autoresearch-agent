@@ -228,7 +228,7 @@ def _schema_dict(schema: Any) -> Optional[Dict[str, Any]]:
     if schema is None:
         return None
     if hasattr(schema, "model_dump"):
-        return schema.model_dump()
+        return schema.model_dump(mode="json")
     if isinstance(schema, Mapping):
         return dict(schema)
     return None
@@ -242,7 +242,7 @@ def _canonical_digest(value: Any) -> Optional[str]:
     if value is None:
         return None
     if hasattr(value, "model_dump"):
-        payload = value.model_dump()
+        payload = value.model_dump(mode="json")
     elif isinstance(value, Mapping):
         payload = dict(value)
     else:

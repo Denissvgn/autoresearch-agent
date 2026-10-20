@@ -17,7 +17,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.core import scoped_credentials as scoped
 from src.core.scoped_credentials import (
@@ -99,6 +99,8 @@ async def _require_agent(
 
 
 class AgentRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     mode: str = Field("create", description="create or attach")
     instrument: str = "EURUSD"
     timeframe: str = "1h"
@@ -174,6 +176,8 @@ async def run_constraints(run_id: str, request: Request) -> dict[str, Any]:
 
 
 class CandidateSubmission(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     digest: str = Field(..., description="sha256 of the submitted content")
     content: str = ""
 
@@ -301,6 +305,8 @@ async def inspect_results(run_id: str, request: Request) -> dict[str, Any]:
 
 
 class LifecycleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     action: str = Field(..., description="pause, resume, or stop")
 
 
