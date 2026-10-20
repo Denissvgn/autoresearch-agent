@@ -4,9 +4,13 @@
 skill; the agent runs it under a governed, default-deny command policy; the
 curve goes up; winners promote through an audited, rollback-able pipeline.
 
-Universal autonomous research agent. An LLM agent iteratively runs experiments,
-adjusts parameters, and promotes winning configurations — for any domain you
-can describe as a **skill** (a manifest + primer + experiment command).
+Domain-neutral autonomous research agent. An LLM agent iteratively runs
+experiments, adjusts parameters, and promotes winning configurations — for any
+domain you can describe as a **skill** (a manifest + primer + experiment
+command). Compatibility across harness adapters is universal at the contract
+level: every adapter shares the same lifecycle, evidence, and usage contracts.
+Native features differ per adapter (pause, resume, steering) and are advertised
+explicitly; unsupported controls are refused with a reason, never substituted.
 
 Built for platform teams tuning prompts, model configs, and system
 parameters: you bring the domain as a skill package; the service brings the
@@ -38,13 +42,17 @@ UI (React) → FastAPI backend → LLM agent loop (Anthropic / OpenAI)
                             Results → SQLite + WebSocket → UI
 ```
 
-The agent gets 5 sandboxed tools (`bash`, `read_file`, `write_file`, `glob`,
-`grep`) and a directive prompt assembled from the skill's manifest. The
-orchestrator auto-detects completed iterations by parsing the skill's declared
-output format — no reliance on the LLM to report results. Every training
-attempt records an immutable snapshot (command, config hash, artifact
-provenance); sessions persist phase state, consistency reports, and
-reconstructable operational summaries.
+The agent gets 5 workspace-scoped tools (`bash`, `read_file`, `write_file`,
+`glob`, `grep`) governed by a default-deny command policy — command execution
+is restricted to the skill's declared allowlist and the run workspace. This is
+a policy boundary, not an OS-level sandbox: run the service in an isolated
+environment (container or dedicated host) when executing untrusted skills. A
+directive prompt is assembled from the skill's manifest. The orchestrator
+auto-detects completed iterations by parsing the skill's declared output
+format — no reliance on the LLM to report results. Every training attempt
+records an immutable snapshot (command, config hash, artifact provenance);
+sessions persist phase state, consistency reports, and reconstructable
+operational summaries.
 
 Each session starts from an immutable `research_session_manifest.v3`
 written to the run workspace and persisted in SQLite. The session's
@@ -109,6 +117,20 @@ poetry install --no-interaction --no-root
 poetry run uvicorn src.main:app --host 0.0.0.0 --port 8030
 ```
 
+Or from a built release artifact (wheel/sdist), outside the source tree:
+
+```bash
+python -m venv /opt/autoresearch/venv
+/opt/autoresearch/venv/bin/pip install dist/autoresearch_agent-*.whl
+/opt/autoresearch/venv/bin/python -c "import src.main"   # imports cleanly
+/opt/autoresearch/venv/bin/autoresearch --help           # operator CLI responds
+```
+
+The installed package carries the service, the bundled skill packages, and
+the operator CLI — no repository checkout is required at runtime. Verify the
+install with the smoke commands in `RUNBOOK.md` (health, skills, demo
+session).
+
 The Docker build consumes the tracked UI source, `package.json`, and
 `package-lock.json`. The `.dockerignore` excludes `.env`, `ui/node_modules/`,
 `ui/dist/`, and coverage outputs while keeping `.env.example`, package
@@ -165,16 +187,19 @@ refuses the mock in production (fail-closed). The same flow is scripted in
 
 | Skill | Category | Scorer | Promotion |
 |-------|----------|--------|-----------|
-| `prompt-engineering` | generative | remote scorer → OpenAI judge → offline fallback | `registry_api` (webhook delivery) |
-| `code-refactor` | generative | offline: syntax + lint + JSONL test ledger | `file_path` |
-| `db-config-tuning` | optimization | offline: deterministic TPS/latency bench model | `file_path` |
+| `prompt-engineering` | generative | controlled scorer (live endpoint required; a scorer failure is an explicit refusal — there is no fallback chain). Offline demo scoring is a separate, labeled mode | `registry_api` (webhook delivery) |
+| `code-refactor` | generative | real test/lint/type runs over candidate bundles (protected tests; a required-but-unmeasured gate rejects) | `file_path` |
+| `db-config-tuning` | optimization | offline: deterministic TPS/latency bench model (simulated mode — never comparable with measured evidence) | `file_path` |
 
 A skill is a directory under `skills/` (`SKILL.yaml` + `SKILL.md` +
 `bootstrap.py` + eval CLI); add one and `POST /api/v1/skills/reload` — no
 orchestrator or UI code changes. At session start the service runs the
 skill's `bootstrap.py` to render the session workspace (the evaluator's
-inputs); a failed bootstrap refuses the start. The **Leaderboard** page ranks every scored
-session per skill by the skill's declared metric direction
+inputs); a failed bootstrap refuses the start. The **Leaderboard** page ranks
+scored sessions **within comparable-context groups** (objective, units,
+dataset/scorer/fidelity pins, subject/variant constraints): contexts never
+merge into one champion table, and history without a recorded context ranks
+only in its own group
 (`GET /api/v1/skills/{id}/leaderboard`).
 
 Skills declaring `promotion_target.kind: webhook` (or `registry_api` with an
@@ -182,6 +207,31 @@ endpoint) deliver the promoted winner to their endpoint with an
 `Idempotency-Key` and retries, keeping a local provenance copy under
 `<workspace>/promotions/`; delivery failure fails the confirm (fail-closed).
 See `examples/prompt-registry/` for a runnable receiver.
+
+---
+
+## Qualified Support
+
+What "works" means here is measured, not claimed. Each combination of
+harness adapter, research domain, and backend is qualified by an executed
+candidate → evaluation → winner lifecycle; combinations without live
+evidence are **shipped but unclaimed**, never marked supported by fixture
+runs or simulations.
+
+| Harness adapter | Real-prompt domain | Code/test domain | Latency domain | Backends |
+|---|---|---|---|---|
+| Built-in loop | qualified | qualified | qualified | SQLite (qualified); same-host Postgres workers (shipped, unclaimed — lifecycle cells pending in the distributed deployment lane) |
+| Codex (`codex exec --json`) | shipped, unclaimed | shipped, unclaimed | shipped, unclaimed | contract-conformant; awaiting live-run evidence |
+| Claude Code (Agent SDK CLI) | shipped, unclaimed | shipped, unclaimed | shipped, unclaimed | contract-conformant; awaiting live-run evidence |
+| Attached API/CLI + custom drivers | contract-qualified on both stores | | | |
+
+Unclaimed combinations still pass the shared contract suites (lifecycle,
+evidence authority, usage accounting, explicit capability refusals) — the
+gap is live external evidence, not conformance. Optional capabilities
+(pause, resume, steering) are advertised per adapter; an unadvertised
+control is refused with an explanation in the UI and API, never silently
+substituted. Cross-harness continuation is never presented as native
+transcript resume.
 
 ---
 

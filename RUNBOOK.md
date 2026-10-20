@@ -179,9 +179,101 @@ that UID when promotions are expected:
 sudo chown -R 1000:1000 configs
 ```
 
-## Parity Suite
+## Install & Isolation Requirements
 
-The golden-output parity suite (`pytest -m parity`) pins parser and
-promotion-preview behavior against fixtures under `tests/parity/`. Regenerate
-fixtures with the engine's `invoke`+`normalize` helpers after intentional
-behavior changes (see `tests/parity/test_parity.py`).
+Install from a built wheel or sdist into a dedicated virtual environment (see
+README → Quick Start). Runtime requirements: Python 3.12+, a writable
+workspace directory (`AUTORESEARCH_WORKSPACE_ROOT` or `workspace/`), and
+network access to your LLM provider and any skill-declared preflight targets.
+
+The command policy is **default-deny** and workspace-scoped, but it is not an
+OS sandbox — skill packages execute code with the service's privileges.
+Isolate accordingly: run in a container or on a dedicated host, mount only the
+workspace and config paths, and do not run untrusted skill packages on a
+privileged host. The UI ships prebuilt; no Node.js is required at runtime.
+
+## Credential Roles
+
+| Role | Credential | Grants |
+|------|-----------|--------|
+| Operator / admin | `AUTORESEARCH_API_TOKEN` (or OAuth2 introspection with `admin`/`ml_admin`/`is_admin`) | full API + UI + promotion confirm |
+| Attached agent | short-lived scoped credential (run/tenant-bound, revocable) | `read`, `submit`, `evaluate`, `lifecycle` only |
+| Metrics scraper | `AUTORESEARCH_PROMETHEUS_TOKEN` | `/metrics` only |
+| LLM providers | `ANTHROPIC_AUTH_TOKEN` / `OPENAI_API_KEY` | model calls |
+| Live harness CLIs | provider credentials for `codex` / `claude` | external harness runs (opt-in) |
+
+Scoped attached-agent credentials **cannot** carry operator, settings,
+evidence-declaration, or promotion-approval permissions — those refusals are
+enforced server-side, and the UI disables the corresponding controls with the
+reason shown. Promotion approval always requires an operator credential.
+
+## Budget Limits
+
+Every session carries a money cap (`max_budget_usd`) enforced with usage
+reservations — work is admitted only when budget and concurrency capacity are
+reserved, so caps hold under concurrent workers. Unknown-cost usage events are
+reported as unknown (never summed as zero). External benchmark and live
+qualification jobs take their own explicit budget caps
+(`AUTORESEARCH_LIVE_BUDGET_USD`); a required-but-unmeasured cost or
+performance gate is a rejection, not a pass.
+
+## Recovery & Restart
+
+Sessions persist full operational state (phase state, attempt snapshots,
+event outbox). On restart, interrupted runs are assessed for recovery from
+their pinned run spec and receipts: resumable sessions report `resumable`,
+unresumable ones report the reason; in-flight work without a receipt is
+`interrupted`, never silently completed. Stale owners cannot write after a
+worker restart (lease epochs fence them). Terminal state persistence retries
+transient store failures before falling back to a broadcast.
+
+## Backup & Restore
+
+SQLite: use the online backup API (or `sqlite3 .backup`) while the service is
+running — a plain file copy of a live database is not a backup. A restore
+recovers sessions, events, usage, and reservations together. Postgres: use
+your standard `pg_dump`/`pg_restore` procedure. Back up the workspace
+directory alongside the database: attempt snapshots and manifests carry the
+digest-pinned provenance the recovery assessment verifies.
+
+## Migrations
+
+Schema evolution runs automatically at startup: `schema_version` plus numbered,
+idempotent migrations (no manual steps on upgrade). Take a backup before
+upgrading across versions. A Postgres backend
+(`AUTORESEARCH_DATABASE_URL=postgresql://…`) supports multi-worker
+deployments with lease-fenced writes and serialized cross-worker stop.
+
+## Plugin & Skill Trust Modes
+
+Skill packages are code. Two trust modes:
+
+1. **Repo-vendored** (default): the bundled `skills/` directory, shipped and
+   versioned with the service.
+2. **Operator-installed**: a package added under `skills/` and loaded with
+   `POST /api/v1/skills/reload`. The operator is responsible for auditing the
+   package — its `bootstrap.py` runs with service privileges at session start.
+
+In both modes the manifest's command policy is default-deny and the evaluator
+entrypoints and test files of a domain are protected from candidate mutation.
+External documentation sources are evidence-only: they never grant execution
+authority.
+
+## Verifying an Installation
+
+Smoke the installed service (health → skills → one demo session):
+
+```bash
+curl -sf http://localhost:8030/health | head -1
+curl -H "Authorization: Bearer $AUTORESEARCH_API_TOKEN" \
+  http://localhost:8030/api/v1/skills
+AUTORESEARCH_DEMO=true curl -sf -X POST http://localhost:8030/api/v1/research/start \
+  -H "Authorization: Bearer $AUTORESEARCH_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"skill_id": "prompt-engineering", "max_iterations": 1}'
+```
+
+The package also ships golden-output fixtures for parser and
+promotion-preview behavior (the parity fixtures). Regenerating them is an
+intentional-engineering procedure described in the implementation handoff
+record, not an operator task.
