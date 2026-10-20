@@ -14,8 +14,9 @@ from __future__ import annotations
 import json
 import sys
 import types
-from types import SimpleNamespace
-from typing import Any, Dict, List, Optional
+from types import ModuleType, SimpleNamespace
+from typing import Any, Dict, List, Optional, cast
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -29,8 +30,7 @@ except ModuleNotFoundError:
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
     )
-    sys.modules["anthropic"] = _stub
-
+    sys.modules["anthropic"] = cast(ModuleType, _stub)
 from src.core.goal_semantics import (
     GOAL_INCONCLUSIVE,
     GOAL_SATISFICED,
@@ -392,7 +392,7 @@ def test_plugin_phase_modes_are_rejected_explicitly() -> None:
         "phase_advancement": {"mode": "plugin", "plugin": "phases.py"},
     }
     manifest = ResearchSkillManifest.model_validate(base)
-    runtime = ManifestSkillRuntime(manifest, None)
+    runtime = ManifestSkillRuntime(manifest, MagicMock())
     with pytest.raises(UnsupportedPhaseAdvancementError):
         runtime.phase_plan()
     with pytest.raises(UnsupportedPhaseAdvancementError):

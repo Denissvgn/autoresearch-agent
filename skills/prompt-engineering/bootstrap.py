@@ -26,7 +26,6 @@ from pathlib import Path
 
 from eval.dataset import load_examples
 
-
 _DEFAULT_PROMPT = """# Candidate prompt — iterate on this template.
 You are a helpful assistant. Answer the user's question accurately.
 """
@@ -46,7 +45,11 @@ def main() -> int:
         json.dump({"error": f"invalid stdin JSON: {exc}"}, sys.stdout)
         return 2
 
-    if not isinstance(payload, dict) or not isinstance(payload.get("workspace"), str) or not payload["workspace"]:
+    if (
+        not isinstance(payload, dict)
+        or not isinstance(payload.get("workspace"), str)
+        or not payload["workspace"]
+    ):
         json.dump({"error": "workspace is required"}, sys.stdout)
         return 2
     workspace = Path(payload["workspace"])

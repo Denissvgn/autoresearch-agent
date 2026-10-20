@@ -254,6 +254,7 @@ class TestBootstrapRunnerDry:
             dry=True,
         )
         assert outcome.ok is True
+        assert outcome.artifact is not None
         rendered = {f["path"] for f in outcome.artifact.rendered_files}
         assert rendered == {"config.yaml", "seed.txt"}
         # The hashes match what live mode would produce.
@@ -262,6 +263,7 @@ class TestBootstrapRunnerDry:
         )
         assert live.ok is True
         dry_index = outcome.artifact._files_index()
+        assert live.artifact is not None
         live_index = live.artifact._files_index()
         assert dry_index == live_index
 
@@ -285,6 +287,7 @@ class TestBootstrapIdempotency:
         )
         assert first.ok is True
         # The workspace hasn't changed → idempotent.
+        assert first.artifact is not None
         assert runner.is_idempotent(
             existing_artifact=first.artifact, workspace=ws
         ) is True
@@ -302,6 +305,7 @@ class TestBootstrapIdempotency:
         )
         # Mutate the workspace after bootstrap.
         (ws / "config.yaml").write_text("key: CHANGED\n")
+        assert first.artifact is not None
         assert runner.is_idempotent(
             existing_artifact=first.artifact, workspace=ws
         ) is False
@@ -318,6 +322,7 @@ class TestBootstrapIdempotency:
             skill_dir=skill_dir, layout=layout, manifest=manifest, workspace=ws,
         )
         artifact_path = tmp_path / "artifacts" / BOOTSTRAP_ARTIFACT_FILENAME
+        assert outcome.artifact is not None
         outcome.artifact.write(artifact_path)
         restored = SessionBootstrapArtifact.read(artifact_path)
         assert restored.matches(outcome.artifact) is True

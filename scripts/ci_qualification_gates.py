@@ -346,7 +346,9 @@ class GateResult:
 
 
 def parse_pytest_output(output: str) -> tuple[list[str], list[str], list[str]]:
-    passed, failed, skipped = [], [], []
+    passed: list[str] = []
+    failed: list[str] = []
+    skipped: list[str] = []
     for line in output.splitlines():
         stripped = line.strip()
         for verdict, bucket in (

@@ -21,6 +21,8 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 import yaml
@@ -283,7 +285,7 @@ def test_attack_forged_receipt_never_verifies() -> None:
         "all_gates_passed": 1,
     }
     payload = result_payload(marker)
-    identity = dict(
+    identity: dict[str, Any] = dict(
         attempt_id="res_g1/turn-1/iteration-1",
         candidate_digest="sha256:" + "a" * 64,
         evaluator_digest="sha256:" + "b" * 64,
@@ -382,8 +384,7 @@ def _live_command(skill_id: str, skill_params: dict, session: Path) -> str:
     from src.core.skill_runtime import ManifestSkillRuntime
 
     runtime = ManifestSkillRuntime(
-        load_skill_manifest(REPO_ROOT / "skills" / skill_id / "SKILL.yaml"), None
-    )
+        load_skill_manifest(REPO_ROOT / "skills" / skill_id / "SKILL.yaml"), MagicMock())
     config = types.SimpleNamespace(
         skill_params=dict(skill_params),
         workspace_path=str(session),

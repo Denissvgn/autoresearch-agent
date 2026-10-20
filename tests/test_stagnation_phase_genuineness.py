@@ -1,3 +1,4 @@
+
 """Tests for phase-genuineness check on the stagnation exemption.
 
 Background: `stagnation_exempt_phases` (e.g. `promotion_proposal`,
@@ -14,6 +15,8 @@ import os
 import sys
 import types
 from pathlib import Path
+from types import ModuleType
+from typing import cast
 
 import pytest
 
@@ -30,8 +33,7 @@ except ModuleNotFoundError:
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
     )
-    sys.modules["anthropic"] = _stub
-
+    sys.modules["anthropic"] = cast(ModuleType, _stub)
 from src.core.orchestrator import AgentOrchestrator
 from src.core.results_store import ResultsStore
 

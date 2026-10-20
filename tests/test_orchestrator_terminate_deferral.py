@@ -1,3 +1,4 @@
+
 """DM-2 — defer TERMINATE_REQUEST when budget remains and best is fresh.
 
 Run res_be66790e192e: agent emitted TERMINATE_REQUEST at iter 12 of a
@@ -18,6 +19,8 @@ import os
 import sys
 import types
 from pathlib import Path
+from types import ModuleType
+from typing import cast
 
 import pytest
 
@@ -34,8 +37,7 @@ except ModuleNotFoundError:
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
     )
-    sys.modules["anthropic"] = _stub
-
+    sys.modules["anthropic"] = cast(ModuleType, _stub)
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig
 from src.core.results_store import ResultsStore
 

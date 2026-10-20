@@ -1,3 +1,4 @@
+
 """CI qualification gates: deliberate negative fixtures for every guard.
 
 An advertised feature without executable coverage, an unowned skip, a
@@ -11,6 +12,8 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from types import ModuleType
+from typing import cast
 
 import pytest
 
@@ -20,9 +23,10 @@ _SPEC = importlib.util.spec_from_file_location(
     "ci_qualification_gates",
     REPO_ROOT / "scripts" / "ci_qualification_gates.py",
 )
+assert _SPEC is not None
 cqg = importlib.util.module_from_spec(_SPEC)
 assert _SPEC.loader is not None
-sys.modules["ci_qualification_gates"] = cqg
+sys.modules["ci_qualification_gates"] = cast(ModuleType, cqg)
 _SPEC.loader.exec_module(cqg)
 
 

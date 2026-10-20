@@ -356,6 +356,7 @@ def test_conflicting_shapes_recorded_in_audit(client: TestClient):
         },
     )
     assert _test_store is not None
+    assert _test_store is not None
     conflict_audits = [
         e for e in _test_store.audit_events
         if e.get("action") == "research.shape_conflict"
@@ -536,6 +537,7 @@ def test_canonical_params_recorded_in_start_audit(client: TestClient):
         },
     )
     assert response.status_code == 201
+    assert _test_store is not None
     start_events = [
         e for e in _test_store.audit_events
         if e.get("action") == "research.start"
@@ -573,6 +575,7 @@ def test_legacy_start_translates_to_canonical_fields(client: TestClient):
     # Non-ML skills carry no legacy alias (D1): model_type arrives empty.
     assert captured["model_type"] == ""
     # The audit metadata records the winning canonical identity.
+    assert _test_store is not None
     start_events = [
         e for e in _test_store.audit_events
         if e.get("action") == "research.start"

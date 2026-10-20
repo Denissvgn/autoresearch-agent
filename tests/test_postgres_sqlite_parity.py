@@ -47,7 +47,7 @@ def _normalize_row(row: Dict[str, Any] | None) -> Dict[str, Any] | None:
 
 
 def _normalize_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    return [_normalize_row(r) for r in rows]  # type: ignore[arg-type]
+    return [nr for r in rows if (nr := _normalize_row(r)) is not None]
 
 
 # --------------------------------------------------------------------------
@@ -255,7 +255,9 @@ async def _run_full_sequence(store: Any, *, sid: str) -> Dict[str, Any]:
         "iterations_count": len(iters),
         "iterations_metrics": [(r.get("iteration"), r.get("primary_metric"))
                                for r in iters],
-        "iter_one_metric": _normalize_row(iter_one).get("primary_metric") if iter_one else None,
+        "iter_one_metric": (_normalize_row(iter_one) or {}).get("primary_metric")
+        if iter_one
+        else None,
         "audit_outcome": audit.get("outcome"),
         "audits_count": len(audits),
         "audits_actions": [a.get("action") for a in audits],

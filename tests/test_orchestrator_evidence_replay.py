@@ -1,3 +1,4 @@
+
 """DM-1 — evidence-replay link on a session-best dedup hit.
 
 Iterations 8/10/11/12 of res_be66790e192e re-ran the iteration-7 best
@@ -20,6 +21,8 @@ import os
 import sys
 import types
 from pathlib import Path
+from types import ModuleType
+from typing import cast
 
 import pytest
 
@@ -36,8 +39,7 @@ except ModuleNotFoundError:
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
     )
-    sys.modules["anthropic"] = _stub
-
+    sys.modules["anthropic"] = cast(ModuleType, _stub)
 from src.core.consistency_validator import _is_synthetic_promotion_iteration
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig
 from src.core.research_phase_plan import (

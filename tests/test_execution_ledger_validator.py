@@ -1,3 +1,4 @@
+
 """Tests for the execution-ledger validator (scripts/check_execution_ledger.py).
 
 Fixtures use synthetic opaque card IDs; no real planning vocabulary appears
@@ -9,6 +10,8 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from types import ModuleType
+from typing import cast
 
 import pytest
 
@@ -16,8 +19,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 _SPEC = importlib.util.spec_from_file_location(
     "check_execution_ledger", REPO_ROOT / "scripts" / "check_execution_ledger.py"
 )
+assert _SPEC is not None
 cel = importlib.util.module_from_spec(_SPEC)
-sys.modules["check_execution_ledger"] = cel
+sys.modules["check_execution_ledger"] = cast(ModuleType, cel)
+assert _SPEC.loader is not None
 _SPEC.loader.exec_module(cel)
 
 

@@ -57,7 +57,13 @@ def _try_remote_scorer(prompt_text, eval_examples, scorer_url, timeout_s=15.0):
         import urllib.request
 
         url = urlsplit(scorer_url)
-        if url.scheme not in {"http", "https"} or not url.hostname or url.username or url.password or url.fragment:
+        if (
+            url.scheme not in {"http", "https"}
+            or not url.hostname
+            or url.username
+            or url.password
+            or url.fragment
+        ):
             raise ValueError("invalid scorer URL")
         payload = json.dumps(
             {"prompt": prompt_text, "examples": eval_examples}

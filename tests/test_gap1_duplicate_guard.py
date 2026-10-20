@@ -23,7 +23,8 @@ from __future__ import annotations
 import json
 import sys
 import types
-from typing import Any, Dict
+from types import ModuleType
+from typing import Any, Dict, cast
 
 try:  # pragma: no cover — defensive for environments without anthropic SDK
     import anthropic  # noqa: F401
@@ -35,8 +36,7 @@ except ModuleNotFoundError:
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
     )
-    sys.modules["anthropic"] = _stub
-
+    sys.modules["anthropic"] = cast(ModuleType, _stub)
 import pytest
 
 from src.core.orchestrator import AgentOrchestrator

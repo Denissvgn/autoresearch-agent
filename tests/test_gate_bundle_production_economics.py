@@ -1,3 +1,4 @@
+
 """MQ-B5 — production-scope unconditional post-cost economic gate.
 
 Pins (development_gate_bundle.evaluate_development_gate_bundle):
@@ -14,6 +15,8 @@ import json
 import os
 import sys
 import types
+from types import ModuleType
+from typing import cast
 
 os.environ.setdefault("ANTHROPIC_BASE_URL", "http://anthropic.invalid")
 os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "test-token")
@@ -28,8 +31,7 @@ except ModuleNotFoundError:  # pragma: no cover — only needed in slim test env
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
     )
-    sys.modules["anthropic"] = _stub
-
+    sys.modules["anthropic"] = cast(ModuleType, _stub)
 from src.core.development_gate_bundle import (  # noqa: E402
     evaluate_development_gate_bundle,
 )

@@ -6,7 +6,8 @@ import os
 import sys
 import types
 from pathlib import Path
-from typing import Any, Dict
+from types import ModuleType
+from typing import Any, Dict, cast
 
 import pytest
 
@@ -23,8 +24,7 @@ except ModuleNotFoundError:
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
     )
-    sys.modules["anthropic"] = _stub
-
+    sys.modules["anthropic"] = cast(ModuleType, _stub)
 from src.core import config_promoter
 from src.core.config_promoter import ConfigPromoter
 from src.core.consistency_validator import build_consistency_report
@@ -280,5 +280,4 @@ def test_consistency_report_accepts_immutable_result_artifact_reference() -> Non
     assert checks["mlflow_run_id_valid"]["status"] == "passed"
     assert checks["artifact_reference_present"]["status"] == "passed"
     assert "missing_artifact_reference" not in report["blockers"]
-
 

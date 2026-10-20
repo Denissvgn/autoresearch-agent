@@ -1,3 +1,4 @@
+
 """G5 compatibility matrix: structure and honesty guards.
 
 The ten scenarios are predeclared against the 18 lifecycle cells; live
@@ -10,6 +11,8 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
+from types import ModuleType
+from typing import cast
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -17,9 +20,10 @@ _SPEC = importlib.util.spec_from_file_location(
     "run_compatibility_matrix",
     REPO_ROOT / "scripts" / "run_compatibility_matrix.py",
 )
+assert _SPEC is not None
 rcm = importlib.util.module_from_spec(_SPEC)
 assert _SPEC.loader is not None
-sys.modules["run_compatibility_matrix"] = rcm
+sys.modules["run_compatibility_matrix"] = cast(ModuleType, rcm)
 _SPEC.loader.exec_module(rcm)
 
 

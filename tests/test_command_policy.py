@@ -7,6 +7,8 @@ import sys
 import time
 import types
 from pathlib import Path
+from types import ModuleType
+from typing import cast
 
 import pytest
 
@@ -27,13 +29,13 @@ except ModuleNotFoundError:
     class _FakeAPIStatusError(Exception):
         status_code = 500
 
-    sys.modules["anthropic"] = types.SimpleNamespace(
+    sys.modules["anthropic"] = cast(ModuleType, types.SimpleNamespace(
         AsyncAnthropic=_FakeAsyncAnthropic,
         APITimeoutError=TimeoutError,
         APIConnectionError=ConnectionError,
         InternalServerError=RuntimeError,
         APIStatusError=_FakeAPIStatusError,
-    )
+    ))
 
 from src.core.orchestrator import _execute_tool
 from src.core.tool_access import build_tool_access_context

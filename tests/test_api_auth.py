@@ -4,6 +4,7 @@ import base64
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -285,7 +286,7 @@ def start_payload() -> dict[str, object]:
 def test_health_is_public_but_api_routes_require_bearer_token(client: TestClient):
     assert client.get("/health").status_code == 200
 
-    checks = [
+    checks: list[tuple[str, str, dict[str, Any]]] = [
         ("post", "/api/research/start", {"json": start_payload()}),
         ("post", "/api/research/res_auth/stop", {}),
         ("get", "/api/research/res_auth/results", {}),

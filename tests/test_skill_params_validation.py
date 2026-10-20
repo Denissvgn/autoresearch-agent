@@ -170,7 +170,8 @@ SCHEMA = {
 
 
 def test_omitted_and_null_objects_face_required_fields() -> None:
-    for raw in (None, {}):
+    cases: tuple[dict[str, Any] | None, ...] = (None, {})
+    for raw in cases:
         resolved, violations = resolve_and_validate("s", SCHEMA, raw)
         assert any(v["field"] == "skill_params" for v in violations), violations
         assert resolved == {} or "eval_set" not in resolved

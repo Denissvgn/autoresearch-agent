@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 import sys
 import types
-from typing import Any, Dict, List, Optional
+from types import ModuleType
+from typing import Any, Dict, List, Optional, cast
 
 import pytest
 
@@ -17,8 +18,7 @@ except ModuleNotFoundError:
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
     )
-    sys.modules["anthropic"] = _stub
-
+    sys.modules["anthropic"] = cast(ModuleType, _stub)
 from src.core import config_promoter
 from src.core import orchestrator as orchestrator_module
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig

@@ -17,6 +17,8 @@ import sys
 import tempfile
 import types
 from pathlib import Path
+from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 import yaml
@@ -31,18 +33,17 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 def _runtime(skill: str) -> ManifestSkillRuntime:
     return ManifestSkillRuntime(
-        load_skill_manifest(REPO_ROOT / "skills" / skill / "SKILL.yaml"), None
-    )
+        load_skill_manifest(REPO_ROOT / "skills" / skill / "SKILL.yaml"), MagicMock())
 
 
-def _config(skill: str, **params):
+def _config(skill: str, **params: Any):
     return types.SimpleNamespace(
         skill_params=params, workspace_path="/ws",
         subject_id="s", variant="v", instrument="i", timeframe="t",
     )
 
 
-NONDEFAULT = {
+NONDEFAULT: dict[str, dict[str, Any]] = {
     "db-config-tuning": {"target_latency_ms": 25, "bench_duration_s": 90},
     "code-refactor": {"target_file": "custom_target.py"},
     "prompt-engineering": {

@@ -291,6 +291,8 @@ async def test_process_death_during_evaluation_exposes_unknown_inflight_state(
         # assumed absent
         assert summary.get("resumable") or summary.get("interrupted")
         session = await store.get_session("res_q")
+        assert session is not None
+        assert session is not None
         assert session["status"] in ("resumable", "interrupted")
         # exactly one authoritative attempt row survived; no duplicate
         rows = await store.get_iterations("res_q")
@@ -371,6 +373,8 @@ async def test_process_death_during_event_publication_drops_no_event(tmp_path):
         # state and event committed together before the kill; the
         # notification was lost, the event was not
         session = await store.get_session("res_q")
+        assert session is not None
+        assert session is not None
         assert session["status"] == "completed"
         delivered = []
 
@@ -642,6 +646,8 @@ def test_simultaneous_admission_and_resume_with_reservations(tmp_path):
             from src.core.run_restore import assess_recovery
 
             victim_row = await store.get_session(victim)
+            assert victim_row is not None
+            assert victim_row is not None
             assert victim_row["max_budget_usd"] == 7.5
             assert victim_row["max_iterations"] == 3
             assert victim_row["focus_hint"] == "scenario nondefault"
@@ -680,8 +686,9 @@ def test_simultaneous_admission_and_resume_with_reservations(tmp_path):
                 os.environ.pop("SKILL_PARAM_API_TOKEN", None)
             # no shared mutable workspace across the admitted runs
             roots = {
-                (await store.get_session(key))["workspace_path"]
+                row["workspace_path"]
                 for key in admitted
+                if (row := await store.get_session(key)) is not None
             }
             assert len(roots) == 3, roots
         finally:

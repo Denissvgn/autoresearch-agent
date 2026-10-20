@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import math
-from typing import Any, Iterable, List, Mapping, Optional, Tuple
+from typing import Any, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 try:
     import yaml
@@ -394,7 +394,7 @@ def _significance_line(
 
 
 def _best_line(
-    iterations: List[Mapping[str, Any]],
+    iterations: "Sequence[Mapping[str, Any]]",
     *,
     comparator: "ObjectiveComparator",
 ) -> str:

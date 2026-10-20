@@ -1,3 +1,4 @@
+
 """P4-016 — End-to-end prompt-engineering session on OpenAI provider (ARC-011).
 
 The Phase-4 milestone: a non-ML domain runs as a first-class peer. Two layers:
@@ -20,6 +21,8 @@ import subprocess
 import sys
 import types
 from pathlib import Path
+from types import ModuleType
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -27,13 +30,13 @@ import pytest
 try:
     import openai  # noqa: F401
 except ModuleNotFoundError:
-    sys.modules["openai"] = types.SimpleNamespace(
+    sys.modules["openai"] = cast(ModuleType, types.SimpleNamespace(
         AsyncOpenAI=MagicMock(return_value=MagicMock()),
         APITimeoutError=TimeoutError,
         APIConnectionError=ConnectionError,
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
-    )
+    ))
 
 os.environ.setdefault("ANTHROPIC_BASE_URL", "http://anthropic.invalid")
 os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "test-token")

@@ -21,7 +21,8 @@ import os
 import sys
 import types
 from pathlib import Path
-from typing import Any, Dict
+from types import ModuleType
+from typing import Any, Dict, cast
 
 import pytest
 
@@ -35,13 +36,13 @@ except ModuleNotFoundError:
     class _FakeAPIStatusError(Exception):
         status_code = 500
 
-    sys.modules["anthropic"] = types.SimpleNamespace(
+    sys.modules["anthropic"] = cast(ModuleType, types.SimpleNamespace(
         AsyncAnthropic=_FakeAsyncAnthropic,
         APITimeoutError=TimeoutError,
         APIConnectionError=ConnectionError,
         InternalServerError=RuntimeError,
         APIStatusError=_FakeAPIStatusError,
-    )
+    ))
 
 os.environ.setdefault("ANTHROPIC_BASE_URL", "http://anthropic.invalid")
 os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "test-token")
@@ -186,4 +187,3 @@ async def test_legacy_start_without_skill_id_is_refused(monkeypatch, tmp_path):
     _configure(monkeypatch, tmp_path)
     with pytest.raises(SkillConfigError, match="no skill_id"):
         await _start_and_capture(monkeypatch, tmp_path)
-

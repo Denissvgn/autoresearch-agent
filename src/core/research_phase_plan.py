@@ -1095,7 +1095,7 @@ def _parse_json(raw: Any) -> Any:
 # AR-5 helpers ------------------------------------------------------------------
 
 
-def _metrics_of(it: Dict[str, Any]) -> Dict[str, Any]:
+def _metrics_of(it: Mapping[str, Any]) -> Dict[str, Any]:
     """Return the parsed metrics_json dict for an iteration row, or {}."""
     parsed = _parse_json(it.get("metrics_json"))
     return parsed if isinstance(parsed, dict) else {}
@@ -1123,7 +1123,7 @@ def _prior_run_ids_for_phase(
 
 
 def _prior_best_metrics(
-    iterations: List[Dict[str, Any]],
+    iterations: Sequence[Mapping[str, Any]],
     *,
     comparator: Optional["ObjectiveComparator"] = None,
 ) -> Dict[str, Any]:

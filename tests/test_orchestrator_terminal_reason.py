@@ -1,3 +1,4 @@
+
 """AR-2: Tests for structured terminal_reason on the exception path.
 
 Defect D2: when the agent loop crashes with an unhandled exception the
@@ -15,6 +16,8 @@ from __future__ import annotations
 import sys
 import types
 from pathlib import Path
+from types import ModuleType
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -33,8 +36,7 @@ except ModuleNotFoundError:
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
     )
-    sys.modules["anthropic"] = _fake_anthropic
-
+    sys.modules["anthropic"] = cast(ModuleType, _fake_anthropic)
 from src.core import orchestrator as orchestrator_module
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig
 from src.core.results_store import ResultsStore

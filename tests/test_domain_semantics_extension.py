@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -52,17 +53,17 @@ ADVERSARIAL = FIXTURES / "adversarial"
 class _Host:
     """Minimal SkillHostServices stand-in for runtime construction."""
 
-    def load_claude_md(self):
+    def load_claude_md(self) -> str:
         return ""
 
-    def read_resume(self):
+    def load_research_resume(self, config: Any) -> str:
         return ""
 
-    def build_contract_block(self):
+    def build_phase_contract_block(self, config: Any) -> str:
         return ""
 
-    def resume_path(self):
-        return Path("/tmp/resume.md")
+    def research_resume_path(self, config: Any) -> str:
+        return "/tmp/resume.md"
 
 
 def _manifest(path: Path) -> ResearchSkillManifest:

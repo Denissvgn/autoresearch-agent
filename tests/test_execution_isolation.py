@@ -182,6 +182,7 @@ def test_plugin_runner_enforced_mode_sandboxed(tmp_path: Path) -> None:
     ))
     assert result.ok, result.error
     assert result.isolation == SANDBOXED_PREFIX + "bwrap"
+    assert result.output is not None
     assert result.output["escape"] == "denied"
     assert not (skill_dir / "plugin_escape.txt").exists()
 

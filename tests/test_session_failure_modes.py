@@ -32,7 +32,8 @@ import sys
 import time
 import types
 from pathlib import Path
-from typing import Any, Dict
+from types import ModuleType
+from typing import Any, Dict, cast
 
 import httpx
 import pytest
@@ -50,8 +51,7 @@ except ModuleNotFoundError:
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
     )
-    sys.modules["anthropic"] = _stub
-
+    sys.modules["anthropic"] = cast(ModuleType, _stub)
 from src.config import settings
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig
 from src.core.research_phase_plan import build_phase_state
@@ -807,4 +807,3 @@ async def test_api_valid_skill_start_still_returns_201(monkeypatch, tmp_path):
     finally:
         await client.aclose()
         await manager.shutdown()
-

@@ -61,6 +61,8 @@ async def test_legacy_v1_database_upgrades_with_rows(tmp_path: Path):
     try:
         assert await store.get_schema_version() == _LATEST_SCHEMA_VERSION
         row = await store.get_session("res_legacy_v1")
+        assert row is not None
+        assert row is not None
         assert row["instrument"] == "DOGE_USDT"
         assert row["tag"] == "legacy_tag"
         # the current surfaces exist on the upgraded database
@@ -121,6 +123,8 @@ async def test_old_manifest_loads_with_its_provenance_reported(tmp_path: Path):
             manifest_hash="h",
         )
         row = await store.get_session("res_old")
+        assert row is not None
+        assert row is not None
         loaded, report = load_persisted_manifest(row["manifest_json"])
         assert loaded is not None
         assert loaded.research_id == "res_old"
@@ -218,6 +222,8 @@ async def test_modern_artifact_references_survive_the_new_migrations(
         assert await store.get_schema_version() == _LATEST_SCHEMA_VERSION
         # the pinned spec and its parent artifact digest are intact
         row = await store.get_session("res_v7")
+        assert row is not None
+        assert row is not None
         manifest, _report = load_persisted_manifest(row["manifest_json"])
         run_spec = dict(getattr(manifest, "run_spec", None) or {})
         assert verify_run_spec(run_spec) is True
@@ -301,6 +307,7 @@ async def test_backup_and_restore_recovers_complete_state(tmp_path: Path):
     await restored.initialize()
     try:
         session = await restored.get_session("res_backup")
+        assert session is not None
         assert session["focus_hint"] == "backup fixture"
         assert session["max_budget_usd"] == 7.5
         events = await restored.list_events(stream_key="res_backup")

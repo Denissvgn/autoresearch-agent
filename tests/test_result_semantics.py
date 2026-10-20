@@ -12,6 +12,7 @@ import json
 import math
 import types
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 import yaml
@@ -97,8 +98,8 @@ def test_nonfinite_numbers_are_rejected() -> None:
         assert result.outcome == "invalid", bad
         assert result.primary_metric is None
     text = GOOD.replace('"p99_latency_ms": 22.5', '"p99_latency_ms": NaN')
-    result = parse_result_text(text, _db_spec())
-    assert result is not None and result.outcome == "invalid"
+    nan_result = parse_result_text(text, _db_spec())
+    assert nan_result is not None and nan_result.outcome == "invalid"
 
 
 def test_declared_type_mismatches_are_invalid() -> None:
@@ -227,7 +228,7 @@ def _runtime_with_marker(
     doc["output_parser"]["iteration_marker"] = marker
     doc["output_parser"]["require_signed_metrics"] = require_signed
     manifest = ResearchSkillManifest.model_validate(doc)
-    return ManifestSkillRuntime(manifest, None)
+    return ManifestSkillRuntime(manifest, MagicMock())
 
 
 def test_custom_marker_parses_through_the_runtime() -> None:
@@ -289,7 +290,7 @@ def test_stale_fallback_files_are_ignored(tmp_path: Path, monkeypatch) -> None:
     manifest = load_skill_manifest(
         REPO_ROOT / "skills" / "db-config-tuning" / "SKILL.yaml"
     )
-    runtime = ManifestSkillRuntime(manifest, None)
+    runtime = ManifestSkillRuntime(manifest, MagicMock())
     orchestrator = object.__new__(AgentOrchestrator)
     config = types.SimpleNamespace(
         id="res_stale", subject_id="DOGE-USDT", variant="15m",

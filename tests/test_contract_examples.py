@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import BaseModel
 
 from src.core import execution_contracts as ec
 
@@ -39,7 +40,7 @@ def _bundle(name: str) -> dict[str, Any]:
     return json.loads((EXAMPLES_DIR / f"{name}.json").read_text(encoding="utf-8"))
 
 
-def _round_trip(model: type, payload: dict[str, Any]) -> Any:
+def _round_trip(model: type[BaseModel], payload: dict[str, Any]) -> Any:
     instance = model.model_validate(payload)
     assert model.model_validate_json(instance.model_dump_json()) == instance
     return instance

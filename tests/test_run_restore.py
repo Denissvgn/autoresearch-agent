@@ -164,8 +164,8 @@ async def _create_parent(
     *,
     session_id: str,
     workspace: Path,
-    run_spec: dict = None,
-    raw_manifest: dict = None,
+    run_spec: dict | None = None,
+    raw_manifest: dict | None = None,
 ) -> None:
     if raw_manifest is not None:
         manifest_json = json.dumps(raw_manifest)

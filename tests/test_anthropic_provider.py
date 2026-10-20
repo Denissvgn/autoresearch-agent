@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import sys
 import types
-from typing import Any
+from types import ModuleType
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -24,13 +25,13 @@ import pytest
 try:
     import anthropic  # noqa: F401
 except ModuleNotFoundError:
-    sys.modules["anthropic"] = types.SimpleNamespace(
+    sys.modules["anthropic"] = cast(ModuleType, types.SimpleNamespace(
         AsyncAnthropic=MagicMock(return_value=MagicMock()),
         APITimeoutError=TimeoutError,
         APIConnectionError=ConnectionError,
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
-    )
+    ))
 
 from src.core.llm_provider import (
     _CLAUDE_INPUT_USD_PER_TOKEN,
@@ -266,7 +267,7 @@ async def test_complete_passes_system_when_provided():
 # ── classify_error ─────────────────────────────────────────────────────────
 
 
-def _instance_without_init(cls: type, **attrs: Any) -> Any:
+def _instance_without_init(cls: type[Any], **attrs: Any) -> Any:
     """Construct an exception instance bypassing __init__ (sets attributes after).
 
     The real anthropic SDK's exception constructors require httpx.Request /
@@ -274,7 +275,7 @@ def _instance_without_init(cls: type, **attrs: Any) -> Any:
     inspects isinstance + .status_code, so __new__ + attribute set is enough
     and is robust across SDK versions.
     """
-    instance = cls.__new__(cls)
+    instance = cast(Any, cls).__new__(cls)
     for key, value in attrs.items():
         setattr(instance, key, value)
     return instance

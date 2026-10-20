@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 import types
 from pathlib import Path
+from types import ModuleType
+from typing import cast
 
 import pytest
 
@@ -16,13 +18,13 @@ except ModuleNotFoundError:
     class _FakeAPIStatusError(Exception):
         status_code = 500
 
-    sys.modules["anthropic"] = types.SimpleNamespace(
+    sys.modules["anthropic"] = cast(ModuleType, types.SimpleNamespace(
         AsyncAnthropic=_FakeAsyncAnthropic,
         APITimeoutError=TimeoutError,
         APIConnectionError=ConnectionError,
         InternalServerError=RuntimeError,
         APIStatusError=_FakeAPIStatusError,
-    )
+    ))
 
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig
 from src.core.results_store import ResultsStore

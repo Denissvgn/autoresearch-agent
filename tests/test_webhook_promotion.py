@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+from typing import Any
 
 os.environ.setdefault("ANTHROPIC_BASE_URL", "http://anthropic.invalid")
 os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "test-token")
@@ -56,7 +57,7 @@ def _patch_mock_transport(monkeypatch, handler) -> list[httpx.Request]:
 
 
 def _webhook_target(tmp_path, **kwargs) -> WebhookPromotionTarget:
-    defaults = dict(
+    defaults: dict[str, Any] = dict(
         endpoint="http://registry.local/api/v1/prompts",
         auth_env_var="PROMPT_REGISTRY_AUTH_TOKEN",
         retries=0,

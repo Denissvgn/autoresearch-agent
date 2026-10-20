@@ -31,7 +31,8 @@ import os
 import sys
 import types
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from types import ModuleType
+from typing import Any, Dict, List, Optional, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -39,13 +40,13 @@ import pytest
 try:
     import anthropic  # noqa: F401
 except ModuleNotFoundError:
-    sys.modules["anthropic"] = types.SimpleNamespace(
+    sys.modules["anthropic"] = cast(ModuleType, types.SimpleNamespace(
         AsyncAnthropic=MagicMock(return_value=MagicMock()),
         APITimeoutError=TimeoutError,
         APIConnectionError=ConnectionError,
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
-    )
+    ))
 
 os.environ.setdefault("ANTHROPIC_BASE_URL", "http://anthropic.invalid")
 os.environ.setdefault("ANTHROPIC_AUTH_TOKEN", "test-token")

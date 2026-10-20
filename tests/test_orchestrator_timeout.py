@@ -1,3 +1,4 @@
+
 """Tests for ARC-011 P0-006 / P0-007 — hard wall-clock bound.
 
 Verifies that a governed command which would overrun the session timeout is
@@ -24,6 +25,8 @@ import sys
 import time
 import types
 from pathlib import Path
+from types import ModuleType
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -32,13 +35,13 @@ import pytest
 try:
     import anthropic  # noqa: F401
 except ModuleNotFoundError:
-    sys.modules["anthropic"] = types.SimpleNamespace(
+    sys.modules["anthropic"] = cast(ModuleType, types.SimpleNamespace(
         AsyncAnthropic=lambda *a, **kw: None,
         APITimeoutError=TimeoutError,
         APIConnectionError=ConnectionError,
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
-    )
+    ))
 
 from src.core import orchestrator as orchestrator_module
 from src.core.command_runner import CommandProcessRegistry, CommandRunResult, GovernedCommandRunner

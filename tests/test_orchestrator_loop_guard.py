@@ -25,7 +25,8 @@ import json
 import sys
 import types
 from pathlib import Path
-from typing import Any, Dict
+from types import ModuleType
+from typing import Any, Dict, cast
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -43,8 +44,7 @@ except ModuleNotFoundError:
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
     )
-    sys.modules["anthropic"] = _stub
-
+    sys.modules["anthropic"] = cast(ModuleType, _stub)
 from src.core import orchestrator as orchestrator_module
 from src.core.llm_provider import (
     ProviderResponse,

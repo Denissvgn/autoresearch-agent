@@ -13,8 +13,9 @@ from __future__ import annotations
 import sys
 import types
 import uuid
-from types import SimpleNamespace
-from typing import Any, Dict, Optional
+from collections.abc import Mapping, Sequence
+from types import ModuleType, SimpleNamespace
+from typing import Any, Dict, Optional, cast
 
 import pytest
 
@@ -30,8 +31,7 @@ except ModuleNotFoundError:
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
     )
-    sys.modules["anthropic"] = _stub
-
+    sys.modules["anthropic"] = cast(ModuleType, _stub)
 from src.core.objective_comparator import (
     ObjectiveComparator,
     ObjectiveContextError,
@@ -109,7 +109,7 @@ def test_ties_within_epsilon_preserve_the_existing_eligible_winner() -> None:
     comparator = ObjectiveComparator(direction="minimize", epsilon=1e-4)
     assert comparator.compare(100.00005, 100.0) == "tie"
     assert comparator.is_better(100.00005, 100.0) is False
-    rows = [
+    rows: list[dict[str, Any]] = [
         {"iteration": 1, "metric": 100.0},
         {"iteration": 2, "metric": 100.00005},
     ]
@@ -149,7 +149,7 @@ def test_absent_and_nonfinite_metrics_never_win() -> None:
     assert comparator.is_better(float("inf"), 100.0) is False
     # Any finite result beats an absent incumbent and establishes the best.
     assert comparator.compare(100.0, None) == "better"
-    rows = [
+    rows: list[dict[str, Any]] = [
         {"iteration": 1, "metric": float("inf")},
         {"iteration": 2, "metric": 5.0},
         {"iteration": 3, "metric": None},
@@ -446,7 +446,7 @@ async def test_promotion_preview_keeps_maximization_behavior() -> None:
 
 
 def test_ranking_orders_by_declared_direction_stably() -> None:
-    rows = [
+    rows: list[dict[str, Any]] = [
         {"id": "a", "best_metric": 100.0},
         {"id": "b", "best_metric": 80.0},
         {"id": "c", "best_metric": None},
@@ -602,7 +602,7 @@ async def test_reconcile_bests_command_reports_flags_and_applies(
 def test_prior_best_selection_honors_direction() -> None:
     from src.core.research_phase_plan import _prior_best_metrics
 
-    rows = [
+    rows: list[dict[str, Any]] = [
         {
             "iteration": it,
             "primary_metric": value,
@@ -621,7 +621,7 @@ def test_production_champion_and_best_line_honor_direction() -> None:
     from src.core.iteration_context import _best_line
     from src.core.research_state import _best_candidate_row
 
-    rows = [
+    rows: list[dict[str, Any]] = [
         {"iteration": 1, "primary_metric": 100.0, "decision": "keep",
          "all_gates_passed": True},
         {"iteration": 2, "primary_metric": 80.0, "decision": "keep",

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -58,7 +59,7 @@ class TestAppendFindings:
         for retry) — does not create a duplicate."""
         skill_dir = tmp_path / "myskill"
         skill_dir.mkdir()
-        kwargs = dict(
+        kwargs: dict[str, Any] = dict(
             skill_id="myskill",
             subject_id="DOGE_USDT",
             variant="15m",

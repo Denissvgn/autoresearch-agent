@@ -1,3 +1,4 @@
+
 """Routing tests for ARC-011 P0-003 / P0-004.
 
 Verifies that ``SessionManager`` and the orchestrator exit path now drive
@@ -26,6 +27,8 @@ import sys
 import types
 from datetime import datetime, timezone
 from pathlib import Path
+from types import ModuleType
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -40,13 +43,13 @@ except ModuleNotFoundError:
         def __init__(self, *args, **kwargs) -> None:
             pass
 
-    sys.modules["anthropic"] = types.SimpleNamespace(
+    sys.modules["anthropic"] = cast(ModuleType, types.SimpleNamespace(
         AsyncAnthropic=_FakeAsyncAnthropic,
         APITimeoutError=TimeoutError,
         APIConnectionError=ConnectionError,
         InternalServerError=RuntimeError,
         APIStatusError=type("_FakeAPIStatusError", (Exception,), {"status_code": 500}),
-    )
+    ))
 
 from src.core.results_store import ResultsStore
 from src.core.session_manager import ActiveSession, SessionManager

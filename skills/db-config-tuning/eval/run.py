@@ -1,10 +1,19 @@
 #!/usr/bin/env python3
 """DB-config bench simulator (P0-2). Offline deterministic TPS model."""
 from __future__ import annotations
-import argparse, hashlib, json, os
+
+import argparse
+import hashlib
+import json
+import os
+
+
 def _emit(**fields):
-    p = dict(fields); p["server_nonce"] = os.environ.get("AUTORESEARCH_SESSION_NONCE", "")
-    p.setdefault("status", "completed"); p.setdefault("primary_metric", 0.0); p.setdefault("metric_name", "tps")
+    p = dict(fields)
+    p["server_nonce"] = os.environ.get("AUTORESEARCH_SESSION_NONCE", "")
+    p.setdefault("status", "completed")
+    p.setdefault("primary_metric", 0.0)
+    p.setdefault("metric_name", "tps")
     print("ITERATION_RESULT: " + json.dumps(p), flush=True)
 def main():
     ap = argparse.ArgumentParser()
@@ -20,9 +29,12 @@ def main():
         try:
             cfg = json.load(open(a.config, encoding="utf-8"))
         except Exception as exc:
-            _emit(status="bench_failed", error=str(exc)); return 1
-    sb = float(cfg.get("shared_buffers_mb", 128)); wm = float(cfg.get("work_mem_mb", 4))
-    ec = float(cfg.get("effective_cache_size_mb", 512)); mc = float(cfg.get("max_connections", 100))
+            _emit(status="bench_failed", error=str(exc))
+            return 1
+    sb = float(cfg.get("shared_buffers_mb", 128))
+    wm = float(cfg.get("work_mem_mb", 4))
+    ec = float(cfg.get("effective_cache_size_mb", 512))
+    mc = float(cfg.get("max_connections", 100))
     h = int(hashlib.sha256(json.dumps(cfg, sort_keys=True).encode()).hexdigest(), 16)
     jitter = ((h >> 16) % 200 - 100) / 100.0
     tps = 800 + 2.0 * sb + 15.0 * wm + 0.2 * ec - 0.5 * max(0, mc - 200) + jitter * 5
@@ -41,4 +53,5 @@ def main():
     _emit(**m)
     return 0
 if __name__ == "__main__":
-    import sys; sys.exit(main())
+    import sys
+    sys.exit(main())

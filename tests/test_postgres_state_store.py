@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
+from typing import AsyncIterator
 
 import pytest
 
@@ -35,7 +36,7 @@ def _admin_dsn() -> str | None:
 
 
 @pytest.fixture()
-async def pg_dsn(_admin_dsn: str | None) -> str:
+async def pg_dsn(_admin_dsn: str | None) -> AsyncIterator[str]:
     """A per-test throwaway database (or skip).
 
     Function-scoped **deliberately**: a module-scoped async fixture deadlocks
@@ -58,6 +59,8 @@ async def pg_dsn(_admin_dsn: str | None) -> str:
         await admin.execute(f'CREATE DATABASE "{dbname}"')
     finally:
         await admin.close()
+    assert _admin_dsn is not None
+    assert base is not None
     test_dsn = base.rsplit("/", 1)[0] + f"/{dbname}"
     yield test_dsn
     cleanup = await asyncpg.connect(_admin_dsn)

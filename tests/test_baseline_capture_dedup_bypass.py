@@ -1,3 +1,4 @@
+
 """Tests for the baseline_capture cross-session dedup bypass.
 
 When the agent is in `baseline_capture` phase and submits a config whose
@@ -12,6 +13,8 @@ import os
 import sys
 import types
 from pathlib import Path
+from types import ModuleType
+from typing import cast
 
 import pytest
 
@@ -28,8 +31,7 @@ except ModuleNotFoundError:
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
     )
-    sys.modules["anthropic"] = _stub
-
+    sys.modules["anthropic"] = cast(ModuleType, _stub)
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig
 from src.core.results_store import ResultsStore
 

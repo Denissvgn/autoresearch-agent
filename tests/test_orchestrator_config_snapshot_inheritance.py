@@ -20,7 +20,8 @@ import json
 import sys
 import types
 from pathlib import Path
-from typing import Any, Dict
+from types import ModuleType
+from typing import Any, Dict, cast
 
 import pytest
 
@@ -37,8 +38,7 @@ except ModuleNotFoundError:
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
     )
-    sys.modules["anthropic"] = _stub
-
+    sys.modules["anthropic"] = cast(ModuleType, _stub)
 from src.core.orchestrator import AgentOrchestrator
 from src.core.results_store import ResultsStore
 
@@ -564,5 +564,4 @@ async def test_attach_consistency_report_persists_resolved_search_phase(
     assert "evidence_artifact_missing_for_multi_seed_robustness" in report.get(
         "blockers", []
     )
-
 

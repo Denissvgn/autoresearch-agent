@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import sys
 import types
-from types import SimpleNamespace
-from typing import Any, Dict, Optional
+from types import ModuleType, SimpleNamespace
+from typing import Any, Dict, Optional, cast
 
 import pytest
 from pydantic import ValidationError
@@ -28,8 +28,7 @@ except ModuleNotFoundError:
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
     )
-    sys.modules["anthropic"] = _stub
-
+    sys.modules["anthropic"] = cast(ModuleType, _stub)
 from src.core.iteration_snapshot import (
     UnsupportedIdentityResolveError,
     build_trial_identity,

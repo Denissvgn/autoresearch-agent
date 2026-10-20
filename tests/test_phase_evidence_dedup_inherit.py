@@ -1,3 +1,4 @@
+
 """Issue 5 — noop-phase evidence inheritance on a dedup hit.
 
 `adaptive_feature_sweeps` advances on a single in-phase iteration carrying an
@@ -16,6 +17,8 @@ import os
 import sys
 import types
 from pathlib import Path
+from types import ModuleType
+from typing import cast
 
 import pytest
 
@@ -32,8 +35,7 @@ except ModuleNotFoundError:
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
     )
-    sys.modules["anthropic"] = _stub
-
+    sys.modules["anthropic"] = cast(ModuleType, _stub)
 from src.core.orchestrator import AgentOrchestrator, ResearchConfig
 from src.core.research_phase_plan import build_phase_state
 from src.core.results_store import ResultsStore

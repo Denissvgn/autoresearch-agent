@@ -30,7 +30,7 @@ import os
 import time
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Header, Request
+from fastapi import FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel
 
 app = FastAPI(title="prompt-registry (example)", version="0.1.0")

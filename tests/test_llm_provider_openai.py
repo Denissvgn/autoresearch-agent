@@ -8,7 +8,8 @@ from __future__ import annotations
 import json
 import sys
 import types
-from typing import Any
+from types import ModuleType
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -16,13 +17,13 @@ import pytest
 try:
     import openai  # noqa: F401
 except ModuleNotFoundError:
-    sys.modules["openai"] = types.SimpleNamespace(
+    sys.modules["openai"] = cast(ModuleType, types.SimpleNamespace(
         AsyncOpenAI=MagicMock(return_value=MagicMock()),
         APITimeoutError=TimeoutError,
         APIConnectionError=ConnectionError,
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
-    )
+    ))
 
 from src.core.llm_provider import (
     Message,

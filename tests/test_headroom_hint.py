@@ -1,3 +1,4 @@
+
 """DM-14 — per-phase ``headroom_hint`` surfaced in the state JSON +
 appended to ``next_action`` when budget is tight.
 
@@ -24,6 +25,8 @@ import os
 import sys
 import types
 from pathlib import Path
+from types import ModuleType
+from typing import Any, cast
 
 import pytest
 
@@ -40,8 +43,7 @@ except ModuleNotFoundError:  # pragma: no cover
         InternalServerError=RuntimeError,
         APIStatusError=type("APIStatusError", (Exception,), {"status_code": 500}),
     )
-    sys.modules["anthropic"] = _stub
-
+    sys.modules["anthropic"] = cast(ModuleType, _stub)
 from src.core.research_phase_plan import (  # noqa: E402
     _PHASE_PRIMARY_SWEEP_KEYS,
     _next_action,
@@ -123,7 +125,8 @@ def test_headroom_hint_accepts_top_level_keys_too() -> None:
 def test_headroom_hint_handles_malformed_metrics_json() -> None:
     """A row with non-JSON / non-dict metrics_json must not crash —
     diagnostic helper must be defensive."""
-    rows = [
+    rows: list[dict[str, Any]] = [
+
         {"iteration": 1, "metrics_json": "not-valid-json"},
         {"iteration": 2, "metrics_json": None},
         {"iteration": 3},  # no metrics_json at all
