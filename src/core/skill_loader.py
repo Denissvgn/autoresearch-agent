@@ -90,6 +90,9 @@ _DEFAULT_CAPS_BY_KIND: dict[PluginKind, PluginCaps] = {
     "resolve_identity": PluginCaps(fs_write="none", network_egress=[], env=[]),
     "preflight": PluginCaps(fs_write="none", network_egress=[], env=[]),
     "bootstrap": PluginCaps(fs_write="workspace", network_egress=[], env=[]),
+    # phase_advancement resolvers decide plan transitions: read-only, no
+    # egress, bounded — the same posture as parsers/identity resolvers.
+    "phase_advancement": PluginCaps(fs_write="none", network_egress=[], env=[]),
 }
 
 

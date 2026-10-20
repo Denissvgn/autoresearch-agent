@@ -104,7 +104,9 @@ PromotionKind = Literal["file_path", "registry_api", "artifact_store", "git_bran
 #: on-disk Python file in the skill package, executed via the governed
 #: ``PluginRunner`` subprocess (P5-005). ``bootstrap`` runs once at session
 #: start; the others run on demand per the runtime contract.
-PluginKind = Literal["parser", "preflight", "resolve_identity", "bootstrap"]
+PluginKind = Literal[
+    "parser", "preflight", "resolve_identity", "bootstrap", "phase_advancement"
+]
 
 
 # ---------------------------------------------------------------------------
@@ -309,6 +311,52 @@ class SignificanceConfig(BaseModel):
     holdout_required: bool = False
 
 
+class MetricObjective(BaseModel):
+    """One objective metric inside a multiobjective declaration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    field: str
+    label: str
+    direction: Literal["higher_is_better", "lower_is_better"]
+
+
+class ObjectiveSpec(BaseModel):
+    """Objective semantics: scalar (legacy) or multiobjective (Pareto).
+
+    ``kind=scalar`` keeps the existing ``metric_schema.primary`` semantics
+    exactly. ``kind=multiobjective`` declares two or more metrics with their
+    own directions; results are compared as Pareto dominance and promotion
+    selects a non-dominated set — never a forced scalar winner. Unknown
+    objective kinds are rejected explicitly (closed vocabulary).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["scalar", "multiobjective"] = "scalar"
+    metrics: list[MetricObjective] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_shape(self) -> "ObjectiveSpec":
+        if self.kind == "multiobjective":
+            fields = [m.field for m in self.metrics]
+            if len(fields) < 2:
+                raise ValueError(
+                    "objective kind=multiobjective requires at least two "
+                    "declared metrics"
+                )
+            if len(set(fields)) != len(fields):
+                raise ValueError(
+                    "objective metrics must declare distinct fields"
+                )
+        elif self.metrics:
+            raise ValueError(
+                "objective kind=scalar declares no metrics list; use "
+                "metric_schema.primary"
+            )
+        return self
+
+
 class MetricSchema(BaseModel):
     """Metric presentation + semantics (ARC-011 §9 ``metric_schema``)."""
 
@@ -327,6 +375,10 @@ class MetricSchema(BaseModel):
     )
     #: P2 ops: optional multi-seed mean±std significance gate.
     significance: Optional[SignificanceConfig] = None
+    #: Objective semantics extension: ``None`` = legacy scalar behavior via
+    #: ``primary`` (zero migration). ``kind=multiobjective`` switches result
+    #: and promotion semantics to Pareto dominance over the declared metrics.
+    objective: Optional[ObjectiveSpec] = None
 
 
 # ---------------------------------------------------------------------------
@@ -1239,6 +1291,8 @@ __all__ = [
     "ParamSchemaProperty",
     "ParamSchema",
     "PrimaryMetric",
+    "MetricObjective",
+    "ObjectiveSpec",
     "MetricColumn",
     "MetricSchema",
     "DecisionVocabulary",

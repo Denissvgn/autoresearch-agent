@@ -1,0 +1,226 @@
+schema_version: research_skill.v1
+id: adaptive-phase-case
+version: 0.1.0
+category: optimization
+display_name: Adaptive Phase Case
+description: 'Motivating skill case: a phase completion rule that adapts to evidence
+  history (early convergence or plateau) resists declarative evidence_keys and needs
+  the sanctioned plugin escape.'
+llm:
+  provider: anthropic
+  primary_model: claude-sonnet-4-20250514
+  insight_model: claude-haiku-4-20250514
+  max_output_tokens: 8192
+  system_prompt: SKILL.md
+workspace:
+  session_path_template: runs/{skill_id}/{subject_id}/{variant}
+subjects:
+  static:
+  - id: postgres16
+    label: Postgres 16 (simulated)
+variants:
+  static:
+  - tpcb
+  - oltp_read_only
+param_schema:
+  type: object
+  additionalProperties: false
+  properties:
+    target_latency_ms:
+      type: integer
+      minimum: 1
+      default: 10
+    bench_duration_s:
+      type: integer
+      minimum: 1
+      maximum: 3600
+      default: 60
+  required: []
+parameter_bindings:
+  bootstrap_inputs: {}
+  candidate_files: {}
+  evaluator_flags:
+    target_latency_ms: --target-latency-ms
+    bench_duration_s: --bench-duration-s
+  fixed_flags: {}
+  output_metadata:
+    bench_duration_s: bench_duration_s
+    target_latency_ms: target_latency_ms
+metric_schema:
+  primary:
+    field: primary_metric
+    label: TPS @ target latency
+    direction: higher_is_better
+    format: .1f
+  gates:
+  - field: p99_within_slo
+    label: p99 SLO
+    kind: boolean_badge
+  - field: no_regression
+    label: No Regr
+    kind: boolean_badge
+  chart_series:
+  - field: tps
+    label: TPS
+  - field: p99_latency_ms
+    label: p99 ms
+    axis: right
+  iteration_table_columns:
+  - field: primary_metric
+    label: TPS
+  - field: p99_within_slo
+    label: SLO
+    kind: icon
+  - field: no_regression
+    label: Regr
+    kind: icon
+  - field: bench_duration_s
+    label: Dur
+  goal: optimize
+decision_vocabulary:
+  base:
+  - keep
+  - discard
+  - improve
+  - unknown
+  extensions: []
+  success_values:
+  - keep
+  - improve
+phase_plan:
+- id: screen
+  label: Screen
+  min_iterations: 1
+  max_iterations: 10
+  evidence_keys:
+  - screen_result
+  stagnation_exempt: false
+- id: refine
+  label: Refine
+  min_iterations: 1
+  max_iterations: 10
+  evidence_keys:
+  - refine_result
+  stagnation_exempt: false
+phase_advancement:
+  mode: plugin
+  plugin: phases.py
+command_policy:
+  allowed_python:
+  - .venv/bin/python
+  - ./.venv/bin/python
+  allowed_scripts:
+  - eval/run.py
+  - bootstrap.py
+  allowed_executables:
+  - cp
+  - cat
+  copyable_files:
+  - db_config.yaml
+  - best_db_config.yaml
+  readable_files:
+  - db_config.yaml
+  - best_db_config.yaml
+  - bench_result.json
+  forbidden_tokens:
+  - '|'
+  - '||'
+  - '&&'
+  - ;
+  - '&'
+  forbidden_substrings:
+  - '`'
+  - $
+  - '>'
+  - <
+  - \n
+  - \r
+  secret_markers:
+  - .env
+  - /proc/
+  - /run/secrets
+  - authorization
+  - bearer
+  - credential
+  - id_rsa
+  - password
+  - secret
+  - token
+output_parser:
+  format: json_marker
+  iteration_marker: 'ITERATION_RESULT:'
+  nonce_field: server_nonce
+  require_signed_metrics: true
+  required_fields:
+  - status
+  - primary_metric
+  - metric_name
+  - p99_within_slo
+  field_types:
+    tps: number
+    p99_latency_ms: milliseconds
+    p99_within_slo: boolean
+    bench_duration_s: seconds
+    target_latency_ms: milliseconds
+  failure_statuses:
+  - crash
+  - timeout
+  - failed
+  - error
+  - bench_failed
+  fallback:
+    read_results_file: bench_result.json
+    marker_dir_template: '{workspace_root}/runs/{skill_id}/{subject_id}/{variant}/'
+preflight: []
+promotion_target:
+  primary:
+    kind: file_path
+    path_template: configs/db/{subject_id}_{variant}.yaml
+    sidecar_extensions:
+    - .{scope}-promotion.iter-{iteration}.json
+    atomic_write: true
+  scopes:
+  - id: development
+    approval_required: false
+  - id: production
+    approval_required: true
+    prior_scopes:
+    - development
+trial_identity:
+  hash_fields:
+  - skill_id
+  - subject_id
+  - variant
+  - db_config_hash
+  resolve:
+    mode: declarative
+blocker_classification:
+  actionable_blockers:
+  - p99_slo_missed
+  - tps_regression
+  - checkpoint_stall
+  phase_evidence_keys: {}
+structured_hpo:
+  enabled: false
+prompt:
+  experiment_command: '.venv/bin/python eval/run.py --config db_config.yaml
+
+    '
+  demo_experiment_command: .venv/bin/python eval/run.py --config {session_workspace}/db_config.yaml
+  continuation_enabled: true
+ui:
+  form_fields:
+  - name: target_latency_ms
+    type: integer
+    required: false
+    label: Target latency ms
+    default: 10
+  - name: bench_duration_s
+    type: integer
+    required: false
+    label: Bench duration s
+    default: 60
+plugins:
+  entries:
+  - kind: phase_advancement
+    path: phases.py

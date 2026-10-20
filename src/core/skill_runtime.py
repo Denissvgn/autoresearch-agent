@@ -154,10 +154,13 @@ class Phase(TypedDict, total=False):
 
 
 class UnsupportedPhaseAdvancementError(ValueError):
-    """Raised when a plugin phase-advancement mode is declared but unsupported.
+    """Raised when a plugin phase-advancement declaration is unsupported.
 
-    Plugin modes are rejected explicitly until their separately qualified
-    implementation exists — declarative behavior is never silently substituted.
+    A ``mode=plugin`` declaration requires a declared ``phase_advancement``
+    plugin entry (the qualified resolver implementation executes it under
+    the governed capability rules). Declarations without one, and other
+    unsupported forms, are rejected explicitly — declarative behavior is
+    never silently substituted.
     """
 
 
@@ -910,11 +913,13 @@ class ManifestSkillRuntime:
         """Read the phase list from the manifest's ``phase_plan`` section,
         reproducing the incumbent ``DIRECTION_PHASES`` etc. literals.
 
-        A declared ``phase_advancement.mode=plugin`` is rejected explicitly:
-        deriving the declarative plan for a plugin-owned rule would silently
-        substitute behavior the declaration does not ask for.
+        A declared ``phase_advancement.mode=plugin`` requires a matching
+        ``plugins.entries`` entry (kind ``phase_advancement``); declarations
+        without it are rejected explicitly. The declarative share
+        (evidence_keys) remains in the plan: it is a necessary condition of
+        the hybrid rule whose plugin share runs through the phase resolver.
         """
-        self._reject_plugin_advancement()
+        self._validate_plugin_advancement()
         return [
             {  # type: ignore[return-value]
                 "id": p.id,
@@ -928,26 +933,58 @@ class ManifestSkillRuntime:
             for p in self._manifest.phase_plan
         ]
 
-    def _reject_plugin_advancement(self) -> None:
-        """Reject plugin phase-advancement modes explicitly (top-level or per-phase)."""
+    def _validate_plugin_advancement(self) -> None:
+        """Validate plugin phase-advancement declarations.
+
+        Supported mode: ``mode=plugin`` with a declared ``plugins.entries``
+        entry of kind ``phase_advancement``. Everything else about plugin
+        advancement keeps the explicit rejection (an unsupported declaration
+        must never silently substitute declarative behavior).
+        """
         advancement = getattr(self._manifest, "phase_advancement", None)
-        if getattr(advancement, "mode", "declarative") == "plugin":
-            raise UnsupportedPhaseAdvancementError(
-                "phase_advancement: mode=plugin is not supported; "
-                "declare mode=declarative with per-phase evidence_keys"
+        top_level_plugin = (
+            getattr(advancement, "mode", "declarative") == "plugin"
+        )
+        per_phase_plugin = [
+            p.id
+            for p in self._manifest.phase_plan
+            if getattr(getattr(p, "advancement", None), "mode", None) == "plugin"
+        ]
+        if not top_level_plugin and not per_phase_plugin:
+            return
+        entries = getattr(self._manifest.plugins, "entries", []) or []
+        declared = [
+            e for e in entries if getattr(e, "kind", None) == "phase_advancement"
+        ]
+        if not declared:
+            scope = (
+                "phase_advancement: mode=plugin"
+                if top_level_plugin
+                else f"phase {per_phase_plugin[0]!r}: advancement mode=plugin"
             )
-        for phase in self._manifest.phase_plan:
-            override = getattr(phase, "advancement", None)
-            if getattr(override, "mode", None) == "plugin":
-                raise UnsupportedPhaseAdvancementError(
-                    f"phase {phase.id!r}: advancement mode=plugin is not "
-                    "supported; declare mode=declarative with evidence_keys"
-                )
+            raise UnsupportedPhaseAdvancementError(
+                f"{scope} requires a declared plugins.entries entry of kind "
+                "'phase_advancement' with its path; declarations without one "
+                "are rejected explicitly"
+            )
+
+    def phase_advancement_plugin(self, phase_id: str) -> Optional[Any]:
+        """The declared ``phase_advancement`` plugin entry, if any.
+
+        Callers run it through the phase resolver under the governed
+        capability rules; ``None`` means the phase uses the declarative
+        share only.
+        """
+        entries = getattr(self._manifest.plugins, "entries", []) or []
+        for entry in entries:
+            if getattr(entry, "kind", None) == "phase_advancement":
+                return entry
+        return None
 
     def phase_advancement_rule(self, phase_id: str) -> AdvancementRule:
         """The declared phase rule: evidence keys and min/max observation
         requirements. Plugin modes are rejected explicitly."""
-        self._reject_plugin_advancement()
+        self._validate_plugin_advancement()
         for p in self._manifest.phase_plan:
             if p.id == phase_id:
                 return {
