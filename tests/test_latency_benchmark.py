@@ -33,7 +33,11 @@ PROTOCOL = MeasurementProtocol(
     max_uncertainty=0.60,
     min_improvement=0.10,
 )
-WORKLOAD = build_workload(size=8000)
+# A dataset large enough that the real implementation differences
+# (index vs scan vs full rescan) dominate loopback overhead and machine
+# load — the measurement stays honest while the margins stop being
+# scheduler-noise-sized. Qualification thresholds above are unchanged.
+WORKLOAD = build_workload(size=24000)
 
 
 def _stable_probe():
