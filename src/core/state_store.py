@@ -1670,6 +1670,36 @@ class StateStore(Protocol):
         ...
 
 
+class _TaskReentrantLock:
+    """An asyncio lock reentrant within one task.
+
+    Serializes transaction spans on the shared connection while staying
+    deadlock-free for same-task nesting (store methods that open a second
+    connection() while already holding one).
+    """
+
+    def __init__(self) -> None:
+        self._lock = asyncio.Lock()
+        self._owner: Optional[asyncio.Task] = None
+        self._depth = 0
+
+    async def __aenter__(self) -> "_TaskReentrantLock":
+        task = asyncio.current_task()
+        if self._owner is not None and task is self._owner:
+            self._depth += 1
+            return self
+        await self._lock.acquire()
+        self._owner = task
+        self._depth = 1
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        self._depth -= 1
+        if self._depth == 0:
+            self._owner = None
+            self._lock.release()
+
+
 class SQLiteStateStore:
     """SQLite-specific implementation of :class:`StateStore`.
 
@@ -1691,6 +1721,7 @@ class SQLiteStateStore:
         self._db_path = db_path
         self._conn: aiosqlite.Connection | None = None
         self._write_lock = asyncio.Lock()
+        self._conn_rlock = _TaskReentrantLock()
 
     async def initialize(self) -> None:
         os.makedirs(os.path.dirname(self._db_path), exist_ok=True)
@@ -1767,11 +1798,20 @@ class SQLiteStateStore:
 
     @asynccontextmanager
     async def connection(self) -> AsyncIterator[aiosqlite.Connection]:
-        """Yield the long-lived SQLite connection initialized at startup."""
+        """Yield the long-lived SQLite connection initialized at startup.
+
+        Every use is serialized by a task-reentrant lock: aiosqlite
+        serializes statements but not transaction spans, so an unlocked
+        implicit write could previously interleave with a ``BEGIN
+        IMMEDIATE`` section and fail with "cannot start a transaction
+        within a transaction". Same-task nesting (a method opening a
+        second connection() while holding one) stays deadlock-free.
+        """
 
         if self._conn is None:
             raise RuntimeError("SQLiteStateStore is not initialized")
-        yield self._conn
+        async with self._conn_rlock:
+            yield self._conn
 
     async def close(self) -> None:
         """Flush and close the long-lived SQLite connection."""
