@@ -36,7 +36,7 @@ FORBIDDEN = [
 
 # state_store.py / postgres_state_store.py keep legacy columns (instrument,
 # trading_mode, ...) as storage back-compat; nothing writes trading values.
-# P1-2: the historical phase tables moved to src/compat/legacy_phase_tables.py
+# The historical phase tables live in src/compat/legacy_phase_tables.py
 # (exempt + documented below); the live machinery left in
 # src/core/research_phase_plan.py is guard-clean and no longer needs an
 # exemption.
@@ -44,7 +44,7 @@ EXEMPT_PATHS = (
     "src/core/legacy_alias.py",
     "src/core/state_store.py",
     "src/core/postgres_state_store.py",
-    # P1-2: the legacy surfaces moved to src/compat/ — exempt by name so the
+    # The legacy surfaces live in src/compat/ — exempt by name so the
     # guard documents exactly where historical vocabulary is quarantined.
     "src/compat/legacy_alias.py",
     "src/compat/ml_enrichment.py",

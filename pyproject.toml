@@ -1,6 +1,6 @@
-# PEP 621 metadata (ARC-012 P7-020): the canonical project identity lives
-# in [project]; [tool.poetry] below keeps only Poetry-specific tables
-# (packages, bundled-skills include allowlist, dependency specs).
+# PEP 621 metadata: the canonical project identity lives in [project];
+# [tool.poetry] below keeps only Poetry-specific tables (packages,
+# bundled-skills include allowlist, dependency specs).
 [project]
 name = "autoresearch-agent"
 version = "0.1.0"
@@ -9,10 +9,21 @@ authors = [{name = "Autoresearch Agent maintainers"}]
 license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.12,<4.0"
+keywords = ["ai-agents", "autonomous-research", "experiment-harness", "llm", "optimization"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 # Dependency specs stay in [tool.poetry.dependencies] (Poetry group syntax).
 dynamic = ["dependencies"]
 
-# P2 Skill SDK: the operator CLI (new-skill / promote-skill).
+# Skill SDK: the operator CLI (new-skill / promote-skill / agent).
 [project.scripts]
 autoresearch = "src.cli:main"
 
@@ -36,7 +47,7 @@ anthropic = "^0.52.0"
 openai = "^1.0.0"
 pyyaml = "^6.0"
 aiosqlite = "^0.20.0"
-# ARC-011 P6-002a: raw asyncpg backend for PostgresStateStore (multi-worker).
+# Raw asyncpg backend for PostgresStateStore (multi-worker).
 # Aligns with requirements-workspace.txt's asyncpg>=0.30.0 (workspace venv).
 asyncpg = "^0.30.0"
 websockets = "^14.0"
@@ -74,8 +85,8 @@ ignore = ["E402", "F401", "F541", "F841"]
 [tool.ruff.lint.per-file-ignores]
 # Legacy phase-plan tables kept only to render pre-migration DB rows; the
 # long lines are historical data strings.
-# P1-2: the tables moved to src/compat/legacy_phase_tables.py (the live
-# machinery in src/core/research_phase_plan.py is now E501-clean).
+# The tables live in src/compat/legacy_phase_tables.py (the live
+# machinery in src/core/research_phase_plan.py is E501-clean).
 "src/compat/legacy_phase_tables.py" = ["E501"]
 # Defense-in-depth denylist lines name the legacy platform secret explicitly
 # so it can never leak into a child/plugin env; exempt from line length.
@@ -101,7 +112,7 @@ disallow_untyped_decorators = false
 exclude = [
   "src/api/(audit|promotion|research|results)\\.py",
   "src/core/(command_policy|command_runner|config_promoter|consistency_validator|development_gate_bundle|development_inference_validation|development_signal_health|experiment_parser|iteration_snapshot|log_writer|orchestrator|pipeline_controller|research_manifest|research_state|results_store|service_preflight|session_manager|structured_hpo)\\.py",
-  # P1-2: verbatim-moved legacy code (was excluded where it lived, in
+  # Verbatim-moved legacy code (was excluded where it lived, in
   # src/api/results.py) — frozen in src/compat, not type-checked by design.
   "src/compat/ml_enrichment\\.py",
 ]
@@ -113,7 +124,7 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"
 markers = [
-    "parity: golden-output parity fixtures (ARC-011 X-002)",
-    "postgres: requires a live Postgres (AUTORESEARCH_DATABASE_URL); skipped otherwise (ARC-011 P6-002a)",
-    "distributed: requires a live Postgres + multi-process harness; skipped otherwise (ARC-011 P6-007)",
+    "parity: golden-output parity fixtures",
+    "postgres: requires a live Postgres (AUTORESEARCH_DATABASE_URL); skipped otherwise",
+    "distributed: requires a live Postgres + multi-process harness; skipped otherwise",
 ]

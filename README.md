@@ -95,8 +95,8 @@ configured — the bundled `docker-compose.yml` wires one for you.
 
 ### 2. Build and run
 
-With Docker Compose (bundles a Postgres state backend by default — the P2
-ops posture; clear `AUTORESEARCH_DATABASE_URL` in `.env` for SQLite):
+With Docker Compose (bundles a Postgres state backend by default; clear
+`AUTORESEARCH_DATABASE_URL` in `.env` for SQLite):
 
 ```bash
 cp .env.example .env   # fill in your LLM key + API token
@@ -207,6 +207,11 @@ endpoint) deliver the promoted winner to their endpoint with an
 `Idempotency-Key` and retries, keeping a local provenance copy under
 `<workspace>/promotions/`; delivery failure fails the confirm (fail-closed).
 See `examples/prompt-registry/` for a runnable receiver.
+
+In addition to the three `research_skill.v1` packages above, the repository
+includes `skills/latency-benchmark/` (`SKILL.md` + `workload.json`), which
+supplies the frozen workload and protocol digest used by the measured latency
+minimization benchmark (`src/core/latency_benchmark.py`).
 
 ---
 
@@ -395,7 +400,7 @@ autoresearch-agent/
 ├── Dockerfile                  # 3-stage build (UI → Python deps → runtime)
 ├── CLAUDE.md                   # Agent workspace context
 ├── pyproject.toml              # Server Python dependencies
-├── RUNBOOK.md                  # Ops: auth, metrics, health, Docker, parity
+├── RUNBOOK.md                  # Ops: auth, metrics, health, Docker, recovery
 ├── CHANGELOG.md
 ├── .env.example                # Tracked sanitized environment template
 └── .env                        # Local ignored API credentials
@@ -511,7 +516,7 @@ Any API compatible with the Anthropic Messages format, plus OpenAI:
 ### Operations
 
 `RUNBOOK.md` covers service auth, metrics, health/readiness, Docker build,
-UID handling, and parity-suite operations.
+UID handling, budget limits, and recovery/backup operations.
 
 ---
 

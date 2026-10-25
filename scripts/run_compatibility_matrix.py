@@ -122,8 +122,8 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
             "test_claude_code_harness, harness_contracts_g4 negatives"
         ),
                 "inapplicable": (
-            "domain choice does not alter lifecycle controls (capability-driven, B40"
-            "descriptors)"
+            "domain choice does not alter lifecycle controls (capability-driven"
+            " descriptors)"
         ),
     },
     {
@@ -148,8 +148,8 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
             "test_distributed_state_store"
         ),
                 "inapplicable": (
-            "admission and isolation are backend concerns (B21/B27); harness identity"
-            "is exercised via scenario 5"
+            "admission and isolation are backend concerns; harness identity"
+            " is exercised via scenario 5"
         ),
     },
     {
@@ -165,8 +165,8 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
             "test_durable_operation_qualification"
         ),
                 "inapplicable": (
-            "approval semantics are kernel/evidence-level (G1), not per harness"
-            "identity"
+            "approval semantics are kernel/evidence-level, not per harness"
+            " identity"
         ),
     },
     {
@@ -189,7 +189,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
         ),
                 "inapplicable": (
             "registration is harness-surface level; the domain dimension is covered"
-            "by the skill-packaged workloads (B37/B38/B39)"
+            " by the skill-packaged workloads"
         ),
     },
 )
@@ -376,7 +376,7 @@ def build_matrix(
         "remaining_limits": [
             (
                 "codex/claude-code live cells are INCOMPLETE until scoped "
-                "live credentials are provisioned (B42 live-qualification job)"
+                "live credentials are provisioned (live-qualification job)"
             ),
             (
                 "postgres-worker cells need a same-host Postgres server/DSN "
@@ -384,7 +384,7 @@ def build_matrix(
             ),
             (
                 "measured outcomes are machine- and load-specific "
-                "(B39 environment labels)"
+                "(environment labels)"
             ),
             (
                 "the gate is COMPLETE only when all 18 cells PASS; "

@@ -1,15 +1,15 @@
-# ARC-011 P4-012 — the live `prompt-engineering` skill descriptor.
+# Live `prompt-engineering` skill descriptor.
 #
-# The first non-ML skill (category: generative). Lifted from
-# docs/adr/skill-manifest-drafts/prompt-engineering.yaml (the original draft) and
-# reconciled to the canonical research_skill.v1 schema (P2-001).
+# Reference generative skill (category: generative). Lifted from
+# docs/adr/skill-manifest-drafts/prompt-engineering.yaml and reconciled to the
+# canonical research_skill.v1 schema.
 #
-# Key Phase-4 properties:
-# * llm.provider: openai — proves cross-provider (P4-007/P4-010).
-# * output_parser.require_signed_metrics: true — enforces the W11 anti-forgery
-#   nonce contract from day one (P4-003/P4-005).
+# Key properties:
+# * llm.provider: openai — cross-provider execution.
+# * output_parser.require_signed_metrics: true — enforces the anti-forgery
+#   nonce contract.
 # * promotion_target.primary.kind: registry_api — a non-file-path promotion
-#   target (G5), proving the generic promotion surface.
+#   target proving the generic promotion surface.
 # * No {skill_params.*} placeholders — the registry loads this manifest at
 #   startup without session context; session-supplied URLs arrive via
 #   skill_params at session-build time and are not baked into the manifest.
@@ -33,7 +33,7 @@ llm:
 workspace:
   session_path_template: "runs/{skill_id}/{subject_id}/{variant}"
 
-# ── Subject / variant enumeration (G12) ───────────────────────────────────────
+# ── Subject / variant enumeration ─────────────────────────────────────────────
 subjects:
   static:
     - { id: default, label: "Default prompt task" }
@@ -88,7 +88,7 @@ metric_schema:
     - { field: n_eval_examples,       label: "N" }
   goal: optimize
 
-# ── 3/8 decision_vocabulary (G8 success_values) ───────────────────────────────
+# ── 3/8 decision_vocabulary (success_values) ──────────────────────────────────
 decision_vocabulary:
   base:           [keep, discard, improve, unknown]
   extensions:     []
@@ -134,7 +134,7 @@ phase_advancement:
 
 # ── 5/8 command_policy ────────────────────────────────────────────────────────
 command_policy:
-  # ARC-012 P7-011: the per-iteration config artifact rides --prompt.
+  # The per-iteration config artifact rides --prompt.
   config_flag: --prompt
   allowed_python: [".venv/bin/python", "./.venv/bin/python"]
   allowed_scripts:
@@ -150,7 +150,7 @@ command_policy:
   forbidden_substrings: ["`", "$", ">", "<", "\n", "\r"]
   secret_markers: [.env, /proc/, /run/secrets, authorization, bearer, credential, id_rsa, password, secret, token]
 
-# ── 6/8 output_parser (json_marker + W11 anti-forgery) ────────────────────────
+# ── 6/8 output_parser (json_marker + anti-forgery) ────────────────────────────
 output_parser:
   format: json_marker
   iteration_marker: "ITERATION_RESULT:"
@@ -172,7 +172,7 @@ output_parser:
 preflight:
   - { name: eval-set, kind: local_file, path: "eval_set.jsonl", required: false }
 
-# ── 8/8 promotion_target (G5 registry_api) ────────────────────────────────────
+# ── 8/8 promotion_target (registry_api) ───────────────────────────────────────
 promotion_target:
   primary:
     kind: registry_api
@@ -197,7 +197,7 @@ trial_identity:
   resolve:
     mode: declarative
 
-# ── Blocker classification (G3) ───────────────────────────────────────────────
+# ── Blocker classification ────────────────────────────────────────────────────
 blocker_classification:
   actionable_blockers: [below_min_precision, cost_budget_exceeded, scorer_unavailable]
   phase_evidence_keys: {}
@@ -218,9 +218,9 @@ prompt:
   # are canonicalized into the command from parameter_bindings at render time.
   experiment_command: |
     .venv/bin/python eval/run.py --prompt prompt.yaml
-  # ARC-012 P7-011: what the demo provider executes verbatim (offline fallback
-  # scorer). The {session_workspace} prompt path is absolute; the bound
-  # dataset/demo flags render identically to the live command (parity).
+  # Command the demo provider executes verbatim (offline fallback scorer).
+  # The {session_workspace} prompt path is absolute; the bound dataset/demo
+  # flags render identically to the live command (parity).
   demo_experiment_command: .venv/bin/python eval/run.py --prompt {session_workspace}/prompt.yaml
   continuation_enabled: true
 

@@ -151,9 +151,9 @@ prompt:
   # canonicalized into the command from parameter_bindings at render time.
   experiment_command: |
     .venv/bin/python eval/run.py --config db_config.yaml
-  # ARC-012 P7-011: what the demo provider executes verbatim (simulated
-  # bench). Absolute {session_workspace} paths — governed commands run with
-  # cwd = the workspace root, not the session workspace.
+  # Command the demo provider executes verbatim (simulated bench). Absolute
+  # {session_workspace} paths — governed commands run with cwd = the workspace
+  # root, not the session workspace.
   demo_experiment_command: .venv/bin/python eval/run.py --config {session_workspace}/db_config.yaml
   continuation_enabled: true
 

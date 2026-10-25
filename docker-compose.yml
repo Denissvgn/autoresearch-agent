@@ -1,12 +1,12 @@
-# P2 ops defaults: one-command bring-up with Postgres as the state backend.
+# Docker Compose defaults: one-command bring-up with Postgres as the state backend.
 #
 #   cp .env.example .env   # fill in your LLM key + API token
 #   docker compose up
 #   open http://localhost:8030
 #
-# Postgres is on by default (the plan's ops posture): AUTORESEARCH_DATABASE_URL
-# points the service at the bundled `postgres` service so the PostgresStateStore
-# backend and multi-worker scaling are exercised from the first `up`. Set
+# Postgres is on by default: AUTORESEARCH_DATABASE_URL points the service at
+# the bundled `postgres` service so the PostgresStateStore backend and
+# multi-worker scaling are exercised from the first `up`. Set
 # AUTORESEARCH_DATABASE_URL="" in .env to fall back to SQLite.
 #
 # Demo without any keys: add AUTORESEARCH_DEMO=true and

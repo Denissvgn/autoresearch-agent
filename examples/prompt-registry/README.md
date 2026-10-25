@@ -1,4 +1,4 @@
-# Example: prompt-registry receiver (P1-3)
+# Example: prompt-registry receiver
 
 A minimal receiver that proves the `registry_api` / `webhook` promotion
 target end-to-end. `autoresearch-agent` delivers a confirmed promotion as:

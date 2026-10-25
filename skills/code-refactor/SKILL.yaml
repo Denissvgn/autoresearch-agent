@@ -95,7 +95,7 @@ phase_advancement:
   mode: declarative
 
 command_policy:
-  # ARC-012 P7-011: the per-iteration config artifact rides --target.
+  # The per-iteration config artifact rides --target.
   config_flag: --target
   allowed_python: [".venv/bin/python", "./.venv/bin/python"]
   allowed_scripts:
@@ -159,8 +159,8 @@ prompt:
   # canonicalized into the command from parameter_bindings at render time.
   experiment_command: |
     .venv/bin/python eval/run.py --tests tests_target.jsonl
-  # ARC-012 P7-011: what the demo provider executes verbatim (offline static
-  # analysis). Bound flags render identically to the live command (parity).
+  # Command the demo provider executes verbatim (offline static analysis).
+  # Bound flags render identically to the live command (parity).
   demo_experiment_command: .venv/bin/python eval/run.py --tests tests_target.jsonl
   continuation_enabled: true
 

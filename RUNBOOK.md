@@ -190,7 +190,9 @@ The command policy is **default-deny** and workspace-scoped, but it is not an
 OS sandbox — skill packages execute code with the service's privileges.
 Isolate accordingly: run in a container or on a dedicated host, mount only the
 workspace and config paths, and do not run untrusted skill packages on a
-privileged host. The UI ships prebuilt; no Node.js is required at runtime.
+privileged host. The Docker image ships the UI prebuilt (no Node.js is
+required at runtime); wheel and sdist installs provide the backend service,
+bundled skills, and CLI, and automatically serve `ui/dist` when present.
 
 ## Credential Roles
 
@@ -272,8 +274,3 @@ AUTORESEARCH_DEMO=true curl -sf -X POST http://localhost:8030/api/v1/research/st
   -H "Content-Type: application/json" \
   -d '{"skill_id": "prompt-engineering", "max_iterations": 1}'
 ```
-
-The package also ships golden-output fixtures for parser and
-promotion-preview behavior (the parity fixtures). Regenerating them is an
-intentional-engineering procedure described in the implementation handoff
-record, not an operator task.

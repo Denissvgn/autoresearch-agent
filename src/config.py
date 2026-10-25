@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     agent_output_digest_max_chars: int = Field(
         default=12_000,
         description=(
-            "Track D2: bash tool outputs longer than this are digested before "
+            "Bash tool outputs longer than this are digested before "
             "entering the agent's context (metrics block / markers / errors "
             "kept, noise collapsed, full log persisted to the workspace). "
             "0 disables digesting (legacy: full raw output every turn)."
@@ -93,7 +93,7 @@ class Settings(BaseSettings):
         description=(
             "Optional bearer token required to scrape /metrics. When set, "
             "callers must present 'Authorization: Bearer <token>' or the "
-            "scrape is rejected with HTTP 401. Phase 5.2 hardening."
+            "scrape is rejected with HTTP 401."
         ),
     )
     identity_introspection_url: str = Field(
@@ -131,11 +131,11 @@ class Settings(BaseSettings):
         repr=False,
         description="Anthropic API authentication token",
     )
-    # NOTE (ARC-011 P0-023): SecretStr fields here are NOT inherited by governed
-    # experiment subprocesses. See src.core.command_runner._CHILD_ENV_ALLOWLIST /
-    # _FORBIDDEN_CHILD_ENV for the agent-path env contract
-    # (ARC-011 security spike §4.3). New server control-plane
-    # secrets added below should also be added to _FORBIDDEN_CHILD_ENV there.
+    # NOTE: SecretStr fields here are NOT inherited by governed experiment
+    # subprocesses. See src.core.command_runner._CHILD_ENV_ALLOWLIST /
+    # _FORBIDDEN_CHILD_ENV for the agent-path env contract. New server
+    # control-plane secrets added below should also be added to
+    # _FORBIDDEN_CHILD_ENV there.
     anthropic_model: str = Field(
         default="claude-sonnet-4-20250514",
         description="Model to use for agent sessions",
@@ -153,10 +153,10 @@ class Settings(BaseSettings):
         description="Opus-tier model alias",
     )
 
-    # --- OpenAI (ARC-011 P4-007 / P4-010) ---
+    # --- OpenAI ---
     # Required when a skill manifest declares ``llm.provider: openai``. The
     # provider router (``llm_provider.build_provider``) reads these to construct
-    # an ``OpenAIProvider``; the Anthropic settings remain the default for ML
+    # an ``OpenAIProvider``; the Anthropic settings remain the default for
     # skills that do not declare a provider override.
     openai_base_url: str = Field(
         default="https://api.openai.com/v1",
@@ -177,7 +177,7 @@ class Settings(BaseSettings):
         default=False,
         validation_alias=AliasChoices("AUTORESEARCH_DEMO", "DEMO_MODE"),
         description=(
-            "P0-3 demo mode: route all LLM calls to the zero-credential "
+            "Demo mode: route all LLM calls to the zero-credential "
             "MockProvider. Never enable in production (refused by router)."
         ),
     )
@@ -187,7 +187,7 @@ class Settings(BaseSettings):
             "AUTORESEARCH_SKILL_GENERATOR_ENABLED", "SKILL_GENERATOR_ENABLED",
         ),
         description=(
-            "P2 Skill SDK: expose POST /skills/generate (LLM-drafted skill "
+            "Skill SDK: expose POST /skills/generate (LLM-drafted skill "
             "packages). Operator opt-in — generation spends real tokens and "
             "writes validated-but-untrusted drafts into skills/_drafts/."
         ),
@@ -210,7 +210,7 @@ class Settings(BaseSettings):
         default=10.0,
         validation_alias=AliasChoices("AUTORESEARCH_MAX_BUDGET_USD", "MAX_BUDGET_USD"),
     )
-    # P2 ops: per-call token budgets (cost control at the provider boundary).
+    # Per-call token budgets (cost control at the provider boundary).
     max_output_tokens_per_call: int = Field(
         default=8192,
         ge=128,
@@ -278,7 +278,7 @@ class Settings(BaseSettings):
         ),
     )
 
-    # --- API Robustness (ML-68) ---
+    # --- API Robustness ---
     anthropic_api_timeout_s: int = Field(
         default=600,
         validation_alias=AliasChoices(
@@ -308,7 +308,7 @@ class Settings(BaseSettings):
             "GLOBAL_STAGNATION_WINDOW",
         ),
         description=(
-            "AR-7: Number of consecutive iterations with no metric improvement "
+            "Number of consecutive iterations with no metric improvement "
             "that triggers a GLOBAL_STAGNATION nudge demanding TERMINATE_REQUEST."
         ),
     )
@@ -320,7 +320,7 @@ class Settings(BaseSettings):
             "GLOBAL_STAGNATION_EPSILON",
         ),
         description=(
-            "AR-7: Minimum metric improvement above the session best required to "
+            "Minimum metric improvement above the session best required to "
             "reset the stagnation window. Improvements <= epsilon are treated as "
             "stagnant."
         ),
@@ -376,8 +376,8 @@ class Settings(BaseSettings):
         description=(
             "Reject duplicate config/seed/mode/split attempts across prior "
             "sessions for the same instrument, timeframe, and model type. "
-            "Phase 3.4: default flipped to True so wasted compute on "
-            "already-explored points is the opt-out, not the opt-in."
+            "Default is True so wasted compute on already-explored points is "
+            "the opt-out, not the opt-in."
         ),
     )
     ws_max_clients: int = Field(
@@ -412,10 +412,10 @@ class Settings(BaseSettings):
         ),
         description=(
             "HMAC-SHA256 secret used to verify the signature on production-scope "
-            "promotion approvals (W18 / P0-020). When unset, all production "
-            "promotions are rejected (fail-closed). The approval.signature must be "
-            "the hex HMAC-SHA256 of '{research_id}:{scope}:{approver}' keyed by "
-            "this secret."
+            "promotion approvals. When unset, all production promotions are "
+            "rejected (fail-closed). The approval.signature must be the hex "
+            "HMAC-SHA256 of the canonical approval message (hmac-sha256-v2) "
+            "keyed by this secret."
         ),
     )
     result_receipt_key: SecretStr | None = Field(
@@ -565,11 +565,11 @@ class Settings(BaseSettings):
             "DATABASE_URL",
         ),
         description=(
-            "Optional Postgres DSN enabling the PostgresStateStore backend "
-            "(ARC-011 Phase 6 / R6). When unset (or when the DSN is a sqlite "
-            "URL), the service uses SQLiteStateStore and the WEB_CONCURRENCY>1 "
-            "guard stays active (W14). Set to a postgresql:// (or "
-            "postgresql+asyncpg://) DSN to enable horizontal scaling."
+            "Optional Postgres DSN enabling the PostgresStateStore backend. "
+            "When unset (or when the DSN is a sqlite URL), the service uses "
+            "SQLiteStateStore and the WEB_CONCURRENCY>1 guard stays active. "
+            "Set to a postgresql:// (or postgresql+asyncpg://) DSN to enable "
+            "horizontal scaling."
         ),
     )
 

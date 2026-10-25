@@ -69,6 +69,13 @@ prerequisite is an environment failure, not a product defect or passing coverage
 Use [Extractors and dependencies](extractors-dependencies.md) for helper recovery.
 Retain the original failure and successful corrective reruns separately.
 
+For captured evidence failures, follow
+[the diagnosis and repair route](maintenance.md#diagnose-captured-evidence):
+inspect stored qualification, read one fresh raw file, resolve helper/runtime
+prerequisites, preview authorized owning work, then repair/re-anchor/validate.
+Raw extraction cannot repair a stored manifest, and invalid evidence stays
+blocking. Do not turn a diagnostic read into setup or an automatic force update.
+
 ## Select checks from contracts and environments
 
 Discover supported environments and existing verification commands from the
@@ -106,6 +113,16 @@ sync or qualifying extraction, check both prepared helper identity and active
 execution runtime under the same cache base. Inspect package, helper and runtime
 bases separately; do not manufacture compatibility for runtime-bound observations.
 Use the authorized setup route or leave the prerequisite unresolved.
+
+Before a hosted wiki proof, derive target runtime declarations from that project's
+maintained proof owners. Where applicable, use `llm-wiki doctor --target-runtime
+<permitted-targets.json> --wiki-dir <wiki-dir>` to compare committed metadata
+without source inventory or target execution. Missing or dynamic declarations
+remain unknown; a match is not package equivalence or hosted proof. A known
+mismatch requires the project's authorized target-host capture and review,
+including complete snapshot provenance and removals. Never infer another
+project's platform, install dependencies, sync, force, upgrade or adopt from this
+diagnostic. Fresh target-native proof remains required.
 
 Classify retained failures as environment, fixture, product or workflow issues
 before correcting them. Verify the correction with an independently expected,

@@ -52,11 +52,11 @@ def _validate_runtime_configuration() -> None:
     env = settings.environment.lower()
     if env in {"prod", "production"} and not secret_value(settings.autoresearch_prometheus_token):
         raise RuntimeError("AUTORESEARCH_PROMETHEUS_TOKEN is required in production")
-    # ARC-011 P6-006: the WEB_CONCURRENCY > 1 guard is conditional on the
-    # backend. SQLiteStateStore is single-writer and cannot back a multi-worker
-    # deployment (W14); PostgresStateStore (settings.database_url → Postgres)
+    # The WEB_CONCURRENCY > 1 guard is conditional on the backend.
+    # SQLiteStateStore is single-writer and cannot back a multi-worker
+    # deployment; PostgresStateStore (settings.database_url → Postgres)
     # can, so >1 is allowed iff the DSN points at Postgres. The default
-    # (database_url unset) keeps today's strict behavior byte-identical.
+    # (database_url unset) keeps the single-worker guard active.
     from src.core.postgres_state_store import is_postgres_dsn
     multi_worker_supported = is_postgres_dsn(settings.database_url)
     for name in ("WEB_CONCURRENCY", "UVICORN_WORKERS", "AUTORESEARCH_REPLICAS"):
@@ -77,12 +77,12 @@ def _validate_runtime_configuration() -> None:
                 "autoresearch-agent is a single-instance SQLite control-plane "
                 f"service; {name}={value} is not supported without a Postgres "
                 "backend. Set AUTORESEARCH_DATABASE_URL to a postgresql:// DSN "
-                "to enable horizontal scaling (ARC-011 Phase 6)."
+                "to enable horizontal scaling."
             )
         if value > 1 and multi_worker_supported:
             logger.info(
-                "Multi-worker mode enabled (%s=%d) on Postgres backend "
-                "(ARC-011 Phase 6). Effective concurrent-session ceiling is "
+                "Multi-worker mode enabled (%s=%d) on Postgres backend. "
+                "Effective concurrent-session ceiling is "
                 "max_concurrent_sessions x %d.",
                 name, value, value,
             )
@@ -102,8 +102,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Workspace: %s", settings.workspace_root)
 
     # Initialize the state store. Backend is config-selected: SQLiteStateStore
-    # (default; W14 single-worker) or PostgresStateStore when
-    # settings.database_url points at Postgres (ARC-011 Phase 6 / R6).
+    # (default; single-worker) or PostgresStateStore when
+    # settings.database_url points at Postgres.
     _store = build_state_store(settings)
     await _store.initialize()
     app.state.audit_store = _store
@@ -119,8 +119,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from src.api import harnesses, promotion, research, results, skills, subjects
     from src.core.skill_registry import SkillRegistry
 
-    # P3-001..011: discover installed skill manifests and wire the skill /
-    # subject endpoint modules with the same registry instance.
+    # Discover installed skill manifests and wire the skill / subject endpoint
+    # modules with the same registry instance.
     _skill_registry = SkillRegistry()
     _skill_registry.discover()
     skills.init(registry=_skill_registry, store=_store)
@@ -152,10 +152,9 @@ app = FastAPI(
 )
 ensure_app_request_headers(app)
 
-# CORS — Phase 1.4 hardening: when origins is the wildcard, force
-# allow_credentials=False because Starlette will silently produce a
-# response that browsers reject anyway, and combining `*` with
-# credentials=True is unsafe with our shared bearer token.
+# CORS: when origins is the wildcard, force allow_credentials=False because
+# Starlette will silently produce a response that browsers reject anyway, and
+# combining `*` with credentials=True is unsafe with our shared bearer token.
 _cors_origins = settings.cors_origins
 _cors_allow_credentials = True
 if _cors_origins == ["*"]:
@@ -320,7 +319,7 @@ async def _collect_observability_snapshot() -> dict[str, Any]:
 
 @app.get("/metrics", include_in_schema=False)
 async def metrics(request: Request) -> Response:
-    # Phase 5.2: bearer-token gate for Prometheus scrapers. When
+    # Bearer-token gate for Prometheus scrapers. When
     # ``autoresearch_prometheus_token`` is unset the endpoint is intentionally
     # unavailable; when set we require it explicitly so the endpoint is safe to
     # expose outside the cluster boundary.
@@ -440,10 +439,10 @@ async def websocket_events(websocket: WebSocket) -> None:
                 heartbeat_failed.set()
 
         heartbeat_task = asyncio.create_task(_heartbeat())
-        # Phase 4.2: bound receive_text with a wall-clock timeout and drop
-        # the connection if the peer goes silent for more than N consecutive
-        # idle windows; this catches half-open TCP sockets the OS hasn't
-        # detected yet (heartbeat send failures cover the other direction).
+        # Bound receive_text with a wall-clock timeout and drop the connection
+        # if the peer goes silent for more than N consecutive idle windows;
+        # this catches half-open TCP sockets the OS hasn't detected yet
+        # (heartbeat send failures cover the other direction).
         idle_window_s = 60
         max_idle_windows = 5
         idle_count = 0
