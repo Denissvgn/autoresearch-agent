@@ -32,8 +32,9 @@ import math
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, List, Literal, Mapping, Optional, Sequence
 
+from src.core.execution_contracts import ObjectiveDirection
+
 Comparison = Literal["better", "tie", "worse", "incomparable"]
-ObjectiveDirection = Literal["minimize", "maximize"]
 
 __all__ = [
     "Comparison",
