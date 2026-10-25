@@ -205,6 +205,12 @@ def wrap_command(
     argv: Sequence[str], *, policy: IsolationPolicy, backend: Optional[BwrapBackend] = None
 ) -> list[str]:
     """Wrap ``argv`` in the isolation boundary (selecting the backend if needed)."""
+    if policy.network_egress:
+        raise UnsupportedCapabilityError(
+            "network allowlist enforcement is not available at the OS "
+            "boundary on this backend; capability refused (no fallback "
+            "to unrestricted egress)"
+        )
     return (backend or select_backend()).wrap(argv, policy=policy)
 
 

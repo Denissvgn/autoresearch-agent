@@ -46,6 +46,7 @@ log "running ${CONTAINER} on 127.0.0.1:${PORT}"
 docker run -d --name "${CONTAINER}" \
   -p "127.0.0.1:${PORT}:8000" \
   -e AUTORESEARCH_DEMO=true \
+  -e AUTORESEARCH_EXECUTION_ISOLATION_MODE=trusted_local_code \
   -e AUTORESEARCH_API_TOKEN="${TOKEN}" \
   -e AUTORESEARCH_DATABASE_URL= \
   "${IMAGE}" >/dev/null || fail "docker run failed"

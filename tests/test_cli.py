@@ -91,12 +91,26 @@ def skills_root(tmp_path: Path) -> Path:
 
 
 def _run_cli(argv: list[str], payload: dict[str, Any], monkeypatch) -> int:
+    from src.config import get_settings, settings
+    from src.core.isolation import probe_host
+
+    if not probe_host().get("ready"):
+        monkeypatch.setenv(
+            "AUTORESEARCH_EXECUTION_ISOLATION_MODE", "trusted_local_code"
+        )
+        monkeypatch.setattr(
+            settings, "execution_isolation_mode", "trusted_local_code"
+        )
+        get_settings.cache_clear()
     monkeypatch.setattr(
         llm_provider_module,
         "build_provider",
         lambda name, **kw: _StubProvider(json.dumps(payload)),
     )
-    return cli.main(argv)
+    try:
+        return cli.main(argv)
+    finally:
+        get_settings.cache_clear()
 
 
 def _last_lines(capsys, n: int = 3) -> str:

@@ -102,6 +102,7 @@ from src.core.llm_provider import (
     Usage,
     build_provider,
     clamp_output_tokens,
+    resolve_effective_provider,
     resolve_model_roles,
 )
 from src.core.log_writer import AgentLogWriter
@@ -369,7 +370,9 @@ class AgentOrchestrator:
         # (build_provider); per-skill provider selection (P4-010) overrides it
         # per-session via _session_providers. No direct anthropic.* reference
         # remains in this file.
-        self._provider: LLMProvider = build_provider("anthropic")
+        self._provider: LLMProvider = build_provider(
+            resolve_effective_provider(None, settings)
+        )
         # P4-010: per-session provider/model overrides (keyed by research_id).
         # Populated in run() when the skill manifest declares a non-anthropic
         # provider; _call_llm_with_retry and the insights path fall back to
@@ -2854,8 +2857,9 @@ class AgentOrchestrator:
         if manifest is not None:
             llm_cfg = manifest.llm
             roles = resolve_model_roles(llm_cfg, settings)
+            effective_provider = resolve_effective_provider(llm_cfg, settings)
             self._session_providers[config.id] = build_provider(
-                llm_cfg.provider,
+                effective_provider,
                 required_capabilities=RequiredCapabilities.from_llm_config(llm_cfg),
             )
             self._session_models[config.id] = roles.primary_model
@@ -4700,7 +4704,14 @@ class AgentOrchestrator:
         )
         # Fence before ANY effect (snapshot file writes included): a stale
         # owner must not publish evidence artifacts after ownership changed.
-        await self._store.require_session_fence(research_id, _fence_epoch)
+        # On PostgresStateStore, a stale worker still records the immutable
+        # iteration row (without advancing best_*) and hits the fenced
+        # update_session below to emit ``result.discarded.stale_worker``.
+        _fence_stale = False
+        try:
+            await self._store.require_session_fence(research_id, _fence_epoch)
+        except Exception:
+            _fence_stale = True
 
         # AR-3: For promotion-family phases the agent does not run a fresh
         # training command and legitimately emits no config_snapshot.  Inherit
@@ -4790,7 +4801,7 @@ class AgentOrchestrator:
         attempt_snapshot = None
         attempt_snapshot_path = None
         attempt_snapshot_hash = None
-        if workspace and command:
+        if workspace and command and not _fence_stale:
             attempt_snapshot = build_iteration_attempt_snapshot(
                 research_id=research_id,
                 iteration=iteration,

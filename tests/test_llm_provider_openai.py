@@ -262,6 +262,45 @@ class TestBuildProvider:
         assert isinstance(provider, OpenAIProvider)
         assert provider.name == "openai"
 
+    @pytest.mark.parametrize(
+        ("provider_id", "expected_name", "expected_zero_cost"),
+        [
+            ("ollama", "ollama", True),
+            ("vllm", "vllm", True),
+            ("lmstudio", "lmstudio", True),
+            ("llamacpp", "llamacpp", True),
+            ("llama.cpp", "llamacpp", True),
+            ("local", "local", True),
+            ("openai-compatible", "openai-compatible", False),
+            ("openai_compatible", "openai-compatible", False),
+            ("openrouter", "openrouter", False),
+        ],
+    )
+    def test_local_and_openai_compatible_providers_without_anthropic_env(
+        self, provider_id, expected_name, expected_zero_cost
+    ):
+        from src.core.llm_provider import Usage, build_provider
+
+        stub = types.SimpleNamespace(
+            anthropic_base_url="",
+            anthropic_auth_token=None,
+            openai_base_url="",
+            openai_api_key=None,
+            openai_api_timeout_s=30,
+        )
+        provider = build_provider(provider_id, settings_obj=stub)
+        assert isinstance(provider, OpenAIProvider)
+        assert provider.name == expected_name
+        usage = Usage(input_tokens=1000, output_tokens=500)
+        quote = provider.price_quote("qwen2.5-coder:32b", usage)
+        if expected_zero_cost:
+            assert provider.estimate_cost("qwen2.5-coder:32b", usage) == 0.0
+            assert quote.money_usd == 0.0
+            assert quote.status == "estimated"
+        else:
+            assert quote.money_usd is None
+            assert quote.status == "unavailable"
+
 
 # ── ARC-011 P4-009: capability matching (fail-closed) ────────────────────────
 

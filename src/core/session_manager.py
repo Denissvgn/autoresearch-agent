@@ -746,6 +746,7 @@ class SessionManager:
         from src.core.llm_provider import (
             RequiredCapabilities,
             build_provider,
+            resolve_effective_provider,
             resolve_model_roles,
         )
 
@@ -753,7 +754,7 @@ class SessionManager:
         if llm_cfg is not None:
             resolve_model_roles(llm_cfg)
             build_provider(
-                str(getattr(llm_cfg, "provider", "") or ""),
+                resolve_effective_provider(llm_cfg),
                 required_capabilities=RequiredCapabilities.from_llm_config(llm_cfg),
             )
 

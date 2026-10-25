@@ -394,13 +394,17 @@ __all__ = [
     "ContentBlock",
     "ErrorClass",
     "LLMProvider",
+    "LOCAL_OPENAI_COMPAT_PROVIDERS",
     "Message",
+    "OPENAI_COMPAT_PROVIDERS",
     "OpenAIProvider",
     "ProviderCapabilities",
     "ProviderResponse",
     "RequestBlock",
+    "resolve_effective_provider",
     "StopReason",
     "StreamDelta",
+    "SUPPORTED_LLM_PROVIDERS",
     "TextBlock",
     "ToolDef",
     "ToolResultBlock",
@@ -860,14 +864,27 @@ class OpenAIProvider:
 
     name = "openai"
 
-    def __init__(self, *, base_url: str, api_key: str, timeout_s: float) -> None:
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        timeout_s: float,
+        provider_name: str = "openai",
+        zero_cost_fallback: bool = False,
+    ) -> None:
         import openai as _openai
 
+        self.name = provider_name
+        self._zero_cost_fallback = zero_cost_fallback
         self._openai_mod = _openai
         # ``max_retries=0`` — loop-owned retry is authoritative (spike D-retry).
+        # Keyless local servers (Ollama, vLLM, LM Studio, llama.cpp) do not
+        # require an API key, while AsyncOpenAI raises OpenAIError if api_key
+        # is empty and OPENAI_API_KEY is unset in the environment.
         self._client = _openai.AsyncOpenAI(
             base_url=base_url,
-            api_key=api_key,
+            api_key=api_key or "local-no-key",
             timeout=httpx.Timeout(timeout_s, connect=30.0),
             max_retries=0,
         )
@@ -927,27 +944,46 @@ class OpenAIProvider:
         yield StreamDelta()  # pragma: no cover — makes this an async generator
 
     def estimate_cost(self, model: str, usage: Usage) -> float:
-        """Per-model USD cost for an OpenAI call.
+        """Per-model USD cost for an OpenAI or OpenAI-compatible call.
 
-        Uses a per-model pricing table with a gpt-4o-class default. Cache-blind
-        (parity with ``AnthropicProvider.estimate_cost``).
+        Uses a per-model pricing table with a gpt-4o-class default (or 0.0 for
+        local OpenAI-compatible inference servers). Cache-blind (parity with
+        ``AnthropicProvider.estimate_cost``).
         """
+        if model not in _OPENAI_PRICING and getattr(
+            self, "_zero_cost_fallback", False
+        ):
+            return 0.0
         in_rate, out_rate = _OPENAI_PRICING.get(
             model, (_OPENAI_DEFAULT_INPUT_USD_PER_TOKEN, _OPENAI_DEFAULT_OUTPUT_USD_PER_TOKEN),
         )
         return usage.input_tokens * in_rate + usage.output_tokens * out_rate
 
     def price_quote(self, model: str, usage: Usage) -> CostEstimate:
-        """Basis-snapshotted OpenAI cost; unknown models are unavailable.
+        """Basis-snapshotted OpenAI cost; unknown cloud models are unavailable,
+        while local OpenAI-compatible providers report zero token cost.
 
-        A model missing from the pricing table is ``COST_UNAVAILABLE`` — the
-        default-rate approximation stays only in the legacy ``estimate_cost``
+        A cloud model missing from the pricing table is ``COST_UNAVAILABLE`` —
+        the default-rate approximation stays only in the legacy ``estimate_cost``
         advisory surface and is never silently billed as an estimate here.
         Cached input is priced at the input rate and reasoning tokens at the
         output rate (the basis records both approximations).
         """
         rates = _OPENAI_PRICING.get(model)
         if rates is None:
+            if getattr(self, "_zero_cost_fallback", False):
+                return CostEstimate(
+                    status=COST_ESTIMATED,
+                    money_usd=0.0,
+                    basis={
+                        "version": "local-zero-cost.v1",
+                        "provider": self.name,
+                        "model": model,
+                        "input_rate_per_mtok": 0.0,
+                        "output_rate_per_mtok": 0.0,
+                        "note": "local inference (zero API token cost)",
+                    },
+                )
             return CostEstimate(
                 status=COST_UNAVAILABLE,
                 money_usd=None,
@@ -1263,6 +1299,53 @@ class UnsupportedModelSetting(ValueError):
     """
 
 
+LOCAL_OPENAI_COMPAT_PROVIDERS: frozenset[str] = frozenset(
+    {"ollama", "vllm", "lmstudio", "llamacpp", "llama.cpp", "local"}
+)
+
+OPENAI_COMPAT_PROVIDERS: frozenset[str] = frozenset(
+    {
+        "openai",
+        "openai-compatible",
+        "openai_compatible",
+        "openrouter",
+        *LOCAL_OPENAI_COMPAT_PROVIDERS,
+    }
+)
+
+SUPPORTED_LLM_PROVIDERS: tuple[str, ...] = (
+    "anthropic",
+    "openai",
+    "openai-compatible",
+    "ollama",
+    "vllm",
+    "lmstudio",
+    "llamacpp",
+    "local",
+    "openrouter",
+    "mock",
+)
+
+
+def _str_setting(settings_obj: Any, attr: str) -> str:
+    """Read a string setting safely (ignores MagicMock / non-str test doubles)."""
+    val = getattr(settings_obj, attr, None)
+    return val.strip() if isinstance(val, str) else ""
+
+
+def resolve_effective_provider(llm_cfg: Any = None, settings_obj: Any = None) -> str:
+    """Resolve the active provider ID, honoring ``settings.llm_provider`` when set."""
+    if settings_obj is None:
+        from src.config import settings as settings_obj  # noqa: PLC0415
+    override = _str_setting(settings_obj, "llm_provider").lower()
+    if override:
+        return "openai-compatible" if override == "openai_compatible" else override
+    declared = _str_setting(llm_cfg, "provider").lower() if llm_cfg is not None else ""
+    if declared:
+        return "openai-compatible" if declared == "openai_compatible" else declared
+    return "anthropic"
+
+
 @dataclass(frozen=True)
 class ModelRoles:
     """The effective model roles and output cap for a session."""
@@ -1278,18 +1361,40 @@ def resolve_model_roles(llm_cfg: Any, settings_obj: Any = None) -> ModelRoles:
     The manifest's ``primary_model`` and ``insight_model`` are the requested
     roles and apply on every provider path, including the default one. The
     insight role falls back to the primary model (provider-agnostic) when the
-    manifest does not declare one. A non-anthropic provider without an
-    explicit ``primary_model`` is rejected — the runtime has no default for
-    it and will not silently substitute another model.
+    manifest does not declare one. An operator may also set global defaults or
+    overrides via ``AUTORESEARCH_LLM_PROVIDER`` / ``AUTORESEARCH_LLM_MODEL`` /
+    ``OPENAI_MODEL`` to run any skill against local LLMs or alternative
+    providers without editing ``SKILL.yaml``. A non-anthropic provider without
+    an explicit ``primary_model`` or configured default is rejected — the
+    runtime will not silently substitute an unrelated provider's model.
     """
     if settings_obj is None:
         from src.config import settings as settings_obj  # noqa: PLC0415
-    provider_id = str(getattr(llm_cfg, "provider", "") or "")
-    requested_primary = str(getattr(llm_cfg, "primary_model", "") or "")
-    if requested_primary:
+    global_provider = _str_setting(settings_obj, "llm_provider").lower()
+    manifest_provider = _str_setting(llm_cfg, "provider").lower()
+    provider_id = global_provider or manifest_provider
+    provider_overridden = bool(
+        global_provider and global_provider != manifest_provider
+    )
+
+    global_model = _str_setting(settings_obj, "llm_model")
+    openai_default_model = _str_setting(settings_obj, "openai_model")
+    requested_primary = _str_setting(llm_cfg, "primary_model")
+
+    if global_model and (provider_overridden or not requested_primary):
+        primary = global_model
+    elif requested_primary and not provider_overridden:
         primary = requested_primary
     elif provider_id == "anthropic":
-        primary = str(settings_obj.anthropic_model)
+        primary = _str_setting(settings_obj, "anthropic_model") or str(
+            getattr(settings_obj, "anthropic_model", "")
+        )
+    elif provider_id in OPENAI_COMPAT_PROVIDERS and (
+        global_model or openai_default_model
+    ):
+        primary = global_model or openai_default_model
+    elif requested_primary:
+        primary = requested_primary
     else:
         raise UnsupportedModelSetting(
             f"skill manifest declares provider {provider_id!r} without a "
@@ -1297,7 +1402,16 @@ def resolve_model_roles(llm_cfg: Any, settings_obj: Any = None) -> ModelRoles:
             f"llm.primary_model explicitly instead of substituting another "
             f"model"
         )
-    insight = str(getattr(llm_cfg, "insight_model", "") or "") or primary
+
+    global_insight = _str_setting(settings_obj, "llm_insight_model")
+    requested_insight = _str_setting(llm_cfg, "insight_model")
+    if global_insight:
+        insight = global_insight
+    elif requested_insight and not provider_overridden:
+        insight = requested_insight
+    else:
+        insight = primary
+
     requested_cap = getattr(llm_cfg, "max_output_tokens", None)
     cap = int(
         requested_cap
@@ -1334,13 +1448,16 @@ def build_provider(
     settings_obj: Any = None,
     required_capabilities: Optional[RequiredCapabilities] = None,
 ) -> LLMProvider:
-    """Construct a ``LLMProvider`` by id (ARC-011 P4-010 router + P0-3 mock).
+    """Construct a ``LLMProvider`` by id (ARC-011 P4-010 router + local/OpenAI-compat).
 
-    Maps a skill manifest's ``llm.provider`` (``"anthropic"`` / ``"openai"`` /
-    ``"mock"``) to a concrete provider instance, reading API credentials from
-    ``settings``. ``"mock"`` (or ``AUTORESEARCH_DEMO=true`` with any id) yields
-    a zero-credential ``MockProvider`` for demos/CI; production refuses it
-    (see ``_refuse_mock_in_production``).
+    Maps a skill manifest's ``llm.provider`` (or operator override via
+    ``AUTORESEARCH_LLM_PROVIDER``) to a concrete provider instance:
+    - ``"anthropic"`` -> ``AnthropicProvider``
+    - ``"openai"`` / ``"openai-compatible"`` / ``"openrouter"`` -> ``OpenAIProvider``
+    - ``"ollama"`` / ``"vllm"`` / ``"lmstudio"`` / ``"llamacpp"`` / ``"local"``
+      -> ``OpenAIProvider`` with local base URL defaults, keyless auth fallback,
+      and zero-cost local inference accounting
+    - ``"mock"`` (or ``AUTORESEARCH_DEMO=true``) -> ``MockProvider`` (refused in prod)
     """
     from src.config import secret_value
 
@@ -1355,7 +1472,13 @@ def build_provider(
             return raw
         return str(raw).lower() in ("1", "true", "yes")
 
-    if provider_id == "mock" or _demo_requested():
+    norm_id = (provider_id or "").strip().lower()
+    if norm_id == "openai_compatible":
+        norm_id = "openai-compatible"
+    elif norm_id == "llama.cpp":
+        norm_id = "llamacpp"
+
+    if norm_id == "mock" or _demo_requested():
         mock = MockProvider()
         if str(getattr(settings_obj, "environment", "development")).lower() in (
             "prod",
@@ -1365,23 +1488,108 @@ def build_provider(
         if required_capabilities is not None:
             required_capabilities.check(mock.capabilities(), "mock")
         return mock
-    if provider_id == "anthropic":
+
+    global_base_url = _str_setting(settings_obj, "llm_base_url")
+    global_api_key = secret_value(getattr(settings_obj, "llm_api_key", None))
+
+    if norm_id == "anthropic":
         provider: LLMProvider = AnthropicProvider(
-            base_url=settings_obj.anthropic_base_url or "https://api.anthropic.com",
-            api_key=secret_value(settings_obj.anthropic_auth_token) or "",
-            timeout_s=settings_obj.anthropic_api_timeout_s,
+            base_url=(
+                global_base_url
+                or _str_setting(settings_obj, "anthropic_base_url")
+                or "https://api.anthropic.com"
+            ),
+            api_key=(
+                secret_value(getattr(settings_obj, "anthropic_auth_token", None))
+                or global_api_key
+                or ""
+            ),
+            timeout_s=float(getattr(settings_obj, "anthropic_api_timeout_s", 600)),
         )
-    elif provider_id == "openai":
-        key = getattr(settings_obj, "openai_api_key", None)
+    elif norm_id in OPENAI_COMPAT_PROVIDERS:
+        oai_key = secret_value(getattr(settings_obj, "openai_api_key", None))
+        timeout_s = float(getattr(settings_obj, "openai_api_timeout_s", 600))
+        if norm_id == "openai":
+            base_url = (
+                global_base_url
+                or _str_setting(settings_obj, "openai_base_url")
+                or "https://api.openai.com/v1"
+            )
+            api_key = oai_key or global_api_key or ""
+            zero_cost = False
+        elif norm_id == "openai-compatible":
+            base_url = (
+                global_base_url
+                or _str_setting(settings_obj, "openai_base_url")
+                or "https://api.openai.com/v1"
+            )
+            api_key = global_api_key or oai_key or ""
+            zero_cost = False
+        elif norm_id == "openrouter":
+            base_url = (
+                global_base_url
+                or _str_setting(settings_obj, "openrouter_base_url")
+                or "https://openrouter.ai/api/v1"
+            )
+            api_key = (
+                secret_value(getattr(settings_obj, "openrouter_api_key", None))
+                or global_api_key
+                or oai_key
+                or ""
+            )
+            zero_cost = False
+        elif norm_id == "ollama":
+            base_url = (
+                global_base_url
+                or _str_setting(settings_obj, "ollama_base_url")
+                or "http://localhost:11434/v1"
+            )
+            api_key = global_api_key or oai_key or "local-no-key"
+            zero_cost = True
+        elif norm_id == "vllm":
+            base_url = (
+                global_base_url
+                or _str_setting(settings_obj, "vllm_base_url")
+                or "http://localhost:8000/v1"
+            )
+            api_key = global_api_key or oai_key or "local-no-key"
+            zero_cost = True
+        elif norm_id == "lmstudio":
+            base_url = (
+                global_base_url
+                or _str_setting(settings_obj, "lmstudio_base_url")
+                or "http://localhost:1234/v1"
+            )
+            api_key = global_api_key or oai_key or "local-no-key"
+            zero_cost = True
+        elif norm_id == "llamacpp":
+            base_url = (
+                global_base_url
+                or _str_setting(settings_obj, "llamacpp_base_url")
+                or "http://localhost:8080/v1"
+            )
+            api_key = global_api_key or oai_key or "local-no-key"
+            zero_cost = True
+        else:  # "local"
+            base_url = (
+                global_base_url
+                or _str_setting(settings_obj, "ollama_base_url")
+                or "http://localhost:11434/v1"
+            )
+            api_key = global_api_key or oai_key or "local-no-key"
+            zero_cost = True
+
         provider = OpenAIProvider(
-            base_url=settings_obj.openai_base_url or "https://api.openai.com/v1",
-            api_key=secret_value(key) or "",
-            timeout_s=settings_obj.openai_api_timeout_s,
+            base_url=base_url,
+            api_key=api_key,
+            timeout_s=timeout_s,
+            provider_name=norm_id,
+            zero_cost_fallback=zero_cost,
         )
     else:
         raise ValueError(
             "unknown LLM provider "
-            f"{provider_id!r}; expected 'anthropic', 'openai' or 'mock'"
+            f"{provider_id!r}; expected one of {SUPPORTED_LLM_PROVIDERS}"
         )
 
     # ARC-011 P4-009: fail-closed capability check. When the caller supplies
@@ -1390,5 +1598,5 @@ def build_provider(
     # start, before any LLM call. Default provider construction (orchestrator
     # init) passes no requirements and skips the check.
     if required_capabilities is not None:
-        required_capabilities.check(provider.capabilities(), provider_id)
+        required_capabilities.check(provider.capabilities(), norm_id)
     return provider

@@ -112,8 +112,12 @@ CREATE TABLE IF NOT EXISTS research_sessions (
     subject_id TEXT NOT NULL DEFAULT '',
     variant TEXT NOT NULL DEFAULT '',
     -- Phase 6 (P6-002a): fencing-token epoch (D-fencing)
-    lock_epoch BIGINT NOT NULL DEFAULT 0
+    lock_epoch BIGINT NOT NULL DEFAULT 0,
+    -- v9: comparable-context identity for direction-aware leaderboard ranking
+    comparison_context TEXT
 );
+
+ALTER TABLE research_sessions ADD COLUMN IF NOT EXISTS comparison_context TEXT;
 
 CREATE TABLE IF NOT EXISTS work_reservations (
     reservation_key TEXT PRIMARY KEY,
@@ -742,6 +746,7 @@ class PostgresStateStore:
         skill_id: Optional[str] = None,
         subject_id: Optional[str] = None,
         variant: Optional[str] = None,
+        comparison_context: Optional[str] = None,
     ) -> Dict[str, Any]:
         # ARC-011 review C4 (P4-016): canonical non-ML sessions carry
         # model_type="" (no legacy alias) — previously a KeyError; unmapped
@@ -761,13 +766,14 @@ class PostgresStateStore:
                     skill_id, subject_id, variant,
                     status, quick_mode, max_iterations, max_budget_usd,
                     focus_hint, workspace_path, manifest_json, manifest_path,
-                    manifest_hash, started_at)
+                    manifest_hash, started_at, comparison_context)
                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'running',
-                           $10, $11, $12, $13, $14, $15, $16, $17, $18)""",
+                           $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)""",
                 session_id, instrument, timeframe, model_type, tag, skill_name,
                 skill_id or "", subject_id or "", variant or "",
                 int(quick_mode), max_iterations, max_budget_usd, focus_hint,
                 workspace_path, manifest_json, manifest_path, manifest_hash, now,
+                comparison_context,
             )
         finally:
             await self._release_short_lived(conn)

@@ -82,12 +82,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override the generated kebab-case skill id.",
     )
     new_skill.add_argument(
-        "--provider", default="anthropic", choices=["anthropic", "openai"],
-        help="LLM provider for generation (default: anthropic).",
+        "--provider",
+        default="anthropic",
+        choices=[
+            "anthropic",
+            "openai",
+            "openai-compatible",
+            "ollama",
+            "vllm",
+            "lmstudio",
+            "llamacpp",
+            "local",
+            "openrouter",
+        ],
+        help=(
+            "LLM provider for generation (default: anthropic, or "
+            "AUTORESEARCH_LLM_PROVIDER when set)."
+        ),
     )
     new_skill.add_argument(
         "--model", default=None,
-        help="Model id (default: settings.anthropic_model; required for openai).",
+        help=(
+            "Model id (default: settings.anthropic_model for anthropic, or "
+            "AUTORESEARCH_LLM_MODEL / OPENAI_MODEL; required otherwise)."
+        ),
     )
     new_skill.add_argument(
         "--dry-run", action="store_true",
@@ -219,18 +237,26 @@ async def cmd_new_skill(args: argparse.Namespace) -> int:
     from src.core.llm_provider import build_provider
     from src.core.skill_generator import SkillGenerationError, SkillGenerator
 
+    provider_id = args.provider
+    if provider_id == "anthropic" and getattr(settings, "llm_provider", ""):
+        provider_id = settings.llm_provider
+    default_non_anthropic_model = (
+        getattr(settings, "llm_model", "") or getattr(settings, "openai_model", "")
+    )
     model = args.model or (
-        settings.anthropic_model if args.provider == "anthropic" else None
+        (getattr(settings, "llm_model", "") or settings.anthropic_model)
+        if provider_id == "anthropic"
+        else (default_non_anthropic_model or None)
     )
     if not model:
         print(
-            "error: --model is required for --provider openai "
+            f"error: --model is required for --provider {provider_id} "
             "(no default model is configured)",
             file=sys.stderr,
         )
         return EXIT_ERROR
     try:
-        provider = build_provider(args.provider)
+        provider = build_provider(provider_id)
     except Exception as exc:  # noqa: BLE001 — surface a friendly credential hint
         print(
             f"error: provider {args.provider!r} is not usable: {exc}\n"

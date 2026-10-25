@@ -48,6 +48,7 @@
 ## Key Highlights
 
 - **Declarative Skill Packages (`research_skill.v1`)** — Every domain decision (system prompt primer, parameter JSON Schema, allowed commands, output parser, research phase plan, preflight checks, metric schema, and promotion target) lives in `skills/<id>/SKILL.yaml`. Add a domain by adding a directory and calling `POST /api/v1/skills/reload`.
+- **Wide LLM Provider & Local LLM Support** — Run any skill against **local LLMs** (`ollama`, `vllm`, `lmstudio`, `llamacpp`, `local` — keyless by default with \$0 token cost accounting) or cloud providers (`anthropic`, `openai`, `openrouter`, `openai-compatible` / LiteLLM / Together / Groq / custom proxies). Switch providers per skill in `SKILL.yaml` or globally across all skills via `AUTORESEARCH_LLM_PROVIDER` and `AUTORESEARCH_LLM_MODEL` without requiring Anthropic URLs or tokens.
 - **Universal Research Kernel** — Supports single-objective maximization and minimization, multi-seed replication (mean / median / worst-case aggregation with standard-error significance gates), and multi-objective Pareto non-domination with hard metric constraints.
 - **Multi-Harness Adapter Architecture** — Run experiments through the built-in Anthropic/OpenAI tool-use loop (`builtin`), OpenAI Codex (`codex exec --json`), Claude Code Agent SDK (`claude-code`), or a custom JSONL subprocess driver (`command-driver`). Every adapter shares one lifecycle, evidence-authority, and token/cost accounting contract; unsupported optional capabilities (`pause`, `resume`, `steer`) are refused explicitly with a reason, never silently substituted.
 - **Attached-Agent API & CLI (`autoresearch agent`)** — External agents authenticate with run-scoped HMAC credentials (never the global operator token) to stage SHA-256 digest-verified candidates, trigger trusted evaluations, poll cursor-resumable event streams, and preview promotion eligibility with stable JSON envelopes and exit codes (`0`–`7`).
@@ -97,16 +98,45 @@ cp .env.example .env
 
 `.env` is intentionally ignored by git. Commit changes to `.env.example` only when adding non-secret defaults or new variable names.
 
-Required variables:
+Choose your LLM backend (local LLM, OpenAI-compatible, or Anthropic) and set `AUTORESEARCH_API_TOKEN`:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `ANTHROPIC_BASE_URL` | API endpoint for Anthropic or a compatible proxy | provider URL |
-| `ANTHROPIC_AUTH_TOKEN` | LLM provider token | local secret, never committed |
-| `ANTHROPIC_MODEL` | Model name supported by that backend | provider model name |
 | `AUTORESEARCH_API_TOKEN` | Bearer token for operator/UI API calls | locally generated random value |
+| `AUTORESEARCH_LLM_PROVIDER` | Optional global provider override (`ollama`, `vllm`, `lmstudio`, `llamacpp`, `local`, `openai`, `openai-compatible`, `openrouter`, `anthropic`) | `ollama` or leave empty for per-skill `SKILL.yaml` |
+| `AUTORESEARCH_LLM_MODEL` | Global primary model override or default across providers | `qwen2.5-coder:32b`, `gpt-4o`, `claude-sonnet-4-20250514` |
+| `AUTORESEARCH_LLM_BASE_URL` | Optional global base URL override for the active provider | `http://localhost:11434/v1` |
+| `OPENAI_BASE_URL` / `OPENAI_API_KEY` | OpenAI or OpenAI-compatible endpoint & key (`OPENAI_MODEL` for default model) | `https://api.openai.com/v1` |
+| `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` | Anthropic Messages API endpoint & token (`ANTHROPIC_MODEL` for default model) | `https://api.anthropic.com` |
 
-Skills may declare `llm.provider: openai`; set `OPENAI_BASE_URL` / `OPENAI_API_KEY` for those. Optional controls — bind host/port, CORS origins, OAuth2 token introspection, Prometheus scrape auth, optional MLflow tracking, preflight flags, iteration limits, and budget limits — are documented in `.env.example`. `AUTORESEARCH_PROMETHEUS_TOKEN` is required in production; without it the `/metrics` endpoint is disabled.
+#### Quick configuration examples
+
+**Option A — Local LLM with Ollama / vLLM / LM Studio / llama.cpp (no cloud API keys required):**
+```dotenv
+AUTORESEARCH_API_TOKEN=change-me-local-operator-token
+AUTORESEARCH_LLM_PROVIDER=ollama          # or: vllm | lmstudio | llamacpp | local
+AUTORESEARCH_LLM_MODEL=qwen2.5-coder:32b  # any local model supporting tool calls
+OLLAMA_BASE_URL=http://localhost:11434/v1
+```
+
+**Option B — OpenAI / OpenRouter / LiteLLM / OpenAI-Compatible Proxy:**
+```dotenv
+AUTORESEARCH_API_TOKEN=change-me-local-operator-token
+AUTORESEARCH_LLM_PROVIDER=openai          # or: openrouter | openai-compatible
+AUTORESEARCH_LLM_MODEL=gpt-4o
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_API_KEY=<your-api-key>
+```
+
+**Option C — Anthropic (or Anthropic-compatible proxy):**
+```dotenv
+AUTORESEARCH_API_TOKEN=change-me-local-operator-token
+ANTHROPIC_BASE_URL=https://api.anthropic.com
+ANTHROPIC_AUTH_TOKEN=<your-api-key>
+ANTHROPIC_MODEL=claude-sonnet-4-20250514
+```
+
+Skills may also declare their own `llm.provider` (`anthropic`, `openai`, `openai-compatible`, `ollama`, `vllm`, `lmstudio`, `llamacpp`, `local`, `openrouter`) and `llm.primary_model` directly in `SKILL.yaml`. Optional controls — bind host/port, CORS origins, OAuth2 token introspection, Prometheus scrape auth, optional MLflow tracking, preflight flags, iteration limits, and budget limits — are documented in `.env.example`. `AUTORESEARCH_PROMETHEUS_TOKEN` is required in production; without it the `/metrics` endpoint is disabled.
 
 Autoresearch-agent ships as a single-instance SQLite control-plane service by default. Keep Uvicorn at one worker and do not scale the container above one replica unless a Postgres backend (`AUTORESEARCH_DATABASE_URL`) is configured — the bundled `docker-compose.yml` wires one for you.
 
@@ -158,6 +188,7 @@ Navigate to **http://localhost:8030** in your browser.
 docker build -t autoresearch-agent .
 docker run -d --name autoresearch-demo -p 127.0.0.1:8030:8000 \
   -e AUTORESEARCH_DEMO=true \
+  -e AUTORESEARCH_EXECUTION_ISOLATION_MODE=trusted_local_code \
   -e AUTORESEARCH_API_TOKEN=demo-token \
   -e AUTORESEARCH_DATABASE_URL= \
   autoresearch-agent
@@ -340,7 +371,7 @@ skills/<skill-id>/
 
 The manifest schema is `research_skill.v1` (see `docs/adr/skill-manifest-drafts/` for drafted examples of several domains). Highlights:
 
-- `llm` — provider (`anthropic`/`openai`), models, primer file
+- `llm` — provider (`anthropic`, `openai`, `openai-compatible`, `ollama`, `vllm`, `lmstudio`, `llamacpp`, `local`, `openrouter`), models, primer file
 - `param_schema` / `ui.form_fields` — validated skill parameters and the form the UI renders
 - `metric_schema` — primary metric, direction (`maximize`/`minimize`), gates, chart series, table columns; optional `significance` block switches keep/discard to a multi-seed mean±standard-error test
 - `phase_plan` — server-tracked research phases with evidence keys
@@ -500,15 +531,22 @@ SQLite schema changes are versioned by `ResultsStore.initialize()` through a sin
 
 The container runs as UID/GID `1000` by default (`APP_UID`/`APP_GID` build args). Ensure any host-owned workspace or configs path used for promotions is writable by that identity.
 
-### Supported LLM Backends
+### Supported LLM Backends & Local LLMs
 
-Any API compatible with the Anthropic Messages format, plus OpenAI:
+Autoresearch Agent supports Anthropic, OpenAI, cloud OpenAI-compatible routers, and local LLM servers out of the box. You can select a provider per skill in `SKILL.yaml` (`llm.provider`) or override the provider and model globally in `.env` via `AUTORESEARCH_LLM_PROVIDER` and `AUTORESEARCH_LLM_MODEL`:
 
-| Backend | Setting | Example |
-|---------|---------|---------|
-| Anthropic | `ANTHROPIC_BASE_URL` / `ANTHROPIC_MODEL` | `https://api.anthropic.com`, `claude-sonnet-4-20250514` |
-| OpenAI (per-skill) | `OPENAI_BASE_URL` / `OPENAI_API_KEY` | `https://api.openai.com/v1`, `gpt-4o` |
-| Any compatible proxy | custom URL | model name supported by proxy |
+| Provider ID | Default Base URL | Auth Env Variable | Cost Accounting |
+|-------------|------------------|-------------------|-----------------|
+| `ollama` | `http://localhost:11434/v1` (`OLLAMA_BASE_URL`) | Optional (`AUTORESEARCH_LLM_API_KEY`) | \$0.00 local inference |
+| `vllm` | `http://localhost:8000/v1` (`VLLM_BASE_URL`) | Optional (`AUTORESEARCH_LLM_API_KEY`) | \$0.00 local inference |
+| `lmstudio` | `http://localhost:1234/v1` (`LMSTUDIO_BASE_URL`) | Optional (`AUTORESEARCH_LLM_API_KEY`) | \$0.00 local inference |
+| `llamacpp` | `http://localhost:8080/v1` (`LLAMACPP_BASE_URL`) | Optional (`AUTORESEARCH_LLM_API_KEY`) | \$0.00 local inference |
+| `local` | `http://localhost:11434/v1` (`AUTORESEARCH_LLM_BASE_URL`) | Optional (`AUTORESEARCH_LLM_API_KEY`) | \$0.00 local inference |
+| `openai` | `https://api.openai.com/v1` (`OPENAI_BASE_URL`) | `OPENAI_API_KEY` | Per-model USD table |
+| `openrouter` | `https://openrouter.ai/api/v1` (`OPENROUTER_BASE_URL`) | `OPENROUTER_API_KEY` | Per-model USD table |
+| `openai-compatible` | `AUTORESEARCH_LLM_BASE_URL` or `OPENAI_BASE_URL` | `AUTORESEARCH_LLM_API_KEY` or `OPENAI_API_KEY` | Per-model USD table |
+| `anthropic` | `https://api.anthropic.com` (`ANTHROPIC_BASE_URL`) | `ANTHROPIC_AUTH_TOKEN` | Per-model USD + cache rates |
+| `mock` | In-process (`AUTORESEARCH_DEMO=true`) | None | \$0.00 (dev/CI/demo only) |
 
 ### Resource Defaults
 

@@ -364,8 +364,10 @@ def parse_pytest_output(output: str) -> tuple[list[str], list[str], list[str]]:
 
 
 def run_pytest(suites: Sequence[str], timeout_s: int) -> tuple[int, str]:
+    venv_python = REPO_ROOT / ".venv" / "bin" / "python"
+    python_bin = str(venv_python) if venv_python.is_file() else sys.executable
     command = [
-        str(REPO_ROOT / ".venv" / "bin" / "python"),
+        python_bin,
         "-m",
         "pytest",
         *suites,

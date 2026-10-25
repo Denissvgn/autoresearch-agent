@@ -484,10 +484,23 @@ class GenerateSkillRequest(BaseModel):
         default=None,
         description="Override the generated kebab-case skill id.",
     )
-    provider: Literal["anthropic", "openai"] = Field(default="anthropic")
+    provider: Literal[
+        "anthropic",
+        "openai",
+        "openai-compatible",
+        "ollama",
+        "vllm",
+        "lmstudio",
+        "llamacpp",
+        "local",
+        "openrouter",
+    ] = Field(default="anthropic")
     model: Optional[str] = Field(
         default=None,
-        description="Model id (default: settings.anthropic_model).",
+        description=(
+            "Model id (default: settings.llm_model, settings.openai_model, "
+            "or settings.anthropic_model)."
+        ),
     )
 
 
@@ -527,9 +540,19 @@ async def generate_skill(body: GenerateSkillRequest, request: Request):
                 ),
             },
         )
-    model = body.model or settings.anthropic_model
+    provider_id: str = (
+        settings.llm_provider
+        if body.provider == "anthropic" and settings.llm_provider
+        else body.provider
+    )
+    model = (
+        body.model
+        or settings.llm_model
+        or (settings.openai_model if provider_id != "anthropic" else "")
+        or settings.anthropic_model
+    )
     try:
-        provider = build_provider(body.provider)
+        provider = build_provider(provider_id)
         draft = await SkillGenerator().generate(
             description=body.goal,
             provider=provider,

@@ -516,7 +516,10 @@ def _spend_enforcement(
 def _model_identity(skill_manifest: Any) -> Dict[str, Any]:
     """Requested versus effective provider/model identity — reported, never
     invented. An unresolvable request is recorded with its error."""
-    from src.core.llm_provider import resolve_model_roles
+    from src.core.llm_provider import (
+        resolve_effective_provider,
+        resolve_model_roles,
+    )
 
     llm_cfg = getattr(skill_manifest, "llm", None)
     if llm_cfg is None:
@@ -534,7 +537,7 @@ def _model_identity(skill_manifest: Any) -> Dict[str, Any]:
     return {
         "requested": requested,
         "effective": {
-            "provider": getattr(llm_cfg, "provider", None),
+            "provider": resolve_effective_provider(llm_cfg),
             "primary_model": roles.primary_model,
             "insight_model": roles.insight_model,
             "max_output_tokens": roles.max_output_tokens,

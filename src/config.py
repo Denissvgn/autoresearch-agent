@@ -153,11 +153,9 @@ class Settings(BaseSettings):
         description="Opus-tier model alias",
     )
 
-    # --- OpenAI ---
-    # Required when a skill manifest declares ``llm.provider: openai``. The
-    # provider router (``llm_provider.build_provider``) reads these to construct
-    # an ``OpenAIProvider``; the Anthropic settings remain the default for
-    # skills that do not declare a provider override.
+    # --- OpenAI & Wide Provider / Local LLM Routing ---
+    # Supports OpenAI, OpenAI-compatible servers (vLLM, Ollama, LM Studio,
+    # llama.cpp, OpenRouter, LiteLLM, custom proxies), and Anthropic.
     openai_base_url: str = Field(
         default="https://api.openai.com/v1",
         description="OpenAI API base URL",
@@ -165,11 +163,95 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = Field(
         default=None,
         repr=False,
-        description="OpenAI API key (required when a skill selects provider: openai)",
+        description="OpenAI API key (optional for keyless local servers)",
+    )
+    openai_model: str = Field(
+        default="",
+        validation_alias=AliasChoices("OPENAI_MODEL", "AUTORESEARCH_OPENAI_MODEL"),
+        description=(
+            "Default model for OpenAI / OpenAI-compatible providers when not "
+            "set in SKILL.yaml"
+        ),
     )
     openai_api_timeout_s: int = Field(
         default=600,
         description="OpenAI API timeout in seconds",
+    )
+    llm_provider: str = Field(
+        default="",
+        validation_alias=AliasChoices("AUTORESEARCH_LLM_PROVIDER", "LLM_PROVIDER"),
+        description=(
+            "Global LLM provider override (anthropic, openai, openai-compatible, "
+            "ollama, vllm, lmstudio, llamacpp, local, openrouter, mock). When "
+            "empty, each skill uses its manifest llm.provider."
+        ),
+    )
+    llm_model: str = Field(
+        default="",
+        validation_alias=AliasChoices("AUTORESEARCH_LLM_MODEL", "LLM_MODEL"),
+        description=(
+            "Global primary model override or default across providers "
+            "(e.g. qwen2.5-coder:32b, llama3.3:70b, gpt-4o)."
+        ),
+    )
+    llm_insight_model: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "AUTORESEARCH_LLM_INSIGHT_MODEL", "LLM_INSIGHT_MODEL"
+        ),
+        description="Optional global insight/summarization model override.",
+    )
+    llm_base_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("AUTORESEARCH_LLM_BASE_URL", "LLM_BASE_URL"),
+        description="Global base URL override for the active LLM provider.",
+    )
+    llm_api_key: SecretStr | None = Field(
+        default=None,
+        repr=False,
+        validation_alias=AliasChoices("AUTORESEARCH_LLM_API_KEY", "LLM_API_KEY"),
+        description="Global API key override for the active LLM provider.",
+    )
+    ollama_base_url: str = Field(
+        default="http://localhost:11434/v1",
+        validation_alias=AliasChoices(
+            "OLLAMA_BASE_URL", "AUTORESEARCH_OLLAMA_BASE_URL"
+        ),
+        description="Local Ollama OpenAI-compatible base URL",
+    )
+    vllm_base_url: str = Field(
+        default="http://localhost:8000/v1",
+        validation_alias=AliasChoices("VLLM_BASE_URL", "AUTORESEARCH_VLLM_BASE_URL"),
+        description="Local/self-hosted vLLM OpenAI-compatible base URL",
+    )
+    lmstudio_base_url: str = Field(
+        default="http://localhost:1234/v1",
+        validation_alias=AliasChoices(
+            "LMSTUDIO_BASE_URL", "AUTORESEARCH_LMSTUDIO_BASE_URL"
+        ),
+        description="Local LM Studio OpenAI-compatible base URL",
+    )
+    llamacpp_base_url: str = Field(
+        default="http://localhost:8080/v1",
+        validation_alias=AliasChoices(
+            "LLAMACPP_BASE_URL", "AUTORESEARCH_LLAMACPP_BASE_URL"
+        ),
+        description="Local llama.cpp (llama-server) OpenAI-compatible base URL",
+    )
+    openrouter_base_url: str = Field(
+        default="https://openrouter.ai/api/v1",
+        validation_alias=AliasChoices(
+            "OPENROUTER_BASE_URL", "AUTORESEARCH_OPENROUTER_BASE_URL"
+        ),
+        description="OpenRouter OpenAI-compatible base URL",
+    )
+    openrouter_api_key: SecretStr | None = Field(
+        default=None,
+        repr=False,
+        validation_alias=AliasChoices(
+            "OPENROUTER_API_KEY", "AUTORESEARCH_OPENROUTER_API_KEY"
+        ),
+        description="OpenRouter API key",
     )
 
     # --- Workspace ---

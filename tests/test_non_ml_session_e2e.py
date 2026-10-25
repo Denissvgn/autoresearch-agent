@@ -88,7 +88,7 @@ def _preserve_lifespan_globals(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def demo_workspace(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+def demo_workspace(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     """A hermetic demo deployment: temp workspace root with the workspace
     venv the governed-command policy expects (the Docker image ships
     ``/app/workspace/.venv``; the test symlinks the real interpreter)."""
@@ -99,8 +99,22 @@ def demo_workspace(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     monkeypatch.setattr(settings, "demo_mode", True)
     monkeypatch.setattr(settings, "workspace_root", str(ws_root))
     monkeypatch.setattr(settings, "autoresearch_api_token", API_TOKEN)
+    from src.config import get_settings
+    from src.core.isolation import probe_host
+
+    if not probe_host().get("ready"):
+        monkeypatch.setenv(
+            "AUTORESEARCH_EXECUTION_ISOLATION_MODE", "trusted_local_code"
+        )
+        monkeypatch.setattr(
+            settings, "execution_isolation_mode", "trusted_local_code"
+        )
+        get_settings.cache_clear()
     _preserve_lifespan_globals(monkeypatch)
-    return ws_root
+    try:
+        yield ws_root
+    finally:
+        get_settings.cache_clear()
 
 
 def _poll_terminal(client: TestClient, research_id: str, timeout_s: float = 90.0) -> dict:

@@ -327,3 +327,27 @@ def test_effective_config_records_requested_versus_effective_identity():
     identity = _model_identity(unresolvable)
     assert identity["effective"] is None
     assert "primary_model" in identity["error"]
+
+
+def test_global_provider_and_model_override_routes_skill_to_local_llm():
+    from src.core.llm_provider import resolve_effective_provider
+
+    # Skill manifest declares anthropic + claude, but operator configures
+    # a local Ollama provider + local model globally via settings.
+    cfg = LLMConfig(
+        provider="anthropic",
+        primary_model="claude-sonnet-4-20250514",
+        insight_model="claude-haiku-4-20250514",
+        max_output_tokens=4096,
+    )
+    local_settings = types.SimpleNamespace(
+        llm_provider="ollama",
+        llm_model="qwen2.5-coder:32b",
+        llm_insight_model="",
+        max_output_tokens_per_call=8192,
+    )
+    assert resolve_effective_provider(cfg, local_settings) == "ollama"
+    roles = resolve_model_roles(cfg, local_settings)
+    assert roles.primary_model == "qwen2.5-coder:32b"
+    assert roles.insight_model == "qwen2.5-coder:32b"
+    assert roles.max_output_tokens == 4096
