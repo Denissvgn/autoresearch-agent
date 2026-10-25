@@ -23,6 +23,13 @@ classifiers = [
 # Dependency specs stay in [tool.poetry.dependencies] (Poetry group syntax).
 dynamic = ["dependencies"]
 
+[project.urls]
+Homepage = "https://github.com/Denissvgn/autoresearch-agent"
+Repository = "https://github.com/Denissvgn/autoresearch-agent"
+Documentation = "https://github.com/Denissvgn/autoresearch-agent#readme"
+Changelog = "https://github.com/Denissvgn/autoresearch-agent/blob/main/CHANGELOG.md"
+Issues = "https://github.com/Denissvgn/autoresearch-agent/issues"
+
 # Skill SDK: the operator CLI (new-skill / promote-skill / agent).
 [project.scripts]
 autoresearch = "src.cli:main"
