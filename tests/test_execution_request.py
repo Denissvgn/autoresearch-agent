@@ -428,7 +428,12 @@ def test_pinned_interpreter_binding_keeps_workspace_venv(tmp_path: Path):
     import shutil
 
     shutil.rmtree(Path(workspace) / ".venv")
-    (Path(workspace) / ".venv").symlink_to(REPO_ROOT / ".venv")
+    venv_target = (
+        REPO_ROOT / ".venv"
+        if (REPO_ROOT / ".venv" / "bin" / "python").is_file()
+        else Path(sys.prefix)
+    )
+    (Path(workspace) / ".venv").symlink_to(venv_target)
     extension = _pin(tmp_path)
     (Path(session) / "db_config.yaml").write_text("max_conn: 7\n", encoding="utf-8")
 

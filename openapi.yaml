@@ -2259,7 +2259,8 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
-                title: Response Research Harness Context Api V1 Research  Research Id  Harness Context Get
+                title: Response Research Harness Context Api V1 Research  Research Id  Harness Context
+                  Get
         '422':
           description: Validation Error
           content:
@@ -2543,6 +2544,13 @@ components:
           enum:
           - anthropic
           - openai
+          - openai-compatible
+          - ollama
+          - vllm
+          - lmstudio
+          - llamacpp
+          - local
+          - openrouter
           title: Provider
           default: anthropic
         model:
@@ -2550,7 +2558,7 @@ components:
           - type: string
           - type: 'null'
           title: Model
-          description: 'Model id (default: settings.anthropic_model).'
+          description: 'Model id (default: settings.llm_model, settings.openai_model, or settings.anthropic_model).'
       additionalProperties: false
       type: object
       required:
@@ -2735,7 +2743,10 @@ components:
           - type: string
           - type: 'null'
           title: Model Type
-          description: 'Legacy alias for skill_id. Known legacy short names (direction/volatility/rl) map to their canonical skill ids; any other value is used as the skill_id directly. Unknown skills are rejected with 404 skill_not_found. In responses this is a derived legacy alias: the trio for ML skills, or "" for skills without one — never a skill id.'
+          description: 'Legacy alias for skill_id. Known legacy short names (direction/volatility/rl)
+            map to their canonical skill ids; any other value is used as the skill_id directly. Unknown
+            skills are rejected with 404 skill_not_found. In responses this is a derived legacy alias:
+            the trio for ML skills, or "" for skills without one — never a skill id.'
         skill_id:
           anyOf:
           - type: string
@@ -2763,7 +2774,8 @@ components:
             type: object
           - type: 'null'
           title: Skill Params
-          description: Canonical skill parameters, validated against the skill's param_schema. Sent alongside skill_id; ignored for legacy shape.
+          description: Canonical skill parameters, validated against the skill's param_schema. Sent alongside
+            skill_id; ignored for legacy shape.
         tag:
           anyOf:
           - type: string
@@ -2776,7 +2788,8 @@ components:
           - type: string
           - type: 'null'
           title: Harness
-          description: 'the registered harness name for this run (default: builtin); resolved through the capability descriptors, never branched on'
+          description: 'the registered harness name for this run (default: builtin); resolved through
+            the capability descriptors, never branched on'
         quick_mode:
           anyOf:
           - type: boolean
@@ -2818,7 +2831,8 @@ components:
             type: object
           - type: 'null'
           title: Manifest
-          description: Optional research-session manifest overrides. Immutable identity fields must still match the server-generated session.
+          description: Optional research-session manifest overrides. Immutable identity fields must still
+            match the server-generated session.
       additionalProperties: false
       type: object
       title: StartResearchRequest

@@ -76,11 +76,14 @@ done
 log "all 3 bundled skills listed"
 
 # ── 5. A REAL demo session reaching an iteration ────────────────────────────
-log "starting a prompt-engineering demo session"
+log "staging demo eval_set.jsonl and starting a prompt-engineering demo session"
+docker exec "${CONTAINER}" sh -c \
+  'printf "{\"input\":\"What is 2+2?\",\"expected\":\"4\"}\n" > /app/workspace/smoke_eval_set.jsonl' \
+  || fail "failed to stage /app/workspace/smoke_eval_set.jsonl"
 start_body="$(curl -fsS -X POST "${API}/api/v1/research/start" \
   -H "${auth_header}" -H 'Content-Type: application/json' \
-  -d '{"skill_id":"prompt-engineering","max_iterations":1}')" \
-  || fail "POST /research/start failed (see docker logs ${CONTAINER})"
+  -d '{"skill_id":"prompt-engineering","max_iterations":1,"skill_params":{"eval_set":"/app/workspace/smoke_eval_set.jsonl"}}')" \
+  || { docker logs "${CONTAINER}" >&2 || true; fail "POST /research/start failed"; }
 research_id="$(printf '%s' "${start_body}" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\(res_[^"]*\)".*/\1/p')"
 [ -n "${research_id}" ] || fail "could not parse session id from: ${start_body}"
 log "session ${research_id} started; polling for a recorded iteration"

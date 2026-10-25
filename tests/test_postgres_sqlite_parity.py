@@ -317,8 +317,8 @@ async def test_full_sequence_parity_across_backends(sqlite_store, pg_store_parit
         f"backend divergence:\n"
         f"sqlite={sqlite_snapshot}\npostgres={pg_snapshot}"
     )
-    # Epoch bump: SQLite no-op (None), Postgres incremented by 1.
-    assert sqlite_epoch is None
+    # Epoch bump: both SQLite and Postgres increment lock_epoch by 1.
+    assert sqlite_epoch == 1
     assert pg_epoch == 1
 
 

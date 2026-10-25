@@ -198,10 +198,12 @@ curl -s http://127.0.0.1:8030/health/ready
 curl -s -H "Authorization: Bearer demo-token" \
   http://127.0.0.1:8030/api/v1/skills
 
-# Start a prompt-engineering demo session (reaches iterations, ~seconds):
+# Stage a tiny eval dataset and start a prompt-engineering demo session (reaches iterations, ~seconds):
+docker exec autoresearch-demo sh -c \
+  'printf "{\"input\":\"What is 2+2?\",\"expected\":\"4\"}\n" > /app/workspace/smoke_eval_set.jsonl'
 curl -s -X POST http://127.0.0.1:8030/api/v1/research/start \
   -H "Authorization: Bearer demo-token" -H "Content-Type: application/json" \
-  -d '{"skill_id":"prompt-engineering","max_iterations":1}'
+  -d '{"skill_id":"prompt-engineering","max_iterations":1,"skill_params":{"eval_set":"/app/workspace/smoke_eval_set.jsonl"}}'
 
 # Poll the session (use the id from the response above), then inspect it:
 curl -s -H "Authorization: Bearer demo-token" \

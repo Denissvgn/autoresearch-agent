@@ -45,7 +45,9 @@ jobs:
           pip install poetry
 
       - name: Install dependencies
-        run: poetry install --no-interaction --no-ansi --no-root
+        run: |
+          poetry config virtualenvs.in-project true
+          poetry install --no-interaction --no-ansi --no-root
 
       - name: Poetry metadata check
         run: poetry check
@@ -186,7 +188,9 @@ jobs:
           pip install poetry
 
       - name: Install dependencies
-        run: poetry install --no-interaction --no-ansi --no-root
+        run: |
+          poetry config virtualenvs.in-project true
+          poetry install --no-interaction --no-ansi --no-root
 
       - name: Pytest (postgres + distributed markers)
         env:
@@ -268,7 +272,9 @@ jobs:
           pip install poetry
 
       - name: Install dependencies
-        run: poetry install --no-interaction --no-ansi --no-root
+        run: |
+          poetry config virtualenvs.in-project true
+          poetry install --no-interaction --no-ansi --no-root
 
       - name: Run qualification gates
         env:
@@ -313,7 +319,9 @@ jobs:
           pip install poetry
 
       - name: Install dependencies
-        run: poetry install --no-interaction --no-ansi --no-root
+        run: |
+          poetry config virtualenvs.in-project true
+          poetry install --no-interaction --no-ansi --no-root
 
       - name: Run live qualification gates
         env:

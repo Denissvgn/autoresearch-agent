@@ -399,7 +399,12 @@ def _fresh_session(tmp_path: Path, kind: str):
     session.mkdir(parents=True)
     # The workspace interpreter binding resolves through the venv directory so
     # the pinned interpreter keeps its venv site-packages (as in production).
-    (shared / ".venv").symlink_to(REPO_ROOT / ".venv")
+    venv_target = (
+        REPO_ROOT / ".venv"
+        if (REPO_ROOT / ".venv" / "bin" / "python").is_file()
+        else Path(sys.prefix)
+    )
+    (shared / ".venv").symlink_to(venv_target)
     return shared, session
 
 
