@@ -63,11 +63,11 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| ensure_minimum_capabilities | set | 484 | `set(descriptor.capabilities)` |
-| ensure_minimum_capabilities | descriptor.unsupported.get | 487 | `descriptor.unsupported.get(name, 'not provided')` |
-| ensure_minimum_capabilities | sorted | 487 | `sorted(missing)` |
-| ensure_minimum_capabilities | UnsupportedCapabilityError | 489 | `UnsupportedCapabilityError(...)` |
-| ensure_minimum_capabilities | sorted | 491 | `sorted(missing)` |
+| ensure_minimum_capabilities | set | 486 | `set(descriptor.capabilities)` |
+| ensure_minimum_capabilities | descriptor.unsupported.get | 489 | `descriptor.unsupported.get(name, 'not provided')` |
+| ensure_minimum_capabilities | sorted | 489 | `sorted(missing)` |
+| ensure_minimum_capabilities | UnsupportedCapabilityError | 491 | `UnsupportedCapabilityError(...)` |
+| ensure_minimum_capabilities | sorted | 493 | `sorted(missing)` |
 
 ### Boundary effects
 
@@ -77,9 +77,9 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `ensure_minimum_capabilities` | `descriptor.unsupported.get` | 487 |
-| external_call | `ensure_minimum_capabilities` | `sorted` | 487 |
-| external_call | `ensure_minimum_capabilities` | `sorted` | 491 |
+| unresolved_call | `ensure_minimum_capabilities` | `descriptor.unsupported.get` | 489 |
+| external_call | `ensure_minimum_capabilities` | `sorted` | 489 |
+| external_call | `ensure_minimum_capabilities` | `sorted` | 493 |
 
 ## Behavior
 

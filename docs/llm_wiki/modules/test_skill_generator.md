@@ -28,7 +28,7 @@ A stub ``LLMProvider`` makes the tests deterministic (no real LLM call).
 | `src.core.skill_generator` | `CommandPolicyFinding`, `GeneratedDraft`, `SkillGenerationError`, `SkillGenerator`, `audit_command_policy`, `build_generation_prompt` |
 | `src.core.skill_lifecycle` | `SkillLifecycleEvent`, `SkillLifecycleMachine`, `SkillLifecycleState`, `selectable_for` |
 | `typing` | `Any` |
-| `yaml` | `yaml` |
+| `yaml` | `yaml`, `yaml`, `yaml`, `yaml`, `yaml` |
 
 ## Local dependency map
 

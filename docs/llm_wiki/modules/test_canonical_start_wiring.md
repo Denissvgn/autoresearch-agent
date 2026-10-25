@@ -36,8 +36,8 @@ plan.
 | `src.core.session_manager` | `session_manager_module` |
 | `src.core.skill_runtime` | `SkillConfigError` |
 | `sys` | `sys` |
-| `types` | `types` |
-| `typing` | `Any`, `Dict` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `Any`, `Dict`, `cast` |
 
 ## Local dependency map
 
@@ -55,6 +55,8 @@ flowchart LR
     n1 --> n4
     n3 --> n0
     n3 --> n1
+    n3 --> n4
+    n4 --> n0
     n4 --> n1
     n5 --> n0
     n5 --> n1
@@ -96,9 +98,9 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [_FakeAsyncAnthropic](../entities/test_canonical_start_wiring_FakeAsyncAnthropic.md) | 31 | — | — |
-| [_FakeAPIStatusError](../entities/test_canonical_start_wiring_FakeAPIStatusError.md) | 35 | `Exception` | — |
-| [FakeOrchestrator](../entities/FakeOrchestrator.md) | 55 | — | Captures the ResearchConfig the session manager hands to run(). |
+| [_FakeAsyncAnthropic](../entities/test_canonical_start_wiring_FakeAsyncAnthropic.md) | 32 | — | — |
+| [_FakeAPIStatusError](../entities/test_canonical_start_wiring_FakeAPIStatusError.md) | 36 | `Exception` | — |
+| [FakeOrchestrator](../entities/FakeOrchestrator.md) | 56 | — | Captures the ResearchConfig the session manager hands to run(). |
 
 ## Functions
 

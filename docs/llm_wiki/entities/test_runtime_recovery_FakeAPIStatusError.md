@@ -1,6 +1,6 @@
 # _FakeAPIStatusError
 
-**Location:** `tests/test_runtime_recovery.py:22`
+**Location:** `tests/test_runtime_recovery.py:24`
 **Kind:** Class
 **Bases:** `Exception`
 **Module:** [test_runtime_recovery](../modules/test_runtime_recovery.md)

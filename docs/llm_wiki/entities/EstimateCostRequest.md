@@ -1,6 +1,6 @@
 # EstimateCostRequest
 
-**Location:** `src/api/research.py:536`
+**Location:** `src/api/research.py:546`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [research](../modules/research.md)
@@ -8,6 +8,12 @@
 ## Description
 
 Body for ``POST /research/estimate-cost`` — the New-Research preview.
+
+## Model Configuration
+
+| Setting | Value | Source |
+|---------|-------|--------|
+| `extra` | `'forbid'` | model_config |
 
 ## Attributes
 

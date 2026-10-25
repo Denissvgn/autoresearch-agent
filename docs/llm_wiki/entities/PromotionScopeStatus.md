@@ -1,6 +1,6 @@
 # PromotionScopeStatus
 
-**Location:** `ui/src/api/client.ts:365`
+**Location:** `ui/src/api/client.ts:366`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

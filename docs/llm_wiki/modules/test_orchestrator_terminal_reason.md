@@ -28,7 +28,8 @@ before calling ``update_session``.
 | `src.core.orchestrator` | `AgentOrchestrator`, `ResearchConfig` |
 | `src.core.results_store` | `ResultsStore` |
 | `sys` | `sys` |
-| `types` | `types` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `cast` |
 | `unittest.mock` | `AsyncMock`, `MagicMock`, `patch` |
 
 ## Local dependency map

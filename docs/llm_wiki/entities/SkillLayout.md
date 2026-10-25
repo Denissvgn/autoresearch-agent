@@ -1,6 +1,6 @@
 # SkillLayout
 
-**Location:** `src/core/skill_loader.py:96`
+**Location:** `src/core/skill_loader.py:99`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_loader](../modules/skill_loader.md)

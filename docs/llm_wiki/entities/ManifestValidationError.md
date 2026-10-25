@@ -1,6 +1,6 @@
 # ManifestValidationError
 
-**Location:** `src/core/skill_manifest.py:1148`
+**Location:** `src/core/skill_manifest.py:1255`
 **Kind:** Class
 **Bases:** `ValueError`
 **Module:** [skill_manifest](../modules/skill_manifest.md)
@@ -34,7 +34,8 @@ flowchart LR
     n5["_resolve_caps (src/core/skill_loader.py)"]
     n6["_wrap_validation_error (src/core/skill_loader.py)"]
     n7["load_skill_manifest (src/core/skill_loader.py)"]
-    n8["tests/test_skill_loader.py"]
+    n8["tests/test_significance.py"]
+    n9["tests/test_skill_loader.py"]
     n0 --> n1
     n2 --> n0
     n3 --> n0
@@ -43,6 +44,7 @@ flowchart LR
     n6 --> n0
     n7 --> n0
     n8 --> n0
+    n9 --> n0
     click n0 "../modules/skill_manifest.md"
     click n2 "../modules/skill_manifest.md"
     click n3 "../modules/research.md"
@@ -50,7 +52,8 @@ flowchart LR
     click n5 "../modules/skill_loader.md"
     click n6 "../modules/skill_loader.md"
     click n7 "../modules/skill_loader.md"
-    click n8 "../modules/test_skill_loader.md"
+    click n8 "../modules/test_significance.md"
+    click n9 "../modules/test_skill_loader.md"
 ```
 
 ### Summary
@@ -76,4 +79,5 @@ flowchart LR
 | `_wrap_validation_error` | call | [skill_loader](../modules/skill_loader.md) | 1 |
 | `_wrap_validation_error` | type_reference | [skill_loader](../modules/skill_loader.md) | — |
 | `load_skill_manifest` | call | [skill_loader](../modules/skill_loader.md) | 3 |
+| `test_significance` | import | [test_significance](../modules/test_significance.md) | — |
 | `test_skill_loader` | import | [test_skill_loader](../modules/test_skill_loader.md) | — |

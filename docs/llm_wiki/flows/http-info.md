@@ -48,8 +48,8 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| info | str(…).rstrip | 215 | `str(request.base_url).rstrip('/')` |
-| info | str | 215 | `str(request.base_url)` |
+| info | str(…).rstrip | 224 | `str(request.base_url).rstrip('/')` |
+| info | str | 224 | `str(request.base_url)` |
 
 ### Boundary effects
 
@@ -59,7 +59,7 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `info` | `str(request.base_url).rstrip` | 215 |
+| unresolved_call | `info` | `str(request.base_url).rstrip` | 224 |
 
 ## Behavior
 

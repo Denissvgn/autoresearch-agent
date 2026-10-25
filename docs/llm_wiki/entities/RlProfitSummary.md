@@ -1,6 +1,6 @@
 # RlProfitSummary
 
-**Location:** `ui/src/api/client.ts:383`
+**Location:** `ui/src/api/client.ts:384`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

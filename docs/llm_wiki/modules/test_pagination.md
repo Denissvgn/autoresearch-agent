@@ -25,6 +25,8 @@ Design reference: ``src/core/pagination.py`` module docstring (ARC-011 P0-016).
 | Source | Symbols |
 |--------|---------|
 | `__future__` | `annotations` |
+| `base64` | `base64`, `base64` |
+| `json` | `json`, `json` |
 | `pathlib` | `Path` |
 | `pytest` | `pytest` |
 | `src.api` | `research`, `results` |

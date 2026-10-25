@@ -1,6 +1,6 @@
 # MetricColumn
 
-**Location:** `ui/src/api/client.ts:513`
+**Location:** `ui/src/api/client.ts:514`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

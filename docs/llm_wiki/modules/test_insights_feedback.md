@@ -24,6 +24,7 @@ Covers:
 | `pathlib` | `Path` |
 | `pytest` | `pytest` |
 | `src.core.insights_feedback` | `append_findings`, `prior_findings_path`, `render_findings_markdown` |
+| `typing` | `Any` |
 | `yaml` | `yaml` |
 
 ## Local dependency map
@@ -54,9 +55,9 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [TestAppendFindings](../entities/TestAppendFindings.md) | 28 | — | — |
-| [TestRenderFindings](../entities/TestRenderFindings.md) | 128 | — | — |
-| [TestKnowledgeStale](../entities/TestKnowledgeStale.md) | 161 | — | — |
+| [TestAppendFindings](../entities/TestAppendFindings.md) | 29 | — | — |
+| [TestRenderFindings](../entities/TestRenderFindings.md) | 129 | — | — |
+| [TestKnowledgeStale](../entities/TestKnowledgeStale.md) | 162 | — | — |
 
 ## Functions
 

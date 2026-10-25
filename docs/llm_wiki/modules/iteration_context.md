@@ -16,7 +16,10 @@ Compact iteration context digests for autoresearch agents.
 | `math` | `math` |
 | `src.core.consistency_validator` | `parse_consistency_report` |
 | `src.core.gate_status` | `training_gates_passed_from_iteration` |
-| `typing` | `Any`, `Iterable`, `List`, `Mapping`, `Optional`, `Tuple` |
+| `src.core.objective_comparator` | `ObjectiveComparator`, `objective_comparator_for_skill_id`, `select_best_row` |
+| `src.core.significance` | `best_config_hash`, `best_other_config_hash`, `samples_from_rows`, `significance_verdict` |
+| `src.core.skill_registry` | `default_registry` |
+| `typing` | `Any`, `Iterable`, `List`, `Mapping`, `Optional`, `Sequence`, `Tuple` |
 | `yaml` | `yaml` |
 
 ## Local dependency map
@@ -24,52 +27,32 @@ Compact iteration context digests for autoresearch agents.
 <!-- Auto-generated local dependency summary. Do not edit by hand. -->
 ```mermaid
 flowchart LR
-    n0["src/core/consistency_validator.py"]
-    n1["src/core/gate_status.py"]
-    n2["src/core/iteration_context.py"]
-    n3["src/core/orchestrator.py"]
-    n4["tests/test_cross_session_digest_hint.py"]
-    n5["tests/test_exploration_markers.py"]
-    n6["tests/test_iteration_context.py"]
-    n7["tests/test_prompt_promotion_policy.py"]
+    n0["src"]
+    n1["src/core/iteration_context.py"]
+    n2["tests"]
     n0 --> n1
-    n2 --> n0
+    n1 --> n0
     n2 --> n1
-    n3 --> n0
-    n3 --> n1
-    n3 --> n2
-    n4 --> n2
-    n5 --> n2
-    n6 --> n2
-    n7 --> n2
-    n7 --> n3
-    click n0 "../modules/consistency_validator.md"
-    click n1 "../modules/gate_status.md"
-    click n2 "../modules/iteration_context.md"
-    click n3 "../modules/orchestrator.md"
-    click n4 "../modules/test_cross_session_digest_hint.md"
-    click n5 "../modules/test_exploration_markers.md"
-    click n6 "../modules/test_iteration_context.md"
-    click n7 "../modules/test_prompt_promotion_policy.md"
+    click n1 "../modules/iteration_context.md"
 ```
+
+> Module-level dependencies exceed the generated-diagram limits, so the diagram and table below group them by top-level package. Counts report the number of module neighbors in each package.
 
 ### Internal neighbors
 
 | Direction | Module |
 |---|---|
-| Inbound | [orchestrator](../modules/orchestrator.md) |
-| Inbound | [test_cross_session_digest_hint](../modules/test_cross_session_digest_hint.md) |
-| Inbound | [test_exploration_markers](../modules/test_exploration_markers.md) |
-| Inbound | [test_iteration_context](../modules/test_iteration_context.md) |
-| Inbound | [test_prompt_promotion_policy](../modules/test_prompt_promotion_policy.md) |
-| Outbound | [consistency_validator](../modules/consistency_validator.md) |
-| Outbound | [gate_status](../modules/gate_status.md) |
+| Inbound | `src` (1) |
+| Inbound | `tests` (6) |
+| Outbound | `src` (5) |
 
 ### External packages
 
 | Language | Used packages | Undeclared packages |
 |---|---:|---:|
 | python | 1 | 0 |
+
+> All 12 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Functions
 
@@ -78,7 +61,8 @@ flowchart LR
 | `derive_exploration_markers` | `(model_type: str, current_config: Mapping[str, Any] \| None, baseline_config: Mapping[str, Any] \| None) -> dict[str, Any]` | — | Return phase-advancement markers this iter should emit, derived |
 | `_resolve_dotted` | `(config: Mapping[str, Any], key: str) -> Any` | — | Resolve a possibly-dotted knob name against a (possibly nested) config. |
 | `build_iteration_context_digest` | `(*, session: Mapping[str, Any], iterations: Iterable[Mapping[str, Any]], hpo_studies: Iterable[Mapping[str, Any]] = (), planned_trials: Iterable[Mapping[str, Any]] = (), phase_state: Optional[Mapping[str, Any]] = None, prior_session_summary: Optional[Iterable[Mapping[str, Any]]] = None, promotion_readiness: Optional[Iterable[Mapping[str, Any]]] = None, max_chars: int = 6000, recent_attempts: int = 5) -> str` | — | Build a deterministic, bounded digest of persisted iteration state. |
-| `_best_line` | `(iterations: List[Mapping[str, Any]]) -> str` | — | — |
+| `_significance_line` | `(rows: List[Mapping[str, Any]], session: Mapping[str, Any], *, comparator: 'ObjectiveComparator') -> str` | — | Visibility line for the declared significance/replication policy. |
+| `_best_line` | `(iterations: 'Sequence[Mapping[str, Any]]', *, comparator: 'ObjectiveComparator') -> str` | — | — |
 | `_attempt_line` | `(row: Mapping[str, Any]) -> str` | — | — |
 | `_blockers_line` | `(iterations: List[Mapping[str, Any]]) -> str` | — | — |
 | `_duplicate_line` | `(iterations: List[Mapping[str, Any]]) -> str` | — | — |

@@ -119,9 +119,9 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| delete_research | _session_manager.is_running | 998 | `_session_manager.is_running(research_id)` |
-| delete_research | _audit | 999 | `_audit(request, action='research.delete', outcome='failure', research_id=research_id, error_message='Cannot delete a running session — stop it first')` |
-| _audit | record_api_audit_event | 109 | `record_api_audit_event(request, _store, action=action, outcome=outcome, research_id=research_id, pipeline_id=pipeline_id, metadata=metadata, error_message=error_message)` |
+| delete_research | _session_manager.is_running | 1025 | `_session_manager.is_running(research_id)` |
+| delete_research | _audit | 1026 | `_audit(request, action='research.delete', outcome='failure', research_id=research_id, error_message='Cannot delete a running session — stop it first')` |
+| _audit | record_api_audit_event | 110 | `record_api_audit_event(request, _store, action=action, outcome=outcome, research_id=research_id, pipeline_id=pipeline_id, metadata=metadata, error_message=error_message)` |
 | record_api_audit_event | _request_actor | 51 | `_request_actor(request)` |
 | _request_actor | getattr | 13 | `getattr(request.state, 'auth_actor', None)` |
 | _request_actor | isinstance | 14 | `isinstance(actor, AuthenticatedActor)` |
@@ -141,7 +141,7 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `delete_research` | `_session_manager.is_running` | 998 |
+| unresolved_call | `delete_research` | `_session_manager.is_running` | 1025 |
 | external_call | `_request_actor` | `getattr` | 13 |
 | external_call | `_request_actor` | `isinstance` | 14 |
 | unresolved_call | `record_api_audit_event` | `store.record_audit_event` | 52 |

@@ -1,6 +1,6 @@
 # CandidateData
 
-**Location:** `src/core/execution_contracts.py:267`
+**Location:** `src/core/execution_contracts.py:269`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

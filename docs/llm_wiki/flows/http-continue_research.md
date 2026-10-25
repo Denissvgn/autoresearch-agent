@@ -42,7 +42,7 @@ sequenceDiagram
     p1->>p7: _json_hash
     p5->>p8: _request_actor
     p0-->>p9: str(e)
-    p0-->>p10: req.model_dump
+    p0-->>p10: req.model_dump(mode='json')
     p0-->>p11: _session_manager.continue_session(…)
     p0-->>p12: session.get('id')
     p0-->>p13: HTTPException (src/api/research.py:continue_research)(status_code=409, detail=str(...))
@@ -140,17 +140,17 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| continue_research | ContinueResearchRequest | 891 | `ContinueResearchRequest(data not statically known)` |
-| continue_research | _continue_metadata | 892 | `_continue_metadata(req)` |
-| continue_research | _run_idempotent | 894 | `_run_idempotent(operation='research.continue', parent_id=research_id, key=idempotency_key, request_payload=req.model_dump(...), call=...)` |
-| _run_idempotent | key.strip | 406 | `key.strip(data not statically known)` |
-| _run_idempotent | HTTPException (src/api/research.py:_run_idempotent) | 407 | `HTTPException(status_code=400, detail='Idempotency-Key header is required')` |
-| _run_idempotent | HTTPException (src/api/research.py:_run_idempotent) | 409 | `HTTPException(status_code=503, detail='Results store is not initialized')` |
-| _run_idempotent | hashlib.sha256(…).hexdigest (src/api/research.py:_run_idempotent) | 411 | `hashlib.sha256(key.strip().encode('utf-8')).hexdigest(data not statically known)` |
-| _run_idempotent | hashlib.sha256 (src/api/research.py:_run_idempotent) | 411 | `hashlib.sha256(...)` |
-| _run_idempotent | key.strip().encode | 411 | `key.strip().encode('utf-8')` |
-| _run_idempotent | key.strip | 411 | `key.strip(data not statically known)` |
-| _run_idempotent | _json_hash | 412 | `_json_hash({...})` |
+| continue_research | ContinueResearchRequest | 918 | `ContinueResearchRequest(data not statically known)` |
+| continue_research | _continue_metadata | 919 | `_continue_metadata(req)` |
+| continue_research | _run_idempotent | 921 | `_run_idempotent(operation='research.continue', parent_id=research_id, key=idempotency_key, request_payload=req.model_dump(...), call=...)` |
+| _run_idempotent | key.strip | 407 | `key.strip(data not statically known)` |
+| _run_idempotent | HTTPException (src/api/research.py:_run_idempotent) | 408 | `HTTPException(status_code=400, detail='Idempotency-Key header is required')` |
+| _run_idempotent | HTTPException (src/api/research.py:_run_idempotent) | 410 | `HTTPException(status_code=503, detail='Results store is not initialized')` |
+| _run_idempotent | hashlib.sha256(…).hexdigest (src/api/research.py:_run_idempotent) | 412 | `hashlib.sha256(key.strip().encode('utf-8')).hexdigest(data not statically known)` |
+| _run_idempotent | hashlib.sha256 (src/api/research.py:_run_idempotent) | 412 | `hashlib.sha256(...)` |
+| _run_idempotent | key.strip().encode | 412 | `key.strip().encode('utf-8')` |
+| _run_idempotent | key.strip | 412 | `key.strip(data not statically known)` |
+| _run_idempotent | _json_hash | 413 | `_json_hash({...})` |
 
 ### Boundary effects
 
@@ -160,13 +160,13 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `_run_idempotent` | `key.strip` | 406 |
-| external_call | `_run_idempotent` | `HTTPException` | 407 |
-| external_call | `_run_idempotent` | `HTTPException` | 409 |
-| unresolved_call | `_run_idempotent` | `hashlib.sha256(key.strip().encode('utf-8')).hexdigest` | 411 |
-| external_call | `_run_idempotent` | `hashlib.sha256` | 411 |
-| unresolved_call | `_run_idempotent` | `key.strip().encode` | 411 |
-| unresolved_call | `_run_idempotent` | `key.strip` | 411 |
+| unresolved_call | `_run_idempotent` | `key.strip` | 407 |
+| external_call | `_run_idempotent` | `HTTPException` | 408 |
+| external_call | `_run_idempotent` | `HTTPException` | 410 |
+| unresolved_call | `_run_idempotent` | `hashlib.sha256(key.strip().encode('utf-8')).hexdigest` | 412 |
+| external_call | `_run_idempotent` | `hashlib.sha256` | 412 |
+| unresolved_call | `_run_idempotent` | `key.strip().encode` | 412 |
+| unresolved_call | `_run_idempotent` | `key.strip` | 412 |
 | step_limit | `continue_research` | `first 12 steps` | 0 |
 
 ## Behavior

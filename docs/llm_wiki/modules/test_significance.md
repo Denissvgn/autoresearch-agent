@@ -23,6 +23,7 @@ byte-identical to the legacy epsilon test.
 | `src.core.orchestrator` | `AgentOrchestrator`, `AgentOrchestrator`, `AgentOrchestrator`, `AgentOrchestrator` |
 | `src.core.significance` | `INCONCLUSIVE`, `REGRESSION`, `SIGNIFICANT`, `best_config_hash`, `mean_std`, `samples_from_rows`, `significance_verdict` |
 | `src.core.skill_loader` | `load_skill_manifest` |
+| `src.core.skill_manifest` | `ManifestValidationError` |
 | `types` | `SimpleNamespace` |
 | `typing` | `Any`, `Optional` |
 | `yaml` | `yaml` |
@@ -35,15 +36,19 @@ flowchart LR
     n0["src/core/orchestrator.py"]
     n1["src/core/significance.py"]
     n2["src/core/skill_loader.py"]
-    n3["tests/test_significance.py"]
+    n3["src/core/skill_manifest.py"]
+    n4["tests/test_significance.py"]
     n0 --> n1
-    n3 --> n0
-    n3 --> n1
-    n3 --> n2
+    n2 --> n3
+    n4 --> n0
+    n4 --> n1
+    n4 --> n2
+    n4 --> n3
     click n0 "../modules/orchestrator.md"
     click n1 "../modules/significance.md"
     click n2 "../modules/skill_loader.md"
-    click n3 "../modules/test_significance.md"
+    click n3 "../modules/skill_manifest.md"
+    click n4 "../modules/test_significance.md"
 ```
 
 ### Internal neighbors
@@ -53,6 +58,7 @@ flowchart LR
 | Outbound | [orchestrator](../modules/orchestrator.md) |
 | Outbound | [significance](../modules/significance.md) |
 | Outbound | [skill_loader](../modules/skill_loader.md) |
+| Outbound | [skill_manifest](../modules/skill_manifest.md) |
 
 ### External packages
 

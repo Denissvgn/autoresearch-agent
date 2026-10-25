@@ -1,6 +1,6 @@
 # RunInputs
 
-**Location:** `src/core/execution_contracts.py:819`
+**Location:** `src/core/execution_contracts.py:821`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

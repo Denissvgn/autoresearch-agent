@@ -21,13 +21,14 @@ sequenceDiagram
     p0-->>p2: json.loads(...)
     p0-->>p1: row.get('metrics_json')
     p0-->>p3: metrics.get('canonical_config_hash')
+    p0-->>p3: metrics.get('evaluation_context_hash')
     p0-->>p4: out.append(float(...))
     p0-->>p5: float(row[...])
 ```
 
-> Call sequence diagram shows 6 of 6 interactions; 0 omitted to keep the visualization within the 30-interaction and generated-diagram limits, with uncertain identities omitted rather than inferred.
+> Call sequence diagram shows 7 of 7 interactions; 0 omitted to keep the visualization within the 30-interaction and generated-diagram limits, with uncertain identities omitted rather than inferred.
 
-> Captured boundary calls: external 2 of 2 (0 omitted); unresolved 4 of 4 (0 omitted). These counts cover the captured static trace.
+> Captured boundary calls: external 2 of 2 (0 omitted); unresolved 5 of 5 (0 omitted). These counts cover the captured static trace.
 > Detailed flow queries retain their own coverage and limits; omitted paths may execute at runtime.
 
 ## Data flow
@@ -40,14 +41,16 @@ flowchart LR
     s3["3. json.loads"]
     s4["4. row.get"]
     s5["5. metrics.get"]
-    s6["6. out.append"]
-    s7["7. float"]
+    s6["6. metrics.get"]
+    s7["7. out.append"]
+    s8["8. float"]
     s1 -. "row.get('primary_metric')" .-> s2
     s1 -. "json.loads(...)" .-> s3
     s1 -. "row.get('metrics_json')" .-> s4
     s1 -. "metrics.get('canonical_config_hash')" .-> s5
-    s1 -. "out.append(float(...))" .-> s6
-    s1 -. "float(row[...])" .-> s7
+    s1 -. "metrics.get('evaluation_context_hash')" .-> s6
+    s1 -. "out.append(float(...))" .-> s7
+    s1 -. "float(row[...])" .-> s8
     b0["mutation out.append"]
     s1 -. "mutation out.append" .-> b0
     click s1 "../modules/significance.md"
@@ -59,10 +62,11 @@ flowchart LR
 
 | Step | Inputs | Reads | Writes | Returns |
 |---|---|---|---|---|
-| `samples_from_rows` | `rows: Sequence[dict]`, `canonical_config_hash: str` | - | - | `out` |
+| `samples_from_rows` | `rows: Sequence[dict]`, `canonical_config_hash: str`, `context_hash: Optional[str]` | - | - | `out` |
 | `row.get` | - | - | - | - |
 | `json.loads` | - | - | - | - |
 | `row.get` | - | - | - | - |
+| `metrics.get` | - | - | - | - |
 | `metrics.get` | - | - | - | - |
 | `out.append` | - | - | - | - |
 | `float` | - | - | - | - |
@@ -71,27 +75,29 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| samples_from_rows | row.get | 110 | `row.get('primary_metric')` |
-| samples_from_rows | json.loads | 113 | `json.loads(...)` |
-| samples_from_rows | row.get | 113 | `row.get('metrics_json')` |
-| samples_from_rows | metrics.get | 116 | `metrics.get('canonical_config_hash')` |
-| samples_from_rows | out.append | 117 | `out.append(float(...))` |
-| samples_from_rows | float | 117 | `float(row[...])` |
+| samples_from_rows | row.get | 118 | `row.get('primary_metric')` |
+| samples_from_rows | json.loads | 121 | `json.loads(...)` |
+| samples_from_rows | row.get | 121 | `row.get('metrics_json')` |
+| samples_from_rows | metrics.get | 124 | `metrics.get('canonical_config_hash')` |
+| samples_from_rows | metrics.get | 126 | `metrics.get('evaluation_context_hash')` |
+| samples_from_rows | out.append | 128 | `out.append(float(...))` |
+| samples_from_rows | float | 128 | `float(row[...])` |
 
 ### Boundary effects
 
 | Kind | Target | Step | Line |
 |---|---|---|---:|
-| mutation | `out.append` | `samples_from_rows` | 117 |
+| mutation | `out.append` | `samples_from_rows` | 128 |
 
 ### Static analysis gaps
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `samples_from_rows` | `row.get` | 110 |
-| external_call | `samples_from_rows` | `json.loads` | 113 |
-| unresolved_call | `samples_from_rows` | `row.get` | 113 |
-| unresolved_call | `samples_from_rows` | `metrics.get` | 116 |
+| unresolved_call | `samples_from_rows` | `row.get` | 118 |
+| external_call | `samples_from_rows` | `json.loads` | 121 |
+| unresolved_call | `samples_from_rows` | `row.get` | 121 |
+| unresolved_call | `samples_from_rows` | `metrics.get` | 124 |
+| unresolved_call | `samples_from_rows` | `metrics.get` | 126 |
 
 ## Behavior
 

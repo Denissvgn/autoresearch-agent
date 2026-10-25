@@ -1,6 +1,6 @@
 # ResourceLimits
 
-**Location:** `src/core/execution_contracts.py:693`
+**Location:** `src/core/execution_contracts.py:695`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

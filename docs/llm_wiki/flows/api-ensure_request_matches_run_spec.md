@@ -103,35 +103,35 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| ensure_request_matches_run_spec | spec.spec_digest | 915 | `spec.spec_digest(data not statically known)` |
-| ensure_request_matches_run_spec | mismatches.append | 916 | `mismatches.append('run_spec_digest')` |
-| ensure_request_matches_run_spec | mismatches.append | 918 | `mismatches.append('run_id')` |
-| ensure_request_matches_run_spec | mismatches.append | 920 | `mismatches.append('integration')` |
-| ensure_request_matches_run_spec | mismatches.append | 922 | `mismatches.append('evaluator_digest')` |
-| ensure_request_matches_run_spec | mismatches.append | 924 | `mismatches.append('dataset_digests')` |
-| ensure_request_matches_run_spec | spec.inputs.environment.digest | 925 | `spec.inputs.environment.digest(data not statically known)` |
-| ensure_request_matches_run_spec | mismatches.append | 926 | `mismatches.append('environment_digest')` |
-| ensure_request_matches_run_spec | ContractError | 928 | `ContractError(...)` |
-| ensure_request_matches_run_spec | sorted | 930 | `sorted(mismatches)` |
+| ensure_request_matches_run_spec | spec.spec_digest | 917 | `spec.spec_digest(data not statically known)` |
+| ensure_request_matches_run_spec | mismatches.append | 918 | `mismatches.append('run_spec_digest')` |
+| ensure_request_matches_run_spec | mismatches.append | 920 | `mismatches.append('run_id')` |
+| ensure_request_matches_run_spec | mismatches.append | 922 | `mismatches.append('integration')` |
+| ensure_request_matches_run_spec | mismatches.append | 924 | `mismatches.append('evaluator_digest')` |
+| ensure_request_matches_run_spec | mismatches.append | 926 | `mismatches.append('dataset_digests')` |
+| ensure_request_matches_run_spec | spec.inputs.environment.digest | 927 | `spec.inputs.environment.digest(data not statically known)` |
+| ensure_request_matches_run_spec | mismatches.append | 928 | `mismatches.append('environment_digest')` |
+| ensure_request_matches_run_spec | ContractError | 930 | `ContractError(...)` |
+| ensure_request_matches_run_spec | sorted | 932 | `sorted(mismatches)` |
 
 ### Boundary effects
 
 | Kind | Target | Step | Line |
 |---|---|---|---:|
-| mutation | `mismatches.append` | `ensure_request_matches_run_spec` | 916 |
 | mutation | `mismatches.append` | `ensure_request_matches_run_spec` | 918 |
 | mutation | `mismatches.append` | `ensure_request_matches_run_spec` | 920 |
 | mutation | `mismatches.append` | `ensure_request_matches_run_spec` | 922 |
 | mutation | `mismatches.append` | `ensure_request_matches_run_spec` | 924 |
 | mutation | `mismatches.append` | `ensure_request_matches_run_spec` | 926 |
+| mutation | `mismatches.append` | `ensure_request_matches_run_spec` | 928 |
 
 ### Static analysis gaps
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `ensure_request_matches_run_spec` | `spec.spec_digest` | 915 |
-| unresolved_call | `ensure_request_matches_run_spec` | `spec.inputs.environment.digest` | 925 |
-| external_call | `ensure_request_matches_run_spec` | `sorted` | 930 |
+| unresolved_call | `ensure_request_matches_run_spec` | `spec.spec_digest` | 917 |
+| unresolved_call | `ensure_request_matches_run_spec` | `spec.inputs.environment.digest` | 927 |
+| external_call | `ensure_request_matches_run_spec` | `sorted` | 932 |
 
 ## Behavior
 

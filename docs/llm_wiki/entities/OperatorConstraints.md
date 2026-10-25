@@ -1,6 +1,6 @@
 # OperatorConstraints
 
-**Location:** `src/core/execution_contracts.py:956`
+**Location:** `src/core/execution_contracts.py:958`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

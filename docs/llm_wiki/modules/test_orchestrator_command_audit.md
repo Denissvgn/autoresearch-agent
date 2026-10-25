@@ -17,7 +17,8 @@ _Auto-generated from `tests/test_orchestrator_command_audit.py`._
 | `src.core.orchestrator` | `AgentOrchestrator`, `ResearchConfig` |
 | `src.core.results_store` | `ResultsStore` |
 | `sys` | `sys` |
-| `types` | `types` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `cast` |
 
 ## Local dependency map
 
@@ -51,8 +52,8 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [_FakeAsyncAnthropic](../entities/test_orchestrator_command_audit_FakeAsyncAnthropic.md) | 12 | — | — |
-| [_FakeAPIStatusError](../entities/test_orchestrator_command_audit_FakeAPIStatusError.md) | 16 | `Exception` | — |
+| [_FakeAsyncAnthropic](../entities/test_orchestrator_command_audit_FakeAsyncAnthropic.md) | 14 | — | — |
+| [_FakeAPIStatusError](../entities/test_orchestrator_command_audit_FakeAPIStatusError.md) | 18 | `Exception` | — |
 
 ## Functions
 

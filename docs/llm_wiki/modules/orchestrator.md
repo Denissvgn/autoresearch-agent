@@ -24,26 +24,35 @@ Agent orchestrator — drives Claude via the Anthropic SDK with tool use.
 | `re` | `re` |
 | `shlex` | `shlex` |
 | `src.config` | `secret_value`, `settings` |
-| `src.core` | `fs_safety` |
-| `src.core.agent_tools` | `AGENT_TOOLS`, `ToolAccessContext`, `ToolExecutionResult`, `_config_snapshot_path_from_command`, `_execute_tool`, `_load_packaged_skill_md`, `_nonce_env_for_command`, `_normalize_command_for_plan`, `_tool_bash`, `_tool_glob`, `_tool_grep`, `_tool_read_file`, `_tool_write_file`, `build_tool_access_context` |
+| `src.core` | `fs_safety`, `result_authority` |
+| `src.core.agent_tools` | `AGENT_TOOLS`, `ToolAccessContext`, `ToolExecutionResult`, `_config_snapshot_path_from_command`, `_execute_tool`, `_load_packaged_skill_md`, `_nonce_env_for_command`, `_normalize_command_for_plan`, `_tool_bash`, `_tool_glob`, `_tool_grep`, `_tool_read_file`, `_tool_write_file`, `build_tool_access_context`, `compute_bash_timeout` |
 | `src.core.artifact_reference` | `normalize_artifact_references_in_mapping` |
+| `src.core.blocker_classifier` | `classify_blockers` |
+| `src.core.command_policy` | `evaluate_command_policy` |
 | `src.core.command_runner` | `CommandProcessRegistry`, `GovernedCommandRunner`, `OutputCallback`, `_build_child_env`, `redact_sensitive_text` |
+| `src.core.config_promoter` | `ConfigPromoter` |
 | `src.core.consistency_validator` | `ACCEPTED_ADAPTIVE_NOOP_REASONS`, `build_consistency_report`, `check_adaptive_feature_sweep`, `consistency_report_json` |
-| `src.core.experiment_parser` | `parse_iteration_marker`, `parse_prepare_output` |
+| `src.core.development_gate_bundle` | `evaluate_development_gate_bundle`, `load_gate_bundle` |
 | `src.core.gate_status` | `normalize_training_gate_aliases`, `training_gates_passed_from_iteration` |
+| `src.core.goal_semantics` | `GOAL_INCONCLUSIVE`, `GOAL_SATISFICE`, `GOAL_SATISFICED`, `goal_decision`, `goal_outcome` |
 | `src.core.iteration_context` | `ITERATION_CONTEXT_DIGEST_MARKER`, `build_iteration_context_digest`, `derive_exploration_markers` |
-| `src.core.iteration_snapshot` | `build_iteration_attempt_snapshot`, `build_trial_identity`, `canonical_config_hash`, `trial_identity_hash`, `write_iteration_attempt_snapshot` |
-| `src.core.llm_provider` | `_CLAUDE_INPUT_USD_PER_TOKEN`, `_CLAUDE_MAX_OUTPUT_TOKENS`, `_CLAUDE_OUTPUT_USD_PER_TOKEN`, `AnthropicProvider`, `ContentBlock`, `LLMProvider`, `Message`, `MockProvider`, `ProviderCapabilityMismatch`, `ProviderResponse`, `RequestBlock`, `RequiredCapabilities`, `StopReason`, `TextBlock`, `ToolDef`, `ToolResultBlock`, `ToolUseBlock`, `Usage`, `build_provider` |
+| `src.core.iteration_snapshot` | `UnsupportedIdentityResolveError`, `build_iteration_attempt_snapshot`, `build_trial_identity`, `canonical_config_hash`, `trial_identity_hash`, `write_iteration_attempt_snapshot` |
+| `src.core.llm_provider` | `_CLAUDE_INPUT_USD_PER_TOKEN`, `_CLAUDE_MAX_OUTPUT_TOKENS`, `_CLAUDE_OUTPUT_USD_PER_TOKEN`, `AnthropicProvider`, `ContentBlock`, `LLMProvider`, `Message`, `MockProvider`, `ModelRoles`, `ProviderCapabilityMismatch`, `ProviderResponse`, `RequestBlock`, `RequiredCapabilities`, `StopReason`, `TextBlock`, `ToolDef`, `ToolResultBlock`, `ToolUseBlock`, `Usage`, `build_provider`, `clamp_output_tokens`, `resolve_effective_provider`, `resolve_model_roles` |
 | `src.core.log_writer` | `AgentLogWriter` |
+| `src.core.objective_comparator` | `ObjectiveComparator`, `ObjectiveContextError`, `objective_comparator_for_manifest`, `objective_comparator_for_skill_id` |
 | `src.core.output_digest` | `digest_command_output` |
-| `src.core.output_parser` | `DelimitedKVParser`, `JSONMarkerParser`, `OutputParser` |
-| `src.core.research_phase_plan` | `_PHASE_ADVANCEMENT_KEYS`, `EVIDENCE_INHERITABLE_PHASES`, `NOOP_INHERITABLE_PHASES`, `_is_rejected_duplicate`, `build_phase_state`, `incomplete_phase_ids`, `phase_cap_exceeded`, `phase_state_json` |
+| `src.core.output_parser` | `DelimitedKVParser`, `JSONMarkerParser`, `OutputParser`, `_verify_nonce` |
+| `src.core.research_phase_plan` | `_PHASE_ADVANCEMENT_KEYS`, `EVIDENCE_INHERITABLE_PHASES`, `NOOP_INHERITABLE_PHASES`, `_is_failed_iteration`, `_is_rejected_duplicate`, `build_phase_state`, `incomplete_phase_ids`, `phase_cap_exceeded`, `phase_state_json` |
+| `src.core.research_resume` | `cross_session_summary` |
 | `src.core.result_artifact` | `enrich_marker_from_result_artifact` |
+| `src.core.result_authority` | `AUTHORITY_NONCE_ONLY`, `AUTHORITY_RECEIPT_VERIFIED`, `AUTHORITY_UNVERIFIED_IMPORTED`, `protected_result_names`, `AUTHORITY_MODEL_PROPOSED`, `AUTHORITY_RECEIPT_VERIFIED` |
 | `src.core.significance` | `REGRESSION`, `SIGNIFICANT`, `best_config_hash`, `samples_from_rows`, `significance_verdict` |
-| `src.core.skill_runtime` | `SkillConfigError`, `SkillRuntime`, `materialize_skill_runtime` |
+| `src.core.skill_registry` | `default_registry` |
+| `src.core.skill_runtime` | `SkillConfigError`, `SkillRuntime`, `UnsupportedPhaseAdvancementError`, `materialize_skill_runtime` |
 | `src.core.state_machine` | `IllegalTransitionError`, `SessionEvent`, `SessionState`, `SessionStateMachine` |
 | `src.core.state_store` | `StateStore` |
 | `src.core.trial_workspace` | `TrialContext`, `build_trial_context`, `is_trial_eligible_command`, `trial_marker_candidates` |
+| `src.core.usage_ledger` | `ROLE_AGENT`, `ROLE_INSIGHT`, `event_from_quote`, `record_usage_event` |
 | `src.ws.events` | `broadcaster` |
 | `subprocess` | `subprocess` |
 | `time` | `time` |
@@ -71,8 +80,8 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Inbound | `src` (2) |
-| Inbound | `tests` (37) |
-| Outbound | `src` (22) |
+| Inbound | `tests` (46) |
+| Outbound | `src` (31) |
 
 ### External packages
 
@@ -80,13 +89,13 @@ flowchart LR
 |---|---:|---:|
 | python | 1 | 0 |
 
-> All 60 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 78 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [ResearchConfig](../entities/ResearchConfig.md) | 189 | — | — |
-| [TurnTrialState](../entities/TurnTrialState.md) | 273 | — | Mutable per-turn execution state owned by the agent tool loop. |
-| [PendingTrial](../entities/PendingTrial.md) | 303 | — | One deferred trial execution (P2 parallel-trial dispatch). |
-| [AgentOrchestrator](../entities/AgentOrchestrator.md) | 328 | — | Runs a Claude agent session for autonomous ML experiment tuning. |
+| [ResearchConfig](../entities/ResearchConfig.md) | 209 | — | — |
+| [TurnTrialState](../entities/TurnTrialState.md) | 293 | — | Mutable per-turn execution state owned by the agent tool loop. |
+| [PendingTrial](../entities/PendingTrial.md) | 323 | — | One deferred trial execution (P2 parallel-trial dispatch). |
+| [AgentOrchestrator](../entities/AgentOrchestrator.md) | 348 | — | Runs a Claude agent session for autonomous ML experiment tuning. |

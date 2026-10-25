@@ -10,7 +10,6 @@ _Auto-generated from `ui/src/pages/Leaderboard.tsx`._
 
 | Source | Symbols |
 |--------|---------|
-| `../api/client` | `LeaderboardEntry` |
 | `../components/hifi/primitives` | `Icon`, `StatusBadge` |
 | `../hooks/useResearch` | `useSkills`, `useSkillLeaderboard` |
 | `react` | `useEffect`, `useMemo`, `useState` |
@@ -27,23 +26,21 @@ _Auto-generated from `ui/src/pages/Leaderboard.tsx`._
 <!-- Auto-generated local dependency summary. Do not edit by hand. -->
 ```mermaid
 flowchart LR
-    n0["ui/src/api/client.ts"]
-    n1["ui/src/App.tsx"]
-    n2["ui/src/components/hifi/primitives.tsx"]
-    n3["ui/src/hooks/useResearch.ts"]
+    n0["ui/src/App.tsx"]
+    n1["ui/src/components/hifi/primitives.tsx"]
+    n2["ui/src/hooks/useResearch.ts"]
+    n3["ui/src/pages/__tests__/Leaderboard.test.tsx"]
     n4["ui/src/pages/Leaderboard.tsx"]
-    n1 --> n0
-    n1 --> n2
-    n1 --> n3
-    n1 --> n4
-    n3 --> n0
-    n4 --> n0
+    n0 --> n1
+    n0 --> n2
+    n0 --> n4
+    n3 --> n4
+    n4 --> n1
     n4 --> n2
-    n4 --> n3
-    click n0 "../modules/client.md"
-    click n1 "../modules/App.md"
-    click n2 "../modules/primitives.md"
-    click n3 "../modules/useResearch.md"
+    click n0 "../modules/App.md"
+    click n1 "../modules/primitives.md"
+    click n2 "../modules/useResearch.md"
+    click n3 "../modules/Leaderboard.test.md"
     click n4 "../modules/Leaderboard.md"
 ```
 
@@ -52,7 +49,7 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Inbound | [App](../modules/App.md) |
-| Outbound | [client](../modules/client.md) |
+| Inbound | [Leaderboard.test](../modules/Leaderboard.test.md) |
 | Outbound | [primitives](../modules/primitives.md) |
 | Outbound | [useResearch](../modules/useResearch.md) |
 

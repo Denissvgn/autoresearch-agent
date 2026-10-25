@@ -1,6 +1,6 @@
 # RollbackStatusSummary
 
-**Location:** `ui/src/api/client.ts:426`
+**Location:** `ui/src/api/client.ts:427`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

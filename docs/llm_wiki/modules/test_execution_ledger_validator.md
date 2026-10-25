@@ -19,6 +19,8 @@ here by design — the validator must stay domain-agnostic.
 | `pathlib` | `Path` |
 | `pytest` | `pytest` |
 | `sys` | `sys` |
+| `types` | `ModuleType` |
+| `typing` | `cast` |
 
 ## Local dependency map
 

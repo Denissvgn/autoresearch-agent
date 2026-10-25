@@ -1,6 +1,6 @@
 # PluginEntry
 
-**Location:** `src/core/skill_manifest.py:487`
+**Location:** `src/core/skill_manifest.py:548`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)
@@ -40,11 +40,17 @@ depth for R10 generated skills).
 flowchart LR
     n0["PluginEntry (src/core/skill_manifest.py)"]
     n1["BaseModel"]
-    n2["load_layout (src/core/skill_loader.py)"]
+    n2["resolve_phase_advancement (src/core/phase_resolver.py)"]
+    n3["load_layout (src/core/skill_loader.py)"]
+    n4["_entry (tests/test_domain_semantics_extension.py)"]
     n0 --> n1
     n2 --> n0
+    n3 --> n0
+    n4 --> n0
     click n0 "../modules/skill_manifest.md"
-    click n2 "../modules/skill_loader.md"
+    click n2 "../modules/phase_resolver.md"
+    click n3 "../modules/skill_loader.md"
+    click n4 "../modules/test_domain_semantics_extension.md"
 ```
 
 ### Summary
@@ -63,4 +69,6 @@ flowchart LR
 
 | Reference | Kind | Source | Call sites |
 |---|---|---|---:|
+| `resolve_phase_advancement` | type_reference | [phase_resolver](../modules/phase_resolver.md) | — |
 | `load_layout` | call | [skill_loader](../modules/skill_loader.md) | 2 |
+| `_entry` | type_reference | [test_domain_semantics_extension](../modules/test_domain_semantics_extension.md) | — |

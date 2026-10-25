@@ -18,6 +18,7 @@ _Auto-generated from `FakeStore` in `tests/test_research_api_compat.py`._
 | Method | Signature | Decorators | Description |
 |--------|-----------|------------|-------------|
 | `__init__` | `() -> None` | — | — |
+| `append_event` | *(async)* `(**kwargs: Any) -> None` | — | — |
 | `ping` | *(async)* `() -> bool` | — | — |
 | `record_audit_event` | *(async)* `(**kwargs: Any) -> None` | — | — |
 | `get_session` | *(async)* `(research_id: str) -> Dict[str, Any] \| None` | — | — |
@@ -43,7 +44,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [test_research_api_compat](../modules/test_research_api_compat.md) | 6 | — |
+| [test_research_api_compat](../modules/test_research_api_compat.md) | 7 | — |
 
 ### References
 

@@ -64,6 +64,10 @@ Section names are canonicalized per spike §4: ``metric_schema`` (not
 |--------|---------|
 | `__future__` | `annotations` |
 | `pydantic` | `BaseModel`, `ConfigDict`, `Field`, `field_validator`, `model_validator` |
+| `src.core.output_parser` | `FIELD_TYPE_VOCABULARY` |
+| `src.core.promotion_policy` | `compile_scope_graph` |
+| `src.core.skill_params` | `unsupported_schema_keywords` |
+| `src.core.skill_paths` | `validate_path_template`, `_template_placeholder_tokens` |
 | `typing` | `Any`, `Literal`, `Mapping`, `Optional`, `Union` |
 
 ## Local dependency map
@@ -75,6 +79,7 @@ flowchart LR
     n1["src/core/skill_manifest.py"]
     n2["tests"]
     n0 --> n1
+    n1 --> n0
     n2 --> n1
     click n1 "../modules/skill_manifest.md"
 ```
@@ -85,8 +90,9 @@ flowchart LR
 
 | Direction | Module |
 |---|---|
-| Inbound | `src` (10) |
-| Inbound | `tests` (7) |
+| Inbound | `src` (11) |
+| Inbound | `tests` (14) |
+| Outbound | `src` (4) |
 
 ### External packages
 
@@ -94,7 +100,7 @@ flowchart LR
 |---|---:|---:|
 | python | 1 | 0 |
 
-> All 17 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 29 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
@@ -107,49 +113,51 @@ flowchart LR
 | [ParserFormat](../entities/ParserFormat.md) | Type alias | 90 | `Literal['delimited_kv', 'json_marker']` | — |
 | [PreflightKind](../entities/PreflightKind.md) | Type alias | 95 | `Literal['http_health', 'tcp', 'local_file']` | — |
 | [PromotionKind](../entities/PromotionKind.md) | Type alias | 101 | `Literal['file_path', 'registry_api', 'artifact_store', 'git_branch', 'webhook']` | — |
-| [PluginKind](../entities/PluginKind.md) | Type alias | 107 | `Literal['parser', 'preflight', 'resolve_identity', 'bootstrap']` | — |
-| [LLMConfig](../entities/LLMConfig.md) | Pydantic model | 115 | `BaseModel` | LLM tier routing (ARC-011 §9 ``llm``). |
-| [WorkspaceConfig](../entities/WorkspaceConfig.md) | Pydantic model | 137 | `BaseModel` | Per-session workspace layout (ARC-011 §9 ``workspace``). |
-| [SubjectField](../entities/SubjectField.md) | Pydantic model | 147 | `BaseModel` | One enumerated subject (e.g. an instrument / research topic). |
-| [SubjectsConfig](../entities/SubjectsConfig.md) | Pydantic model | 156 | `BaseModel` | Subject enumeration (G12). ML skills glob config files today; non-ML |
-| [VariantsConfig](../entities/VariantsConfig.md) | Pydantic model | 195 | `BaseModel` | Variant enumeration (G12). A variant is a per-subject sweep dimension |
-| [ParamSchemaProperty](../entities/ParamSchemaProperty.md) | Pydantic model | 216 | `BaseModel` | One property in the ``param_schema`` JSON Schema (a subset of JSON-Schema |
-| [ParamSchema](../entities/ParamSchema.md) | Pydantic model | 228 | `BaseModel` | JSON Schema describing the ``skill_params`` a skill accepts (ARC-011 |
-| [PrimaryMetric](../entities/PrimaryMetric.md) | Pydantic model | 263 | `BaseModel` | The primary optimization metric (ARC-011 §9 ``metric_schema.primary``). |
-| [MetricColumn](../entities/skill_manifest_MetricColumn.md) | Pydantic model | 277 | `BaseModel` | One gate badge, chart series, or iteration-table column. |
-| [SignificanceConfig](../entities/SignificanceConfig.md) | Pydantic model | 289 | `BaseModel` | Multi-seed significance gate (P2 ops — ``metric_schema.significance``). |
-| [MetricSchema](../entities/skill_manifest_MetricSchema.md) | Pydantic model | 306 | `BaseModel` | Metric presentation + semantics (ARC-011 §9 ``metric_schema``). |
-| [DecisionVocabulary](../entities/DecisionVocabulary.md) | Pydantic model | 331 | `BaseModel` | Closed decision set + success marker (ARC-011 §9, G8). |
-| [PhaseAdvancementOverride](../entities/PhaseAdvancementOverride.md) | Pydantic model | 348 | `BaseModel` | Per-phase advancement override (G1). Inherits the top-level mode when |
-| [Phase](../entities/skill_manifest_Phase.md) | Pydantic model | 361 | `BaseModel` | One phase in the research playbook (ARC-011 §9 ``phase_plan[]``). |
-| [PhaseAdvancement](../entities/PhaseAdvancement.md) | Pydantic model | 391 | `BaseModel` | Top-level phase-advancement mode (G1). When ``mode == plugin`` the |
-| [CommandPolicy](../entities/CommandPolicy.md) | Pydantic model | 417 | `BaseModel` | Allowed scripts / executables / files for the skill (ARC-011 §9 |
-| [PluginCaps](../entities/PluginCaps.md) | Pydantic model | 451 | `BaseModel` | Capability block for one skill plugin (ARC-011 X-004 §6). |
-| [PluginEntry](../entities/PluginEntry.md) | Pydantic model | 487 | `BaseModel` | One declared skill plugin with its capability grant (X-004 §6). |
-| [PluginsConfig](../entities/PluginsConfig.md) | Pydantic model | 510 | `BaseModel` | Declared skill plugins + their capability grants (ARC-011 §5.3 / X-004). |
-| [OutputParserFallback](../entities/OutputParserFallback.md) | Pydantic model | 549 | `BaseModel` | Fallback iteration sources when the primary parse yields nothing |
-| [FieldTypes](../entities/FieldTypes.md) | Pydantic model | 567 | `BaseModel` | Type hints for parser fields used during coercion. |
-| [OutputParserConfig](../entities/OutputParserConfig.md) | Pydantic model | 573 | `BaseModel` | Parser contract (ARC-011 §9 ``output_parser``, G7). Reproduces |
-| [PreflightEntry](../entities/PreflightEntry.md) | Pydantic model | 603 | `BaseModel` | One service-dependency preflight check (ARC-011 §9 ``preflight[]``). |
-| [GateBundles](../entities/GateBundles.md) | Pydantic model | 634 | `BaseModel` | Per-scope promotion gate bundles + override location (G4). Pure paths. |
-| [PromotionScope](../entities/skill_manifest_PromotionScope.md) | Pydantic model | 645 | `BaseModel` | One promotion scope declaration (ARC-011 §9 ``promotion_target.scopes``). |
-| [FilePathPromotionTarget](../entities/skill_manifest_FilePathPromotionTarget.md) | Pydantic model | 656 | `BaseModel` | ``kind: file_path`` — write a config file to the host bind mount |
-| [RegistryLookup](../entities/RegistryLookup.md) | Pydantic model | 684 | `BaseModel` | ``registry_api.lookup`` — how to find the composite to promote (G5). |
-| [RegistryApiTarget](../entities/RegistryApiTarget.md) | Pydantic model | 695 | `BaseModel` | ``kind: registry_api`` — production composite REST promotion (G5). |
-| [ArtifactStoreTarget](../entities/ArtifactStoreTarget.md) | Pydantic model | 716 | `BaseModel` | ``kind: artifact_store`` — promote a multi-file artifact bundle (G10). |
-| [GitBranchTarget](../entities/GitBranchTarget.md) | Pydantic model | 729 | `BaseModel` | ``kind: git_branch`` — promote to a version-control branch |
-| [WebhookTarget](../entities/WebhookTarget.md) | Pydantic model | 747 | `BaseModel` | ``kind: webhook`` — POST the winning config to an HTTP endpoint (P1-3). |
-| [PromotionTargetKind](../entities/PromotionTargetKind.md) | Type alias | 767 | `Union[FilePathPromotionTarget, RegistryApiTarget, ArtifactStoreTarget, GitBranchTarget, WebhookTarget]` | — |
-| [PromotionTarget](../entities/skill_manifest_PromotionTarget.md) | Pydantic model | 776 | `BaseModel` | Promotion surface (ARC-011 §9 ``promotion_target``). ``primary`` is the |
-| [IdentityResolve](../entities/IdentityResolve.md) | Pydantic model | 803 | `BaseModel` | ``trial_identity.resolve`` — the G2 plugin selector. ``mode=declarative`` |
-| [TrialIdentityConfig](../entities/TrialIdentityConfig.md) | Pydantic model | 829 | `BaseModel` | Dedup trial-identity contract (ARC-011 §9 ``trial_identity``, G2). |
-| [BlockerClassification](../entities/BlockerClassification.md) | Pydantic model | 848 | `BaseModel` | Actionable-blocker + per-phase evidence-key sets (G3). Reproduces |
-| [StructuredHPOConfig](../entities/StructuredHPOConfig.md) | Pydantic model | 859 | `BaseModel` | Optional structured-HPO capability (ARC-011 §9 ``structured_hpo``). |
-| [InsightsConfig](../entities/InsightsConfig.md) | Pydantic model | 869 | `BaseModel` | Per-skill insights summarization (ARC-011 §9 ``insights``, G9). |
-| [PromptConfig](../entities/PromptConfig.md) | Pydantic model | 879 | `BaseModel` | Prompt-assembly templates (ARC-011 §9 ``prompt``). |
-| [ParameterBindings](../entities/ParameterBindings.md) | Pydantic model | 917 | `BaseModel` | Declarative bindings from resolved ``skill_params`` into actual work. |
-| [UIConfig](../entities/UIConfig.md) | Pydantic model | 956 | `BaseModel` | UI hints (ARC-011 §9 ``ui``). Advisory; not behaviorally load-bearing. |
-| [ExecutionConfig](../entities/ExecutionConfig.md) | Pydantic model | 970 | `BaseModel` | Per-skill execution capabilities (P1-4). |
-| [ResearchSkillManifest](../entities/ResearchSkillManifest.md) | Pydantic model | 987 | `BaseModel` | A validated ``research_skill.v1`` skill descriptor (ARC-011 P2-001). |
-| [ManifestValidationError](../entities/ManifestValidationError.md) | Class | 1148 | `ValueError` | Raised when a manifest fails structural validation. Wraps a pydantic |
-| [ManifestVersionError](../entities/ManifestVersionError.md) | Class | 1165 | `ManifestValidationError` | Raised by the loader (P2-002) for an unrecognized ``schema_version``. |
+| [PluginKind](../entities/PluginKind.md) | Type alias | 107 | `Literal['parser', 'preflight', 'resolve_identity', 'bootstrap', 'phase_advancement']` | — |
+| [LLMConfig](../entities/LLMConfig.md) | Pydantic model | 117 | `BaseModel` | LLM tier routing (ARC-011 §9 ``llm``). |
+| [WorkspaceConfig](../entities/WorkspaceConfig.md) | Pydantic model | 139 | `BaseModel` | Per-session workspace layout (ARC-011 §9 ``workspace``). |
+| [SubjectField](../entities/SubjectField.md) | Pydantic model | 149 | `BaseModel` | One enumerated subject (e.g. an instrument / research topic). |
+| [SubjectsConfig](../entities/SubjectsConfig.md) | Pydantic model | 158 | `BaseModel` | Subject enumeration (G12). ML skills glob config files today; non-ML |
+| [VariantsConfig](../entities/VariantsConfig.md) | Pydantic model | 197 | `BaseModel` | Variant enumeration (G12). A variant is a per-subject sweep dimension |
+| [ParamSchemaProperty](../entities/ParamSchemaProperty.md) | Pydantic model | 219 | `BaseModel` | One property in the ``param_schema`` JSON Schema (a subset of JSON-Schema |
+| [ParamSchema](../entities/ParamSchema.md) | Pydantic model | 232 | `BaseModel` | JSON Schema describing the ``skill_params`` a skill accepts (ARC-011 |
+| [PrimaryMetric](../entities/PrimaryMetric.md) | Pydantic model | 267 | `BaseModel` | The primary optimization metric (ARC-011 §9 ``metric_schema.primary``). |
+| [MetricColumn](../entities/skill_manifest_MetricColumn.md) | Pydantic model | 282 | `BaseModel` | One gate badge, chart series, or iteration-table column. |
+| [SignificanceConfig](../entities/SignificanceConfig.md) | Pydantic model | 294 | `BaseModel` | Multi-seed significance gate (P2 ops — ``metric_schema.significance``). |
+| [MetricObjective](../entities/MetricObjective.md) | Pydantic model | 317 | `BaseModel` | One objective metric inside a multiobjective declaration. |
+| [ObjectiveSpec](../entities/ObjectiveSpec.md) | Pydantic model | 327 | `BaseModel` | Objective semantics: scalar (legacy) or multiobjective (Pareto). |
+| [MetricSchema](../entities/skill_manifest_MetricSchema.md) | Pydantic model | 363 | `BaseModel` | Metric presentation + semantics (ARC-011 §9 ``metric_schema``). |
+| [DecisionVocabulary](../entities/DecisionVocabulary.md) | Pydantic model | 392 | `BaseModel` | Closed decision set + success marker (ARC-011 §9, G8). |
+| [PhaseAdvancementOverride](../entities/PhaseAdvancementOverride.md) | Pydantic model | 409 | `BaseModel` | Per-phase advancement override (G1). Inherits the top-level mode when |
+| [Phase](../entities/skill_manifest_Phase.md) | Pydantic model | 422 | `BaseModel` | One phase in the research playbook (ARC-011 §9 ``phase_plan[]``). |
+| [PhaseAdvancement](../entities/PhaseAdvancement.md) | Pydantic model | 452 | `BaseModel` | Top-level phase-advancement mode (G1). When ``mode == plugin`` the |
+| [CommandPolicy](../entities/CommandPolicy.md) | Pydantic model | 478 | `BaseModel` | Allowed scripts / executables / files for the skill (ARC-011 §9 |
+| [PluginCaps](../entities/PluginCaps.md) | Pydantic model | 512 | `BaseModel` | Capability block for one skill plugin (ARC-011 X-004 §6). |
+| [PluginEntry](../entities/PluginEntry.md) | Pydantic model | 548 | `BaseModel` | One declared skill plugin with its capability grant (X-004 §6). |
+| [PluginsConfig](../entities/PluginsConfig.md) | Pydantic model | 571 | `BaseModel` | Declared skill plugins + their capability grants (ARC-011 §5.3 / X-004). |
+| [OutputParserFallback](../entities/OutputParserFallback.md) | Pydantic model | 610 | `BaseModel` | Fallback iteration sources when the primary parse yields nothing |
+| [FieldTypes](../entities/FieldTypes.md) | Pydantic model | 629 | `BaseModel` | Type hints for parser fields used during coercion. |
+| [OutputParserConfig](../entities/OutputParserConfig.md) | Pydantic model | 660 | `BaseModel` | Parser contract (ARC-011 §9 ``output_parser``, G7). Reproduces |
+| [PreflightEntry](../entities/PreflightEntry.md) | Pydantic model | 690 | `BaseModel` | One service-dependency preflight check (ARC-011 §9 ``preflight[]``). |
+| [GateBundles](../entities/GateBundles.md) | Pydantic model | 730 | `BaseModel` | Per-scope promotion gate bundles + override location (G4). Pure paths. |
+| [PromotionScope](../entities/skill_manifest_PromotionScope.md) | Pydantic model | 742 | `BaseModel` | One promotion scope declaration (ARC-011 §9 ``promotion_target.scopes``). |
+| [FilePathPromotionTarget](../entities/skill_manifest_FilePathPromotionTarget.md) | Pydantic model | 757 | `BaseModel` | ``kind: file_path`` — write a config file to the host bind mount |
+| [RegistryLookup](../entities/RegistryLookup.md) | Pydantic model | 785 | `BaseModel` | ``registry_api.lookup`` — how to find the composite to promote (G5). |
+| [RegistryApiTarget](../entities/RegistryApiTarget.md) | Pydantic model | 796 | `BaseModel` | ``kind: registry_api`` — production composite REST promotion (G5). |
+| [ArtifactStoreTarget](../entities/ArtifactStoreTarget.md) | Pydantic model | 817 | `BaseModel` | ``kind: artifact_store`` — promote a multi-file artifact bundle (G10). |
+| [GitBranchTarget](../entities/GitBranchTarget.md) | Pydantic model | 830 | `BaseModel` | ``kind: git_branch`` — promote to a version-control branch |
+| [WebhookTarget](../entities/WebhookTarget.md) | Pydantic model | 848 | `BaseModel` | ``kind: webhook`` — POST the winning config to an HTTP endpoint (P1-3). |
+| [PromotionTargetKind](../entities/PromotionTargetKind.md) | Type alias | 868 | `Union[FilePathPromotionTarget, RegistryApiTarget, ArtifactStoreTarget, GitBranchTarget, WebhookTarget]` | — |
+| [PromotionTarget](../entities/skill_manifest_PromotionTarget.md) | Pydantic model | 877 | `BaseModel` | Promotion surface (ARC-011 §9 ``promotion_target``). ``primary`` is the |
+| [IdentityResolve](../entities/IdentityResolve.md) | Pydantic model | 910 | `BaseModel` | ``trial_identity.resolve`` — the G2 plugin selector. ``mode=declarative`` |
+| [TrialIdentityConfig](../entities/TrialIdentityConfig.md) | Pydantic model | 936 | `BaseModel` | Dedup trial-identity contract (ARC-011 §9 ``trial_identity``, G2). |
+| [BlockerClassification](../entities/BlockerClassification.md) | Pydantic model | 955 | `BaseModel` | Actionable-blocker + per-phase evidence-key sets (G3). Reproduces |
+| [StructuredHPOConfig](../entities/StructuredHPOConfig.md) | Pydantic model | 966 | `BaseModel` | Optional structured-HPO capability (ARC-011 §9 ``structured_hpo``). |
+| [InsightsConfig](../entities/InsightsConfig.md) | Pydantic model | 976 | `BaseModel` | Per-skill insights summarization (ARC-011 §9 ``insights``, G9). |
+| [PromptConfig](../entities/PromptConfig.md) | Pydantic model | 986 | `BaseModel` | Prompt-assembly templates (ARC-011 §9 ``prompt``). |
+| [ParameterBindings](../entities/ParameterBindings.md) | Pydantic model | 1024 | `BaseModel` | Declarative bindings from resolved ``skill_params`` into actual work. |
+| [UIConfig](../entities/UIConfig.md) | Pydantic model | 1063 | `BaseModel` | UI hints (ARC-011 §9 ``ui``). Advisory; not behaviorally load-bearing. |
+| [ExecutionConfig](../entities/ExecutionConfig.md) | Pydantic model | 1077 | `BaseModel` | Per-skill execution capabilities (P1-4). |
+| [ResearchSkillManifest](../entities/ResearchSkillManifest.md) | Pydantic model | 1094 | `BaseModel` | A validated ``research_skill.v1`` skill descriptor (ARC-011 P2-001). |
+| [ManifestValidationError](../entities/ManifestValidationError.md) | Class | 1255 | `ValueError` | Raised when a manifest fails structural validation. Wraps a pydantic |
+| [ManifestVersionError](../entities/ManifestVersionError.md) | Class | 1272 | `ManifestValidationError` | Raised by the loader (P2-002) for an unrecognized ``schema_version``. |

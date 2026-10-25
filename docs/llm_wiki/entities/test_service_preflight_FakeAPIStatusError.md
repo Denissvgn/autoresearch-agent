@@ -1,6 +1,6 @@
 # _FakeAPIStatusError
 
-**Location:** `tests/test_service_preflight.py:19`
+**Location:** `tests/test_service_preflight.py:21`
 **Kind:** Class
 **Bases:** `Exception`
 **Module:** [test_service_preflight](../modules/test_service_preflight.md)

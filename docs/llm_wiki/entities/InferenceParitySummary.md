@@ -1,6 +1,6 @@
 # InferenceParitySummary
 
-**Location:** `ui/src/api/client.ts:419`
+**Location:** `ui/src/api/client.ts:420`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

@@ -57,28 +57,32 @@ Nothing the mapping classifies as preserved is silently dropped.
 flowchart LR
     n0["src/compat/legacy_alias.py"]
     n1["src/core/execution_contracts.py"]
-    n2["src/core/result_authority.py"]
-    n3["tests/test_contract_examples.py"]
-    n4["tests/test_execution_contracts.py"]
-    n5["tests/test_result_authority.py"]
+    n2["src/core/objective_comparator.py"]
+    n3["src/core/result_authority.py"]
+    n4["tests/test_contract_examples.py"]
+    n5["tests/test_execution_contracts.py"]
+    n6["tests/test_result_authority.py"]
     n1 --> n0
     n2 --> n1
     n3 --> n1
     n4 --> n1
     n5 --> n1
-    n5 --> n2
+    n6 --> n1
+    n6 --> n3
     click n0 "../modules/compat_legacy_alias.md"
     click n1 "../modules/execution_contracts.md"
-    click n2 "../modules/result_authority.md"
-    click n3 "../modules/test_contract_examples.md"
-    click n4 "../modules/test_execution_contracts.md"
-    click n5 "../modules/test_result_authority.md"
+    click n2 "../modules/objective_comparator.md"
+    click n3 "../modules/result_authority.md"
+    click n4 "../modules/test_contract_examples.md"
+    click n5 "../modules/test_execution_contracts.md"
+    click n6 "../modules/test_result_authority.md"
 ```
 
 ### Internal neighbors
 
 | Direction | Module |
 |---|---|
+| Inbound | [objective_comparator](../modules/objective_comparator.md) |
 | Inbound | [result_authority](../modules/result_authority.md) |
 | Inbound | [test_contract_examples](../modules/test_contract_examples.md) |
 | Inbound | [test_execution_contracts](../modules/test_execution_contracts.md) |
@@ -96,43 +100,43 @@ flowchart LR
 | Class | Kind | Line | Bases / Target | Description |
 |-------|------|------|----------------|-------------|
 | [VersionedContract](../entities/VersionedContract.md) | Pydantic model | 75 | `BaseModel` | Base for top-level contracts: pins ``schema_version`` to its family. |
-| [ContractError](../entities/ContractError.md) | Class | 101 | `ValueError` | Base error for contract validation and resolution failures. |
-| [UnsupportedCapabilityError](../entities/execution_contracts_UnsupportedCapabilityError.md) | Class | 105 | `ContractError` | Raised before work starts when a capability is unknown or unsupported. |
-| [ContractMigrationError](../entities/ContractMigrationError.md) | Class | 113 | `ContractError` | Raised when a legacy payload requests a rejected incomplete feature. |
-| [SecretReference](../entities/SecretReference.md) | Pydantic model | 142 | `BaseModel` | A named reference to a credential; never the credential itself. |
-| [ArtifactRef](../entities/ArtifactRef.md) | Pydantic model | 228 | `BaseModel` | An immutable artifact location bound by content digest. |
-| [CandidateIdentity](../entities/CandidateIdentity.md) | Pydantic model | 243 | `VersionedContract` | Immutable identity of a proposed candidate. |
-| [CandidateData](../entities/CandidateData.md) | Pydantic model | 267 | `BaseModel` | The mutable candidate payload — deliberately outside run contracts. |
-| [ScorerRef](../entities/ScorerRef.md) | Pydantic model | 287 | `BaseModel` | Identity of the scorer that produced an observation. |
-| [ObservationIdentity](../entities/ObservationIdentity.md) | Pydantic model | 302 | `VersionedContract` | Identity of one measured observation of a candidate. |
-| [ObjectiveDirection](../entities/ObjectiveDirection.md) | Type alias | 355 | `Literal['minimize', 'maximize']` | — |
-| [ObjectiveGoal](../entities/ObjectiveGoal.md) | Type alias | 356 | `Literal['optimize', 'satisfice']` | — |
-| [MetricConstraint](../entities/MetricConstraint.md) | Pydantic model | 359 | `BaseModel` | A guardrail threshold an eligible result must satisfy. |
-| [ObjectivePolicy](../entities/ObjectivePolicy.md) | Pydantic model | 370 | `VersionedContract` | What counts as better, and what must hold for a result to be eligible. |
-| [IntegrationDirection](../entities/IntegrationDirection.md) | Type alias | 412 | `Literal['managed', 'attached']` | — |
-| [CapabilityDescriptor](../entities/CapabilityDescriptor.md) | Pydantic model | 444 | `VersionedContract` | What a harness/driver can do — with explicit gaps, never silent ones. |
-| [IsolationBoundary](../entities/IsolationBoundary.md) | Pydantic model | 514 | `BaseModel` | Declared enforcement boundary for untrusted execution. |
-| [FailureRecord](../entities/FailureRecord.md) | Pydantic model | 569 | `BaseModel` | Structured failure detail for an attempt that produced no metrics. |
-| [ResultReceipt](../entities/ResultReceipt.md) | Pydantic model | 580 | `BaseModel` | Replay protection and ownership for a result envelope. |
-| [VerifiedResult](../entities/VerifiedResult.md) | Pydantic model | 602 | `VersionedContract` | An evaluator-owned measurement of one candidate in one context. |
-| [WorkspaceBounds](../entities/WorkspaceBounds.md) | Pydantic model | 669 | `BaseModel` | Where an attempt may write and what it may only read. |
-| [NetworkPolicy](../entities/NetworkPolicy.md) | Pydantic model | 678 | `BaseModel` | Network authority for one attempt; deny is the default posture. |
-| [ResourceLimits](../entities/ResourceLimits.md) | Pydantic model | 693 | `BaseModel` | OS-enforced resource ceilings for one attempt. |
-| [ExecutionRequest](../entities/execution_contracts_ExecutionRequest.md) | Pydantic model | 703 | `VersionedContract` | One approved attempt: what the experiment executor may execute. |
-| [SkillPackageRef](../entities/SkillPackageRef.md) | Pydantic model | 754 | `BaseModel` | The exact skill package a run executes. |
-| [HarnessConfig](../entities/HarnessConfig.md) | Pydantic model | 769 | `BaseModel` | Harness identity and effective configuration. |
-| [EnvironmentIdentity](../entities/EnvironmentIdentity.md) | Pydantic model | 784 | `BaseModel` | Pinned execution environment: image or dependency-lock digest. |
-| [BudgetDimensions](../entities/BudgetDimensions.md) | Pydantic model | 808 | `BaseModel` | Spend ceilings for a run; every dimension is explicit. |
-| [RunInputs](../entities/RunInputs.md) | Pydantic model | 819 | `BaseModel` | Pinned input identities: what the run evaluates against. |
-| [RunLineage](../entities/RunLineage.md) | Pydantic model | 842 | `BaseModel` | Continuation provenance: where this run came from and how to resume. |
-| [RunSpec](../entities/RunSpec.md) | Pydantic model | 852 | `VersionedContract` | The persisted, fully resolved run specification. |
-| [OperatorConstraints](../entities/OperatorConstraints.md) | Pydantic model | 956 | `BaseModel` | Authority bounds. Every resolved value falls inside these limits. |
-| [SkillDefaults](../entities/SkillDefaults.md) | Pydantic model | 983 | `BaseModel` | Defaults declared by the skill package (domain behavior). |
-| [HarnessPreferences](../entities/HarnessPreferences.md) | Pydantic model | 993 | `BaseModel` | Harness-level convenience defaults. Advisory only. |
-| [ResolutionRecord](../entities/ResolutionRecord.md) | Pydantic model | 1008 | `BaseModel` | Provenance of one resolved value — nothing resolves silently. |
-| [ResolvedRunInputs](../entities/ResolvedRunInputs.md) | Pydantic model | 1020 | `BaseModel` | Deterministically resolved inputs with per-field provenance. |
-| [LegacyFieldCompat](../entities/LegacyFieldCompat.md) | Pydantic model | 1161 | `BaseModel` | One legacy surface's disposition under the v1 contracts. |
-| [LegacyRunInputs](../entities/LegacyRunInputs.md) | Pydantic model | 1283 | `VersionedContract` | What a legacy payload migrates into: identity, parameters, budget. |
+| [ContractError](../entities/ContractError.md) | Class | 103 | `ValueError` | Base error for contract validation and resolution failures. |
+| [UnsupportedCapabilityError](../entities/execution_contracts_UnsupportedCapabilityError.md) | Class | 107 | `ContractError` | Raised before work starts when a capability is unknown or unsupported. |
+| [ContractMigrationError](../entities/ContractMigrationError.md) | Class | 115 | `ContractError` | Raised when a legacy payload requests a rejected incomplete feature. |
+| [SecretReference](../entities/SecretReference.md) | Pydantic model | 144 | `BaseModel` | A named reference to a credential; never the credential itself. |
+| [ArtifactRef](../entities/ArtifactRef.md) | Pydantic model | 230 | `BaseModel` | An immutable artifact location bound by content digest. |
+| [CandidateIdentity](../entities/CandidateIdentity.md) | Pydantic model | 245 | `VersionedContract` | Immutable identity of a proposed candidate. |
+| [CandidateData](../entities/CandidateData.md) | Pydantic model | 269 | `BaseModel` | The mutable candidate payload — deliberately outside run contracts. |
+| [ScorerRef](../entities/ScorerRef.md) | Pydantic model | 289 | `BaseModel` | Identity of the scorer that produced an observation. |
+| [ObservationIdentity](../entities/ObservationIdentity.md) | Pydantic model | 304 | `VersionedContract` | Identity of one measured observation of a candidate. |
+| [ObjectiveDirection](../entities/ObjectiveDirection.md) | Type alias | 357 | `Literal['minimize', 'maximize']` | — |
+| [ObjectiveGoal](../entities/ObjectiveGoal.md) | Type alias | 358 | `Literal['optimize', 'satisfice']` | — |
+| [MetricConstraint](../entities/MetricConstraint.md) | Pydantic model | 361 | `BaseModel` | A guardrail threshold an eligible result must satisfy. |
+| [ObjectivePolicy](../entities/ObjectivePolicy.md) | Pydantic model | 372 | `VersionedContract` | What counts as better, and what must hold for a result to be eligible. |
+| [IntegrationDirection](../entities/IntegrationDirection.md) | Type alias | 414 | `Literal['managed', 'attached']` | — |
+| [CapabilityDescriptor](../entities/CapabilityDescriptor.md) | Pydantic model | 446 | `VersionedContract` | What a harness/driver can do — with explicit gaps, never silent ones. |
+| [IsolationBoundary](../entities/IsolationBoundary.md) | Pydantic model | 516 | `BaseModel` | Declared enforcement boundary for untrusted execution. |
+| [FailureRecord](../entities/FailureRecord.md) | Pydantic model | 571 | `BaseModel` | Structured failure detail for an attempt that produced no metrics. |
+| [ResultReceipt](../entities/ResultReceipt.md) | Pydantic model | 582 | `BaseModel` | Replay protection and ownership for a result envelope. |
+| [VerifiedResult](../entities/VerifiedResult.md) | Pydantic model | 604 | `VersionedContract` | An evaluator-owned measurement of one candidate in one context. |
+| [WorkspaceBounds](../entities/WorkspaceBounds.md) | Pydantic model | 671 | `BaseModel` | Where an attempt may write and what it may only read. |
+| [NetworkPolicy](../entities/NetworkPolicy.md) | Pydantic model | 680 | `BaseModel` | Network authority for one attempt; deny is the default posture. |
+| [ResourceLimits](../entities/ResourceLimits.md) | Pydantic model | 695 | `BaseModel` | OS-enforced resource ceilings for one attempt. |
+| [ExecutionRequest](../entities/execution_contracts_ExecutionRequest.md) | Pydantic model | 705 | `VersionedContract` | One approved attempt: what the experiment executor may execute. |
+| [SkillPackageRef](../entities/SkillPackageRef.md) | Pydantic model | 756 | `BaseModel` | The exact skill package a run executes. |
+| [HarnessConfig](../entities/HarnessConfig.md) | Pydantic model | 771 | `BaseModel` | Harness identity and effective configuration. |
+| [EnvironmentIdentity](../entities/EnvironmentIdentity.md) | Pydantic model | 786 | `BaseModel` | Pinned execution environment: image or dependency-lock digest. |
+| [BudgetDimensions](../entities/BudgetDimensions.md) | Pydantic model | 810 | `BaseModel` | Spend ceilings for a run; every dimension is explicit. |
+| [RunInputs](../entities/RunInputs.md) | Pydantic model | 821 | `BaseModel` | Pinned input identities: what the run evaluates against. |
+| [RunLineage](../entities/RunLineage.md) | Pydantic model | 844 | `BaseModel` | Continuation provenance: where this run came from and how to resume. |
+| [RunSpec](../entities/RunSpec.md) | Pydantic model | 854 | `VersionedContract` | The persisted, fully resolved run specification. |
+| [OperatorConstraints](../entities/OperatorConstraints.md) | Pydantic model | 958 | `BaseModel` | Authority bounds. Every resolved value falls inside these limits. |
+| [SkillDefaults](../entities/SkillDefaults.md) | Pydantic model | 985 | `BaseModel` | Defaults declared by the skill package (domain behavior). |
+| [HarnessPreferences](../entities/HarnessPreferences.md) | Pydantic model | 995 | `BaseModel` | Harness-level convenience defaults. Advisory only. |
+| [ResolutionRecord](../entities/ResolutionRecord.md) | Pydantic model | 1010 | `BaseModel` | Provenance of one resolved value — nothing resolves silently. |
+| [ResolvedRunInputs](../entities/ResolvedRunInputs.md) | Pydantic model | 1022 | `BaseModel` | Deterministically resolved inputs with per-field provenance. |
+| [LegacyFieldCompat](../entities/LegacyFieldCompat.md) | Pydantic model | 1163 | `BaseModel` | One legacy surface's disposition under the v1 contracts. |
+| [LegacyRunInputs](../entities/LegacyRunInputs.md) | Pydantic model | 1285 | `VersionedContract` | What a legacy payload migrates into: identity, parameters, budget. |
 
 ## Functions
 

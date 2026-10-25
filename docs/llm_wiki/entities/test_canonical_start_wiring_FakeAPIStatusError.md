@@ -1,6 +1,6 @@
 # _FakeAPIStatusError
 
-**Location:** `tests/test_canonical_start_wiring.py:35`
+**Location:** `tests/test_canonical_start_wiring.py:36`
 **Kind:** Class
 **Bases:** `Exception`
 **Module:** [test_canonical_start_wiring](../modules/test_canonical_start_wiring.md)

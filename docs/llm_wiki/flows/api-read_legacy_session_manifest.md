@@ -166,39 +166,39 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| read_legacy_session_manifest | payload.get (src/core/execution_contra…ad_legacy_session_manifest) | 1394 | `payload.get('schema_version')` |
-| read_legacy_session_manifest | ContractMigrationError | 1396 | `ContractMigrationError(..., issues=[...])` |
-| read_legacy_session_manifest | sorted (src/core/execution_contra…ad_legacy_session_manifest) | 1398 | `sorted(_LEGACY_SESSION_SCHEMA_VERSIONS)` |
-| read_legacy_session_manifest | _check_rejected_fields | 1401 | `_check_rejected_fields(payload)` |
-| _check_rejected_fields | payload.get (src/core/execution_contra….py:_check_rejected_fields) | 1326 | `payload.get(entry.legacy_field)` |
-| _check_rejected_fields | _is_requested | 1327 | `_is_requested(value)` |
-| _check_rejected_fields | issues.append | 1328 | `issues.append({...})` |
-| _check_rejected_fields | absent.append | 1339 | `absent.append(entry.legacy_field)` |
-| _check_rejected_fields | ContractMigrationError | 1341 | `ContractMigrationError(..., issues=issues)` |
-| _check_rejected_fields | sorted (src/core/execution_contra….py:_check_rejected_fields) | 1343 | `sorted(...)` |
-| read_legacy_session_manifest | _require_identity | 1402 | `_require_identity(payload)` |
+| read_legacy_session_manifest | payload.get (src/core/execution_contra…ad_legacy_session_manifest) | 1396 | `payload.get('schema_version')` |
+| read_legacy_session_manifest | ContractMigrationError | 1398 | `ContractMigrationError(..., issues=[...])` |
+| read_legacy_session_manifest | sorted (src/core/execution_contra…ad_legacy_session_manifest) | 1400 | `sorted(_LEGACY_SESSION_SCHEMA_VERSIONS)` |
+| read_legacy_session_manifest | _check_rejected_fields | 1403 | `_check_rejected_fields(payload)` |
+| _check_rejected_fields | payload.get (src/core/execution_contra….py:_check_rejected_fields) | 1328 | `payload.get(entry.legacy_field)` |
+| _check_rejected_fields | _is_requested | 1329 | `_is_requested(value)` |
+| _check_rejected_fields | issues.append | 1330 | `issues.append({...})` |
+| _check_rejected_fields | absent.append | 1341 | `absent.append(entry.legacy_field)` |
+| _check_rejected_fields | ContractMigrationError | 1343 | `ContractMigrationError(..., issues=issues)` |
+| _check_rejected_fields | sorted (src/core/execution_contra….py:_check_rejected_fields) | 1345 | `sorted(...)` |
+| read_legacy_session_manifest | _require_identity | 1404 | `_require_identity(payload)` |
 
 ### Boundary effects
 
 | Kind | Target | Step | Line |
 |---|---|---|---:|
-| mutation | `consumed.extend` | `read_legacy_session_manifest` | 1421 |
-| mutation | `consumed.append` | `read_legacy_session_manifest` | 1426 |
-| mutation | `consumed.append` | `read_legacy_session_manifest` | 1430 |
-| mutation | `consumed.append` | `read_legacy_session_manifest` | 1433 |
-| mutation | `issues.append` | `_check_rejected_fields` | 1328 |
-| mutation | `absent.append` | `_check_rejected_fields` | 1339 |
-| mutation | `consumed.append` | `_require_identity` | 1354 |
-| mutation | `consumed.append` | `_require_identity` | 1357 |
+| mutation | `consumed.extend` | `read_legacy_session_manifest` | 1423 |
+| mutation | `consumed.append` | `read_legacy_session_manifest` | 1428 |
+| mutation | `consumed.append` | `read_legacy_session_manifest` | 1432 |
+| mutation | `consumed.append` | `read_legacy_session_manifest` | 1435 |
+| mutation | `issues.append` | `_check_rejected_fields` | 1330 |
+| mutation | `absent.append` | `_check_rejected_fields` | 1341 |
+| mutation | `consumed.append` | `_require_identity` | 1356 |
+| mutation | `consumed.append` | `_require_identity` | 1359 |
 
 ### Static analysis gaps
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `read_legacy_session_manifest` | `payload.get` | 1394 |
-| external_call | `read_legacy_session_manifest` | `sorted` | 1398 |
-| unresolved_call | `_check_rejected_fields` | `payload.get` | 1326 |
-| external_call | `_check_rejected_fields` | `sorted` | 1343 |
+| unresolved_call | `read_legacy_session_manifest` | `payload.get` | 1396 |
+| external_call | `read_legacy_session_manifest` | `sorted` | 1400 |
+| unresolved_call | `_check_rejected_fields` | `payload.get` | 1328 |
+| external_call | `_check_rejected_fields` | `sorted` | 1345 |
 | step_limit | `read_legacy_session_manifest` | `first 12 steps` | 0 |
 
 ## Behavior

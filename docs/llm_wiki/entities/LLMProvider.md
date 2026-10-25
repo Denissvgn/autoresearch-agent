@@ -1,6 +1,6 @@
 # LLMProvider
 
-**Location:** `src/core/llm_provider.py:283`
+**Location:** `src/core/llm_provider.py:307`
 **Kind:** Class
 **Bases:** `Protocol`
 **Module:** [llm_provider](../modules/llm_provider.md)
@@ -27,6 +27,7 @@ accept any ``LLMProvider`` and owns retry/backoff via ``classify_error``.
 | `complete` | *(async)* `(*, model: str, prompt: str, max_tokens: int, system: str \| None = None) -> str` | — | One-shot text completion (insights / Haiku path). |
 | `stream` | *(async)* `(**kwargs: Any) -> AsyncIterator[StreamDelta]` | — | Token streaming (OPTIONAL in v1; D-stream). |
 | `estimate_cost` | `(model: str, usage: Usage) -> float` | — | Per-provider, per-model USD cost for a call (→ P1-003). |
+| `price_quote` | `(model: str, usage: Usage) -> CostEstimate` | — | Basis-snapshotted cost knowledge for a call. |
 | `capabilities` | `() -> ProviderCapabilities` | — | Static capability advertisement (→ P4-009 / router P4-010). |
 | `classify_error` | `(exc: Exception) -> ErrorClass` | — | Classify an exception for loop-owned retry (→ R4 / D-retry). |
 
@@ -38,7 +39,7 @@ flowchart LR
     n0["LLMProvider (src/core/llm_provider.py)"]
     n1["Protocol"]
     n2["build_provider (src/core/llm_provider.py)"]
-    n3["src/core/orchestrator.py"]
+    n3["AgentOrchestrator._record_usage (src/core/orchestrator.py)"]
     n4["tests/test_llm_provider.py"]
     n0 --> n1
     n2 --> n0
@@ -54,7 +55,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [llm_provider](../modules/llm_provider.md) | 6 | `name` |
+| [llm_provider](../modules/llm_provider.md) | 7 | `name` |
 
 ### Structure
 
@@ -67,5 +68,5 @@ flowchart LR
 | Reference | Kind | Source | Call sites |
 |---|---|---|---:|
 | `build_provider` | type_reference | [llm_provider](../modules/llm_provider.md) | — |
-| `orchestrator` | import | [orchestrator](../modules/orchestrator.md) | — |
+| `AgentOrchestrator._record_usage` | type_reference | [orchestrator](../modules/orchestrator.md) | — |
 | `test_llm_provider` | import | [test_llm_provider](../modules/test_llm_provider.md) | — |

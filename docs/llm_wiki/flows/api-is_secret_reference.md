@@ -48,8 +48,8 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| is_secret_reference | isinstance | 182 | `isinstance(value, str)` |
-| is_secret_reference | value.startswith | 182 | `value.startswith(SECRET_WIRE_PREFIX)` |
+| is_secret_reference | isinstance | 184 | `isinstance(value, str)` |
+| is_secret_reference | value.startswith | 184 | `value.startswith(SECRET_WIRE_PREFIX)` |
 
 ### Boundary effects
 
@@ -59,8 +59,8 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| external_call | `is_secret_reference` | `isinstance` | 182 |
-| unresolved_call | `is_secret_reference` | `value.startswith` | 182 |
+| external_call | `is_secret_reference` | `isinstance` | 184 |
+| unresolved_call | `is_secret_reference` | `value.startswith` | 184 |
 
 ## Behavior
 

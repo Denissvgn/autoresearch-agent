@@ -39,6 +39,7 @@ flowchart LR
     n0["src"]
     n1["src/core/results_store.py"]
     n2["tests"]
+    n0 --> n1
     n1 --> n0
     n2 --> n1
     click n1 "../modules/results_store.md"
@@ -50,7 +51,8 @@ flowchart LR
 
 | Direction | Module |
 |---|---|
-| Inbound | `tests` (44) |
+| Inbound | `src` (1) |
+| Inbound | `tests` (53) |
 | Outbound | `src` (1) |
 
-> All 45 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 55 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.

@@ -64,11 +64,11 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| ensure_capabilities_allowed | ContractError | 505 | `ContractError(...)` |
-| ensure_capabilities_allowed | sorted | 505 | `sorted(unknown)` |
-| ensure_capabilities_allowed | set | 506 | `set(descriptor.capabilities)` |
-| ensure_capabilities_allowed | UnsupportedCapabilityError | 508 | `UnsupportedCapabilityError(...)` |
-| ensure_capabilities_allowed | sorted | 510 | `sorted(excess)` |
+| ensure_capabilities_allowed | ContractError | 507 | `ContractError(...)` |
+| ensure_capabilities_allowed | sorted | 507 | `sorted(unknown)` |
+| ensure_capabilities_allowed | set | 508 | `set(descriptor.capabilities)` |
+| ensure_capabilities_allowed | UnsupportedCapabilityError | 510 | `UnsupportedCapabilityError(...)` |
+| ensure_capabilities_allowed | sorted | 512 | `sorted(excess)` |
 
 ### Boundary effects
 
@@ -78,8 +78,8 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| external_call | `ensure_capabilities_allowed` | `sorted` | 505 |
-| external_call | `ensure_capabilities_allowed` | `sorted` | 510 |
+| external_call | `ensure_capabilities_allowed` | `sorted` | 507 |
+| external_call | `ensure_capabilities_allowed` | `sorted` | 512 |
 
 ## Behavior
 

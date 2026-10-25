@@ -1,6 +1,6 @@
 # BudgetDimensions
 
-**Location:** `src/core/execution_contracts.py:808`
+**Location:** `src/core/execution_contracts.py:810`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

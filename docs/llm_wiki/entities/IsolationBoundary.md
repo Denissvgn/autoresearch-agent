@@ -1,6 +1,6 @@
 # IsolationBoundary
 
-**Location:** `src/core/execution_contracts.py:514`
+**Location:** `src/core/execution_contracts.py:516`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

@@ -146,37 +146,37 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| main | argparse.ArgumentParser | 129 | `argparse.ArgumentParser(description='Score a candidate prompt', allow_abbrev=False)` |
-| main | parser.add_argument | 130 | `parser.add_argument('--prompt', required=True, help='Path to the prompt file')` |
-| main | parser.add_argument | 131 | `parser.add_argument('--eval', required=True, help='Path to the eval set (JSONL)')` |
-| main | parser.add_argument | 132 | `parser.add_argument('--scorer-url', default=None, help='External scorer endpoint')` |
-| main | parser.add_argument | 133 | `parser.add_argument('--demo', choices=(...), default='false', help='Server-controlled synthetic demo scoring (default false)')` |
-| main | parser.parse_args | 135 | `parser.parse_args(data not statically known)` |
-| main | open | 139 | `open(args.prompt, encoding='utf-8')` |
-| main | f.read | 140 | `f.read(data not statically known)` |
-| main | _emit | 142 | `_emit(**=_error(...))` |
-| _emit | os.environ.get | 159 | `os.environ.get('AUTORESEARCH_SESSION_NONCE', '')` |
-| _emit | dict | 160 | `dict(fields)` |
+| main | argparse.ArgumentParser | 135 | `argparse.ArgumentParser(description='Score a candidate prompt', allow_abbrev=False)` |
+| main | parser.add_argument | 136 | `parser.add_argument('--prompt', required=True, help='Path to the prompt file')` |
+| main | parser.add_argument | 137 | `parser.add_argument('--eval', required=True, help='Path to the eval set (JSONL)')` |
+| main | parser.add_argument | 138 | `parser.add_argument('--scorer-url', default=None, help='External scorer endpoint')` |
+| main | parser.add_argument | 139 | `parser.add_argument('--demo', choices=(...), default='false', help='Server-controlled synthetic demo scoring (default false)')` |
+| main | parser.parse_args | 141 | `parser.parse_args(data not statically known)` |
+| main | open | 145 | `open(args.prompt, encoding='utf-8')` |
+| main | f.read | 146 | `f.read(data not statically known)` |
+| main | _emit | 148 | `_emit(**=_error(...))` |
+| _emit | os.environ.get | 165 | `os.environ.get('AUTORESEARCH_SESSION_NONCE', '')` |
+| _emit | dict | 166 | `dict(fields)` |
 
 ### Boundary effects
 
 | Kind | Target | Step | Line |
 |---|---|---|---:|
-| filesystem_read | `open` | `main` | 139 |
-| environment_read | `os.environ.get` | `_emit` | 159 |
-| output | `print` | `_emit` | 167 |
+| filesystem_read | `open` | `main` | 145 |
+| environment_read | `os.environ.get` | `_emit` | 165 |
+| output | `print` | `_emit` | 173 |
 
 ### Static analysis gaps
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| external_call | `main` | `argparse.ArgumentParser` | 129 |
-| unresolved_call | `main` | `parser.add_argument` | 130 |
-| unresolved_call | `main` | `parser.add_argument` | 131 |
-| unresolved_call | `main` | `parser.add_argument` | 132 |
-| unresolved_call | `main` | `parser.add_argument` | 133 |
-| unresolved_call | `main` | `parser.parse_args` | 135 |
-| unresolved_call | `main` | `f.read` | 140 |
+| external_call | `main` | `argparse.ArgumentParser` | 135 |
+| unresolved_call | `main` | `parser.add_argument` | 136 |
+| unresolved_call | `main` | `parser.add_argument` | 137 |
+| unresolved_call | `main` | `parser.add_argument` | 138 |
+| unresolved_call | `main` | `parser.add_argument` | 139 |
+| unresolved_call | `main` | `parser.parse_args` | 141 |
+| unresolved_call | `main` | `f.read` | 146 |
 | step_limit | `main` | `first 12 steps` | 0 |
 
 ## Behavior

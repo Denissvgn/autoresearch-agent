@@ -50,8 +50,8 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| preflight_check_from_target | TCPConnectCheck | 147 | `TCPConnectCheck(target, timeout_s=timeout_s)` |
-| preflight_check_from_target | HTTPHealthCheck | 148 | `HTTPHealthCheck(target)` |
+| preflight_check_from_target | TCPConnectCheck | 182 | `TCPConnectCheck(target, timeout_s=timeout_s)` |
+| preflight_check_from_target | HTTPHealthCheck | 183 | `HTTPHealthCheck(target)` |
 
 ### Boundary effects
 

@@ -84,30 +84,30 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| get_skill_changelog | _get_or_404 | 369 | `_get_or_404(skill_id)` |
-| _get_or_404 | _registry.get | 181 | `_registry.get(skill_id)` |
-| _get_or_404 | HTTPException (src/api/skills.py:_get_or_404) | 183 | `HTTPException(status_code=404, detail={...})` |
-| get_skill_changelog | _skill_dir | 370 | `_skill_dir(skill_id)` |
-| get_skill_changelog | changelog_path.is_file | 371 | `changelog_path.is_file(data not statically known)` |
-| get_skill_changelog | changelog_path.stat | 373 | `changelog_path.stat(data not statically known)` |
-| get_skill_changelog | HTTPException (src/api/skills.py:get_skill_changelog) | 375 | `HTTPException(status_code=413, detail={...})` |
-| get_skill_changelog | changelog_path.read_text | 389 | `changelog_path.read_text(encoding='utf-8')` |
+| get_skill_changelog | _get_or_404 | 400 | `_get_or_404(skill_id)` |
+| _get_or_404 | _registry.get | 188 | `_registry.get(skill_id)` |
+| _get_or_404 | HTTPException (src/api/skills.py:_get_or_404) | 190 | `HTTPException(status_code=404, detail={...})` |
+| get_skill_changelog | _skill_dir | 401 | `_skill_dir(skill_id)` |
+| get_skill_changelog | changelog_path.is_file | 402 | `changelog_path.is_file(data not statically known)` |
+| get_skill_changelog | changelog_path.stat | 404 | `changelog_path.stat(data not statically known)` |
+| get_skill_changelog | HTTPException (src/api/skills.py:get_skill_changelog) | 406 | `HTTPException(status_code=413, detail={...})` |
+| get_skill_changelog | changelog_path.read_text | 420 | `changelog_path.read_text(encoding='utf-8')` |
 
 ### Boundary effects
 
 | Kind | Target | Step | Line |
 |---|---|---|---:|
-| filesystem_read | `changelog_path.read_text` | `get_skill_changelog` | 389 |
+| filesystem_read | `changelog_path.read_text` | `get_skill_changelog` | 420 |
 
 ### Static analysis gaps
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `_get_or_404` | `_registry.get` | 181 |
-| external_call | `_get_or_404` | `HTTPException` | 183 |
-| unresolved_call | `get_skill_changelog` | `changelog_path.is_file` | 371 |
-| unresolved_call | `get_skill_changelog` | `changelog_path.stat` | 373 |
-| external_call | `get_skill_changelog` | `HTTPException` | 375 |
+| unresolved_call | `_get_or_404` | `_registry.get` | 188 |
+| external_call | `_get_or_404` | `HTTPException` | 190 |
+| unresolved_call | `get_skill_changelog` | `changelog_path.is_file` | 402 |
+| unresolved_call | `get_skill_changelog` | `changelog_path.stat` | 404 |
+| external_call | `get_skill_changelog` | `HTTPException` | 406 |
 
 ## Behavior
 

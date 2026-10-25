@@ -24,7 +24,8 @@ Pins (development_gate_bundle.evaluate_development_gate_bundle):
 | `os` | `os` |
 | `src.core.development_gate_bundle` | `evaluate_development_gate_bundle` |
 | `sys` | `sys` |
-| `types` | `types` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `cast` |
 
 ## Local dependency map
 

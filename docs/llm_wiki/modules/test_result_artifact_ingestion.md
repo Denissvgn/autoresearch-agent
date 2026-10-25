@@ -26,8 +26,8 @@ _Auto-generated from `tests/test_result_artifact_ingestion.py`._
 | `src.core.result_artifact` | `merge_result_payload`, `merge_result_payload` |
 | `src.core.results_store` | `ResultsStore` |
 | `sys` | `sys` |
-| `types` | `types` |
-| `typing` | `Any`, `Dict` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `Any`, `Dict`, `cast` |
 
 ## Local dependency map
 
@@ -42,7 +42,8 @@ flowchart LR
     n5["src/core/results_store.py"]
     n6["tests/test_result_artifact_ingestion.py"]
     n0 --> n1
-    n3 --> n2
+    n3 --> n0
+    n3 --> n1
     n3 --> n4
     n6 --> n0
     n6 --> n1

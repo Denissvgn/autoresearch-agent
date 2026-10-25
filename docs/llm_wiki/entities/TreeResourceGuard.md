@@ -35,22 +35,19 @@ attributed violation kind.
 ```mermaid
 flowchart LR
     n0["TreeResourceGuard (src/core/process_limits.py)"]
-    n1["_collect_process_output (src/core/command_runner.py)"]
-    n2["GovernedCommandRunner.run (src/core/command_runner.py)"]
-    n3["PluginRunner._run_sync_inner (src/core/plugin_runner.py)"]
-    n4["bounded_drain (src/core/process_limits.py)"]
-    n5["_guarded_run (tests/test_process_limits.py)"]
+    n1["GovernedCommandRunner.run (src/core/command_runner.py)"]
+    n2["PluginRunner._run_sync_inner (src/core/plugin_runner.py)"]
+    n3["bounded_drain (src/core/process_limits.py)"]
+    n4["_guarded_run (tests/test_process_limits.py)"]
     n1 --> n0
     n2 --> n0
     n3 --> n0
     n4 --> n0
-    n5 --> n0
     click n0 "../modules/process_limits.md"
     click n1 "../modules/command_runner.md"
-    click n2 "../modules/command_runner.md"
-    click n3 "../modules/plugin_runner.md"
-    click n4 "../modules/process_limits.md"
-    click n5 "../modules/test_process_limits.md"
+    click n2 "../modules/plugin_runner.md"
+    click n3 "../modules/process_limits.md"
+    click n4 "../modules/test_process_limits.md"
 ```
 
 ### Summary
@@ -63,7 +60,6 @@ flowchart LR
 
 | Reference | Kind | Source | Call sites |
 |---|---|---|---:|
-| `_collect_process_output` | type_reference | [command_runner](../modules/command_runner.md) | — |
 | `GovernedCommandRunner.run` | call | [command_runner](../modules/command_runner.md) | 1 |
 | `PluginRunner._run_sync_inner` | call | [plugin_runner](../modules/plugin_runner.md) | 1 |
 | `bounded_drain` | type_reference | [process_limits](../modules/process_limits.md) | — |

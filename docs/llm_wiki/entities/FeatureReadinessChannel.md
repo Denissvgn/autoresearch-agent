@@ -1,6 +1,6 @@
 # FeatureReadinessChannel
 
-**Location:** `ui/src/api/client.ts:393`
+**Location:** `ui/src/api/client.ts:394`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

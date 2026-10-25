@@ -1,6 +1,6 @@
 # PolicyFinding
 
-**Location:** `ui/src/api/client.ts:474`
+**Location:** `ui/src/api/client.ts:475`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

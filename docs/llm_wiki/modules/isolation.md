@@ -60,16 +60,22 @@ flowchart LR
     n0["src/core/command_runner.py"]
     n1["src/core/isolation.py"]
     n2["src/core/plugin_runner.py"]
-    n3["tests/test_execution_isolation.py"]
+    n3["tests/test_cli.py"]
+    n4["tests/test_execution_isolation.py"]
+    n5["tests/test_non_ml_session_e2e.py"]
     n0 --> n1
     n2 --> n1
-    n3 --> n0
     n3 --> n1
-    n3 --> n2
+    n4 --> n0
+    n4 --> n1
+    n4 --> n2
+    n5 --> n1
     click n0 "../modules/command_runner.md"
     click n1 "../modules/isolation.md"
     click n2 "../modules/plugin_runner.md"
-    click n3 "../modules/test_execution_isolation.md"
+    click n3 "../modules/test_cli.md"
+    click n4 "../modules/test_execution_isolation.md"
+    click n5 "../modules/test_non_ml_session_e2e.md"
 ```
 
 ### Internal neighbors
@@ -78,7 +84,9 @@ flowchart LR
 |---|---|
 | Inbound | [command_runner](../modules/command_runner.md) |
 | Inbound | [plugin_runner](../modules/plugin_runner.md) |
+| Inbound | [test_cli](../modules/test_cli.md) |
 | Inbound | [test_execution_isolation](../modules/test_execution_isolation.md) |
+| Inbound | [test_non_ml_session_e2e](../modules/test_non_ml_session_e2e.md) |
 
 ## Classes
 

@@ -33,6 +33,7 @@ executable bindings are rejected with migration diagnostics.
 | `src.core.tool_access` | `build_tool_access_context` |
 | `subprocess` | `subprocess` |
 | `sys` | `sys` |
+| `unittest.mock` | `MagicMock` |
 | `yaml` | `yaml` |
 
 ## Local dependency map

@@ -142,34 +142,34 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| resolve_run_inputs | dict | 1073 | `dict(...)` |
-| resolve_run_inputs | SkillDefaults | 1074 | `SkillDefaults(data not statically known)` |
-| resolve_run_inputs | HarnessPreferences | 1075 | `HarnessPreferences(data not statically known)` |
-| resolve_run_inputs | dict | 1076 | `dict(...)` |
-| resolve_run_inputs | reject_raw_secret_parameters | 1078 | `reject_raw_secret_parameters(explicit, 'explicit inputs')` |
-| reject_raw_secret_parameters | parameters.items | 187 | `parameters.items(data not statically known)` |
-| reject_raw_secret_parameters | _SECRET_PARAM_KEY_RE.search | 188 | `_SECRET_PARAM_KEY_RE.search(key)` |
-| reject_raw_secret_parameters | is_secret_reference | 188 | `is_secret_reference(value)` |
-| is_secret_reference | isinstance | 182 | `isinstance(value, str)` |
-| is_secret_reference | value.startswith | 182 | `value.startswith(SECRET_WIRE_PREFIX)` |
-| reject_raw_secret_parameters | ContractError | 189 | `ContractError(...)` |
+| resolve_run_inputs | dict | 1075 | `dict(...)` |
+| resolve_run_inputs | SkillDefaults | 1076 | `SkillDefaults(data not statically known)` |
+| resolve_run_inputs | HarnessPreferences | 1077 | `HarnessPreferences(data not statically known)` |
+| resolve_run_inputs | dict | 1078 | `dict(...)` |
+| resolve_run_inputs | reject_raw_secret_parameters | 1080 | `reject_raw_secret_parameters(explicit, 'explicit inputs')` |
+| reject_raw_secret_parameters | parameters.items | 189 | `parameters.items(data not statically known)` |
+| reject_raw_secret_parameters | _SECRET_PARAM_KEY_RE.search | 190 | `_SECRET_PARAM_KEY_RE.search(key)` |
+| reject_raw_secret_parameters | is_secret_reference | 190 | `is_secret_reference(value)` |
+| is_secret_reference | isinstance | 184 | `isinstance(value, str)` |
+| is_secret_reference | value.startswith | 184 | `value.startswith(SECRET_WIRE_PREFIX)` |
+| reject_raw_secret_parameters | ContractError | 191 | `ContractError(...)` |
 
 ### Boundary effects
 
 | Kind | Target | Step | Line |
 |---|---|---|---:|
-| mutation | `records.append` | `resolve_run_inputs` | 1103 |
-| mutation | `records.append` | `resolve_run_inputs` | 1126 |
-| mutation | `records.append` | `resolve_run_inputs` | 1142 |
+| mutation | `records.append` | `resolve_run_inputs` | 1105 |
+| mutation | `records.append` | `resolve_run_inputs` | 1128 |
+| mutation | `records.append` | `resolve_run_inputs` | 1144 |
 
 ### Static analysis gaps
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `reject_raw_secret_parameters` | `parameters.items` | 187 |
-| unresolved_call | `reject_raw_secret_parameters` | `_SECRET_PARAM_KEY_RE.search` | 188 |
-| external_call | `is_secret_reference` | `isinstance` | 182 |
-| unresolved_call | `is_secret_reference` | `value.startswith` | 182 |
+| unresolved_call | `reject_raw_secret_parameters` | `parameters.items` | 189 |
+| unresolved_call | `reject_raw_secret_parameters` | `_SECRET_PARAM_KEY_RE.search` | 190 |
+| external_call | `is_secret_reference` | `isinstance` | 184 |
+| unresolved_call | `is_secret_reference` | `value.startswith` | 184 |
 | step_limit | `resolve_run_inputs` | `first 12 steps` | 0 |
 
 ## Behavior

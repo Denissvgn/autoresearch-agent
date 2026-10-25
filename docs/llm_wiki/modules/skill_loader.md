@@ -71,8 +71,8 @@ flowchart LR
 
 | Direction | Module |
 |---|---|
-| Inbound | `src` (4) |
-| Inbound | `tests` (11) |
+| Inbound | `src` (5) |
+| Inbound | `tests` (12) |
 | Outbound | `src` (2) |
 
 ### External packages
@@ -81,13 +81,13 @@ flowchart LR
 |---|---:|---:|
 | python | 2 | 0 |
 
-> All 17 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 19 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [SkillLayout](../entities/SkillLayout.md) | 96 | `BaseModel` | Resolved on-disk layout of a skill package (ARC-011 §5.3, P5-001). |
+| [SkillLayout](../entities/SkillLayout.md) | 99 | `BaseModel` | Resolved on-disk layout of a skill package (ARC-011 §5.3, P5-001). |
 
 ## Functions
 

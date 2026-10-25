@@ -17,10 +17,10 @@ Mirrors ``test_anthropic_provider.py`` (P1-002) in structure.
 | `json` | `json` |
 | `openai` | `openai` |
 | `pytest` | `pytest` |
-| `src.core.llm_provider` | `Message`, `OpenAIProvider`, `ProviderCapabilities`, `StopReason`, `TextBlock`, `ToolDef`, `ToolResultBlock`, `ToolUseBlock`, `Usage`, `_from_openai_response`, `_to_openai_messages`, `_to_openai_tools` |
+| `src.core.llm_provider` | `Message`, `OpenAIProvider`, `ProviderCapabilities`, `StopReason`, `TextBlock`, `ToolDef`, `ToolResultBlock`, `ToolUseBlock`, `Usage`, `_from_openai_response`, `_to_openai_messages`, `_to_openai_tools`, `build_provider`, `build_provider`, `Usage`, `build_provider`, `RequiredCapabilities`, `build_provider`, `ProviderCapabilityMismatch`, `RequiredCapabilities`, `build_provider`, `ProviderCapabilityMismatch`, `RequiredCapabilities`, `ProviderCapabilityMismatch`, `RequiredCapabilities`, `build_provider`, `RequiredCapabilities` |
 | `sys` | `sys` |
-| `types` | `types` |
-| `typing` | `Any` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `Any`, `cast` |
 | `unittest.mock` | `AsyncMock`, `MagicMock` |
 
 ## Local dependency map
@@ -51,16 +51,16 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [TestToOpenAIMessages](../entities/TestToOpenAIMessages.md) | 89 | — | — |
-| [TestToOpenAITools](../entities/TestToOpenAITools.md) | 125 | — | — |
-| [TestFromOpenAIResponse](../entities/TestFromOpenAIResponse.md) | 134 | — | — |
-| [TestMessagesCreate](../entities/TestMessagesCreate.md) | 167 | — | — |
-| [TestComplete](../entities/TestComplete.md) | 188 | — | — |
-| [TestClassifyError](../entities/TestClassifyError.md) | 200 | — | — |
-| [TestEstimateCost](../entities/TestEstimateCost.md) | 222 | — | — |
-| [TestCapabilities](../entities/TestCapabilities.md) | 236 | — | — |
-| [TestBuildProvider](../entities/TestBuildProvider.md) | 245 | — | — |
-| [TestCapabilityMatching](../entities/TestCapabilityMatching.md) | 268 | — | P4-009: ``build_provider(required_capabilities=...)`` validates the |
+| [TestToOpenAIMessages](../entities/TestToOpenAIMessages.md) | 90 | — | — |
+| [TestToOpenAITools](../entities/TestToOpenAITools.md) | 126 | — | — |
+| [TestFromOpenAIResponse](../entities/TestFromOpenAIResponse.md) | 135 | — | — |
+| [TestMessagesCreate](../entities/TestMessagesCreate.md) | 168 | — | — |
+| [TestComplete](../entities/TestComplete.md) | 189 | — | — |
+| [TestClassifyError](../entities/TestClassifyError.md) | 201 | — | — |
+| [TestEstimateCost](../entities/TestEstimateCost.md) | 223 | — | — |
+| [TestCapabilities](../entities/TestCapabilities.md) | 237 | — | — |
+| [TestBuildProvider](../entities/TestBuildProvider.md) | 246 | — | — |
+| [TestCapabilityMatching](../entities/TestCapabilityMatching.md) | 308 | — | P4-009: ``build_provider(required_capabilities=...)`` validates the |
 
 ## Functions
 

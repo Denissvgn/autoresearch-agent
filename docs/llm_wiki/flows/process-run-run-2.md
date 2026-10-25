@@ -145,38 +145,38 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| main | argparse.ArgumentParser | 10 | `argparse.ArgumentParser(data not statically known)` |
-| main | ap.add_argument | 11 | `ap.add_argument('--config', required=True)` |
-| main | ap.add_argument | 12 | `ap.add_argument('--target-latency-ms', type=float, default=10.0)` |
-| main | ap.add_argument | 13 | `ap.add_argument('--bench-duration-s', type=int, default=60)` |
-| main | ap.add_argument | 14 | `ap.add_argument('--baseline-tps', type=float, default=0.0)` |
-| main | ap.parse_args | 15 | `ap.parse_args(data not statically known)` |
-| main | yaml.safe_load | 18 | `yaml.safe_load(open(...))` |
-| main | open | 18 | `open(a.config, encoding='utf-8')` |
-| main | json.load | 21 | `json.load(open(...))` |
-| main | open | 21 | `open(a.config, encoding='utf-8')` |
-| main | _emit | 23 | `_emit(status='bench_failed', error=str(...))` |
+| main | argparse.ArgumentParser | 19 | `argparse.ArgumentParser(data not statically known)` |
+| main | ap.add_argument | 20 | `ap.add_argument('--config', required=True)` |
+| main | ap.add_argument | 21 | `ap.add_argument('--target-latency-ms', type=float, default=10.0)` |
+| main | ap.add_argument | 22 | `ap.add_argument('--bench-duration-s', type=int, default=60)` |
+| main | ap.add_argument | 23 | `ap.add_argument('--baseline-tps', type=float, default=0.0)` |
+| main | ap.parse_args | 24 | `ap.parse_args(data not statically known)` |
+| main | yaml.safe_load | 27 | `yaml.safe_load(open(...))` |
+| main | open | 27 | `open(a.config, encoding='utf-8')` |
+| main | json.load | 30 | `json.load(open(...))` |
+| main | open | 30 | `open(a.config, encoding='utf-8')` |
+| main | _emit | 32 | `_emit(status='bench_failed', error=str(...))` |
 
 ### Boundary effects
 
 | Kind | Target | Step | Line |
 |---|---|---|---:|
-| filesystem_read | `open` | `main` | 18 |
-| filesystem_read | `json.load` | `main` | 21 |
-| filesystem_read | `open` | `main` | 21 |
-| environment_read | `os.environ.get` | `_emit` | 6 |
-| output | `print` | `_emit` | 8 |
+| filesystem_read | `open` | `main` | 27 |
+| filesystem_read | `json.load` | `main` | 30 |
+| filesystem_read | `open` | `main` | 30 |
+| environment_read | `os.environ.get` | `_emit` | 13 |
+| output | `print` | `_emit` | 17 |
 
 ### Static analysis gaps
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| external_call | `main` | `argparse.ArgumentParser` | 10 |
-| unresolved_call | `main` | `ap.add_argument` | 11 |
-| unresolved_call | `main` | `ap.add_argument` | 12 |
-| unresolved_call | `main` | `ap.add_argument` | 13 |
-| unresolved_call | `main` | `ap.add_argument` | 14 |
-| unresolved_call | `main` | `ap.parse_args` | 15 |
+| external_call | `main` | `argparse.ArgumentParser` | 19 |
+| unresolved_call | `main` | `ap.add_argument` | 20 |
+| unresolved_call | `main` | `ap.add_argument` | 21 |
+| unresolved_call | `main` | `ap.add_argument` | 22 |
+| unresolved_call | `main` | `ap.add_argument` | 23 |
+| unresolved_call | `main` | `ap.parse_args` | 24 |
 | step_limit | `main` | `first 12 steps` | 0 |
 
 ## Behavior

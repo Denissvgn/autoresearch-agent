@@ -59,10 +59,10 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| get_skill_param_schema | _get_or_404 | 226 | `_get_or_404(skill_id)` |
-| _get_or_404 | _registry.get | 181 | `_registry.get(skill_id)` |
-| _get_or_404 | HTTPException | 183 | `HTTPException(status_code=404, detail={...})` |
-| get_skill_param_schema | manifest.param_schema.model_dump | 227 | `manifest.param_schema.model_dump(exclude_none=True, mode='json')` |
+| get_skill_param_schema | _get_or_404 | 233 | `_get_or_404(skill_id)` |
+| _get_or_404 | _registry.get | 188 | `_registry.get(skill_id)` |
+| _get_or_404 | HTTPException | 190 | `HTTPException(status_code=404, detail={...})` |
+| get_skill_param_schema | manifest.param_schema.model_dump | 234 | `manifest.param_schema.model_dump(exclude_none=True, mode='json')` |
 
 ### Boundary effects
 
@@ -72,9 +72,9 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `_get_or_404` | `_registry.get` | 181 |
-| external_call | `_get_or_404` | `HTTPException` | 183 |
-| unresolved_call | `get_skill_param_schema` | `manifest.param_schema.model_dump` | 227 |
+| unresolved_call | `_get_or_404` | `_registry.get` | 188 |
+| external_call | `_get_or_404` | `HTTPException` | 190 |
+| unresolved_call | `get_skill_param_schema` | `manifest.param_schema.model_dump` | 234 |
 
 ## Behavior
 

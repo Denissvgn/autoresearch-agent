@@ -1,6 +1,6 @@
 # SkillRuntime
 
-**Location:** `src/core/skill_runtime.py:195`
+**Location:** `src/core/skill_runtime.py:211`
 **Kind:** Class
 **Bases:** `Protocol`
 **Module:** [skill_runtime](../modules/skill_runtime.md)
@@ -35,13 +35,15 @@ branches.
 | `experiment_command` | `(config: 'ResearchConfig') -> str` | — | Session-resolved suggested experiment command. |
 | `demo_experiment_command` | `(config: 'ResearchConfig') -> str` | — | The command the demo provider (MockProvider) executes verbatim in |
 | `iteration_marker_prefix` | `() -> str` | — | The ``output_parser.iteration_marker`` prefix (default |
+| `result_spec` | `() -> Any` | — | The declared result semantics (from ``output_parser``). |
+| `parse_result` | `(raw_output: str) -> Optional[Any]` | — | Parse and normalize in the declared format (one contract). |
 | `parse_iteration` | `(raw_output: str, *, session_nonce: Optional[bytes] = None, config_snapshot: Optional[str] = None) -> Optional[dict[str, Any]]` | — | Parse experiment output into a structured result. |
 | `marker_file_paths` | `(config: 'ResearchConfig') -> list[Path]` | — | Fallback iteration sources (``last_metrics.txt``, ``results.json``). |
 | `phase_plan` | `() -> list[Phase]` | — | — |
 | `phase_advancement_rule` | `(phase_id: str) -> AdvancementRule` | — | — |
 | `blocker_classification` | `() -> dict[str, Any]` | — | G3: per-skill blocker-classification overrides (ARC-011 review |
 | `trial_identity` | `(config: 'ResearchConfig', *, command: str, config_snapshot: Optional[str] = None, planned_trial: Optional[dict] = None) -> dict` | — | — |
-| `preflight_checks` | `() -> list['PreflightCheck']` | — | — |
+| `preflight_checks` | `(*, stage: str = 'source') -> list['PreflightCheck']` | — | — |
 | `execution_concurrency` | `() -> int` | — | Max independent trial commands the loop may run in parallel. |
 | `promotion_target` | `() -> 'PromotionTarget'` | — | — |
 | `output_parser` | `() -> 'OutputParser'` | — | The parser for ``---`` delimited prepare.py output. |
@@ -77,7 +79,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [skill_runtime](../modules/skill_runtime.md) | 28 | — |
+| [skill_runtime](../modules/skill_runtime.md) | 30 | — |
 
 ### Structure
 

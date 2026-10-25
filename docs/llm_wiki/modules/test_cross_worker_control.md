@@ -38,8 +38,8 @@ non-paused owner, and a cross-worker resume unsticks a locally-paused owner).
 | `src.core.session_manager` | `session_manager_module`, `ActiveSession`, `SessionManager` |
 | `src.core.state_machine` | `IllegalTransitionError`, `SessionEvent` |
 | `sys` | `sys` |
-| `types` | `types` |
-| `typing` | `Any`, `Dict`, `List` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `Any`, `Dict`, `List`, `cast` |
 | `unittest.mock` | `MagicMock` |
 
 ## Local dependency map
@@ -85,7 +85,7 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [ControlFakeOrchestrator](../entities/ControlFakeOrchestrator.md) | 54 | — | Records control requests; never actually runs anything. |
+| [ControlFakeOrchestrator](../entities/ControlFakeOrchestrator.md) | 55 | — | Records control requests; never actually runs anything. |
 
 ## Functions
 

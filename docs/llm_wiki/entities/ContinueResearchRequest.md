@@ -1,6 +1,6 @@
 # ContinueResearchRequest
 
-**Location:** `src/api/research.py:848`
+**Location:** `src/api/research.py:873`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [research](../modules/research.md)
@@ -8,6 +8,12 @@
 ## Description
 
 Request body for continuing a timed-out/completed session.
+
+## Model Configuration
+
+| Setting | Value | Source |
+|---------|-------|--------|
+| `extra` | `'forbid'` | model_config |
 
 ## Attributes
 

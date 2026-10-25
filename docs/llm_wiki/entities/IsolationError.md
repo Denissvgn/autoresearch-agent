@@ -26,12 +26,15 @@ flowchart LR
     n1["RuntimeError"]
     n2["IsolationUnavailableError (src/core/isolation.py)"]
     n3["UnsupportedCapabilityError (src/core/isolation.py)"]
+    n4["src/core/command_runner.py"]
     n0 --> n1
     n2 --> n0
     n3 --> n0
+    n4 --> n0
     click n0 "../modules/isolation.md"
     click n2 "../modules/isolation.md"
     click n3 "../modules/isolation.md"
+    click n4 "../modules/command_runner.md"
 ```
 
 ### Summary
@@ -47,3 +50,9 @@ flowchart LR
 | Base | `RuntimeError` | — |
 | Subclass | `IsolationUnavailableError` | [isolation](../modules/isolation.md) |
 | Subclass | `UnsupportedCapabilityError` | [isolation](../modules/isolation.md) |
+
+### References
+
+| Reference | Kind | Source | Call sites |
+|---|---|---|---:|
+| `command_runner` | import | [command_runner](../modules/command_runner.md) | — |

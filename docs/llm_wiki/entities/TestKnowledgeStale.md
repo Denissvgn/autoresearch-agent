@@ -1,6 +1,6 @@
 # TestKnowledgeStale
 
-**Location:** `tests/test_insights_feedback.py:161`
+**Location:** `tests/test_insights_feedback.py:162`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_insights_feedback](../modules/test_insights_feedback.md)

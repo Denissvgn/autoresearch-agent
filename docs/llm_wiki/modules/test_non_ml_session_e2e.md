@@ -43,7 +43,8 @@ The demo path P7-011 had to make real (each piece was previously dead):
 | `pathlib` | `Path` |
 | `pytest` | `pytest` |
 | `src.api` | `promotion`, `research`, `results`, `skills`, `subjects` |
-| `src.config` | `settings` |
+| `src.config` | `settings`, `get_settings` |
+| `src.core.isolation` | `probe_host` |
 | `src.main` | `app`, `main_module` |
 | `sys` | `sys` |
 | `time` | `time` |
@@ -59,45 +60,55 @@ flowchart LR
     n3["src/api/skills.py"]
     n4["src/api/subjects.py"]
     n5["src/config.py"]
-    n6["src/main.py"]
-    n7["tests/test_non_ml_session_e2e.py"]
+    n6["src/core/isolation.py"]
+    n7["src/main.py"]
+    n8["tests/test_domain_conformance.py"]
+    n9["tests/test_non_ml_session_e2e.py"]
     n0 --> n5
     n1 --> n5
     n3 --> n5
     n4 --> n5
-    n6 --> n0
-    n6 --> n1
-    n6 --> n2
-    n6 --> n3
-    n6 --> n4
-    n6 --> n5
     n7 --> n0
     n7 --> n1
     n7 --> n2
     n7 --> n3
     n7 --> n4
     n7 --> n5
-    n7 --> n6
+    n8 --> n5
+    n8 --> n7
+    n8 --> n9
+    n9 --> n0
+    n9 --> n1
+    n9 --> n2
+    n9 --> n3
+    n9 --> n4
+    n9 --> n5
+    n9 --> n6
+    n9 --> n7
     click n0 "../modules/promotion.md"
     click n1 "../modules/research.md"
     click n2 "../modules/results.md"
     click n3 "../modules/src_api_skills.md"
     click n4 "../modules/subjects.md"
     click n5 "../modules/config.md"
-    click n6 "../modules/src_main.md"
-    click n7 "../modules/test_non_ml_session_e2e.md"
+    click n6 "../modules/isolation.md"
+    click n7 "../modules/src_main.md"
+    click n8 "../modules/test_domain_conformance.md"
+    click n9 "../modules/test_non_ml_session_e2e.md"
 ```
 
 ### Internal neighbors
 
 | Direction | Module |
 |---|---|
+| Inbound | [test_domain_conformance](../modules/test_domain_conformance.md) |
 | Outbound | [promotion](../modules/promotion.md) |
 | Outbound | [research](../modules/research.md) |
 | Outbound | [results](../modules/results.md) |
 | Outbound | [src_api_skills](../modules/src_api_skills.md) |
 | Outbound | [subjects](../modules/subjects.md) |
 | Outbound | [config](../modules/config.md) |
+| Outbound | [isolation](../modules/isolation.md) |
 | Outbound | [src_main](../modules/src_main.md) |
 
 ### External packages
@@ -112,7 +123,7 @@ flowchart LR
 |----------|-----------|------------|-------------|
 | `_auth` | `() -> dict[str, str]` | — | — |
 | `_preserve_lifespan_globals` | `(monkeypatch: pytest.MonkeyPatch) -> None` | — | Snapshot the module globals main's lifespan wires so teardown restores |
-| `demo_workspace` | `(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path` | `@pytest.fixture` | A hermetic demo deployment: temp workspace root with the workspace |
+| `demo_workspace` | `(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)` | `@pytest.fixture` | A hermetic demo deployment: temp workspace root with the workspace |
 | `_poll_terminal` | `(client: TestClient, research_id: str, timeout_s: float = 90.0) -> dict` | — | — |
 | `_valid_params` | `(skill_id: str, staging_dir: Path) -> dict` | — | Per-skill parameter objects valid against each declared param_schema. |
 | `test_non_ml_session_runs_end_to_end` | `(demo_workspace: Path, skill_id: str, expected_target_kind: str) -> None` | `@pytest.mark.parametrize(('skill_id', 'expected_target_kind'), _SKILL_CASES)` | — |

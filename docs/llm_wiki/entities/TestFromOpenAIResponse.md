@@ -1,6 +1,6 @@
 # TestFromOpenAIResponse
 
-**Location:** `tests/test_llm_provider_openai.py:134`
+**Location:** `tests/test_llm_provider_openai.py:135`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_llm_provider_openai](../modules/test_llm_provider_openai.md)

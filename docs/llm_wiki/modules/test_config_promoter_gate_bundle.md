@@ -29,20 +29,26 @@ flowchart LR
     n1["src/core/development_gate_bundle.py"]
     n2["src/core/results_store.py"]
     n3["tests/test_config_promoter_gate_bundle.py"]
+    n4["tests/test_promotion_policy.py"]
     n0 --> n1
     n3 --> n0
     n3 --> n1
     n3 --> n2
+    n4 --> n0
+    n4 --> n2
+    n4 --> n3
     click n0 "../modules/config_promoter.md"
     click n1 "../modules/development_gate_bundle.md"
     click n2 "../modules/results_store.md"
     click n3 "../modules/test_config_promoter_gate_bundle.md"
+    click n4 "../modules/test_promotion_policy.md"
 ```
 
 ### Internal neighbors
 
 | Direction | Module |
 |---|---|
+| Inbound | [test_promotion_policy](../modules/test_promotion_policy.md) |
 | Outbound | [config_promoter](../modules/config_promoter.md) |
 | Outbound | [development_gate_bundle](../modules/development_gate_bundle.md) |
 | Outbound | [results_store](../modules/results_store.md) |

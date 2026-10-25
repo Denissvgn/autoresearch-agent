@@ -42,15 +42,17 @@ Design decisions (P1-007 house style):
 | `fastapi` | `APIRouter`, `Depends`, `HTTPException`, `Query`, `Request` |
 | `logging` | `logging` |
 | `pathlib` | `Path` |
-| `pydantic` | `BaseModel`, `Field` |
+| `pydantic` | `BaseModel`, `ConfigDict`, `Field` |
 | `src.api.audit` | `record_api_audit_event` |
 | `src.api.auth` | `require_api_auth` |
 | `src.config` | `settings` |
+| `src.core.comparison_context` | `describe_comparison_context` |
 | `src.core.legacy_alias` | `skill_id_to_model_type` |
 | `src.core.llm_provider` | `build_provider` |
 | `src.core.skill_generator` | `SkillGenerationError`, `SkillGenerator` |
 | `src.core.skill_manifest` | `ResearchSkillManifest` |
 | `src.core.skill_registry` | `DEFAULT_SKILLS_ROOT`, `SkillNotRegisteredError`, `SkillRegistry`, `default_registry` |
+| `src.core.support_matrix` | `support_descriptor`, `support_descriptor` |
 | `subprocess` | `subprocess` |
 | `typing` | `Any`, `Dict`, `List`, `Literal`, `Optional` |
 
@@ -76,7 +78,7 @@ flowchart LR
 |---|---|
 | Inbound | `src` (1) |
 | Inbound | `tests` (5) |
-| Outbound | `src` (8) |
+| Outbound | `src` (10) |
 
 ### External packages
 
@@ -84,13 +86,13 @@ flowchart LR
 |---|---:|---:|
 | python | 2 | 1 |
 
-> All 14 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 16 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [GenerateSkillRequest](../entities/GenerateSkillRequest.md) | 443 | `BaseModel` | Body for ``POST /skills/generate``. |
+| [GenerateSkillRequest](../entities/GenerateSkillRequest.md) | 474 | `BaseModel` | Body for ``POST /skills/generate``. |
 
 ## Functions
 
@@ -107,8 +109,9 @@ flowchart LR
 | `get_skill` | *(async)* `(skill_id: str)` | `@router.get('/skills/{skill_id}')` | Full skill descriptor (manifest + links). |
 | `get_skill_param_schema` | *(async)* `(skill_id: str)` | `@router.get('/skills/{skill_id}/param-schema')` | The ``param_schema`` JSON Schema for ``skill_params`` validation. |
 | `get_skill_form_fields` | *(async)* `(skill_id: str)` | `@router.get('/skills/{skill_id}/form-fields')` | UI form-field definitions for the dynamic form renderer. |
+| `get_skill_support` | *(async)* `(skill_id: str)` | `@router.get('/skills/{skill_id}/support')` | Machine-readable support descriptor + actionable diagnostics. |
 | `get_skill_metric_schema` | *(async)* `(skill_id: str)` | `@router.get('/skills/{skill_id}/metric-schema')` | The ``metric_schema`` — primary metric, gates, chart series, table columns. |
-| `get_skill_leaderboard` | *(async)* `(skill_id: str, limit: int = Query(default=20, ge=1, le=100, title='Limit'))` | `@router.get('/skills/{skill_id}/leaderboard')` | Cross-session leaderboard for one skill. |
+| `get_skill_leaderboard` | *(async)* `(skill_id: str, limit: int = Query(default=20, ge=1, le=100, title='Limit'), offset: int = Query(default=0, ge=0, title='Offset'))` | `@router.get('/skills/{skill_id}/leaderboard')` | Cross-session leaderboard for one skill — comparable groups only. |
 | `get_skill_versions` | *(async)* `(skill_id: str)` | `@router.get('/skills/{skill_id}/versions')` | Declared skill versions + best-effort git-tag history. |
 | `_skill_git_tags` | `(skill_id: str) -> List[str]` | — | Git tags recorded for this skill (``skill/<id>/*``), newest-last. |
 | `get_skill_changelog` | *(async)* `(skill_id: str)` | `@router.get('/skills/{skill_id}/changelog')` | The skill's ``CHANGELOG.md`` content. |

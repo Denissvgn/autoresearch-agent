@@ -52,7 +52,7 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [_FakeStore](../entities/test_leaderboard_api_FakeStore.md) | 20 | — | Minimal list_sessions double: two scored sessions + one unscored. |
+| [_FakeStore](../entities/test_leaderboard_api_FakeStore.md) | 20 | — | Ranking double: grouped, direction-aware, windowed rows. |
 
 ## Functions
 
@@ -64,6 +64,6 @@ flowchart LR
 | `auth_headers` | `() -> dict[str, str]` | — | — |
 | `test_leaderboard_unknown_skill_404` | `(client: TestClient)` | — | — |
 | `test_leaderboard_requires_auth` | `(client: TestClient)` | — | — |
-| `test_leaderboard_sorts_and_filters` | `(client: TestClient, monkeypatch)` | — | — |
-| `test_leaderboard_respects_limit` | `(client: TestClient, monkeypatch)` | — | — |
+| `test_leaderboard_ranks_within_comparable_groups` | `(client: TestClient, monkeypatch)` | — | — |
+| `test_leaderboard_window_semantics` | `(client: TestClient, monkeypatch)` | — | — |
 | `test_leaderboard_graceful_without_store` | `(client: TestClient, monkeypatch)` | — | — |

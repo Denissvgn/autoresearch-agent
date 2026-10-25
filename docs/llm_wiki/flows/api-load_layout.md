@@ -152,36 +152,36 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| load_layout | Path (src/core/skill_loader.py:load_layout) | 195 | `Path(skill_dir)` |
-| load_layout | SkillLayout | 196 | `SkillLayout(skill_dir=root, has_bootstrap=..., has_scaffold=..., has_knowledge=..., has_eval=..., has_tools=...)` |
-| load_layout | (…).is_file (src/core/skill_loader.py:load_layout) | 198 | `(root / 'bootstrap.py').is_file(data not statically known)` |
-| load_layout | (…).is_dir (src/core/skill_loader.py:load_layout, 2) | 199 | `(root / 'scaffold').is_dir(data not statically known)` |
-| load_layout | (…).is_dir (src/core/skill_loader.py:load_layout, 1) | 200 | `(root / 'knowledge').is_dir(data not statically known)` |
-| load_layout | (…).is_dir (src/core/skill_loader.py:load_layout) | 201 | `(root / 'eval').is_dir(data not statically known)` |
-| load_layout | (…).is_dir (src/core/skill_loader.py:load_layout, 3) | 202 | `(root / 'tools').is_dir(data not statically known)` |
-| load_layout | manifest_path.is_file | 207 | `manifest_path.is_file(data not statically known)` |
-| load_layout | load_skill_manifest | 208 | `load_skill_manifest(manifest_path)` |
-| load_skill_manifest | isinstance (src/core/skill_loader.py:load_skill_manifest) | 383 | `isinstance(source, Mapping)` |
-| load_skill_manifest | dict | 384 | `dict(source)` |
+| load_layout | Path (src/core/skill_loader.py:load_layout) | 198 | `Path(skill_dir)` |
+| load_layout | SkillLayout | 199 | `SkillLayout(skill_dir=root, has_bootstrap=..., has_scaffold=..., has_knowledge=..., has_eval=..., has_tools=...)` |
+| load_layout | (…).is_file (src/core/skill_loader.py:load_layout) | 201 | `(root / 'bootstrap.py').is_file(data not statically known)` |
+| load_layout | (…).is_dir (src/core/skill_loader.py:load_layout, 2) | 202 | `(root / 'scaffold').is_dir(data not statically known)` |
+| load_layout | (…).is_dir (src/core/skill_loader.py:load_layout, 1) | 203 | `(root / 'knowledge').is_dir(data not statically known)` |
+| load_layout | (…).is_dir (src/core/skill_loader.py:load_layout) | 204 | `(root / 'eval').is_dir(data not statically known)` |
+| load_layout | (…).is_dir (src/core/skill_loader.py:load_layout, 3) | 205 | `(root / 'tools').is_dir(data not statically known)` |
+| load_layout | manifest_path.is_file | 210 | `manifest_path.is_file(data not statically known)` |
+| load_layout | load_skill_manifest | 211 | `load_skill_manifest(manifest_path)` |
+| load_skill_manifest | isinstance (src/core/skill_loader.py:load_skill_manifest) | 386 | `isinstance(source, Mapping)` |
+| load_skill_manifest | dict | 387 | `dict(source)` |
 
 ### Boundary effects
 
 | Kind | Target | Step | Line |
 |---|---|---|---:|
-| mutation | `missing.append` | `load_layout` | 220 |
-| filesystem_read | `candidate.read_text` | `load_skill_manifest` | 398 |
+| mutation | `missing.append` | `load_layout` | 223 |
+| filesystem_read | `candidate.read_text` | `load_skill_manifest` | 401 |
 
 ### Static analysis gaps
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `load_layout` | `(root / 'bootstrap.py').is_file` | 198 |
-| unresolved_call | `load_layout` | `(root / 'scaffold').is_dir` | 199 |
-| unresolved_call | `load_layout` | `(root / 'knowledge').is_dir` | 200 |
-| unresolved_call | `load_layout` | `(root / 'eval').is_dir` | 201 |
-| unresolved_call | `load_layout` | `(root / 'tools').is_dir` | 202 |
-| unresolved_call | `load_layout` | `manifest_path.is_file` | 207 |
-| external_call | `load_skill_manifest` | `isinstance` | 383 |
+| unresolved_call | `load_layout` | `(root / 'bootstrap.py').is_file` | 201 |
+| unresolved_call | `load_layout` | `(root / 'scaffold').is_dir` | 202 |
+| unresolved_call | `load_layout` | `(root / 'knowledge').is_dir` | 203 |
+| unresolved_call | `load_layout` | `(root / 'eval').is_dir` | 204 |
+| unresolved_call | `load_layout` | `(root / 'tools').is_dir` | 205 |
+| unresolved_call | `load_layout` | `manifest_path.is_file` | 210 |
+| external_call | `load_skill_manifest` | `isinstance` | 386 |
 | step_limit | `load_layout` | `first 12 steps` | 0 |
 
 ## Behavior

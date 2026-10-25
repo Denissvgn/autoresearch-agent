@@ -75,7 +75,7 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [_Store](../entities/Store.md) | 43 | — | Minimal store stub with the session + iteration read surface. |
+| [_Store](../entities/test_research_api_integration_Store.md) | 43 | — | Minimal store stub with the session + iteration read surface. |
 | [_FakePromoter](../entities/FakePromoter.md) | 108 | — | Returns a canned preview dict; ``target_kind`` is injected downstream. |
 | [_StubManifest](../entities/StubManifest.md) | 210 | — | — |
 | [_StubRegistry](../entities/StubRegistry.md) | 224 | — | Returns a manifest with a configurable promotion target kind. |

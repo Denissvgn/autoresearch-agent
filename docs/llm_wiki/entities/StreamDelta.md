@@ -1,6 +1,6 @@
 # StreamDelta
 
-**Location:** `src/core/llm_provider.py:269`
+**Location:** `src/core/llm_provider.py:293`
 **Kind:** Class
 **Bases:** —
 **Module:** [llm_provider](../modules/llm_provider.md)

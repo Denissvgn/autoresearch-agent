@@ -18,6 +18,7 @@ _Auto-generated from `_StubStore` in `tests/test_skill_params_validation.py`._
 | Method | Signature | Decorators | Description |
 |--------|-----------|------------|-------------|
 | `__init__` | `() -> None` | — | — |
+| `append_event` | *(async)* `(**kwargs: Any) -> None` | — | — |
 | `record_audit_event` | *(async)* `(**kwargs: Any) -> None` | — | — |
 | `ping` | *(async)* `() -> bool` | — | — |
 | `get_session` | *(async)* `(research_id: str) -> Dict[str, Any] \| None` | — | — |
@@ -40,7 +41,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [test_skill_params_validation](../modules/test_skill_params_validation.md) | 6 | — |
+| [test_skill_params_validation](../modules/test_skill_params_validation.md) | 7 | — |
 
 ### References
 

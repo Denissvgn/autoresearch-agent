@@ -1,6 +1,6 @@
 # TestComplete
 
-**Location:** `tests/test_llm_provider_openai.py:188`
+**Location:** `tests/test_llm_provider_openai.py:189`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_llm_provider_openai](../modules/test_llm_provider_openai.md)

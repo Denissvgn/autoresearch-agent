@@ -1,6 +1,6 @@
 # ObjectiveGoal
 
-**Location:** `src/core/execution_contracts.py:356`
+**Location:** `src/core/execution_contracts.py:358`
 **Kind:** Type alias
 **Bases:** —
 **Module:** [execution_contracts](../modules/execution_contracts.md)

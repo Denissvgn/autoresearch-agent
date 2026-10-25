@@ -1,6 +1,6 @@
 # FakeStore
 
-**Location:** `tests/test_api_auth.py:90`
+**Location:** `tests/test_api_auth.py:91`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_api_auth](../modules/test_api_auth.md)
@@ -18,12 +18,13 @@ _Auto-generated from `FakeStore` in `tests/test_api_auth.py`._
 | Method | Signature | Decorators | Description |
 |--------|-----------|------------|-------------|
 | `__init__` | `() -> None` | — | — |
+| `append_event` | *(async)* `(**kwargs)` | — | — |
 | `list_sessions` | *(async)* `(**kwargs)` | — | — |
 | `count_sessions` | *(async)* `(**kwargs)` | — | — |
 | `get_pipeline` | *(async)* `(pipeline_id: str)` | — | — |
 | `get_session` | *(async)* `(research_id: str)` | — | — |
 | `get_iterations` | *(async)* `(research_id: str)` | — | — |
-| `get_best_iteration` | *(async)* `(research_id: str)` | — | — |
+| `get_best_iteration` | *(async)* `(research_id, **kwargs)` | — | — |
 | `get_hpo_studies` | *(async)* `(research_id: str)` | — | — |
 | `get_planned_trials` | *(async)* `(research_id: str)` | — | — |
 | `list_promotions` | *(async)* `()` | — | — |
@@ -69,7 +70,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [test_api_auth](../modules/test_api_auth.md) | 17 | — |
+| [test_api_auth](../modules/test_api_auth.md) | 18 | — |
 
 ### References
 

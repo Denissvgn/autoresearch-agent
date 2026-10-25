@@ -97,35 +97,35 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| main | json.load | 9 | `json.load(sys.stdin)` |
-| main | json.dump | 11 | `json.dump({...}, sys.stdout)` |
-| main | str | 11 | `str(exc)` |
-| main | Path | 12 | `Path(...)` |
-| main | payload.get | 12 | `payload.get('workspace')` |
-| main | str | 13 | `str(ws)` |
-| main | json.dump | 14 | `json.dump({...}, sys.stdout)` |
-| main | payload.get | 15 | `payload.get('mode', 'live')` |
-| main | json.dump | 16 | `json.dump({...}, sys.stdout)` |
-| main | ws.mkdir | 17 | `ws.mkdir(parents=True, exist_ok=True)` |
-| main | (…).write_text (skills/db-config-tuning/bootstrap.py:main, 1) | 18 | `(ws / 'db_config.yaml').write_text(_DEFAULT, encoding='utf-8')` |
+| main | json.load | 15 | `json.load(sys.stdin)` |
+| main | json.dump | 17 | `json.dump({...}, sys.stdout)` |
+| main | str | 17 | `str(exc)` |
+| main | Path | 19 | `Path(...)` |
+| main | payload.get | 19 | `payload.get('workspace')` |
+| main | str | 20 | `str(ws)` |
+| main | json.dump | 21 | `json.dump({...}, sys.stdout)` |
+| main | payload.get | 23 | `payload.get('mode', 'live')` |
+| main | json.dump | 24 | `json.dump({...}, sys.stdout)` |
+| main | ws.mkdir | 26 | `ws.mkdir(parents=True, exist_ok=True)` |
+| main | (…).write_text (skills/db-config-tuning/bootstrap.py:main, 1) | 27 | `(ws / 'db_config.yaml').write_text(_DEFAULT, encoding='utf-8')` |
 
 ### Boundary effects
 
 | Kind | Target | Step | Line |
 |---|---|---|---:|
-| filesystem_read | `json.load` | `main` | 9 |
+| filesystem_read | `json.load` | `main` | 15 |
 
 ### Static analysis gaps
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| external_call | `main` | `json.dump` | 11 |
-| unresolved_call | `main` | `payload.get` | 12 |
-| external_call | `main` | `json.dump` | 14 |
-| unresolved_call | `main` | `payload.get` | 15 |
-| external_call | `main` | `json.dump` | 16 |
-| unresolved_call | `main` | `ws.mkdir` | 17 |
-| unresolved_call | `main` | `(ws / 'db_config.yaml').write_text` | 18 |
+| external_call | `main` | `json.dump` | 17 |
+| unresolved_call | `main` | `payload.get` | 19 |
+| external_call | `main` | `json.dump` | 21 |
+| unresolved_call | `main` | `payload.get` | 23 |
+| external_call | `main` | `json.dump` | 24 |
+| unresolved_call | `main` | `ws.mkdir` | 26 |
+| unresolved_call | `main` | `(ws / 'db_config.yaml').write_text` | 27 |
 | step_limit | `main` | `first 12 steps` | 0 |
 
 ## Behavior

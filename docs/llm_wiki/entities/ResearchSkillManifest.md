@@ -1,6 +1,6 @@
 # ResearchSkillManifest
 
-**Location:** `src/core/skill_manifest.py:987`
+**Location:** `src/core/skill_manifest.py:1094`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)
@@ -150,4 +150,4 @@ flowchart LR
 | `DomainClassifier._cached_embed` | type_reference | [domain_classifier](../modules/domain_classifier.md) | — |
 | `load_layout` | type_reference | [skill_loader](../modules/skill_loader.md) | — |
 
-> References: showing 12 of 27 logical references; 15 omitted by the 12-row generated summary limit.
+> References: showing 12 of 31 logical references; 19 omitted by the 12-row generated summary limit.

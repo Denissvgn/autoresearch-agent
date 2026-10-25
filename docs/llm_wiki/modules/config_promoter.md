@@ -15,7 +15,7 @@ Config promoter — previews and writes winning configs to the host bind mount.
 | `datetime` | `datetime`, `timezone` |
 | `hashlib` | `hashlib` |
 | `httpx` | `httpx` |
-| `json` | `json` |
+| `json` | `json`, `_json` |
 | `logging` | `logging` |
 | `math` | `math` |
 | `os` | `os` |
@@ -29,14 +29,17 @@ Config promoter — previews and writes winning configs to the host bind mount.
 | `src.core.development_signal_health` | `build_development_signal_health` |
 | `src.core.gate_status` | `training_gates_passed_from_iteration` |
 | `src.core.legacy_alias` | `model_type_to_skill_id` |
-| `src.core.promotion_approval` | `target_identity`, `validate_candidate_binding` |
-| `src.core.promotion_target` | `FilePathPromotionTarget`, `PromotionTarget` |
+| `src.core.objective_comparator` | `ObjectiveComparator`, `objective_comparator_for_skill_id` |
+| `src.core.promotion_approval` | `target_identity`, `validate_candidate_binding`, `target_identity`, `canonical_json` |
+| `src.core.promotion_policy` | `SCOPE_EVIDENCE_VALIDATORS`, `ScopePolicyError`, `compile_scope_graph`, `scope_requirements` |
+| `src.core.promotion_target` | `FilePathPromotionTarget`, `PromotionTarget`, `WebhookPromotionTarget`, `WebhookPromotionTarget`, `WebhookPromotionTarget` |
 | `src.core.research_phase_plan` | `build_phase_state` |
-| `src.core.skill_registry` | `default_registry` |
+| `src.core.significance` | `best_other_config_hash`, `qualification_status`, `samples_from_rows`, `significance_verdict` |
+| `src.core.skill_registry` | `default_registry`, `default_registry`, `default_registry` |
 | `src.core.state_store` | `StateStore` |
 | `subprocess` | `subprocess` |
 | `tempfile` | `tempfile` |
-| `typing` | `Any`, `Dict`, `Optional` |
+| `typing` | `Any`, `Dict`, `List`, `Mapping`, `Optional` |
 | `yaml` | `yaml` |
 
 ## Local dependency map
@@ -59,9 +62,9 @@ flowchart LR
 
 | Direction | Module |
 |---|---|
-| Inbound | `src` (2) |
-| Inbound | `tests` (12) |
-| Outbound | `src` (14) |
+| Inbound | `src` (3) |
+| Inbound | `tests` (16) |
+| Outbound | `src` (17) |
 
 ### External packages
 
@@ -69,13 +72,13 @@ flowchart LR
 |---|---:|---:|
 | python | 2 | 0 |
 
-> All 28 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 36 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [ConfigPromoter](../entities/ConfigPromoter.md) | 131 | — | Handles preview and confirmation of config promotion to host. |
+| [ConfigPromoter](../entities/ConfigPromoter.md) | 142 | — | Handles preview and confirmation of config promotion to host. |
 
 ## Functions
 

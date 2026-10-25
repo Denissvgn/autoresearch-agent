@@ -1,6 +1,6 @@
 # TrialIdentityConfig
 
-**Location:** `src/core/skill_manifest.py:829`
+**Location:** `src/core/skill_manifest.py:936`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)

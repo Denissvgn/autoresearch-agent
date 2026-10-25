@@ -94,31 +94,31 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| get_skill_versions | _get_or_404 | 324 | `_get_or_404(skill_id)` |
-| _get_or_404 | _registry.get | 181 | `_registry.get(skill_id)` |
-| _get_or_404 | HTTPException | 183 | `HTTPException(status_code=404, detail={...})` |
-| get_skill_versions | _skill_git_tags | 325 | `_skill_git_tags(skill_id)` |
-| _skill_git_tags | subprocess.run | 349 | `subprocess.run([...], cwd=str(...), capture_output=True, text=True, timeout=5)` |
-| _skill_git_tags | str | 351 | `str(...)` |
-| _skill_git_tags | _skill_dir | 351 | `_skill_dir(skill_id)` |
-| _skill_git_tags | line.strip | 358 | `line.strip(data not statically known)` |
-| _skill_git_tags | proc.stdout.splitlines | 358 | `proc.stdout.splitlines(data not statically known)` |
-| _skill_git_tags | line.strip | 358 | `line.strip(data not statically known)` |
+| get_skill_versions | _get_or_404 | 355 | `_get_or_404(skill_id)` |
+| _get_or_404 | _registry.get | 188 | `_registry.get(skill_id)` |
+| _get_or_404 | HTTPException | 190 | `HTTPException(status_code=404, detail={...})` |
+| get_skill_versions | _skill_git_tags | 356 | `_skill_git_tags(skill_id)` |
+| _skill_git_tags | subprocess.run | 380 | `subprocess.run([...], cwd=str(...), capture_output=True, text=True, timeout=5)` |
+| _skill_git_tags | str | 382 | `str(...)` |
+| _skill_git_tags | _skill_dir | 382 | `_skill_dir(skill_id)` |
+| _skill_git_tags | line.strip | 389 | `line.strip(data not statically known)` |
+| _skill_git_tags | proc.stdout.splitlines | 389 | `proc.stdout.splitlines(data not statically known)` |
+| _skill_git_tags | line.strip | 389 | `line.strip(data not statically known)` |
 
 ### Boundary effects
 
 | Kind | Target | Step | Line |
 |---|---|---|---:|
-| process | `subprocess.run` | `_skill_git_tags` | 349 |
+| process | `subprocess.run` | `_skill_git_tags` | 380 |
 
 ### Static analysis gaps
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `_get_or_404` | `_registry.get` | 181 |
-| external_call | `_get_or_404` | `HTTPException` | 183 |
-| unresolved_call | `_skill_git_tags` | `line.strip` | 358 |
-| unresolved_call | `_skill_git_tags` | `proc.stdout.splitlines` | 358 |
+| unresolved_call | `_get_or_404` | `_registry.get` | 188 |
+| external_call | `_get_or_404` | `HTTPException` | 190 |
+| unresolved_call | `_skill_git_tags` | `line.strip` | 389 |
+| unresolved_call | `_skill_git_tags` | `proc.stdout.splitlines` | 389 |
 
 ## Behavior
 

@@ -70,6 +70,7 @@ Design decisions (P1-007 house style):
 | `logging` | `logging` |
 | `os` | `os` |
 | `pathlib` | `Path` |
+| `src.config` | `get_settings`, `get_settings` |
 | `src.core.isolation` | `SANDBOXED_PREFIX`, `TRUSTED_LOCAL_CODE`, `IsolationPolicy`, `IsolationUnavailableError`, `UnsupportedCapabilityError`, `wrap_command` |
 | `src.core.process_limits` | `ProcessResourceCaps`, `TreeResourceGuard`, `UnenforceableResourceCapabilityError`, `bounded_drain`, `rlimit_prefix`, `signal_violation` |
 | `src.core.skill_manifest` | `PluginCaps`, `PluginKind` |
@@ -100,11 +101,11 @@ flowchart LR
 
 | Direction | Module |
 |---|---|
-| Inbound | `src` (2) |
+| Inbound | `src` (3) |
 | Inbound | `tests` (7) |
-| Outbound | `src` (3) |
+| Outbound | `src` (4) |
 
-> All 12 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 14 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 

@@ -46,14 +46,22 @@ Canonical resolution path — one entry point, :func:`resolve_and_validate`:
 ```mermaid
 flowchart LR
     n0["src/api/research.py"]
-    n1["src/core/skill_params.py"]
-    n2["tests/test_skill_params_validation.py"]
-    n0 --> n1
-    n2 --> n0
-    n2 --> n1
+    n1["src/core/run_spec.py"]
+    n2["src/core/skill_manifest.py"]
+    n3["src/core/skill_params.py"]
+    n4["tests/test_skill_params_validation.py"]
+    n0 --> n2
+    n0 --> n3
+    n1 --> n3
+    n2 --> n3
+    n4 --> n0
+    n4 --> n2
+    n4 --> n3
     click n0 "../modules/research.md"
-    click n1 "../modules/skill_params.md"
-    click n2 "../modules/test_skill_params_validation.md"
+    click n1 "../modules/run_spec.md"
+    click n2 "../modules/skill_manifest.md"
+    click n3 "../modules/skill_params.md"
+    click n4 "../modules/test_skill_params_validation.md"
 ```
 
 ### Internal neighbors
@@ -61,6 +69,8 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Inbound | [research](../modules/research.md) |
+| Inbound | [run_spec](../modules/run_spec.md) |
+| Inbound | [skill_manifest](../modules/skill_manifest.md) |
 | Inbound | [test_skill_params_validation](../modules/test_skill_params_validation.md) |
 
 ### External packages

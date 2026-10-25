@@ -1,6 +1,6 @@
 # MockProvider
 
-**Location:** `src/core/llm_provider.py:913`
+**Location:** `src/core/llm_provider.py:1057`
 **Kind:** Class
 **Bases:** —
 **Module:** [llm_provider](../modules/llm_provider.md)
@@ -34,6 +34,7 @@ so production code can refuse it.
 | `complete` | *(async)* `(*, model: str, prompt: str, max_tokens: int, system: str \| None = None) -> str` | — | — |
 | `stream` | *(async)* `(**kwargs: Any) -> AsyncIterator[StreamDelta]` | — | — |
 | `estimate_cost` | `(model: str, usage: Usage) -> float` | — | — |
+| `price_quote` | `(model: str, usage: Usage) -> CostEstimate` | — | A real, priced zero — not an unavailable cost. |
 | `capabilities` | `() -> ProviderCapabilities` | — | — |
 | `classify_error` | `(exc: Exception) -> ErrorClass` | — | — |
 
@@ -45,11 +46,13 @@ flowchart LR
     n0["MockProvider (src/core/llm_provider.py)"]
     n1["build_provider (src/core/llm_provider.py)"]
     n2["AgentOrchestrator.run (src/core/orchestrator.py)"]
-    n3["test_mock_provider_alternates_tool_and_text (tests/test_mock_provider.py)"]
-    n4["test_mock_provider_complete_and_cost (tests/test_mock_provider.py)"]
-    n5["test_mock_provider_honors_custom_marker_prefix (tests/test_mock_provider.py)"]
-    n6["test_mock_provider_relay_only_from_newest_tool_result (tests/test_mock_provider.py)"]
-    n7["test_mock_provider_relays_governed_eval_marker (tests/test_mock_provider.py)"]
+    n3["test_adapter_behavior_is_provider_parity (tests/test_builtin_harness.py)"]
+    n4["test_mock_provider_alternates_tool_and_text (tests/test_mock_provider.py)"]
+    n5["test_mock_provider_complete_and_cost (tests/test_mock_provider.py)"]
+    n6["test_mock_provider_honors_custom_marker_prefix (tests/test_mock_provider.py)"]
+    n7["test_mock_provider_relay_only_from_newest_tool_result (tests/test_mock_provider.py)"]
+    n8["test_mock_provider_relays_governed_eval_marker (tests/test_mock_provider.py)"]
+    n9["test_mock_zero_cost_is_a_real_zero (tests/test_usage_ledger.py)"]
     n1 --> n0
     n2 --> n0
     n3 --> n0
@@ -57,21 +60,25 @@ flowchart LR
     n5 --> n0
     n6 --> n0
     n7 --> n0
+    n8 --> n0
+    n9 --> n0
     click n0 "../modules/llm_provider.md"
     click n1 "../modules/llm_provider.md"
     click n2 "../modules/orchestrator.md"
-    click n3 "../modules/test_mock_provider.md"
+    click n3 "../modules/test_builtin_harness.md"
     click n4 "../modules/test_mock_provider.md"
     click n5 "../modules/test_mock_provider.md"
     click n6 "../modules/test_mock_provider.md"
     click n7 "../modules/test_mock_provider.md"
+    click n8 "../modules/test_mock_provider.md"
+    click n9 "../modules/test_usage_ledger.md"
 ```
 
 ### Summary
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [llm_provider](../modules/llm_provider.md) | 8 | — |
+| [llm_provider](../modules/llm_provider.md) | 9 | — |
 
 ### References
 
@@ -79,8 +86,10 @@ flowchart LR
 |---|---|---|---:|
 | `build_provider` | call | [llm_provider](../modules/llm_provider.md) | 1 |
 | `AgentOrchestrator.run` | call | [orchestrator](../modules/orchestrator.md) | 1 |
+| `test_adapter_behavior_is_provider_parity` | call | [test_builtin_harness](../modules/test_builtin_harness.md) | 1 |
 | `test_mock_provider_alternates_tool_and_text` | call | [test_mock_provider](../modules/test_mock_provider.md) | 1 |
 | `test_mock_provider_complete_and_cost` | call | [test_mock_provider](../modules/test_mock_provider.md) | 1 |
 | `test_mock_provider_honors_custom_marker_prefix` | call | [test_mock_provider](../modules/test_mock_provider.md) | 1 |
 | `test_mock_provider_relay_only_from_newest_tool_result` | call | [test_mock_provider](../modules/test_mock_provider.md) | 1 |
 | `test_mock_provider_relays_governed_eval_marker` | call | [test_mock_provider](../modules/test_mock_provider.md) | 1 |
+| `test_mock_zero_cost_is_a_real_zero` | call | [test_usage_ledger](../modules/test_usage_ledger.md) | 1 |

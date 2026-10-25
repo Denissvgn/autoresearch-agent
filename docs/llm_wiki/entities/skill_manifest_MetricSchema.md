@@ -1,6 +1,6 @@
 # MetricSchema
 
-**Location:** `src/core/skill_manifest.py:306`
+**Location:** `src/core/skill_manifest.py:363`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)
@@ -26,6 +26,7 @@ Metric presentation + semantics (ARC-011 §9 ``metric_schema``).
 | `goal` | `MetricGoal` | `goal` | No | No | `'optimize'` | — | — | — |
 | `satisfice_threshold_field` | `Optional[str]` | `satisfice_threshold_field` | No | Yes | `None` | — | — | Boolean field gating satisfice completion (G11). |
 | `significance` | `Optional[SignificanceConfig]` | `significance` | No | Yes | `None` | — | — | — |
+| `objective` | `Optional[ObjectiveSpec]` | `objective` | No | Yes | `None` | — | — | — |
 
 ## Methods
 
@@ -46,7 +47,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [skill_manifest](../modules/skill_manifest.md) | 0 | `chart_series`, `gates`, `goal`, `iteration_table_columns`, `primary`, `satisfice_threshold_field`, `significance` |
+| [skill_manifest](../modules/skill_manifest.md) | 0 | `chart_series`, `gates`, `goal`, `iteration_table_columns`, `objective`, `primary`, `satisfice_threshold_field`, `significance` |
 
 ### Structure
 

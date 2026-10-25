@@ -16,12 +16,26 @@ the adaptive_feature_sweeps phase completes (ACCEPTED_ADAPTIVE_NOOP_REASONS).
 |--------|---------|
 | `__future__` | `annotations` |
 | `pytest` | `pytest` |
+| `src.core.consistency_validator` | `ACCEPTED_ADAPTIVE_NOOP_REASONS` |
 | `typing` | `Any`, `Dict` |
 
 ## Local dependency map
 
 <!-- Auto-generated local dependency summary. Do not edit by hand. -->
-*No internal module dependencies detected.*
+```mermaid
+flowchart LR
+    n0["src/core/consistency_validator.py"]
+    n1["tests/test_adaptive_noop_reason_fallback.py"]
+    n1 --> n0
+    click n0 "../modules/consistency_validator.md"
+    click n1 "../modules/test_adaptive_noop_reason_fallback.md"
+```
+
+### Internal neighbors
+
+| Direction | Module |
+|---|---|
+| Outbound | [consistency_validator](../modules/consistency_validator.md) |
 
 ### External packages
 

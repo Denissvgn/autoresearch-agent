@@ -19,7 +19,7 @@ _Auto-generated from `FakePromotionStore` in `tests/test_config_promoter_gate_bu
 |--------|-----------|------------|-------------|
 | `__init__` | `(best: dict, model_type: str = 'direction', promotions: list[dict] \| None = None, iterations: list[dict] \| None = None) -> None` | — | — |
 | `get_session` | *(async)* `(research_id: str)` | — | — |
-| `get_best_iteration` | *(async)* `(research_id: str)` | — | — |
+| `get_best_iteration` | *(async)* `(research_id, **kwargs)` | — | — |
 | `get_iterations` | *(async)* `(research_id: str)` | — | — |
 | `get_iteration` | *(async)* `(research_id: str, iteration: int)` | — | — |
 | `record_promotion` | *(async)* `(**kwargs)` | — | — |

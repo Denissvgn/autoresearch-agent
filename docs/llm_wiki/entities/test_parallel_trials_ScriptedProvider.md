@@ -30,10 +30,13 @@ Issues two sanctioned eval commands in one turn, then terminates.
 ```mermaid
 flowchart LR
     n0["_ScriptedProvider (tests/test_parallel_trials.py)"]
-    n1["_run_session (tests/test_parallel_trials.py)"]
+    n1["tests/test_domain_conformance.py"]
+    n2["_run_session (tests/test_parallel_trials.py)"]
     n1 --> n0
+    n2 --> n0
     click n0 "../modules/test_parallel_trials.md"
-    click n1 "../modules/test_parallel_trials.md"
+    click n1 "../modules/test_domain_conformance.md"
+    click n2 "../modules/test_parallel_trials.md"
 ```
 
 ### Summary
@@ -46,4 +49,5 @@ flowchart LR
 
 | Reference | Kind | Source | Call sites |
 |---|---|---|---:|
+| `test_domain_conformance` | import | [test_domain_conformance](../modules/test_domain_conformance.md) | — |
 | `_run_session` | call | [test_parallel_trials](../modules/test_parallel_trials.md) | 1 |

@@ -1,7 +1,7 @@
 # lifespan
 
 **Entry point:** `main.lifespan`
-**Modules involved:** [config_promoter](../modules/config_promoter.md), [postgres_state_store](../modules/postgres_state_store.md), [promotion](../modules/promotion.md), [research](../modules/research.md), [results](../modules/results.md), [session_manager](../modules/session_manager.md), [skill_registry](../modules/skill_registry.md), [src_api_skills](../modules/src_api_skills.md), [src_main](../modules/src_main.md), [subjects](../modules/subjects.md)
+**Modules involved:** [config_promoter](../modules/config_promoter.md), [harnesses](../modules/harnesses.md), [postgres_state_store](../modules/postgres_state_store.md), [promotion](../modules/promotion.md), [research](../modules/research.md), [results](../modules/results.md), [session_manager](../modules/session_manager.md), [skill_registry](../modules/skill_registry.md), [src_api_skills](../modules/src_api_skills.md), [src_main](../modules/src_main.md), [subjects](../modules/subjects.md)
 
 > Startup and shutdown logic.
 
@@ -18,10 +18,12 @@
 8. `research.init`
 9. `results.init`
 10. `promotion.init`
+11. `harnesses.init`
 
 ## Touches
 
 - [config_promoter](../modules/config_promoter.md)
+- [harnesses](../modules/harnesses.md)
 - [postgres_state_store](../modules/postgres_state_store.md)
 - [promotion](../modules/promotion.md)
 - [research](../modules/research.md)

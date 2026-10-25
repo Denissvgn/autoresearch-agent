@@ -57,10 +57,10 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| mean_std | len | 45 | `len(values)` |
-| mean_std | ValueError | 47 | `ValueError('mean_std requires at least one value')` |
-| mean_std | sum | 48 | `sum(values)` |
-| mean_std | sum | 51 | `sum(...)` |
+| mean_std | len | 47 | `len(values)` |
+| mean_std | ValueError | 49 | `ValueError('mean_std requires at least one value')` |
+| mean_std | sum | 50 | `sum(values)` |
+| mean_std | sum | 53 | `sum(...)` |
 
 ### Boundary effects
 
@@ -70,9 +70,9 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| external_call | `mean_std` | `ValueError` | 47 |
-| external_call | `mean_std` | `sum` | 48 |
-| external_call | `mean_std` | `sum` | 51 |
+| external_call | `mean_std` | `ValueError` | 49 |
+| external_call | `mean_std` | `sum` | 50 |
+| external_call | `mean_std` | `sum` | 53 |
 
 ## Behavior
 

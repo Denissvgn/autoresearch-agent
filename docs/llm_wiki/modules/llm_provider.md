@@ -65,7 +65,8 @@ only deviations from a literal copy — see inline comments):
 | `httpx` | `httpx` |
 | `json` | `json` |
 | `logging` | `logging` |
-| `src.config` | `secret_value`, `settings` |
+| `openai` | `_openai` |
+| `src.config` | `settings`, `settings`, `secret_value`, `settings` |
 | `typing` | `Any`, `Optional`, `Protocol` |
 
 ## Local dependency map
@@ -88,17 +89,17 @@ flowchart LR
 
 | Direction | Module |
 |---|---|
-| Inbound | `src` (5) |
-| Inbound | `tests` (13) |
+| Inbound | `src` (9) |
+| Inbound | `tests` (18) |
 | Outbound | `src` (1) |
 
 ### External packages
 
 | Language | Used packages | Undeclared packages |
 |---|---:|---:|
-| python | 2 | 1 |
+| python | 3 | 1 |
 
-> All 19 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 28 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
@@ -106,21 +107,24 @@ flowchart LR
 |-------|------|------|----------------|-------------|
 | [StopReason](../entities/StopReason.md) | Enum | 120 | `str`, `Enum` | Normalized reason the model stopped generating (R5-critical). |
 | [Usage](../entities/Usage.md) | Class | 145 | — | Token accounting for one provider call (spike §3.6). |
-| [TextBlock](../entities/TextBlock.md) | Class | 161 | — | A text content block emitted by the model. |
-| [ToolUseBlock](../entities/ToolUseBlock.md) | Class | 168 | — | A tool-call request emitted by the model (Anthropic-shaped). |
-| [ToolResultBlock](../entities/ToolResultBlock.md) | Class | 182 | — | A tool result fed back to the model by the loop (request-side block). |
-| [Message](../entities/Message.md) | Class | 202 | — | One conversation turn (spike §4, completion #2 for content shape). |
-| [ToolDef](../entities/ToolDef.md) | Class | 216 | — | A tool the model may call (matches today's ``AGENT_TOOLS`` entries). |
-| [ProviderResponse](../entities/ProviderResponse.md) | Class | 225 | — | Normalized response from ``messages_create``. |
-| [ProviderCapabilities](../entities/ProviderCapabilities.md) | Class | 240 | — | Static capability advertisement (→ P4-009 capabilities / P4-010 router). |
-| [ErrorClass](../entities/ErrorClass.md) | Class | 255 | — | Classification of a provider exception (→ loop-owned retry, R4 / D-retry). |
-| [StreamDelta](../entities/StreamDelta.md) | Class | 269 | — | One incremental chunk from ``stream()`` (completion #3). |
-| [LLMProvider](../entities/LLMProvider.md) | Class | 283 | `Protocol` | The provider-agnostic LLM contract (ARC-011 P1-001, X-005 spike §4). |
-| [AnthropicProvider](../entities/AnthropicProvider.md) | Class | 497 | — | ``LLMProvider`` adapter over the Anthropic SDK (ARC-011 P1-002). |
-| [OpenAIProvider](../entities/OpenAIProvider.md) | Class | 782 | — | ``LLMProvider`` adapter over the OpenAI Chat Completions API (P4-007). |
-| [MockProvider](../entities/MockProvider.md) | Class | 913 | — | Zero-credential scripted provider for demos and CI (P0-3). |
-| [ProviderCapabilityMismatch](../entities/ProviderCapabilityMismatch.md) | Class | 1058 | `ValueError` | Raised (ARC-011 P4-009) when a skill manifest's required capabilities |
-| [RequiredCapabilities](../entities/RequiredCapabilities.md) | Class | 1072 | — | Subset of :class:`ProviderCapabilities` a skill demands (P4-009). |
+| [CostEstimate](../entities/llm_provider_CostEstimate.md) | Class | 167 | — | Money knowledge for one call — never conflated with zero. |
+| [TextBlock](../entities/TextBlock.md) | Class | 182 | — | A text content block emitted by the model. |
+| [ToolUseBlock](../entities/ToolUseBlock.md) | Class | 189 | — | A tool-call request emitted by the model (Anthropic-shaped). |
+| [ToolResultBlock](../entities/ToolResultBlock.md) | Class | 203 | — | A tool result fed back to the model by the loop (request-side block). |
+| [Message](../entities/Message.md) | Class | 223 | — | One conversation turn (spike §4, completion #2 for content shape). |
+| [ToolDef](../entities/ToolDef.md) | Class | 237 | — | A tool the model may call (matches today's ``AGENT_TOOLS`` entries). |
+| [ProviderResponse](../entities/ProviderResponse.md) | Class | 246 | — | Normalized response from ``messages_create``. |
+| [ProviderCapabilities](../entities/ProviderCapabilities.md) | Class | 261 | — | Static capability advertisement (→ P4-009 capabilities / P4-010 router). |
+| [ErrorClass](../entities/ErrorClass.md) | Class | 279 | — | Classification of a provider exception (→ loop-owned retry, R4 / D-retry). |
+| [StreamDelta](../entities/StreamDelta.md) | Class | 293 | — | One incremental chunk from ``stream()`` (completion #3). |
+| [LLMProvider](../entities/LLMProvider.md) | Class | 307 | `Protocol` | The provider-agnostic LLM contract (ARC-011 P1-001, X-005 spike §4). |
+| [AnthropicProvider](../entities/AnthropicProvider.md) | Class | 533 | — | ``LLMProvider`` adapter over the Anthropic SDK (ARC-011 P1-002). |
+| [OpenAIProvider](../entities/OpenAIProvider.md) | Class | 851 | — | ``LLMProvider`` adapter over the OpenAI Chat Completions API (P4-007). |
+| [MockProvider](../entities/MockProvider.md) | Class | 1057 | — | Zero-credential scripted provider for demos and CI (P0-3). |
+| [ProviderCapabilityMismatch](../entities/ProviderCapabilityMismatch.md) | Class | 1215 | `ValueError` | Raised (ARC-011 P4-009) when a skill manifest's required capabilities |
+| [RequiredCapabilities](../entities/RequiredCapabilities.md) | Class | 1229 | — | Subset of :class:`ProviderCapabilities` a skill demands (P4-009). |
+| [UnsupportedModelSetting](../entities/UnsupportedModelSetting.md) | Class | 1294 | `ValueError` | A provider/model role combination the runtime cannot serve. |
+| [ModelRoles](../entities/ModelRoles.md) | Class | 1350 | — | The effective model roles and output cap for a session. |
 
 ## Functions
 
@@ -134,4 +138,8 @@ flowchart LR
 | `_to_openai_messages` | `(messages: list[Message], system: str) -> list[dict[str, Any]]` | — | Translate the normalized conversation → OpenAI Chat Completions messages. |
 | `_to_openai_tools` | `(tools: list[ToolDef]) -> list[dict[str, Any]]` | — | Translate ``ToolDef`` → OpenAI function-tool definitions. |
 | `_from_openai_response` | `(raw: Any) -> ProviderResponse` | — | Translate a raw OpenAI ``ChatCompletion`` → normalized ``ProviderResponse``. |
-| `build_provider` | `(provider_id: str, *, settings_obj: Any = None, required_capabilities: Optional[RequiredCapabilities] = None) -> LLMProvider` | — | Construct a ``LLMProvider`` by id (ARC-011 P4-010 router + P0-3 mock). |
+| `_str_setting` | `(settings_obj: Any, attr: str) -> str` | — | Read a string setting safely (ignores MagicMock / non-str test doubles). |
+| `resolve_effective_provider` | `(llm_cfg: Any = None, settings_obj: Any = None) -> str` | — | Resolve the active provider ID, honoring ``settings.llm_provider`` when set. |
+| `resolve_model_roles` | `(llm_cfg: Any, settings_obj: Any = None) -> ModelRoles` | — | Resolve primary/insight model roles and the output cap for a skill. |
+| `clamp_output_tokens` | `(caps: ProviderCapabilities, *, requested: int, settings_cap: int) -> int` | — | The output cap actually sent: the adapter's ceiling governs. |
+| `build_provider` | `(provider_id: str, *, settings_obj: Any = None, required_capabilities: Optional[RequiredCapabilities] = None) -> LLMProvider` | — | Construct a ``LLMProvider`` by id (ARC-011 P4-010 router + local/OpenAI-compat). |

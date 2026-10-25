@@ -1,6 +1,6 @@
 # _AuditStore
 
-**Location:** `tests/test_metrics_forgery_c3.py:64`
+**Location:** `tests/test_metrics_forgery_c3.py:65`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_metrics_forgery_c3](../modules/test_metrics_forgery_c3.md)

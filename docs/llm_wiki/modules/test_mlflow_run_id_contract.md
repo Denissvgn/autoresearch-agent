@@ -26,8 +26,8 @@ _Auto-generated from `tests/test_mlflow_run_id_contract.py`._
 | `src.core.result_artifact` | `merge_result_payload` |
 | `src.core.results_store` | `ResultsStore` |
 | `sys` | `sys` |
-| `types` | `types` |
-| `typing` | `Any`, `Dict` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `Any`, `Dict`, `cast` |
 
 ## Local dependency map
 

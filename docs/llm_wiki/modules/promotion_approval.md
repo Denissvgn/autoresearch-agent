@@ -29,20 +29,24 @@ flowchart LR
     n1["src/core/config_promoter.py"]
     n2["src/core/promotion_approval.py"]
     n3["tests/test_promotion_approval.py"]
-    n4["tests/test_release_promotion_safety.py"]
+    n4["tests/test_promotion_policy.py"]
+    n5["tests/test_release_promotion_safety.py"]
     n0 --> n1
     n0 --> n2
     n1 --> n2
     n3 --> n0
     n3 --> n2
-    n4 --> n0
     n4 --> n1
     n4 --> n2
+    n5 --> n0
+    n5 --> n1
+    n5 --> n2
     click n0 "../modules/promotion.md"
     click n1 "../modules/config_promoter.md"
     click n2 "../modules/promotion_approval.md"
     click n3 "../modules/test_promotion_approval.md"
-    click n4 "../modules/test_release_promotion_safety.md"
+    click n4 "../modules/test_promotion_policy.md"
+    click n5 "../modules/test_release_promotion_safety.md"
 ```
 
 ### Internal neighbors
@@ -52,6 +56,7 @@ flowchart LR
 | Inbound | [promotion](../modules/promotion.md) |
 | Inbound | [config_promoter](../modules/config_promoter.md) |
 | Inbound | [test_promotion_approval](../modules/test_promotion_approval.md) |
+| Inbound | [test_promotion_policy](../modules/test_promotion_policy.md) |
 | Inbound | [test_release_promotion_safety](../modules/test_release_promotion_safety.md) |
 
 ## Functions

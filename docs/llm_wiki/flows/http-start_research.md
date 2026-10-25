@@ -36,10 +36,9 @@ sequenceDiagram
     participant p22 as default_registry.get (src/api/research.py:start_research)
     participant p23 as _session_manager.start_session
     participant p24 as session.get (src/api/research.py:start_research)
-    participant p25 as HTTPException (src/api/research.py:start_research)
-    participant p26 as default_registry.get (src/api/research.py:_translate_canonical_request)
-    participant p27 as dict (src/api/research.py:_dual_shape_session)
-    participant p28 as HTTPException (src/api/research.py:_skill_config_http_error)
+    participant p25 as _store.append_event
+    participant p26 as HTTPException (src/api/research.py:start_research)
+    participant p27 as default_registry.get (src/api/research.py:_translate_canonical_request)
     p0->>p1: _translate_legacy_request
     p0->>p2: _translate_canonical_request
     p0->>p3: _audit
@@ -64,17 +63,17 @@ sequenceDiagram
     p0-->>p22: default_registry.get (src/api/research.py:start_research)(req.skill_id)
     p0-->>p23: _session_manager.start_session(…)
     p0-->>p24: session.get (src/api/research.py:start_research)('id')
+    p0-->>p24: session.get (src/api/research.py:start_research)('id')
+    p0-->>p25: _store.append_event(event_id=..., stream_key=session[...], event_type='research.run.created', payload={...}, producer='research-api')
     p0-->>p21: str (src/api/research.py:start_research)(e)
-    p0-->>p25: HTTPException (src/api/research.py:start_research)(status_code=409, detail=str(...))
+    p0-->>p26: HTTPException (src/api/research.py:start_research)(status_code=409, detail=str(...))
     p0-->>p21: str (src/api/research.py:start_research)(e)
-    p2-->>p26: default_registry.get (src/api/research.py:_translate_canonical_request)(req.skill_id)
-    p5-->>p27: dict (src/api/research.py:_dual_shape_session)(session)
-    p7-->>p28: HTTPException (src/api/research.py:_skill_config_http_error)(status_code=422, detail={...})
+    p2-->>p27: default_registry.get (src/api/research.py:_translate_canonical_request)(req.skill_id)
 ```
 
-> Call sequence diagram shows 30 of 118 interactions; 88 omitted to keep the visualization within the 30-interaction and generated-diagram limits, with uncertain identities omitted rather than inferred.
+> Call sequence diagram shows 30 of 120 interactions; 90 omitted to keep the visualization within the 30-interaction and generated-diagram limits, with uncertain identities omitted rather than inferred.
 
-> Captured boundary calls: external 6 of 48 (42 omitted); unresolved 4 of 42 (38 omitted). These counts cover the captured static trace.
+> Captured boundary calls: external 4 of 48 (44 omitted); unresolved 6 of 44 (38 omitted). These counts cover the captured static trace.
 
 Omitted captured detail, grouped by actual caller occurrence and target module:
 
@@ -88,7 +87,7 @@ Omitted captured detail, grouped by actual caller occurrence and target module:
 | `src/api/audit.py:_request_actor` | 30 | - | external | 2 |
 | `src/api/audit.py:record_api_audit_event` | 29 | - | unresolved | 1 |
 | `src/api/audit.py:request_metadata` | 34 | [src/api/audit.py](../modules/audit.md) | internal | 1 |
-> Omission summary shows 8 of 26 groups; 18 further groups are not expanded here. Counts above include all omitted interactions.
+> Omission summary shows 8 of 27 groups; 19 further groups are not expanded here. Counts above include all omitted interactions.
 > Detailed flow queries retain their own coverage and limits; omitted paths may execute at runtime.
 
 ## Data flow
@@ -144,7 +143,7 @@ flowchart LR
 
 | Step | Inputs | Reads | Writes | Returns |
 |---|---|---|---|---|
-| `start_research` | `request: Request`, `req: StartResearchRequest` | `SkillConfigError` | - | `_dual_shape_session(...)` |
+| `start_research` | `request: Request`, `req: StartResearchRequest` | `_store`, `SkillConfigError` | - | `_dual_shape_session(...)` |
 | `_translate_legacy_request` | `req: 'StartResearchRequest'` | - | `req.skill_id`, `req.subject_id`, `req.variant` | - |
 | `model_type_to_skill_id` | `model_type: str` | - | - | `''`, `_MODEL_TYPE_TO_SKILL_ID.get(...)` |
 | `_MODEL_TYPE_TO_SKILL_ID.get` | - | - | - | - |
@@ -161,35 +160,35 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| start_research | _translate_legacy_request | 588 | `_translate_legacy_request(req)` |
-| _translate_legacy_request | model_type_to_skill_id | 182 | `model_type_to_skill_id(...)` |
+| start_research | _translate_legacy_request | 600 | `_translate_legacy_request(req)` |
+| _translate_legacy_request | model_type_to_skill_id | 183 | `model_type_to_skill_id(...)` |
 | model_type_to_skill_id | _MODEL_TYPE_TO_SKILL_ID.get | 45 | `_MODEL_TYPE_TO_SKILL_ID.get(model_type, model_type)` |
-| start_research | _translate_canonical_request | 595 | `_translate_canonical_request(req)` |
-| _translate_canonical_request | default_registry.get (src/api/research.py:_translate_canonical_request) | 250 | `default_registry.get(req.skill_id)` |
-| _translate_canonical_request | HTTPException (src/api/research.py:_translate_canonical_request) | 252 | `HTTPException(status_code=404, detail={...})` |
-| _translate_canonical_request | HTTPException (src/api/research.py:_translate_canonical_request) | 262 | `HTTPException(status_code=422, detail={...})` |
-| _translate_canonical_request | str (src/api/research.py:_translate_canonical_request) | 267 | `str(exc)` |
-| _translate_canonical_request | skill_id_to_model_type | 281 | `skill_id_to_model_type(req.skill_id)` |
+| start_research | _translate_canonical_request | 607 | `_translate_canonical_request(req)` |
+| _translate_canonical_request | default_registry.get (src/api/research.py:_translate_canonical_request) | 251 | `default_registry.get(req.skill_id)` |
+| _translate_canonical_request | HTTPException (src/api/research.py:_translate_canonical_request) | 253 | `HTTPException(status_code=404, detail={...})` |
+| _translate_canonical_request | HTTPException (src/api/research.py:_translate_canonical_request) | 263 | `HTTPException(status_code=422, detail={...})` |
+| _translate_canonical_request | str (src/api/research.py:_translate_canonical_request) | 268 | `str(exc)` |
+| _translate_canonical_request | skill_id_to_model_type | 282 | `skill_id_to_model_type(req.skill_id)` |
 | skill_id_to_model_type | _SKILL_ID_TO_MODEL_TYPE.get | 56 | `_SKILL_ID_TO_MODEL_TYPE.get(skill_id, skill_id)` |
-| _translate_canonical_request | is_known_model_type | 282 | `is_known_model_type(mt)` |
+| _translate_canonical_request | is_known_model_type | 283 | `is_known_model_type(mt)` |
 
 ### Boundary effects
 
 | Kind | Target | Step | Line |
 |---|---|---|---:|
-| mutation | `conflicts.append` | `_translate_canonical_request` | 284 |
-| mutation | `conflicts.append` | `_translate_canonical_request` | 290 |
-| mutation | `conflicts.append` | `_translate_canonical_request` | 338 |
-| mutation | `conflicts.append` | `_translate_canonical_request` | 349 |
+| mutation | `conflicts.append` | `_translate_canonical_request` | 285 |
+| mutation | `conflicts.append` | `_translate_canonical_request` | 291 |
+| mutation | `conflicts.append` | `_translate_canonical_request` | 339 |
+| mutation | `conflicts.append` | `_translate_canonical_request` | 350 |
 
 ### Static analysis gaps
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
 | unresolved_call | `model_type_to_skill_id` | `_MODEL_TYPE_TO_SKILL_ID.get` | 45 |
-| unresolved_call | `_translate_canonical_request` | `default_registry.get` | 250 |
-| external_call | `_translate_canonical_request` | `HTTPException` | 252 |
-| external_call | `_translate_canonical_request` | `HTTPException` | 262 |
+| unresolved_call | `_translate_canonical_request` | `default_registry.get` | 251 |
+| external_call | `_translate_canonical_request` | `HTTPException` | 253 |
+| external_call | `_translate_canonical_request` | `HTTPException` | 263 |
 | unresolved_call | `skill_id_to_model_type` | `_SKILL_ID_TO_MODEL_TYPE.get` | 56 |
 | step_limit | `start_research` | `first 12 steps` | 0 |
 

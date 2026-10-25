@@ -1,6 +1,6 @@
 # ArtifactRef
 
-**Location:** `src/core/execution_contracts.py:228`
+**Location:** `src/core/execution_contracts.py:230`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

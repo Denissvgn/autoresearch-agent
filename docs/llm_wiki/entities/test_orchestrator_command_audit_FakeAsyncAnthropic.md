@@ -1,6 +1,6 @@
 # _FakeAsyncAnthropic
 
-**Location:** `tests/test_orchestrator_command_audit.py:12`
+**Location:** `tests/test_orchestrator_command_audit.py:14`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_orchestrator_command_audit](../modules/test_orchestrator_command_audit.md)

@@ -51,12 +51,13 @@ writes a fail-closed ``audit_events`` row. The exception never propagates.
 flowchart LR
     n0["PluginResult (src/core/plugin_runner.py)"]
     n1["src/core/bootstrap_runner.py"]
-    n2["_violation_result (src/core/plugin_runner.py)"]
-    n3["PluginRunner._run_sync (src/core/plugin_runner.py)"]
-    n4["PluginRunner._run_sync_inner (src/core/plugin_runner.py)"]
-    n5["PluginRunner.run (src/core/plugin_runner.py)"]
-    n6["tests/test_plugin_runner.py"]
-    n7["tests/test_prompt_evaluator.py"]
+    n2["src/core/phase_resolver.py"]
+    n3["_violation_result (src/core/plugin_runner.py)"]
+    n4["PluginRunner._run_sync (src/core/plugin_runner.py)"]
+    n5["PluginRunner._run_sync_inner (src/core/plugin_runner.py)"]
+    n6["PluginRunner.run (src/core/plugin_runner.py)"]
+    n7["tests/test_plugin_runner.py"]
+    n8["tests/test_prompt_evaluator.py"]
     n1 --> n0
     n2 --> n0
     n3 --> n0
@@ -64,14 +65,16 @@ flowchart LR
     n5 --> n0
     n6 --> n0
     n7 --> n0
+    n8 --> n0
     click n0 "../modules/plugin_runner.md"
     click n1 "../modules/bootstrap_runner.md"
-    click n2 "../modules/plugin_runner.md"
+    click n2 "../modules/phase_resolver.md"
     click n3 "../modules/plugin_runner.md"
     click n4 "../modules/plugin_runner.md"
     click n5 "../modules/plugin_runner.md"
-    click n6 "../modules/test_plugin_runner.md"
-    click n7 "../modules/test_prompt_evaluator.md"
+    click n6 "../modules/plugin_runner.md"
+    click n7 "../modules/test_plugin_runner.md"
+    click n8 "../modules/test_prompt_evaluator.md"
 ```
 
 ### Summary
@@ -85,6 +88,7 @@ flowchart LR
 | Reference | Kind | Source | Call sites |
 |---|---|---|---:|
 | `bootstrap_runner` | import | [bootstrap_runner](../modules/bootstrap_runner.md) | — |
+| `phase_resolver` | import | [phase_resolver](../modules/phase_resolver.md) | — |
 | `_violation_result` | call | [plugin_runner](../modules/plugin_runner.md) | 1 |
 | `_violation_result` | type_reference | [plugin_runner](../modules/plugin_runner.md) | — |
 | `PluginRunner._run_sync` | type_reference | [plugin_runner](../modules/plugin_runner.md) | — |

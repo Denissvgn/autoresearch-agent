@@ -72,7 +72,7 @@ flowchart LR
 | `test_unknown_api_v1_path_returns_404` | `(client: TestClient) -> None` | — | — |
 | `test_app_has_request_header_dependency` | `() -> None` | — | — |
 | `test_runtime_config_requires_metrics_token_in_production` | `(monkeypatch: pytest.MonkeyPatch) -> None` | — | — |
-| `test_runtime_config_rejects_multiple_workers` | `(monkeypatch: pytest.MonkeyPatch) -> None` | — | SQLite backend (no database_url) ⇒ WEB_CONCURRENCY>1 still rejected (W14). |
-| `test_runtime_config_allows_multiple_workers_on_postgres` | `(monkeypatch: pytest.MonkeyPatch) -> None` | — | ARC-011 P6-006: Postgres backend ⇒ WEB_CONCURRENCY>1 is allowed. |
-| `test_runtime_config_rejects_multiple_workers_on_sqlite_url` | `(monkeypatch: pytest.MonkeyPatch) -> None` | — | A sqlite:// database_url does NOT unlock multi-worker (still W14). |
+| `test_runtime_config_rejects_multiple_workers` | `(monkeypatch: pytest.MonkeyPatch) -> None` | — | SQLite backend (no database_url) ⇒ WEB_CONCURRENCY>1 still rejected. |
+| `test_runtime_config_allows_multiple_workers_on_postgres` | `(monkeypatch: pytest.MonkeyPatch) -> None` | — | Postgres backend ⇒ WEB_CONCURRENCY>1 is allowed. |
+| `test_runtime_config_rejects_multiple_workers_on_sqlite_url` | `(monkeypatch: pytest.MonkeyPatch) -> None` | — | A sqlite:// database_url does NOT unlock multi-worker. |
 | `test_readiness_reports_internal_state` | `(client: TestClient) -> None` | — | — |

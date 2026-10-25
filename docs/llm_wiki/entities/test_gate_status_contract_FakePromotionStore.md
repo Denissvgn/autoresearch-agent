@@ -19,7 +19,8 @@ _Auto-generated from `FakePromotionStore` in `tests/test_gate_status_contract.py
 |--------|-----------|------------|-------------|
 | `__init__` | `(best: Dict[str, Any]) -> None` | — | — |
 | `get_session` | *(async)* `(research_id: str) -> Dict[str, Any]` | — | — |
-| `get_best_iteration` | *(async)* `(research_id: str) -> Dict[str, Any]` | — | — |
+| `get_iterations` | *(async)* `(research_id: str) -> list` | — | — |
+| `get_best_iteration` | *(async)* `(research_id, **kwargs) -> Dict[str, Any]` | — | — |
 
 ## Relationships
 
@@ -37,7 +38,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [test_gate_status_contract](../modules/test_gate_status_contract.md) | 3 | — |
+| [test_gate_status_contract](../modules/test_gate_status_contract.md) | 4 | — |
 
 ### References
 

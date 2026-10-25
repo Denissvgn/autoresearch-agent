@@ -1,6 +1,6 @@
 # ResearchConfig
 
-**Location:** `src/core/orchestrator.py:189`
+**Location:** `src/core/orchestrator.py:209`
 **Kind:** Class
 **Bases:** —
 **Module:** [orchestrator](../modules/orchestrator.md)
@@ -59,7 +59,7 @@ flowchart LR
     n9["AgentOrchestrator._drain_oldest_pending_trial (src/core/orchestrator.py)"]
     n10["AgentOrchestrator._emit_auto_promotion_skipped (src/core/orchestrator.py)"]
     n11["AgentOrchestrator._finalize_tool_result (src/core/orchestrator.py)"]
-    n12["AgentOrchestrator._guard_duplicate_training_attempt (src/core/orchestrator.py)"]
+    n12["AgentOrchestrator._generate_research_resume_file (src/core/orchestrator.py)"]
     n1 --> n0
     n2 --> n0
     n3 --> n0
@@ -108,6 +108,6 @@ flowchart LR
 | `AgentOrchestrator._drain_oldest_pending_trial` | type_reference | [orchestrator](../modules/orchestrator.md) | — |
 | `AgentOrchestrator._emit_auto_promotion_skipped` | type_reference | [orchestrator](../modules/orchestrator.md) | — |
 | `AgentOrchestrator._finalize_tool_result` | type_reference | [orchestrator](../modules/orchestrator.md) | — |
-| `AgentOrchestrator._guard_duplicate_training_attempt` | type_reference | [orchestrator](../modules/orchestrator.md) | — |
+| `AgentOrchestrator._generate_research_resume_file` | type_reference | [orchestrator](../modules/orchestrator.md) | — |
 
-> References: showing 12 of 109 logical references; 97 omitted by the 12-row generated summary limit.
+> References: showing 12 of 102 logical references; 90 omitted by the 12-row generated summary limit.

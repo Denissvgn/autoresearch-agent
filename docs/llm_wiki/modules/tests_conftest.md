@@ -47,7 +47,7 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [ReplayContext](../entities/ReplayContext.md) | 84 | `NamedTuple` | Result of seeding a ResultsStore from a JSON fixture file. |
+| [ReplayContext](../entities/ReplayContext.md) | 88 | `NamedTuple` | Result of seeding a ResultsStore from a JSON fixture file. |
 
 ## Functions
 

@@ -22,7 +22,8 @@ _Auto-generated from `tests/test_service_preflight.py`._
 | `src.core.service_preflight` | `ServicePreflightError`, `require_preflight_ready`, `run_service_preflight`, `sanitize_service_url`, `ServicePreflightTarget` |
 | `src.core.session_manager` | `session_manager_module`, `session_manager_module` |
 | `sys` | `sys` |
-| `types` | `types` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `cast` |
 
 ## Local dependency map
 
@@ -67,8 +68,8 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [_FakeAsyncAnthropic](../entities/test_service_preflight_FakeAsyncAnthropic.md) | 15 | — | — |
-| [_FakeAPIStatusError](../entities/test_service_preflight_FakeAPIStatusError.md) | 19 | `Exception` | — |
+| [_FakeAsyncAnthropic](../entities/test_service_preflight_FakeAsyncAnthropic.md) | 17 | — | — |
+| [_FakeAPIStatusError](../entities/test_service_preflight_FakeAPIStatusError.md) | 21 | `Exception` | — |
 
 ## Functions
 

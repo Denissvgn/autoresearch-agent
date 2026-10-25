@@ -46,6 +46,7 @@ Design decisions (P1-007 house style):
 | `hashlib` | `hashlib` |
 | `json` | `json` |
 | `logging` | `logging` |
+| `os` | `_os` |
 | `pathlib` | `Path` |
 | `shutil` | `shutil` |
 | `src.config` | `settings` |
@@ -63,37 +64,44 @@ flowchart LR
     n0["src/config.py"]
     n1["src/core/bootstrap_runner.py"]
     n2["src/core/plugin_runner.py"]
-    n3["src/core/skill_loader.py"]
-    n4["src/core/skill_manifest.py"]
-    n5["tests/test_bootstrap_runner.py"]
-    n6["tests/test_prompt_evaluator.py"]
+    n3["src/core/session_manager.py"]
+    n4["src/core/skill_loader.py"]
+    n5["src/core/skill_manifest.py"]
+    n6["tests/test_bootstrap_runner.py"]
+    n7["tests/test_prompt_evaluator.py"]
     n1 --> n0
     n1 --> n2
-    n1 --> n3
     n1 --> n4
-    n2 --> n4
+    n1 --> n5
+    n2 --> n0
+    n2 --> n5
     n3 --> n0
+    n3 --> n1
     n3 --> n4
-    n5 --> n1
-    n5 --> n3
-    n5 --> n4
-    n6 --> n0
+    n4 --> n0
+    n4 --> n5
     n6 --> n1
-    n6 --> n2
-    n6 --> n3
+    n6 --> n4
+    n6 --> n5
+    n7 --> n0
+    n7 --> n1
+    n7 --> n2
+    n7 --> n4
     click n0 "../modules/config.md"
     click n1 "../modules/bootstrap_runner.md"
     click n2 "../modules/plugin_runner.md"
-    click n3 "../modules/skill_loader.md"
-    click n4 "../modules/skill_manifest.md"
-    click n5 "../modules/test_bootstrap_runner.md"
-    click n6 "../modules/test_prompt_evaluator.md"
+    click n3 "../modules/session_manager.md"
+    click n4 "../modules/skill_loader.md"
+    click n5 "../modules/skill_manifest.md"
+    click n6 "../modules/test_bootstrap_runner.md"
+    click n7 "../modules/test_prompt_evaluator.md"
 ```
 
 ### Internal neighbors
 
 | Direction | Module |
 |---|---|
+| Inbound | [session_manager](../modules/session_manager.md) |
 | Inbound | [test_bootstrap_runner](../modules/test_bootstrap_runner.md) |
 | Inbound | [test_prompt_evaluator](../modules/test_prompt_evaluator.md) |
 | Outbound | [config](../modules/config.md) |

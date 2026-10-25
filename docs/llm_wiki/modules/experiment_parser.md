@@ -48,7 +48,6 @@ flowchart LR
     n0["src"]
     n1["src/core/experiment_parser.py"]
     n2["tests"]
-    n0 --> n1
     n1 --> n0
     n2 --> n1
     click n1 "../modules/experiment_parser.md"
@@ -60,11 +59,10 @@ flowchart LR
 
 | Direction | Module |
 |---|---|
-| Inbound | `src` (1) |
 | Inbound | `tests` (12) |
 | Outbound | `src` (1) |
 
-> All 14 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 13 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 

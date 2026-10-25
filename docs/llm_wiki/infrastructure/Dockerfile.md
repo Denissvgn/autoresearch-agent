@@ -1,13 +1,13 @@
 # Dockerfile
 
 **Path:** `Dockerfile`
-**Base Image(s):** `node:20-alpine`, `python:3.12-slim`, `python:3.12-slim`
+**Base Image(s):** `node:24-alpine`, `python:3.12-slim`, `python:3.12-slim`
 
 ## Build Stages
 
 | Stage | Base Image |
 |-------|-----------|
-| `ui-builder` | `node:20-alpine` |
+| `ui-builder` | `node:24-alpine` |
 | `python-builder` | `python:3.12-slim` |
 | `runtime` | `python:3.12-slim` |
 

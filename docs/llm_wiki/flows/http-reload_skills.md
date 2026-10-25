@@ -109,8 +109,8 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| reload_skills | _audit | 405 | `_audit(request, action='skills.reload', outcome='denied', metadata={...}, error_message='skills.reload disabled in production')` |
-| _audit | record_api_audit_event | 168 | `record_api_audit_event(request, _store, action=action, outcome=outcome, metadata=metadata, error_message=error_message)` |
+| reload_skills | _audit | 436 | `_audit(request, action='skills.reload', outcome='denied', metadata={...}, error_message='skills.reload disabled in production')` |
+| _audit | record_api_audit_event | 175 | `record_api_audit_event(request, _store, action=action, outcome=outcome, metadata=metadata, error_message=error_message)` |
 | record_api_audit_event | _request_actor | 51 | `_request_actor(request)` |
 | _request_actor | getattr | 13 | `getattr(request.state, 'auth_actor', None)` |
 | _request_actor | isinstance | 14 | `isinstance(actor, AuthenticatedActor)` |

@@ -28,8 +28,8 @@ message is injected into ``tool_results`` demanding a ``TERMINATE_REQUEST:``.
 | `src.core.orchestrator` | `AgentOrchestrator`, `ResearchConfig`, `orch_module`, `orch_module`, `orch_module` |
 | `src.core.results_store` | `ResultsStore` |
 | `sys` | `sys` |
-| `types` | `types` |
-| `typing` | `Any`, `Dict`, `Optional` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `Any`, `Dict`, `Optional`, `cast` |
 
 ## Local dependency map
 

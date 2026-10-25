@@ -1,6 +1,6 @@
 # ToolDef
 
-**Location:** `src/core/llm_provider.py:216`
+**Location:** `src/core/llm_provider.py:237`
 **Kind:** Class
 **Bases:** —
 **Module:** [llm_provider](../modules/llm_provider.md)

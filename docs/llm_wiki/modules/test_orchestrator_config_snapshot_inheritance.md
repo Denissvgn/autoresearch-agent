@@ -31,8 +31,8 @@ result, recording the source iteration number in
 | `src.core.orchestrator` | `AgentOrchestrator` |
 | `src.core.results_store` | `ResultsStore` |
 | `sys` | `sys` |
-| `types` | `types` |
-| `typing` | `Any`, `Dict` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `Any`, `Dict`, `cast` |
 
 ## Local dependency map
 

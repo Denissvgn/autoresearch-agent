@@ -10,7 +10,7 @@ _Auto-generated from `ui/src/api/client.ts`._
 
 | Signal | Values |
 |--------|--------|
-| Exports | `AgentLogEntry`, `BlockerDetail`, `CompactPromotion`, `ConsistencyReport`, `CostEstimate`, `FeatureReadinessChannel`, `FeatureReadinessSummary`, `FormField`, `GeneratedSkillDraft`, `HpoStudy`, `HpoTrial`, `InferenceParitySummary`, `Iteration`, `LeaderboardEntry`, `MetricColumn`, `MetricSchema`, `ModelInfo`, `OosProvenanceSummary`, `PaginatedResponse`, `PolicyFinding`, `ProductionAuditEvent`, `ProductionCandidate`, `ProductionOperations`, `ProductionWarning`, `Promotion`, `PromotionApproval`, `PromotionGateCheck`, `PromotionGateEvaluation`, `PromotionPreview`, `PromotionPreviewRequest`, `PromotionScope`, `PromotionScopeRequest`, `PromotionScopeStatus`, `ResearchSession`, `ResearchState`, `RlProfitSummary`, `RollbackStatusSummary`, `ScopedPromotionMetadata`, `SecondaryMetric`, `SkillLeaderboard`, `SkillSummary`, `StartResearchRequest`, `SubjectInfo`, `SystemStatus`, `api`, `clearAutoresearchApiToken`, `getAutoresearchApiToken`, `getAutoresearchWebSocketProtocols`, `hasBuildTimeAutoresearchApiToken`, `normalizeListResponse`, `setAutoresearchApiToken` |
+| Exports | `AgentLogEntry`, `BlockerDetail`, `CompactPromotion`, `ConsistencyReport`, `CostEstimate`, `FeatureReadinessChannel`, `FeatureReadinessSummary`, `FormField`, `GeneratedSkillDraft`, `HarnessCapabilityEntry`, `HarnessContext`, `HarnessDescriptor`, `HarnessPreflightCheck`, `HpoStudy`, `HpoTrial`, `InferenceParitySummary`, `Iteration`, `LeaderboardEntry`, `LifecycleAction`, `MetricColumn`, `MetricSchema`, `ModelInfo`, `OosProvenanceSummary`, `PaginatedResponse`, `PolicyFinding`, `ProductionAuditEvent`, `ProductionCandidate`, `ProductionOperations`, `ProductionWarning`, `Promotion`, `PromotionApproval`, `PromotionGateCheck`, `PromotionGateEvaluation`, `PromotionPreview`, `PromotionPreviewRequest`, `PromotionScope`, `PromotionScopeRequest`, `PromotionScopeStatus`, `ResearchSession`, `ResearchState`, `RlProfitSummary`, `RollbackStatusSummary`, `ScopedPromotionMetadata`, `SecondaryMetric`, `SkillLeaderboard`, `SkillLeaderboardGroup`, `SkillSummary`, `StartResearchRequest`, `SubjectInfo`, `SystemStatus`, `api`, `clearAutoresearchApiToken`, `getAutoresearchApiToken`, `getAutoresearchWebSocketProtocols`, `hasBuildTimeAutoresearchApiToken`, `normalizeListResponse`, `setAutoresearchApiToken` |
 | Constants | `BASE`, `API_TOKEN_STORAGE_KEY`, `api` |
 
 ## Local dependency map
@@ -30,9 +30,9 @@ flowchart LR
 
 | Direction | Module |
 |---|---|
-| Inbound | `ui` (23) |
+| Inbound | `ui` (25) |
 
-> All 23 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 25 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
@@ -53,34 +53,40 @@ flowchart LR
 | [PromotionGateEvaluation](../entities/PromotionGateEvaluation.md) | Class | 190 | — | — |
 | [ScopedPromotionMetadata](../entities/ScopedPromotionMetadata.md) | Class | 197 | — | — |
 | [StartResearchRequest](../entities/client_StartResearchRequest.md) | Class | 212 | — | — |
-| [HpoTrial](../entities/HpoTrial.md) | Class | 227 | — | — |
-| [HpoStudy](../entities/HpoStudy.md) | Class | 235 | — | — |
-| [ResearchState](../entities/ResearchState.md) | Class | 254 | — | — |
-| [ProductionOperations](../entities/ProductionOperations.md) | Class | 311 | — | — |
-| [ProductionCandidate](../entities/ProductionCandidate.md) | Class | 333 | — | — |
-| [BlockerDetail](../entities/BlockerDetail.md) | Class | 347 | — | — |
-| [CompactPromotion](../entities/CompactPromotion.md) | Class | 352 | — | — |
-| [PromotionScopeStatus](../entities/PromotionScopeStatus.md) | Class | 365 | — | — |
-| [ProductionWarning](../entities/ProductionWarning.md) | Class | 376 | — | — |
-| [RlProfitSummary](../entities/RlProfitSummary.md) | Class | 383 | — | — |
-| [FeatureReadinessChannel](../entities/FeatureReadinessChannel.md) | Class | 393 | — | — |
-| [FeatureReadinessSummary](../entities/FeatureReadinessSummary.md) | Class | 400 | — | — |
-| [OosProvenanceSummary](../entities/OosProvenanceSummary.md) | Class | 406 | — | — |
-| [InferenceParitySummary](../entities/InferenceParitySummary.md) | Class | 419 | — | — |
-| [RollbackStatusSummary](../entities/RollbackStatusSummary.md) | Class | 426 | — | — |
-| [ProductionAuditEvent](../entities/ProductionAuditEvent.md) | Class | 433 | — | — |
-| [SystemStatus](../entities/SystemStatus.md) | Class | 445 | — | — |
-| [ModelInfo](../entities/ModelInfo.md) | Class | 451 | — | — |
-| [SkillSummary](../entities/SkillSummary.md) | Class | 459 | — | — |
-| [PolicyFinding](../entities/PolicyFinding.md) | Class | 474 | — | — |
-| [GeneratedSkillDraft](../entities/GeneratedSkillDraft.md) | Class | 480 | — | — |
-| [CostEstimate](../entities/CostEstimate.md) | Class | 491 | — | — |
-| [FormField](../entities/FormField.md) | Class | 500 | — | — |
-| [MetricColumn](../entities/client_MetricColumn.md) | Class | 513 | — | — |
-| [MetricSchema](../entities/client_MetricSchema.md) | Class | 521 | — | — |
-| [SubjectInfo](../entities/SubjectInfo.md) | Class | 529 | — | — |
-| [LeaderboardEntry](../entities/LeaderboardEntry.md) | Class | 536 | — | — |
-| [SkillLeaderboard](../entities/SkillLeaderboard.md) | Class | 551 | — | — |
+| [HpoTrial](../entities/HpoTrial.md) | Class | 228 | — | — |
+| [HpoStudy](../entities/HpoStudy.md) | Class | 236 | — | — |
+| [ResearchState](../entities/ResearchState.md) | Class | 255 | — | — |
+| [ProductionOperations](../entities/ProductionOperations.md) | Class | 312 | — | — |
+| [ProductionCandidate](../entities/ProductionCandidate.md) | Class | 334 | — | — |
+| [BlockerDetail](../entities/BlockerDetail.md) | Class | 348 | — | — |
+| [CompactPromotion](../entities/CompactPromotion.md) | Class | 353 | — | — |
+| [PromotionScopeStatus](../entities/PromotionScopeStatus.md) | Class | 366 | — | — |
+| [ProductionWarning](../entities/ProductionWarning.md) | Class | 377 | — | — |
+| [RlProfitSummary](../entities/RlProfitSummary.md) | Class | 384 | — | — |
+| [FeatureReadinessChannel](../entities/FeatureReadinessChannel.md) | Class | 394 | — | — |
+| [FeatureReadinessSummary](../entities/FeatureReadinessSummary.md) | Class | 401 | — | — |
+| [OosProvenanceSummary](../entities/OosProvenanceSummary.md) | Class | 407 | — | — |
+| [InferenceParitySummary](../entities/InferenceParitySummary.md) | Class | 420 | — | — |
+| [RollbackStatusSummary](../entities/RollbackStatusSummary.md) | Class | 427 | — | — |
+| [ProductionAuditEvent](../entities/ProductionAuditEvent.md) | Class | 434 | — | — |
+| [SystemStatus](../entities/SystemStatus.md) | Class | 446 | — | — |
+| [ModelInfo](../entities/ModelInfo.md) | Class | 452 | — | — |
+| [SkillSummary](../entities/SkillSummary.md) | Class | 460 | — | — |
+| [PolicyFinding](../entities/PolicyFinding.md) | Class | 475 | — | — |
+| [GeneratedSkillDraft](../entities/GeneratedSkillDraft.md) | Class | 481 | — | — |
+| [CostEstimate](../entities/client_CostEstimate.md) | Class | 492 | — | — |
+| [FormField](../entities/FormField.md) | Class | 501 | — | — |
+| [MetricColumn](../entities/client_MetricColumn.md) | Class | 514 | — | — |
+| [MetricSchema](../entities/client_MetricSchema.md) | Class | 522 | — | — |
+| [SubjectInfo](../entities/SubjectInfo.md) | Class | 530 | — | — |
+| [LeaderboardEntry](../entities/LeaderboardEntry.md) | Class | 537 | — | — |
+| [SkillLeaderboardGroup](../entities/SkillLeaderboardGroup.md) | Class | 552 | — | — |
+| [SkillLeaderboard](../entities/SkillLeaderboard.md) | Class | 562 | — | — |
+| [HarnessPreflightCheck](../entities/HarnessPreflightCheck.md) | Class | 669 | — | — |
+| [HarnessCapabilityEntry](../entities/HarnessCapabilityEntry.md) | Class | 675 | — | — |
+| [HarnessDescriptor](../entities/HarnessDescriptor.md) | Class | 680 | — | — |
+| [LifecycleAction](../entities/LifecycleAction.md) | Class | 694 | — | — |
+| [HarnessContext](../entities/HarnessContext.md) | Class | 700 | — | — |
 | [PromotionScope](../entities/client_PromotionScope.md) | Type alias | 125 | — | — |
 
 ## Functions

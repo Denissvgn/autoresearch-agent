@@ -1,6 +1,6 @@
 # _TransitionSpec
 
-**Location:** `src/core/state_machine.py:163`
+**Location:** `src/core/state_machine.py:164`
 **Kind:** Class
 **Bases:** —
 **Module:** [state_machine](../modules/state_machine.md)

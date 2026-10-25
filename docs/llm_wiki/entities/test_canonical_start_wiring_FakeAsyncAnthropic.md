@@ -1,6 +1,6 @@
 # _FakeAsyncAnthropic
 
-**Location:** `tests/test_canonical_start_wiring.py:31`
+**Location:** `tests/test_canonical_start_wiring.py:32`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_canonical_start_wiring](../modules/test_canonical_start_wiring.md)

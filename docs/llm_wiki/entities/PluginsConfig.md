@@ -1,6 +1,6 @@
 # PluginsConfig
 
-**Location:** `src/core/skill_manifest.py:510`
+**Location:** `src/core/skill_manifest.py:571`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)

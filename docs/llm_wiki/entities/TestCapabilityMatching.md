@@ -1,6 +1,6 @@
 # TestCapabilityMatching
 
-**Location:** `tests/test_llm_provider_openai.py:268`
+**Location:** `tests/test_llm_provider_openai.py:308`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_llm_provider_openai](../modules/test_llm_provider_openai.md)

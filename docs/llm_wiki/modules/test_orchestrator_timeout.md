@@ -42,7 +42,8 @@ the ``Popen`` handle.
 | `src.core.tool_access` | `ToolAccessContext`, `build_tool_access_context` |
 | `sys` | `sys` |
 | `time` | `time` |
-| `types` | `types` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `cast` |
 | `unittest.mock` | `AsyncMock`, `MagicMock`, `patch` |
 
 ## Local dependency map
@@ -98,7 +99,7 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [_CapturingRunner](../entities/test_orchestrator_timeout_CapturingRunner.md) | 288 | — | Stand-in for GovernedCommandRunner that records the resolved timeout_s. |
+| [_CapturingRunner](../entities/test_orchestrator_timeout_CapturingRunner.md) | 291 | — | Stand-in for GovernedCommandRunner that records the resolved timeout_s. |
 
 ## Functions
 

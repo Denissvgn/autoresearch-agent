@@ -76,13 +76,13 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| observability_alerts | _collect_observability_snapshot | 340 | `_collect_observability_snapshot(data not statically known)` |
-| _collect_observability_snapshot | empty_observability_snapshot | 305 | `empty_observability_snapshot(active_sessions=active_sessions)` |
+| observability_alerts | _collect_observability_snapshot | 349 | `_collect_observability_snapshot(data not statically known)` |
+| _collect_observability_snapshot | empty_observability_snapshot | 314 | `empty_observability_snapshot(active_sessions=active_sessions)` |
 | empty_observability_snapshot | datetime.now(…).isoformat | 73 | `datetime.now(timezone.utc).isoformat(data not statically known)` |
 | empty_observability_snapshot | datetime.now | 73 | `datetime.now(timezone.utc)` |
 | empty_observability_snapshot | alert_suggestions | 84 | `alert_suggestions(data not statically known)` |
 | alert_suggestions | dict | 91 | `dict(item)` |
-| _collect_observability_snapshot | _store.collect_observability_metrics | 306 | `_store.collect_observability_metrics(active_sessions=active_sessions)` |
+| _collect_observability_snapshot | _store.collect_observability_metrics | 315 | `_store.collect_observability_metrics(active_sessions=active_sessions)` |
 
 ### Boundary effects
 
@@ -94,7 +94,7 @@ flowchart LR
 |---|---|---|---:|
 | unresolved_call | `empty_observability_snapshot` | `datetime.now(timezone.utc).isoformat` | 73 |
 | external_call | `empty_observability_snapshot` | `datetime.now` | 73 |
-| unresolved_call | `_collect_observability_snapshot` | `_store.collect_observability_metrics` | 306 |
+| unresolved_call | `_collect_observability_snapshot` | `_store.collect_observability_metrics` | 315 |
 
 ## Behavior
 

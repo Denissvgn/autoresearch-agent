@@ -153,16 +153,16 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| promote_confirm | PromotionScopeRequest | 366 | `PromotionScopeRequest(data not statically known)` |
-| promote_confirm | _approval_payload | 367 | `_approval_payload(payload.approval)` |
-| _approval_payload | hasattr | 187 | `hasattr(approval, 'model_dump')` |
-| _approval_payload | approval.model_dump (src/api/promotion.py:_approval_payload) | 188 | `approval.model_dump(exclude_none=True)` |
-| _approval_payload | approval.dict | 189 | `approval.dict(exclude_none=True)` |
-| promote_confirm | _confirm_audit_metadata | 368 | `_confirm_audit_metadata(payload)` |
-| _confirm_audit_metadata | getattr (src/api/promotion.py:_confirm_audit_metadata) | 241 | `getattr(payload.approval, field)` |
-| promote_confirm | (…).lower | 373 | `(payload.scope or '').lower(data not statically known)` |
-| promote_confirm | _verify_production_approval_signature | 374 | `_verify_production_approval_signature(research_id, payload)` |
-| _verify_production_approval_signature | secret_value | 204 | `secret_value(settings.production_approval_verifier)` |
+| promote_confirm | PromotionScopeRequest | 377 | `PromotionScopeRequest(data not statically known)` |
+| promote_confirm | _approval_payload | 378 | `_approval_payload(payload.approval)` |
+| _approval_payload | hasattr | 198 | `hasattr(approval, 'model_dump')` |
+| _approval_payload | approval.model_dump (src/api/promotion.py:_approval_payload) | 199 | `approval.model_dump(exclude_none=True)` |
+| _approval_payload | approval.dict | 200 | `approval.dict(exclude_none=True)` |
+| promote_confirm | _confirm_audit_metadata | 379 | `_confirm_audit_metadata(payload)` |
+| _confirm_audit_metadata | getattr (src/api/promotion.py:_confirm_audit_metadata) | 252 | `getattr(payload.approval, field)` |
+| promote_confirm | (…).lower | 384 | `(payload.scope or '').lower(data not statically known)` |
+| promote_confirm | _verify_production_approval_signature | 385 | `_verify_production_approval_signature(research_id, payload)` |
+| _verify_production_approval_signature | secret_value | 215 | `secret_value(settings.production_approval_verifier)` |
 | secret_value | isinstance (src/config.py:secret_value) | 25 | `isinstance(value, SecretStr)` |
 
 ### Boundary effects
@@ -173,10 +173,10 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| external_call | `_approval_payload` | `hasattr` | 187 |
-| unresolved_call | `_approval_payload` | `approval.model_dump` | 188 |
-| external_call | `_confirm_audit_metadata` | `getattr` | 241 |
-| unresolved_call | `promote_confirm` | `(payload.scope or '').lower` | 373 |
+| external_call | `_approval_payload` | `hasattr` | 198 |
+| unresolved_call | `_approval_payload` | `approval.model_dump` | 199 |
+| external_call | `_confirm_audit_metadata` | `getattr` | 252 |
+| unresolved_call | `promote_confirm` | `(payload.scope or '').lower` | 384 |
 | external_call | `secret_value` | `isinstance` | 25 |
 | step_limit | `promote_confirm` | `first 12 steps` | 0 |
 

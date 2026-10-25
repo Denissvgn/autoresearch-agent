@@ -70,12 +70,12 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| list_skills | _skill_summary | 211 | `_skill_summary(_registry.get(...))` |
-| _skill_summary | skill_id_to_model_type | 98 | `skill_id_to_model_type(manifest.id)` |
+| list_skills | _skill_summary | 218 | `_skill_summary(_registry.get(...))` |
+| _skill_summary | skill_id_to_model_type | 99 | `skill_id_to_model_type(manifest.id)` |
 | skill_id_to_model_type | _SKILL_ID_TO_MODEL_TYPE.get | 56 | `_SKILL_ID_TO_MODEL_TYPE.get(skill_id, skill_id)` |
-| list_skills | _registry.get | 211 | `_registry.get(sid)` |
-| list_skills | _registry.available | 211 | `_registry.available(data not statically known)` |
-| list_skills | s.get | 213 | `s.get('category')` |
+| list_skills | _registry.get | 218 | `_registry.get(sid)` |
+| list_skills | _registry.available | 218 | `_registry.available(data not statically known)` |
+| list_skills | s.get | 220 | `s.get('category')` |
 
 ### Boundary effects
 
@@ -86,9 +86,9 @@ flowchart LR
 | Kind | Step | Target | Line |
 |---|---|---|---:|
 | unresolved_call | `skill_id_to_model_type` | `_SKILL_ID_TO_MODEL_TYPE.get` | 56 |
-| unresolved_call | `list_skills` | `_registry.get` | 211 |
-| unresolved_call | `list_skills` | `_registry.available` | 211 |
-| unresolved_call | `list_skills` | `s.get` | 213 |
+| unresolved_call | `list_skills` | `_registry.get` | 218 |
+| unresolved_call | `list_skills` | `_registry.available` | 218 |
+| unresolved_call | `list_skills` | `s.get` | 220 |
 
 ## Behavior
 

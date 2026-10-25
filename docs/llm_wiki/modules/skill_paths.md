@@ -45,20 +45,32 @@ Rules (D4, composed with the G6 loader semantics):
 ```mermaid
 flowchart LR
     n0["src/api/research.py"]
-    n1["src/core/research_manifest.py"]
-    n2["src/core/session_manager.py"]
-    n3["src/core/skill_paths.py"]
-    n4["tests/test_skill_paths.py"]
-    n0 --> n3
-    n1 --> n3
-    n2 --> n1
-    n2 --> n3
-    n4 --> n3
+    n1["src/core/promotion_target.py"]
+    n2["src/core/research_manifest.py"]
+    n3["src/core/session_manager.py"]
+    n4["src/core/skill_manifest.py"]
+    n5["src/core/skill_paths.py"]
+    n6["tests/test_run_workspace_isolation.py"]
+    n7["tests/test_skill_paths.py"]
+    n0 --> n4
+    n0 --> n5
+    n1 --> n5
+    n2 --> n5
+    n3 --> n2
+    n3 --> n5
+    n4 --> n5
+    n6 --> n2
+    n6 --> n3
+    n6 --> n5
+    n7 --> n5
     click n0 "../modules/research.md"
-    click n1 "../modules/research_manifest.md"
-    click n2 "../modules/session_manager.md"
-    click n3 "../modules/skill_paths.md"
-    click n4 "../modules/test_skill_paths.md"
+    click n1 "../modules/promotion_target.md"
+    click n2 "../modules/research_manifest.md"
+    click n3 "../modules/session_manager.md"
+    click n4 "../modules/skill_manifest.md"
+    click n5 "../modules/skill_paths.md"
+    click n6 "../modules/test_run_workspace_isolation.md"
+    click n7 "../modules/test_skill_paths.md"
 ```
 
 ### Internal neighbors
@@ -66,8 +78,11 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Inbound | [research](../modules/research.md) |
+| Inbound | [promotion_target](../modules/promotion_target.md) |
 | Inbound | [research_manifest](../modules/research_manifest.md) |
 | Inbound | [session_manager](../modules/session_manager.md) |
+| Inbound | [skill_manifest](../modules/skill_manifest.md) |
+| Inbound | [test_run_workspace_isolation](../modules/test_run_workspace_isolation.md) |
 | Inbound | [test_skill_paths](../modules/test_skill_paths.md) |
 
 ## Functions
@@ -78,4 +93,4 @@ flowchart LR
 | `validate_path_template` | `(template: str, *, allowed: frozenset[str] = PATH_TEMPLATE_IDENTITY_PLACEHOLDERS) -> None` | — | Validate a skill-declared path template at load time. |
 | `render_path_template` | `(template: str, *, skill_id: str, subject_id: str, variant: str) -> str` | — | Render an identity-placeholder template into a relative path. |
 | `_template_placeholder_tokens` | `(template: str) -> list[str]` | — | — |
-| `session_workspace_path` | `(skill_manifest: Any, *, skill_id: str, subject_id: str, variant: str) -> Optional[str]` | — | Render a skill's ``workspace.session_path_template``. |
+| `session_workspace_path` | `(skill_manifest: Any, *, skill_id: str, subject_id: str, variant: str, research_id: Optional[str] = None) -> Optional[str]` | — | Render a skill's ``workspace.session_path_template``. |

@@ -1,6 +1,6 @@
 # ContractError
 
-**Location:** `src/core/execution_contracts.py:101`
+**Location:** `src/core/execution_contracts.py:103`
 **Kind:** Class
 **Bases:** `ValueError`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

@@ -9,11 +9,18 @@
 
 _Auto-generated from `PromotionRollbackRequest` in `src/api/promotion.py`._
 
+## Model Configuration
+
+| Setting | Value | Source |
+|---------|-------|--------|
+| `extra` | `'forbid'` | model_config |
+
 ## Attributes
 
 | Name | Type | Wire name | Required | Nullable | Default | Constraints | Examples | Description |
 |------|------|-----------|----------|----------|---------|-------------|-------------|----------|
 | `reason` | `str \| None` | `reason` | No | Yes | `None` | — | — | — |
+| `reconcile_legacy` | `bool` | `reconcile_legacy` | No | No | `False` | — | — | — |
 
 ## Methods
 
@@ -37,7 +44,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [promotion](../modules/promotion.md) | 0 | `reason` |
+| [promotion](../modules/promotion.md) | 0 | `reason`, `reconcile_legacy` |
 
 ### Structure
 

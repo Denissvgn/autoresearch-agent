@@ -1,6 +1,6 @@
 # IllegalTransitionError
 
-**Location:** `src/core/state_machine.py:124`
+**Location:** `src/core/state_machine.py:125`
 **Kind:** Class
 **Bases:** `RuntimeError`
 **Module:** [state_machine](../modules/state_machine.md)

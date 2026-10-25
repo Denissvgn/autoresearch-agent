@@ -1,6 +1,6 @@
 # ProviderResponse
 
-**Location:** `src/core/llm_provider.py:225`
+**Location:** `src/core/llm_provider.py:246`
 **Kind:** Class
 **Bases:** —
 **Module:** [llm_provider](../modules/llm_provider.md)
@@ -41,8 +41,8 @@ flowchart LR
     n5["MockProvider.messages_create (src/core/llm_provider.py)"]
     n6["OpenAIProvider.messages_create (src/core/llm_provider.py)"]
     n7["AgentOrchestrator._call_llm_with_retry (src/core/orchestrator.py)"]
-    n8["test_value_types_are_frozen_and_construct_correctly (tests/test_llm_provider.py)"]
-    n9["_fake_text_response (tests/test_orchestrator_loop_guard.py)"]
+    n8["_OnePerTurnScriptedProvider.messages_create (tests/test_domain_conformance.py)"]
+    n9["test_value_types_are_frozen_and_construct_correctly (tests/test_llm_provider.py)"]
     n1 --> n0
     n2 --> n0
     n3 --> n0
@@ -60,8 +60,8 @@ flowchart LR
     click n5 "../modules/llm_provider.md"
     click n6 "../modules/llm_provider.md"
     click n7 "../modules/orchestrator.md"
-    click n8 "../modules/test_llm_provider.md"
-    click n9 "../modules/test_orchestrator_loop_guard.md"
+    click n8 "../modules/test_domain_conformance.md"
+    click n9 "../modules/test_llm_provider.md"
 ```
 
 ### Summary
@@ -84,7 +84,7 @@ flowchart LR
 | `MockProvider.messages_create` | type_reference | [llm_provider](../modules/llm_provider.md) | — |
 | `OpenAIProvider.messages_create` | type_reference | [llm_provider](../modules/llm_provider.md) | — |
 | `AgentOrchestrator._call_llm_with_retry` | type_reference | [orchestrator](../modules/orchestrator.md) | — |
+| `_OnePerTurnScriptedProvider.messages_create` | call | [test_domain_conformance](../modules/test_domain_conformance.md) | 2 |
 | `test_value_types_are_frozen_and_construct_correctly` | type_reference | [test_llm_provider](../modules/test_llm_provider.md) | — |
-| `_fake_text_response` | call | [test_orchestrator_loop_guard](../modules/test_orchestrator_loop_guard.md) | 1 |
 
-> References: showing 12 of 16 logical references; 4 omitted by the 12-row generated summary limit.
+> References: showing 12 of 17 logical references; 5 omitted by the 12-row generated summary limit.

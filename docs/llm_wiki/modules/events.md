@@ -38,8 +38,8 @@ flowchart LR
 
 | Direction | Module |
 |---|---|
-| Inbound | `src` (5) |
-| Inbound | `tests` (7) |
+| Inbound | `src` (6) |
+| Inbound | `tests` (9) |
 | Outbound | `src` (1) |
 
 ### External packages
@@ -48,7 +48,7 @@ flowchart LR
 |---|---:|---:|
 | python | 1 | 1 |
 
-> All 13 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 16 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
@@ -61,3 +61,9 @@ flowchart LR
 | Function | Signature | Decorators | Description |
 |----------|-----------|------------|-------------|
 | `_enrich_event` | `(event: Any) -> Any` | — | P3-018: enrich a WebSocket event payload with canonical skill fields. |
+| `redact_event_payload` | `(payload: Dict[str, Any]) -> tuple[Dict[str, Any], bool]` | — | Strip secret-looking values from an event payload. |
+| `plan_catchup` | `(*, cursor: int, min_sequence: int) -> Dict[str, Any]` | — | Decide replay versus resync for a reconnecting client. |
+| `dedupe_events` | `(events: list[Dict[str, Any]], applied_ids: Set[str]) -> tuple[list[Dict[str, Any]], Set[str]]` | — | Duplicate/out-of-order ingestion rule: apply each event at most once. |
+| `poll_events` | *(async)* `(store: Any, *, cursor: int = 0, stream_key: str \| None = None, limit: int = 200) -> list[Dict[str, Any]]` | — | Bounded outbox read — the slow-consumer/backpressure primitive. |
+| `snapshot_with_cursor` | *(async)* `(store: Any, research_id: str) -> Dict[str, Any]` | — | Atomic snapshot-plus-cursor resynchronization payload. |
+| `relay_new_events` | *(async)* `(store: Any, *, cursor: int, stream_key: str \| None = None, limit: int = 200, on_event: Any = None) -> tuple[int, int]` | — | One bounded relay tick: deliver new events and advance the cursor. |

@@ -1,6 +1,6 @@
 # _FakeAsyncAnthropic
 
-**Location:** `tests/test_session_status_routing.py:39`
+**Location:** `tests/test_session_status_routing.py:42`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_session_status_routing](../modules/test_session_status_routing.md)

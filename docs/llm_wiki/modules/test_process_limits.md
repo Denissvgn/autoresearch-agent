@@ -42,7 +42,9 @@ flowchart LR
     n2["src/core/plugin_runner.py"]
     n3["src/core/process_limits.py"]
     n4["tests/test_process_limits.py"]
+    n1 --> n0
     n1 --> n3
+    n2 --> n0
     n2 --> n3
     n4 --> n0
     n4 --> n1

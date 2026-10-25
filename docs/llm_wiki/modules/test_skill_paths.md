@@ -19,6 +19,7 @@ and absolute templates are accepted (G6 resolves
 | `__future__` | `annotations` |
 | `pytest` | `pytest` |
 | `src.core.skill_paths` | `render_path_template`, `sanitize_path_segment`, `session_workspace_path`, `validate_path_template` |
+| `types` | `SimpleNamespace`, `SimpleNamespace` |
 
 ## Local dependency map
 

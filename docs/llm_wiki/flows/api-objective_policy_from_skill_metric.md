@@ -44,7 +44,7 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| objective_policy_from_skill_metric | ObjectivePolicy | 401 | `ObjectivePolicy(metric_field=metric_field, direction=..., goal=goal)` |
+| objective_policy_from_skill_metric | ObjectivePolicy | 403 | `ObjectivePolicy(metric_field=metric_field, direction=..., goal=goal)` |
 
 ### Boundary effects
 

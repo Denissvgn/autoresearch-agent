@@ -1,6 +1,6 @@
 # ScorerRef
 
-**Location:** `src/core/execution_contracts.py:287`
+**Location:** `src/core/execution_contracts.py:289`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

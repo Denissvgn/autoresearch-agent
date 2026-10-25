@@ -40,17 +40,20 @@ cross-session concurrency relies on MVCC.
 |--------|---------|
 | `__future__` | `annotations` |
 | `asyncpg` | `asyncpg` |
+| `collections` | `Counter`, `defaultdict` |
 | `contextlib` | `asynccontextmanager` |
 | `contextvars` | `contextvars` |
-| `datetime` | `datetime`, `timezone` |
+| `datetime` | `datetime`, `timedelta`, `timezone` |
+| `hashlib` | `hashlib` |
 | `json` | `json` |
 | `logging` | `logging` |
 | `src.core.artifact_reference` | `normalize_optional_artifact_ref` |
 | `src.core.gate_status` | `consistency_report_passed` |
-| `src.core.observability` | `log_research_event` |
+| `src.core.objective_comparator` | `ObjectiveComparator`, `select_best_row` |
+| `src.core.observability` | `log_research_event`, `OBSERVABILITY_SCHEMA_VERSION`, `alert_suggestions` |
 | `src.core.pagination` | `clamp_limit` |
-| `src.core.state_store` | `SQLiteStateStore` |
-| `typing` | `Any`, `AsyncIterator`, `Dict`, `List`, `Optional`, `Sequence` |
+| `src.core.state_store` | `BudgetExceeded`, `CapacityExceeded`, `StaleFenceError`, `_normalized_iteration_metrics_json`, `_attempt_outcome`, `_json_object`, `_attempt_outcome`, `_counter_rows`, `_json_list`, `_json_object`, `_reason_slug`, `_replay_status`, `_value_rows`, `SQLiteStateStore` |
+| `typing` | `Any`, `AsyncIterator`, `Dict`, `List`, `Mapping`, `Optional`, `Sequence` |
 | `uuid` | `uuid` |
 
 ## Local dependency map
@@ -77,8 +80,8 @@ flowchart LR
 |---|---|
 | Inbound | `scripts` (1) |
 | Inbound | `src` (1) |
-| Inbound | `tests` (5) |
-| Outbound | `src` (5) |
+| Inbound | `tests` (9) |
+| Outbound | `src` (6) |
 
 ### External packages
 
@@ -86,13 +89,13 @@ flowchart LR
 |---|---:|---:|
 | python | 1 | 0 |
 
-> All 12 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 17 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [PostgresStateStore](../entities/PostgresStateStore.md) | 338 | — | Multi-worker Postgres implementation of :class:`StateStore`. |
+| [PostgresStateStore](../entities/PostgresStateStore.md) | 414 | — | Multi-worker Postgres implementation of :class:`StateStore`. |
 
 ## Functions
 

@@ -1,6 +1,6 @@
 # CompactPromotion
 
-**Location:** `ui/src/api/client.ts:352`
+**Location:** `ui/src/api/client.ts:353`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

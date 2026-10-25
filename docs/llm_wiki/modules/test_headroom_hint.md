@@ -35,7 +35,8 @@ Pins:
 | `pytest` | `pytest` |
 | `src.core.research_phase_plan` | `_PHASE_PRIMARY_SWEEP_KEYS`, `_next_action`, `_phase_headroom_hint`, `build_phase_state` |
 | `sys` | `sys` |
-| `types` | `types` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `Any`, `cast` |
 
 ## Local dependency map
 

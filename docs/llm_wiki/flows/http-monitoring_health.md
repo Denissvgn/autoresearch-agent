@@ -147,7 +147,7 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| monitoring_health | run_service_preflight | 274 | `run_service_preflight(targets=[...])` |
+| monitoring_health | run_service_preflight | 283 | `run_service_preflight(targets=[...])` |
 | run_service_preflight | datetime.now(…).isoformat | 97 | `datetime.now(timezone.utc).isoformat(data not statically known)` |
 | run_service_preflight | datetime.now | 97 | `datetime.now(timezone.utc)` |
 | run_service_preflight | bool | 99 | `bool(settings_obj.allow_unready_services)` |

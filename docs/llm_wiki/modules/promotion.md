@@ -14,11 +14,11 @@ Config promotion endpoints — preview and confirm pushing configs to host.
 | `fastapi` | `APIRouter`, `Depends`, `HTTPException`, `Request` |
 | `hashlib` | `hashlib` |
 | `hmac` | `hmac` |
-| `pydantic` | `BaseModel`, `Field`, `model_validator` |
+| `pydantic` | `BaseModel`, `ConfigDict`, `Field`, `model_validator` |
 | `src.api.audit` | `record_api_audit_event` |
 | `src.api.auth` | `require_api_auth` |
 | `src.config` | `secret_value`, `settings` |
-| `src.core.config_promoter` | `ConfigPromoter` |
+| `src.core.config_promoter` | `ConfigPromoter`, `ConfigPromoter`, `ConfigPromoter` |
 | `src.core.legacy_alias` | `model_type_to_skill_id`, `model_type_to_skill_id` |
 | `src.core.promotion_approval` | `APPROVAL_METHOD`, `CANDIDATE_FIELDS`, `candidate_fields`, `canonical_approval_message` |
 | `src.core.promotion_target` | `FilePathPromotionTarget`, `promotion_target_from_manifest` |
@@ -45,7 +45,7 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Inbound | `src` (1) |
-| Inbound | `tests` (8) |
+| Inbound | `tests` (9) |
 | Outbound | `src` (7) |
 
 ### External packages
@@ -54,16 +54,16 @@ flowchart LR
 |---|---:|---:|
 | python | 2 | 1 |
 
-> All 16 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 17 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
 | [PromotionRollbackRequest](../entities/PromotionRollbackRequest.md) | 110 | `BaseModel` | — |
-| [PromotionApproval](../entities/promotion_PromotionApproval.md) | 114 | `BaseModel` | — |
-| [PromotionPreviewRequest](../entities/promotion_PromotionPreviewRequest.md) | 125 | `BaseModel` | Unsigned discovery must be possible before an operator can sign a candidate. |
-| [PromotionScopeRequest](../entities/promotion_PromotionScopeRequest.md) | 138 | `BaseModel` | — |
+| [PromotionApproval](../entities/promotion_PromotionApproval.md) | 119 | `BaseModel` | — |
+| [PromotionPreviewRequest](../entities/promotion_PromotionPreviewRequest.md) | 132 | `BaseModel` | Unsigned discovery must be possible before an operator can sign a candidate. |
+| [PromotionScopeRequest](../entities/promotion_PromotionScopeRequest.md) | 147 | `BaseModel` | — |
 
 ## Functions
 

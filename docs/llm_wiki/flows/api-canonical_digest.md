@@ -58,10 +58,10 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| canonical_digest | json.dumps | 218 | `json.dumps(payload, sort_keys=True, separators=(...))` |
-| canonical_digest | hashlib.sha256(…).hexdigest | 219 | `hashlib.sha256(encoded.encode('utf-8')).hexdigest(data not statically known)` |
-| canonical_digest | hashlib.sha256 | 219 | `hashlib.sha256(encoded.encode(...))` |
-| canonical_digest | encoded.encode | 219 | `encoded.encode('utf-8')` |
+| canonical_digest | json.dumps | 220 | `json.dumps(payload, sort_keys=True, separators=(...))` |
+| canonical_digest | hashlib.sha256(…).hexdigest | 221 | `hashlib.sha256(encoded.encode('utf-8')).hexdigest(data not statically known)` |
+| canonical_digest | hashlib.sha256 | 221 | `hashlib.sha256(encoded.encode(...))` |
+| canonical_digest | encoded.encode | 221 | `encoded.encode('utf-8')` |
 
 ### Boundary effects
 
@@ -71,10 +71,10 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| external_call | `canonical_digest` | `json.dumps` | 218 |
-| unresolved_call | `canonical_digest` | `hashlib.sha256(encoded.encode('utf-8')).hexdigest` | 219 |
-| external_call | `canonical_digest` | `hashlib.sha256` | 219 |
-| unresolved_call | `canonical_digest` | `encoded.encode` | 219 |
+| external_call | `canonical_digest` | `json.dumps` | 220 |
+| unresolved_call | `canonical_digest` | `hashlib.sha256(encoded.encode('utf-8')).hexdigest` | 221 |
+| external_call | `canonical_digest` | `hashlib.sha256` | 221 |
+| unresolved_call | `canonical_digest` | `encoded.encode` | 221 |
 
 ## Behavior
 

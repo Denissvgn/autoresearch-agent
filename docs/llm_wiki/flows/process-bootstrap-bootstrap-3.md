@@ -129,36 +129,37 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| main | json.load | 44 | `json.load(sys.stdin)` |
-| main | json.dump | 46 | `json.dump({...}, sys.stdout)` |
+| main | json.load | 43 | `json.load(sys.stdin)` |
+| main | json.dump | 45 | `json.dump({...}, sys.stdout)` |
 | main | isinstance | 49 | `isinstance(payload, dict)` |
-| main | isinstance | 49 | `isinstance(payload.get(...), str)` |
-| main | payload.get | 49 | `payload.get('workspace')` |
-| main | json.dump | 50 | `json.dump({...}, sys.stdout)` |
-| main | Path | 52 | `Path(payload[...])` |
-| main | payload.get | 53 | `payload.get('mode', 'live')` |
-| main | workspace.is_absolute | 54 | `workspace.is_absolute(data not statically known)` |
-| main | isinstance | 54 | `isinstance(mode, str)` |
-| main | json.dump | 55 | `json.dump({...}, sys.stdout)` |
+| main | isinstance | 50 | `isinstance(payload.get(...), str)` |
+| main | payload.get | 50 | `payload.get('workspace')` |
+| main | json.dump | 53 | `json.dump({...}, sys.stdout)` |
+| main | Path | 55 | `Path(payload[...])` |
+| main | payload.get | 56 | `payload.get('mode', 'live')` |
+| main | workspace.is_absolute | 57 | `workspace.is_absolute(data not statically known)` |
+| main | isinstance | 57 | `isinstance(mode, str)` |
+| main | json.dump | 58 | `json.dump({...}, sys.stdout)` |
 
 ### Boundary effects
 
 | Kind | Target | Step | Line |
 |---|---|---|---:|
-| filesystem_read | `json.load` | `main` | 44 |
+| filesystem_read | `json.load` | `main` | 43 |
 
 ### Static analysis gaps
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| external_call | `main` | `json.dump` | 46 |
+| external_call | `main` | `json.dump` | 45 |
 | external_call | `main` | `isinstance` | 49 |
-| unresolved_call | `main` | `payload.get` | 49 |
-| external_call | `main` | `json.dump` | 50 |
-| unresolved_call | `main` | `payload.get` | 53 |
-| unresolved_call | `main` | `workspace.is_absolute` | 54 |
-| external_call | `main` | `isinstance` | 54 |
-| external_call | `main` | `json.dump` | 55 |
+| external_call | `main` | `isinstance` | 50 |
+| unresolved_call | `main` | `payload.get` | 50 |
+| external_call | `main` | `json.dump` | 53 |
+| unresolved_call | `main` | `payload.get` | 56 |
+| unresolved_call | `main` | `workspace.is_absolute` | 57 |
+| external_call | `main` | `isinstance` | 57 |
+| external_call | `main` | `json.dump` | 58 |
 | step_limit | `main` | `first 12 steps` | 0 |
 
 ## Behavior

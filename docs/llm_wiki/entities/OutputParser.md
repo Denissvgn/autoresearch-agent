@@ -1,6 +1,6 @@
 # OutputParser
 
-**Location:** `src/core/output_parser.py:109`
+**Location:** `src/core/output_parser.py:507`
 **Kind:** Class
 **Bases:** `Protocol`
 **Module:** [output_parser](../modules/output_parser.md)
@@ -39,25 +39,16 @@ flowchart LR
     n0["OutputParser (src/core/output_parser.py)"]
     n1["Protocol"]
     n2["src/core/orchestrator.py"]
-    n3["ManifestSkillRuntime.iteration_marker_parser (src/core/skill_runtime.py)"]
-    n4["ManifestSkillRuntime.output_parser (src/core/skill_runtime.py)"]
-    n5["SkillRuntime.iteration_marker_parser (src/core/skill_runtime.py)"]
-    n6["SkillRuntime.output_parser (src/core/skill_runtime.py)"]
-    n7["tests/test_output_parser.py"]
+    n3["src/core/skill_runtime.py"]
+    n4["tests/test_output_parser.py"]
     n0 --> n1
     n2 --> n0
     n3 --> n0
     n4 --> n0
-    n5 --> n0
-    n6 --> n0
-    n7 --> n0
     click n0 "../modules/output_parser.md"
     click n2 "../modules/orchestrator.md"
     click n3 "../modules/skill_runtime.md"
-    click n4 "../modules/skill_runtime.md"
-    click n5 "../modules/skill_runtime.md"
-    click n6 "../modules/skill_runtime.md"
-    click n7 "../modules/test_output_parser.md"
+    click n4 "../modules/test_output_parser.md"
 ```
 
 ### Summary
@@ -77,8 +68,5 @@ flowchart LR
 | Reference | Kind | Source | Call sites |
 |---|---|---|---:|
 | `orchestrator` | import | [orchestrator](../modules/orchestrator.md) | — |
-| `ManifestSkillRuntime.iteration_marker_parser` | type_reference | [skill_runtime](../modules/skill_runtime.md) | — |
-| `ManifestSkillRuntime.output_parser` | type_reference | [skill_runtime](../modules/skill_runtime.md) | — |
-| `SkillRuntime.iteration_marker_parser` | type_reference | [skill_runtime](../modules/skill_runtime.md) | — |
-| `SkillRuntime.output_parser` | type_reference | [skill_runtime](../modules/skill_runtime.md) | — |
+| `skill_runtime` | import | [skill_runtime](../modules/skill_runtime.md) | — |
 | `test_output_parser` | import | [test_output_parser](../modules/test_output_parser.md) | — |

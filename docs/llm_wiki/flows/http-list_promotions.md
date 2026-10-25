@@ -43,7 +43,7 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| list_promotions | _store.list_promotions | 424 | `_store.list_promotions(data not statically known)` |
+| list_promotions | _store.list_promotions | 435 | `_store.list_promotions(data not statically known)` |
 
 ### Boundary effects
 
@@ -53,7 +53,7 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `list_promotions` | `_store.list_promotions` | 424 |
+| unresolved_call | `list_promotions` | `_store.list_promotions` | 435 |
 
 ## Behavior
 

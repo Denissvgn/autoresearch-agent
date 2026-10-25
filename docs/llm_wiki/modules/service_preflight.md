@@ -31,33 +31,40 @@ flowchart LR
     n2["src/core/research_manifest.py"]
     n3["src/core/service_preflight.py"]
     n4["src/core/session_manager.py"]
-    n5["src/main.py"]
-    n6["tests/test_preflight.py"]
-    n7["tests/test_service_preflight.py"]
+    n5["src/core/skill_runtime.py"]
+    n6["src/main.py"]
+    n7["tests/test_preflight.py"]
+    n8["tests/test_service_preflight.py"]
     n1 --> n3
     n2 --> n0
     n2 --> n3
     n3 --> n0
     n3 --> n1
     n4 --> n0
+    n4 --> n1
     n4 --> n2
     n4 --> n3
+    n4 --> n5
     n5 --> n0
+    n5 --> n1
     n5 --> n3
-    n5 --> n4
-    n6 --> n1
+    n6 --> n0
     n6 --> n3
-    n7 --> n0
+    n6 --> n4
+    n7 --> n1
     n7 --> n3
-    n7 --> n4
+    n8 --> n0
+    n8 --> n3
+    n8 --> n4
     click n0 "../modules/config.md"
     click n1 "../modules/preflight.md"
     click n2 "../modules/research_manifest.md"
     click n3 "../modules/service_preflight.md"
     click n4 "../modules/session_manager.md"
-    click n5 "../modules/src_main.md"
-    click n6 "../modules/test_preflight.md"
-    click n7 "../modules/test_service_preflight.md"
+    click n5 "../modules/skill_runtime.md"
+    click n6 "../modules/src_main.md"
+    click n7 "../modules/test_preflight.md"
+    click n8 "../modules/test_service_preflight.md"
 ```
 
 ### Internal neighbors
@@ -67,6 +74,7 @@ flowchart LR
 | Inbound | [preflight](../modules/preflight.md) |
 | Inbound | [research_manifest](../modules/research_manifest.md) |
 | Inbound | [session_manager](../modules/session_manager.md) |
+| Inbound | [skill_runtime](../modules/skill_runtime.md) |
 | Inbound | [src_main](../modules/src_main.md) |
 | Inbound | [test_preflight](../modules/test_preflight.md) |
 | Inbound | [test_service_preflight](../modules/test_service_preflight.md) |

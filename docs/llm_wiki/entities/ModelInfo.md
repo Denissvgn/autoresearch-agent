@@ -1,6 +1,6 @@
 # ModelInfo
 
-**Location:** `ui/src/api/client.ts:451`
+**Location:** `ui/src/api/client.ts:452`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

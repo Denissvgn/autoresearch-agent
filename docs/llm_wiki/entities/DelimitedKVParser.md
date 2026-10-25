@@ -1,6 +1,6 @@
 # DelimitedKVParser
 
-**Location:** `src/core/output_parser.py:148`
+**Location:** `src/core/output_parser.py:546`
 **Kind:** Class
 **Bases:** —
 **Module:** [output_parser](../modules/output_parser.md)
@@ -43,14 +43,13 @@ flowchart LR
     n1["parse_prepare_output (src/core/experiment_parser.py)"]
     n2["AgentOrchestrator.__init__ (src/core/orchestrator.py)"]
     n3["ManifestSkillRuntime.output_parser (src/core/skill_runtime.py)"]
-    n4["ManifestSkillRuntime.parse_iteration (src/core/skill_runtime.py)"]
-    n5["TestDelimitedKVParserForgery.test_default_no_key_added (tests/test_metrics_forgery.py)"]
-    n6["TestDelimitedKVParserForgery.test_missing_nonce_rejected (tests/test_metrics_forgery.py)"]
-    n7["TestDelimitedKVParserForgery.test_valid_nonce_accepted (tests/test_metrics_forgery.py)"]
-    n8["TestDelimitedKVParserForgery.test_wrong_nonce_rejected (tests/test_metrics_forgery.py)"]
-    n9["test_delimited_kv_parser_failure_status_nulls_primary_metric (tests/test_output_parser.py)"]
-    n10["test_delimited_kv_parser_parse_returns_flat_dict_shape (tests/test_output_parser.py)"]
-    n11["test_output_parser_impl_satisfies_protocol_surface (tests/test_output_parser.py)"]
+    n4["TestDelimitedKVParserForgery.test_default_no_key_added (tests/test_metrics_forgery.py)"]
+    n5["TestDelimitedKVParserForgery.test_missing_nonce_rejected (tests/test_metrics_forgery.py)"]
+    n6["TestDelimitedKVParserForgery.test_valid_nonce_accepted (tests/test_metrics_forgery.py)"]
+    n7["TestDelimitedKVParserForgery.test_wrong_nonce_rejected (tests/test_metrics_forgery.py)"]
+    n8["test_delimited_kv_parser_failure_status_nulls_primary_metric (tests/test_output_parser.py)"]
+    n9["test_delimited_kv_parser_parse_returns_flat_dict_shape (tests/test_output_parser.py)"]
+    n10["test_output_parser_impl_satisfies_protocol_surface (tests/test_output_parser.py)"]
     n1 --> n0
     n2 --> n0
     n3 --> n0
@@ -61,19 +60,17 @@ flowchart LR
     n8 --> n0
     n9 --> n0
     n10 --> n0
-    n11 --> n0
     click n0 "../modules/output_parser.md"
     click n1 "../modules/experiment_parser.md"
     click n2 "../modules/orchestrator.md"
     click n3 "../modules/skill_runtime.md"
-    click n4 "../modules/skill_runtime.md"
+    click n4 "../modules/test_metrics_forgery.md"
     click n5 "../modules/test_metrics_forgery.md"
     click n6 "../modules/test_metrics_forgery.md"
     click n7 "../modules/test_metrics_forgery.md"
-    click n8 "../modules/test_metrics_forgery.md"
+    click n8 "../modules/test_output_parser.md"
     click n9 "../modules/test_output_parser.md"
     click n10 "../modules/test_output_parser.md"
-    click n11 "../modules/test_output_parser.md"
 ```
 
 ### Summary
@@ -89,7 +86,6 @@ flowchart LR
 | `parse_prepare_output` | call | [experiment_parser](../modules/experiment_parser.md) | 1 |
 | `AgentOrchestrator.__init__` | call | [orchestrator](../modules/orchestrator.md) | 1 |
 | `ManifestSkillRuntime.output_parser` | call | [skill_runtime](../modules/skill_runtime.md) | 1 |
-| `ManifestSkillRuntime.parse_iteration` | call | [skill_runtime](../modules/skill_runtime.md) | 1 |
 | `TestDelimitedKVParserForgery.test_default_no_key_added` | call | [test_metrics_forgery](../modules/test_metrics_forgery.md) | 1 |
 | `TestDelimitedKVParserForgery.test_missing_nonce_rejected` | call | [test_metrics_forgery](../modules/test_metrics_forgery.md) | 1 |
 | `TestDelimitedKVParserForgery.test_valid_nonce_accepted` | call | [test_metrics_forgery](../modules/test_metrics_forgery.md) | 1 |

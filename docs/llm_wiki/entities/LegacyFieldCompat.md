@@ -1,6 +1,6 @@
 # LegacyFieldCompat
 
-**Location:** `src/core/execution_contracts.py:1161`
+**Location:** `src/core/execution_contracts.py:1163`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

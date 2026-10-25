@@ -1,6 +1,6 @@
 # HpoStudy
 
-**Location:** `ui/src/api/client.ts:235`
+**Location:** `ui/src/api/client.ts:236`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

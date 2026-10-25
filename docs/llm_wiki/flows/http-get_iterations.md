@@ -163,36 +163,36 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| get_iterations | isinstance (src/api/results.py:get_iterations) | 458 | `isinstance(limit, int)` |
-| get_iterations | _resolve_result_context | 460 | `_resolve_result_context(research_id)` |
-| _resolve_result_context | research_id.startswith | 342 | `research_id.startswith('pipe_')` |
-| _resolve_result_context | _store.get_pipeline | 343 | `_store.get_pipeline(research_id)` |
-| _resolve_result_context | HTTPException | 345 | `HTTPException(status_code=404, detail='Pipeline not found')` |
-| _resolve_result_context | _decode_pipeline_payload | 346 | `_decode_pipeline_payload(pipeline)` |
-| _decode_pipeline_payload | dict (src/api/results.py:_decode_pipeline_payload) | 56 | `dict(pipeline)` |
-| _decode_pipeline_payload | decoded.get (src/api/results.py:_decode_pipeline_payload) | 63 | `decoded.get(source)` |
-| _decode_pipeline_payload | isinstance (src/api/results.py:_decode_pipeline_payload) | 67 | `isinstance(raw, str)` |
-| _decode_pipeline_payload | json.loads (src/api/results.py:_decode_pipeline_payload) | 67 | `json.loads(raw)` |
-| _decode_pipeline_payload | isinstance (src/api/results.py:_decode_pipeline_payload) | 70 | `isinstance(parsed, fallback_type)` |
+| get_iterations | isinstance (src/api/results.py:get_iterations) | 462 | `isinstance(limit, int)` |
+| get_iterations | _resolve_result_context | 464 | `_resolve_result_context(research_id)` |
+| _resolve_result_context | research_id.startswith | 346 | `research_id.startswith('pipe_')` |
+| _resolve_result_context | _store.get_pipeline | 347 | `_store.get_pipeline(research_id)` |
+| _resolve_result_context | HTTPException | 349 | `HTTPException(status_code=404, detail='Pipeline not found')` |
+| _resolve_result_context | _decode_pipeline_payload | 350 | `_decode_pipeline_payload(pipeline)` |
+| _decode_pipeline_payload | dict (src/api/results.py:_decode_pipeline_payload) | 60 | `dict(pipeline)` |
+| _decode_pipeline_payload | decoded.get (src/api/results.py:_decode_pipeline_payload) | 67 | `decoded.get(source)` |
+| _decode_pipeline_payload | isinstance (src/api/results.py:_decode_pipeline_payload) | 71 | `isinstance(raw, str)` |
+| _decode_pipeline_payload | json.loads (src/api/results.py:_decode_pipeline_payload) | 71 | `json.loads(raw)` |
+| _decode_pipeline_payload | isinstance (src/api/results.py:_decode_pipeline_payload) | 74 | `isinstance(parsed, fallback_type)` |
 
 ### Boundary effects
 
 | Kind | Target | Step | Line |
 |---|---|---|---:|
-| mutation | `sessions.append` | `_resolve_result_context` | 358 |
+| mutation | `sessions.append` | `_resolve_result_context` | 362 |
 
 ### Static analysis gaps
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| external_call | `get_iterations` | `isinstance` | 458 |
-| unresolved_call | `_resolve_result_context` | `research_id.startswith` | 342 |
-| unresolved_call | `_resolve_result_context` | `_store.get_pipeline` | 343 |
-| external_call | `_resolve_result_context` | `HTTPException` | 345 |
-| unresolved_call | `_decode_pipeline_payload` | `decoded.get` | 63 |
-| external_call | `_decode_pipeline_payload` | `isinstance` | 67 |
-| external_call | `_decode_pipeline_payload` | `json.loads` | 67 |
-| external_call | `_decode_pipeline_payload` | `isinstance` | 70 |
+| external_call | `get_iterations` | `isinstance` | 462 |
+| unresolved_call | `_resolve_result_context` | `research_id.startswith` | 346 |
+| unresolved_call | `_resolve_result_context` | `_store.get_pipeline` | 347 |
+| external_call | `_resolve_result_context` | `HTTPException` | 349 |
+| unresolved_call | `_decode_pipeline_payload` | `decoded.get` | 67 |
+| external_call | `_decode_pipeline_payload` | `isinstance` | 71 |
+| external_call | `_decode_pipeline_payload` | `json.loads` | 71 |
+| external_call | `_decode_pipeline_payload` | `isinstance` | 74 |
 | step_limit | `get_iterations` | `first 12 steps` | 0 |
 | truncated_flow | `get_iterations` | `depth limit` | 0 |
 

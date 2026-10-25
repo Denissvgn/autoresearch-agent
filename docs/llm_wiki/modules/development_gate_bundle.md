@@ -28,26 +28,33 @@ flowchart LR
     n1["src/core/config_promoter.py"]
     n2["src/core/development_gate_bundle.py"]
     n3["src/core/gate_status.py"]
-    n4["tests/test_config_promoter_gate_bundle.py"]
-    n5["tests/test_gate_bundle_production_economics.py"]
-    n6["tests/test_result_artifact_ingestion.py"]
+    n4["src/core/orchestrator.py"]
+    n5["tests/test_config_promoter_gate_bundle.py"]
+    n6["tests/test_gate_bundle_production_economics.py"]
+    n7["tests/test_result_artifact_ingestion.py"]
     n1 --> n0
     n1 --> n2
     n1 --> n3
     n2 --> n0
     n2 --> n3
+    n4 --> n0
     n4 --> n1
     n4 --> n2
+    n4 --> n3
+    n5 --> n1
     n5 --> n2
-    n6 --> n1
     n6 --> n2
+    n7 --> n1
+    n7 --> n2
+    n7 --> n4
     click n0 "../modules/blocker_classifier.md"
     click n1 "../modules/config_promoter.md"
     click n2 "../modules/development_gate_bundle.md"
     click n3 "../modules/gate_status.md"
-    click n4 "../modules/test_config_promoter_gate_bundle.md"
-    click n5 "../modules/test_gate_bundle_production_economics.md"
-    click n6 "../modules/test_result_artifact_ingestion.md"
+    click n4 "../modules/orchestrator.md"
+    click n5 "../modules/test_config_promoter_gate_bundle.md"
+    click n6 "../modules/test_gate_bundle_production_economics.md"
+    click n7 "../modules/test_result_artifact_ingestion.md"
 ```
 
 ### Internal neighbors
@@ -55,6 +62,7 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Inbound | [config_promoter](../modules/config_promoter.md) |
+| Inbound | [orchestrator](../modules/orchestrator.md) |
 | Inbound | [test_config_promoter_gate_bundle](../modules/test_config_promoter_gate_bundle.md) |
 | Inbound | [test_gate_bundle_production_economics](../modules/test_gate_bundle_production_economics.md) |
 | Inbound | [test_result_artifact_ingestion](../modules/test_result_artifact_ingestion.md) |

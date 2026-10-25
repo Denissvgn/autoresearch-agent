@@ -1,7 +1,7 @@
 # AgentOrchestrator__finalize_tool_result
 
 **Entry point:** `orchestrator.AgentOrchestrator._finalize_tool_result`
-**Modules involved:** [experiment_parser](../modules/experiment_parser.md), [fs_safety](../modules/fs_safety.md), [iteration_snapshot](../modules/iteration_snapshot.md), [llm_provider](../modules/llm_provider.md), [orchestrator](../modules/orchestrator.md), [output_digest](../modules/output_digest.md)
+**Modules involved:** [fs_safety](../modules/fs_safety.md), [iteration_snapshot](../modules/iteration_snapshot.md), [llm_provider](../modules/llm_provider.md), [orchestrator](../modules/orchestrator.md), [output_digest](../modules/output_digest.md)
 
 ## Sequence
 
@@ -9,15 +9,12 @@
 1. `fs_safety.safe_write_text`
 2. `output_digest.digest_command_output`
 3. `llm_provider.ToolResultBlock`
-4. `experiment_parser.parse_prepare_output`
-5. `iteration_snapshot.canonical_config_hash`
-6. `llm_provider.ToolResultBlock`
-7. `experiment_parser.parse_prepare_output`
-8. `iteration_snapshot.canonical_config_hash`
+4. `iteration_snapshot.canonical_config_hash`
+5. `llm_provider.ToolResultBlock`
+6. `iteration_snapshot.canonical_config_hash`
 
 ## Touches
 
-- [experiment_parser](../modules/experiment_parser.md)
 - [fs_safety](../modules/fs_safety.md)
 - [iteration_snapshot](../modules/iteration_snapshot.md)
 - [llm_provider](../modules/llm_provider.md)

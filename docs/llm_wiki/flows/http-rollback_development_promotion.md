@@ -27,7 +27,7 @@ sequenceDiagram
     participant p13 as metadata.update
     participant p14 as extra.items
     p0->>p1: PromotionRollbackRequest
-    p0-->>p2: _promoter.rollback(model_type=model_type, instrument=instrument, timeframe=timeframe, reason=request.reason)
+    p0-->>p2: _promoter.rollback(model_type=model_type, instrument=instrument, timeframe=timeframe, reason=request.reason, reconcile_legacy=request.reconcile_legacy)
     p0->>p3: _audit
     p0->>p3: _audit
     p0-->>p4: str(e)
@@ -68,7 +68,7 @@ flowchart LR
     s11["11. _request_actor"]
     s12["12. request.headers.get"]
     s1 -->|"PromotionRollbackRequest(data not statically known)"| s2
-    s1 -. "_promoter.rollback(model_type=model_type, instrument=instrument, timeframe=timeframe, reason=request.reason)" .-> s3
+    s1 -. "_promoter.rollback(model_type=model_type, instrument=instrument, timeframe=timeframe, reason=request.reason, reconcile_legacy=request.reconcile_legacy)" .-> s3
     s1 -->|"_audit(http_request, action='promotion.rollback', outcome='success', metadata=metadata)"| s4
     s4 -->|"record_api_audit_event(request, _store, action=action, outcome=outcome, research_id=research_id, metadata=metadata, error_message=error_message)"| s5
     s5 -->|"_request_actor(request)"| s6
@@ -112,9 +112,9 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| rollback_development_promotion | PromotionRollbackRequest | 436 | `PromotionRollbackRequest(data not statically known)` |
-| rollback_development_promotion | _promoter.rollback | 444 | `_promoter.rollback(model_type=model_type, instrument=instrument, timeframe=timeframe, reason=request.reason)` |
-| rollback_development_promotion | _audit | 450 | `_audit(http_request, action='promotion.rollback', outcome='success', metadata=metadata)` |
+| rollback_development_promotion | PromotionRollbackRequest | 447 | `PromotionRollbackRequest(data not statically known)` |
+| rollback_development_promotion | _promoter.rollback | 455 | `_promoter.rollback(model_type=model_type, instrument=instrument, timeframe=timeframe, reason=request.reason, reconcile_legacy=request.reconcile_legacy)` |
+| rollback_development_promotion | _audit | 462 | `_audit(http_request, action='promotion.rollback', outcome='success', metadata=metadata)` |
 | _audit | record_api_audit_event | 64 | `record_api_audit_event(request, _store, action=action, outcome=outcome, research_id=research_id, metadata=metadata, error_message=error_message)` |
 | record_api_audit_event | _request_actor | 51 | `_request_actor(request)` |
 | _request_actor | getattr | 13 | `getattr(request.state, 'auth_actor', None)` |
@@ -134,7 +134,7 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `rollback_development_promotion` | `_promoter.rollback` | 444 |
+| unresolved_call | `rollback_development_promotion` | `_promoter.rollback` | 455 |
 | external_call | `_request_actor` | `getattr` | 13 |
 | external_call | `_request_actor` | `isinstance` | 14 |
 | unresolved_call | `record_api_audit_event` | `store.record_audit_event` | 52 |

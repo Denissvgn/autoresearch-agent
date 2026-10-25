@@ -36,8 +36,8 @@ flowchart LR
 
 | Direction | Module |
 |---|---|
-| Inbound | `src` (16) |
-| Inbound | `tests` (25) |
+| Inbound | `src` (22) |
+| Inbound | `tests` (30) |
 
 ### External packages
 
@@ -45,13 +45,13 @@ flowchart LR
 |---|---:|---:|
 | python | 2 | 0 |
 
-> All 41 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 52 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [Settings](../entities/Settings.md) | 30 | `BaseSettings` | Application settings loaded from environment variables. |
+| [Settings](../entities/config_Settings.md) | 30 | `BaseSettings` | Application settings loaded from environment variables. |
 
 ## Functions
 

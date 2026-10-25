@@ -1,6 +1,6 @@
 # FakeOrchestrator
 
-**Location:** `tests/test_canonical_start_wiring.py:55`
+**Location:** `tests/test_canonical_start_wiring.py:56`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_canonical_start_wiring](../modules/test_canonical_start_wiring.md)

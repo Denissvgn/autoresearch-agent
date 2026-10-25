@@ -27,7 +27,8 @@ attempt. Same-session duplicates remain rejected.
 | `src.core.orchestrator` | `AgentOrchestrator`, `ResearchConfig` |
 | `src.core.results_store` | `ResultsStore` |
 | `sys` | `sys` |
-| `types` | `types` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `cast` |
 
 ## Local dependency map
 

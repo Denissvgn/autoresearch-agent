@@ -27,8 +27,8 @@ block promotion when phases are incomplete.
 | `src.core.orchestrator` | `AgentOrchestrator`, `ResearchConfig` |
 | `src.core.research_phase_plan` | `phases_for_model` |
 | `sys` | `sys` |
-| `types` | `types` |
-| `typing` | `Any`, `Dict`, `List`, `Optional` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `Any`, `Dict`, `List`, `Optional`, `cast` |
 
 ## Local dependency map
 
@@ -40,6 +40,7 @@ flowchart LR
     n2["src/core/research_phase_plan.py"]
     n3["tests/test_auto_promote_terminate_waiver.py"]
     n0 --> n2
+    n1 --> n0
     n1 --> n2
     n3 --> n0
     n3 --> n1

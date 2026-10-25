@@ -46,12 +46,14 @@ flowchart LR
     n2["str"]
     n3["src/core/orchestrator.py"]
     n4["tests/test_anthropic_provider.py"]
-    n5["test_value_types_are_frozen_and_construct_correctly (tests/test_llm_provider.py)"]
-    n6["tests/test_llm_provider_openai.py"]
-    n7["tests/test_mock_provider.py"]
-    n8["tests/test_orchestrator_loop_guard.py"]
-    n9["tests/test_orchestrator_timeout.py"]
-    n10["tests/test_parallel_trials.py"]
+    n5["tests/test_domain_conformance.py"]
+    n6["test_value_types_are_frozen_and_construct_correctly (tests/test_llm_provider.py)"]
+    n7["tests/test_llm_provider_openai.py"]
+    n8["tests/test_mock_provider.py"]
+    n9["tests/test_orchestrator_loop_guard.py"]
+    n10["tests/test_orchestrator_timeout.py"]
+    n11["tests/test_parallel_trials.py"]
+    n12["tests/test_result_authority.py"]
     n0 --> n1
     n0 --> n2
     n3 --> n0
@@ -62,15 +64,19 @@ flowchart LR
     n8 --> n0
     n9 --> n0
     n10 --> n0
+    n11 --> n0
+    n12 --> n0
     click n0 "../modules/llm_provider.md"
     click n3 "../modules/orchestrator.md"
     click n4 "../modules/test_anthropic_provider.md"
-    click n5 "../modules/test_llm_provider.md"
-    click n6 "../modules/test_llm_provider_openai.md"
-    click n7 "../modules/test_mock_provider.md"
-    click n8 "../modules/test_orchestrator_loop_guard.md"
-    click n9 "../modules/test_orchestrator_timeout.md"
-    click n10 "../modules/test_parallel_trials.md"
+    click n5 "../modules/test_domain_conformance.md"
+    click n6 "../modules/test_llm_provider.md"
+    click n7 "../modules/test_llm_provider_openai.md"
+    click n8 "../modules/test_mock_provider.md"
+    click n9 "../modules/test_orchestrator_loop_guard.md"
+    click n10 "../modules/test_orchestrator_timeout.md"
+    click n11 "../modules/test_parallel_trials.md"
+    click n12 "../modules/test_result_authority.md"
 ```
 
 ### Summary
@@ -92,9 +98,11 @@ flowchart LR
 |---|---|---|---:|
 | `orchestrator` | import | [orchestrator](../modules/orchestrator.md) | — |
 | `test_anthropic_provider` | import | [test_anthropic_provider](../modules/test_anthropic_provider.md) | — |
+| `test_domain_conformance` | import | [test_domain_conformance](../modules/test_domain_conformance.md) | — |
 | `test_value_types_are_frozen_and_construct_correctly` | type_reference | [test_llm_provider](../modules/test_llm_provider.md) | — |
 | `test_llm_provider_openai` | import | [test_llm_provider_openai](../modules/test_llm_provider_openai.md) | — |
 | `test_mock_provider` | import | [test_mock_provider](../modules/test_mock_provider.md) | — |
 | `test_orchestrator_loop_guard` | import | [test_orchestrator_loop_guard](../modules/test_orchestrator_loop_guard.md) | — |
 | `test_orchestrator_timeout` | import | [test_orchestrator_timeout](../modules/test_orchestrator_timeout.md) | — |
 | `test_parallel_trials` | import | [test_parallel_trials](../modules/test_parallel_trials.md) | — |
+| `test_result_authority` | import | [test_result_authority](../modules/test_result_authority.md) | — |

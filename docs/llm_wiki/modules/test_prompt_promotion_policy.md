@@ -19,7 +19,8 @@ _Auto-generated from `tests/test_prompt_promotion_policy.py`._
 | `src.core.llm_provider` | `Message`, `TextBlock`, `ToolResultBlock` |
 | `src.core.orchestrator` | `PROMOTION_HANDOFF_INSTRUCTION`, `AgentOrchestrator`, `ResearchConfig` |
 | `sys` | `sys` |
-| `types` | `types` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `cast` |
 
 ## Local dependency map
 
@@ -59,8 +60,8 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [_FakeAsyncAnthropic](../entities/test_prompt_promotion_policy_FakeAsyncAnthropic.md) | 12 | — | — |
-| [_FakeAPIStatusError](../entities/test_prompt_promotion_policy_FakeAPIStatusError.md) | 16 | `Exception` | — |
+| [_FakeAsyncAnthropic](../entities/test_prompt_promotion_policy_FakeAsyncAnthropic.md) | 14 | — | — |
+| [_FakeAPIStatusError](../entities/test_prompt_promotion_policy_FakeAPIStatusError.md) | 18 | `Exception` | — |
 
 ## Functions
 

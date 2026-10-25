@@ -26,7 +26,8 @@ exemption should not apply.
 | `src.core.orchestrator` | `AgentOrchestrator` |
 | `src.core.results_store` | `ResultsStore` |
 | `sys` | `sys` |
-| `types` | `types` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `cast` |
 
 ## Local dependency map
 

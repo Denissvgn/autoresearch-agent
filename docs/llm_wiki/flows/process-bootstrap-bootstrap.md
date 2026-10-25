@@ -120,36 +120,36 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| main | json.load | 16 | `json.load(sys.stdin)` |
-| main | json.dump | 18 | `json.dump({...}, sys.stdout)` |
-| main | Path | 19 | `Path(...)` |
-| main | payload.get (skills/code-refactor/bootstrap.py:main) | 19 | `payload.get('workspace')` |
-| main | str | 20 | `str(ws)` |
-| main | json.dump | 21 | `json.dump({...}, sys.stdout)` |
-| main | _target_name | 23 | `_target_name(payload)` |
-| _target_name | payload.get (skills/code-refactor/bootstrap.py:_target_name) | 8 | `payload.get('skill_params')` |
-| _target_name | params.get | 9 | `params.get('target_file')` |
-| _target_name | isinstance | 10 | `isinstance(name, str)` |
-| _target_name | name.endswith | 11 | `name.endswith('.py')` |
+| main | json.load | 25 | `json.load(sys.stdin)` |
+| main | json.dump | 27 | `json.dump({...}, sys.stdout)` |
+| main | Path | 29 | `Path(...)` |
+| main | payload.get (skills/code-refactor/bootstrap.py:main) | 29 | `payload.get('workspace')` |
+| main | str | 30 | `str(ws)` |
+| main | json.dump | 31 | `json.dump({...}, sys.stdout)` |
+| main | _target_name | 34 | `_target_name(payload)` |
+| _target_name | payload.get (skills/code-refactor/bootstrap.py:_target_name) | 17 | `payload.get('skill_params')` |
+| _target_name | params.get | 18 | `params.get('target_file')` |
+| _target_name | isinstance | 19 | `isinstance(name, str)` |
+| _target_name | name.endswith | 20 | `name.endswith('.py')` |
 
 ### Boundary effects
 
 | Kind | Target | Step | Line |
 |---|---|---|---:|
-| filesystem_read | `json.load` | `main` | 16 |
-| filesystem_write | `open` | `main` | 32 |
+| filesystem_read | `json.load` | `main` | 25 |
+| filesystem_write | `open` | `main` | 45 |
 
 ### Static analysis gaps
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| external_call | `main` | `json.dump` | 18 |
-| unresolved_call | `main` | `payload.get` | 19 |
-| external_call | `main` | `json.dump` | 21 |
-| unresolved_call | `_target_name` | `payload.get` | 8 |
-| unresolved_call | `_target_name` | `params.get` | 9 |
-| external_call | `_target_name` | `isinstance` | 10 |
-| unresolved_call | `_target_name` | `name.endswith` | 11 |
+| external_call | `main` | `json.dump` | 27 |
+| unresolved_call | `main` | `payload.get` | 29 |
+| external_call | `main` | `json.dump` | 31 |
+| unresolved_call | `_target_name` | `payload.get` | 17 |
+| unresolved_call | `_target_name` | `params.get` | 18 |
+| external_call | `_target_name` | `isinstance` | 19 |
+| unresolved_call | `_target_name` | `name.endswith` | 20 |
 | step_limit | `main` | `first 12 steps` | 0 |
 
 ## Behavior

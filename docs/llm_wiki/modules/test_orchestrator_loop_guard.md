@@ -38,8 +38,8 @@ Fix: the kick now:
 | `src.core.orchestrator` | `AgentOrchestrator`, `ResearchConfig` |
 | `src.core.results_store` | `ResultsStore` |
 | `sys` | `sys` |
-| `types` | `types` |
-| `typing` | `Any`, `Dict` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `Any`, `Dict`, `cast` |
 | `unittest.mock` | `AsyncMock`, `patch` |
 
 ## Local dependency map

@@ -306,3 +306,44 @@ Append-only chronological log.
 - Infrastructure moved: 0
 - Infrastructure removed: 0
 - Unsupported infrastructure YAML: 8
+
+## 2026-10-25
+
+### Wiki sync
+- Source: `.`
+- Generator version: `3.2.0`
+- Source selection profile: none (default discovery)
+- Source selection fingerprint: none
+- Source snapshot digest: `sha256:c24d8cff0ecef23fba39ebc78fe6f87141314c6456048d5ea68409145823edbe`
+- Pages created: 278
+- Pages updated: 451
+- Pages metadata-only: 5
+- Pages skipped (unchanged): 391
+- Pages deprecated: 0
+- Semantic fields preserved: 0
+- Moved entities: none
+- Flow pages initialized: 58 (api=39, http=13, process=6)
+- Workflow pages created: 5
+- Dependency pages initialized: 0
+- Surface policy updated: no
+- Infrastructure added: 0
+- Infrastructure changed: 3
+- Infrastructure moved: 0
+- Infrastructure removed: 0
+- Unsupported infrastructure YAML: 10
+
+## 2026-10-25
+
+### Wiki sync
+- Source: `.`
+- Generator version: `3.2.0`
+- Source selection profile: none (default discovery)
+- Source selection fingerprint: none
+- Source snapshot digest: `sha256:c24d8cff0ecef23fba39ebc78fe6f87141314c6456048d5ea68409145823edbe`
+- Pages created: 0
+- Pages updated: 2
+- Pages metadata-only: 0
+- Pages skipped (unchanged): 1120
+- Pages deprecated: 0
+- Semantic fields preserved: 0
+- Moved entities: none

@@ -1,6 +1,6 @@
 # TestPromptEngineeringSkillManifest
 
-**Location:** `tests/test_skill_prompt_engineering_e2e.py:49`
+**Location:** `tests/test_skill_prompt_engineering_e2e.py:52`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_skill_prompt_engineering_e2e](../modules/test_skill_prompt_engineering_e2e.md)

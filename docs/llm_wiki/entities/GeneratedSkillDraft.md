@@ -1,6 +1,6 @@
 # GeneratedSkillDraft
 
-**Location:** `ui/src/api/client.ts:480`
+**Location:** `ui/src/api/client.ts:481`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

@@ -160,41 +160,41 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| main | argparse.ArgumentParser | 40 | `argparse.ArgumentParser(data not statically known)` |
-| main | ap.add_argument | 41 | `ap.add_argument('--target', required=True)` |
-| main | ap.add_argument | 42 | `ap.add_argument('--tests', default='')` |
-| main | ap.add_argument | 43 | `ap.add_argument('--baseline', default='')` |
-| main | ap.parse_args | 44 | `ap.parse_args(data not statically known)` |
-| main | open(…).read | 46 | `open(a.target, encoding='utf-8').read(data not statically known)` |
-| main | open | 46 | `open(a.target, encoding='utf-8')` |
-| main | _emit | 48 | `_emit(status='eval_error', error=str(...))` |
-| _emit | dict | 32 | `dict(fields)` |
-| _emit | os.environ.get | 33 | `os.environ.get('AUTORESEARCH_SESSION_NONCE', '')` |
-| _emit | payload.setdefault | 34 | `payload.setdefault('status', 'completed')` |
+| main | argparse.ArgumentParser | 51 | `argparse.ArgumentParser(data not statically known)` |
+| main | ap.add_argument | 52 | `ap.add_argument('--target', required=True)` |
+| main | ap.add_argument | 53 | `ap.add_argument('--tests', default='')` |
+| main | ap.add_argument | 54 | `ap.add_argument('--baseline', default='')` |
+| main | ap.parse_args | 55 | `ap.parse_args(data not statically known)` |
+| main | open(…).read | 57 | `open(a.target, encoding='utf-8').read(data not statically known)` |
+| main | open | 57 | `open(a.target, encoding='utf-8')` |
+| main | _emit | 59 | `_emit(status='eval_error', error=str(...))` |
+| _emit | dict | 43 | `dict(fields)` |
+| _emit | os.environ.get | 44 | `os.environ.get('AUTORESEARCH_SESSION_NONCE', '')` |
+| _emit | payload.setdefault | 45 | `payload.setdefault('status', 'completed')` |
 
 ### Boundary effects
 
 | Kind | Target | Step | Line |
 |---|---|---|---:|
-| filesystem_read | `open` | `main` | 56 |
-| mutation | `ledger.append` | `main` | 59 |
-| filesystem_read | `json.load` | `main` | 70 |
-| filesystem_read | `open` | `main` | 70 |
-| environment_read | `os.environ.get` | `_emit` | 33 |
-| output | `print` | `_emit` | 37 |
+| filesystem_read | `open` | `main` | 69 |
+| mutation | `ledger.append` | `main` | 72 |
+| filesystem_read | `json.load` | `main` | 84 |
+| filesystem_read | `open` | `main` | 84 |
+| environment_read | `os.environ.get` | `_emit` | 44 |
+| output | `print` | `_emit` | 48 |
 
 ### Static analysis gaps
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| external_call | `main` | `argparse.ArgumentParser` | 40 |
-| unresolved_call | `main` | `ap.add_argument` | 41 |
-| unresolved_call | `main` | `ap.add_argument` | 42 |
-| unresolved_call | `main` | `ap.add_argument` | 43 |
-| unresolved_call | `main` | `ap.parse_args` | 44 |
-| unresolved_call | `main` | `open(a.target, encoding='utf-8').read` | 46 |
-| external_call | `main` | `open` | 46 |
-| unresolved_call | `_emit` | `payload.setdefault` | 34 |
+| external_call | `main` | `argparse.ArgumentParser` | 51 |
+| unresolved_call | `main` | `ap.add_argument` | 52 |
+| unresolved_call | `main` | `ap.add_argument` | 53 |
+| unresolved_call | `main` | `ap.add_argument` | 54 |
+| unresolved_call | `main` | `ap.parse_args` | 55 |
+| unresolved_call | `main` | `open(a.target, encoding='utf-8').read` | 57 |
+| external_call | `main` | `open` | 57 |
+| unresolved_call | `_emit` | `payload.setdefault` | 45 |
 | step_limit | `main` | `first 12 steps` | 0 |
 
 ## Behavior

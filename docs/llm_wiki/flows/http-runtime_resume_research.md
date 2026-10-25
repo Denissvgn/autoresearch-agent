@@ -41,7 +41,7 @@ sequenceDiagram
     p1->>p6: _json_hash
     p4->>p7: _request_actor
     p0-->>p8: str(e)
-    p0-->>p9: req.model_dump
+    p0-->>p9: req.model_dump(mode='json')
     p0-->>p10: _session_manager.resume_interrupted_session(…)
     p0-->>p11: session.get('id')
     p0-->>p12: HTTPException (src/api/research.py:runtime_resume_research)(status_code=409, detail=str(...))
@@ -139,17 +139,17 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| runtime_resume_research | _runtime_resume_metadata | 947 | `_runtime_resume_metadata(req)` |
-| _runtime_resume_metadata | bool | 90 | `bool(req.reason)` |
-| runtime_resume_research | _run_idempotent | 949 | `_run_idempotent(operation='research.runtime_resume', parent_id=research_id, key=idempotency_key, request_payload=req.model_dump(...), call=...)` |
-| _run_idempotent | key.strip | 406 | `key.strip(data not statically known)` |
-| _run_idempotent | HTTPException (src/api/research.py:_run_idempotent) | 407 | `HTTPException(status_code=400, detail='Idempotency-Key header is required')` |
-| _run_idempotent | HTTPException (src/api/research.py:_run_idempotent) | 409 | `HTTPException(status_code=503, detail='Results store is not initialized')` |
-| _run_idempotent | hashlib.sha256(…).hexdigest (src/api/research.py:_run_idempotent) | 411 | `hashlib.sha256(key.strip().encode('utf-8')).hexdigest(data not statically known)` |
-| _run_idempotent | hashlib.sha256 (src/api/research.py:_run_idempotent) | 411 | `hashlib.sha256(...)` |
-| _run_idempotent | key.strip().encode | 411 | `key.strip().encode('utf-8')` |
-| _run_idempotent | key.strip | 411 | `key.strip(data not statically known)` |
-| _run_idempotent | _json_hash | 412 | `_json_hash({...})` |
+| runtime_resume_research | _runtime_resume_metadata | 974 | `_runtime_resume_metadata(req)` |
+| _runtime_resume_metadata | bool | 91 | `bool(req.reason)` |
+| runtime_resume_research | _run_idempotent | 976 | `_run_idempotent(operation='research.runtime_resume', parent_id=research_id, key=idempotency_key, request_payload=req.model_dump(...), call=...)` |
+| _run_idempotent | key.strip | 407 | `key.strip(data not statically known)` |
+| _run_idempotent | HTTPException (src/api/research.py:_run_idempotent) | 408 | `HTTPException(status_code=400, detail='Idempotency-Key header is required')` |
+| _run_idempotent | HTTPException (src/api/research.py:_run_idempotent) | 410 | `HTTPException(status_code=503, detail='Results store is not initialized')` |
+| _run_idempotent | hashlib.sha256(…).hexdigest (src/api/research.py:_run_idempotent) | 412 | `hashlib.sha256(key.strip().encode('utf-8')).hexdigest(data not statically known)` |
+| _run_idempotent | hashlib.sha256 (src/api/research.py:_run_idempotent) | 412 | `hashlib.sha256(...)` |
+| _run_idempotent | key.strip().encode | 412 | `key.strip().encode('utf-8')` |
+| _run_idempotent | key.strip | 412 | `key.strip(data not statically known)` |
+| _run_idempotent | _json_hash | 413 | `_json_hash({...})` |
 
 ### Boundary effects
 
@@ -159,13 +159,13 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `_run_idempotent` | `key.strip` | 406 |
-| external_call | `_run_idempotent` | `HTTPException` | 407 |
-| external_call | `_run_idempotent` | `HTTPException` | 409 |
-| unresolved_call | `_run_idempotent` | `hashlib.sha256(key.strip().encode('utf-8')).hexdigest` | 411 |
-| external_call | `_run_idempotent` | `hashlib.sha256` | 411 |
-| unresolved_call | `_run_idempotent` | `key.strip().encode` | 411 |
-| unresolved_call | `_run_idempotent` | `key.strip` | 411 |
+| unresolved_call | `_run_idempotent` | `key.strip` | 407 |
+| external_call | `_run_idempotent` | `HTTPException` | 408 |
+| external_call | `_run_idempotent` | `HTTPException` | 410 |
+| unresolved_call | `_run_idempotent` | `hashlib.sha256(key.strip().encode('utf-8')).hexdigest` | 412 |
+| external_call | `_run_idempotent` | `hashlib.sha256` | 412 |
+| unresolved_call | `_run_idempotent` | `key.strip().encode` | 412 |
+| unresolved_call | `_run_idempotent` | `key.strip` | 412 |
 | step_limit | `runtime_resume_research` | `first 12 steps` | 0 |
 
 ## Behavior

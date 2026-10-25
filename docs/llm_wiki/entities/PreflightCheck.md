@@ -1,6 +1,6 @@
 # PreflightCheck
 
-**Location:** `src/core/preflight.py:49`
+**Location:** `src/core/preflight.py:50`
 **Kind:** Class
 **Bases:** `Protocol`
 **Module:** [preflight](../modules/preflight.md)
@@ -36,19 +36,16 @@ flowchart LR
     n0["PreflightCheck (src/core/preflight.py)"]
     n1["Protocol"]
     n2["preflight_check_from_target (src/core/preflight.py)"]
-    n3["ManifestSkillRuntime.preflight_checks (src/core/skill_runtime.py)"]
-    n4["SkillRuntime.preflight_checks (src/core/skill_runtime.py)"]
-    n5["tests/test_preflight.py"]
+    n3["src/core/skill_runtime.py"]
+    n4["tests/test_preflight.py"]
     n0 --> n1
     n2 --> n0
     n3 --> n0
     n4 --> n0
-    n5 --> n0
     click n0 "../modules/preflight.md"
     click n2 "../modules/preflight.md"
     click n3 "../modules/skill_runtime.md"
-    click n4 "../modules/skill_runtime.md"
-    click n5 "../modules/test_preflight.md"
+    click n4 "../modules/test_preflight.md"
 ```
 
 ### Summary
@@ -68,6 +65,5 @@ flowchart LR
 | Reference | Kind | Source | Call sites |
 |---|---|---|---:|
 | `preflight_check_from_target` | type_reference | [preflight](../modules/preflight.md) | — |
-| `ManifestSkillRuntime.preflight_checks` | type_reference | [skill_runtime](../modules/skill_runtime.md) | — |
-| `SkillRuntime.preflight_checks` | type_reference | [skill_runtime](../modules/skill_runtime.md) | — |
+| `skill_runtime` | import | [skill_runtime](../modules/skill_runtime.md) | — |
 | `test_preflight` | import | [test_preflight](../modules/test_preflight.md) | — |

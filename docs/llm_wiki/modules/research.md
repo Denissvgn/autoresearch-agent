@@ -18,7 +18,7 @@ Research session management endpoints.
 | `json` | `json` |
 | `logging` | `logging` |
 | `os` | `os` |
-| `pydantic` | `BaseModel`, `Field`, `field_validator`, `model_validator` |
+| `pydantic` | `BaseModel`, `ConfigDict`, `Field`, `field_validator`, `model_validator` |
 | `src.api.audit` | `record_api_audit_event` |
 | `src.api.auth` | `require_api_auth` |
 | `src.config` | `settings` |
@@ -54,7 +54,7 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Inbound | `src` (1) |
-| Inbound | `tests` (9) |
+| Inbound | `tests` (10) |
 | Outbound | `src` (11) |
 
 ### External packages
@@ -63,16 +63,16 @@ flowchart LR
 |---|---:|---:|
 | python | 3 | 1 |
 
-> All 21 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 22 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [StartResearchRequest](../entities/research_StartResearchRequest.md) | 469 | `BaseModel` | — |
-| [EstimateCostRequest](../entities/EstimateCostRequest.md) | 536 | `BaseModel` | Body for ``POST /research/estimate-cost`` — the New-Research preview. |
-| [ContinueResearchRequest](../entities/ContinueResearchRequest.md) | 848 | `BaseModel` | Request body for continuing a timed-out/completed session. |
-| [RuntimeResumeRequest](../entities/RuntimeResumeRequest.md) | 862 | `ContinueResearchRequest` | Explicit operator action for resuming a restart-recovered session. |
+| [StartResearchRequest](../entities/research_StartResearchRequest.md) | 470 | `BaseModel` | — |
+| [EstimateCostRequest](../entities/EstimateCostRequest.md) | 546 | `BaseModel` | Body for ``POST /research/estimate-cost`` — the New-Research preview. |
+| [ContinueResearchRequest](../entities/ContinueResearchRequest.md) | 873 | `BaseModel` | Request body for continuing a timed-out/completed session. |
+| [RuntimeResumeRequest](../entities/RuntimeResumeRequest.md) | 889 | `ContinueResearchRequest` | Explicit operator action for resuming a restart-recovered session. |
 
 ## Functions
 

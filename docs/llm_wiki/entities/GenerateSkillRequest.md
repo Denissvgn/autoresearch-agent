@@ -1,6 +1,6 @@
 # GenerateSkillRequest
 
-**Location:** `src/api/skills.py:443`
+**Location:** `src/api/skills.py:474`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [src_api_skills](../modules/src_api_skills.md)
@@ -9,14 +9,20 @@
 
 Body for ``POST /skills/generate``.
 
+## Model Configuration
+
+| Setting | Value | Source |
+|---------|-------|--------|
+| `extra` | `'forbid'` | model_config |
+
 ## Attributes
 
 | Name | Type | Wire name | Required | Nullable | Default | Constraints | Examples | Description |
 |------|------|-----------|----------|----------|---------|-------------|-------------|----------|
 | `goal` | `str` | `goal` | Yes | No | — | min_length=8 | — | Natural-language description of the research domain. |
 | `skill_id` | `Optional[str]` | `skill_id` | No | Yes | `None` | — | — | Override the generated kebab-case skill id. |
-| `provider` | `Literal['anthropic', 'openai']` | `provider` | No | No | `'anthropic'` | — | — | — |
-| `model` | `Optional[str]` | `model` | No | Yes | `None` | — | — | Model id (default: settings.anthropic_model). |
+| `provider` | `Literal['anthropic', 'openai', 'openai-compatible', 'ollama', 'vllm', 'lmstudio', 'llamacpp', 'local', 'openrouter']` | `provider` | No | No | `'anthropic'` | — | — | — |
+| `model` | `Optional[str]` | `model` | No | Yes | `None` | — | — | Model id (default: settings.llm_model, settings.openai_model, or settings.anthropic_model). |
 
 ## Methods
 

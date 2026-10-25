@@ -1,6 +1,6 @@
 # SessionRecord
 
-**Location:** `src/core/skill_runtime.py:82`
+**Location:** `src/core/skill_runtime.py:83`
 **Kind:** Class
 **Bases:** `TypedDict`
 **Module:** [skill_runtime](../modules/skill_runtime.md)

@@ -1,6 +1,6 @@
 # PreflightEntry
 
-**Location:** `src/core/skill_manifest.py:603`
+**Location:** `src/core/skill_manifest.py:690`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)
@@ -34,6 +34,7 @@ placeholders (G6, resolved by the loader).
 | `health_paths` | `list[str]` | `health_paths` | No | No | factory: `lambda: ['/health']` | — | — | — |
 | `required` | `bool` | `required` | No | No | `True` | — | — | — |
 | `timeout_s` | `float` | `timeout_s` | No | No | `3.0` | ge=0 | — | — |
+| `stage` | `Literal['source', 'generated']` | `stage` | No | No | `'source'` | — | — | — |
 
 ## Methods
 
@@ -59,7 +60,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [skill_manifest](../modules/skill_manifest.md) | 1 | `health_paths`, `kind`, `name`, `path`, `required`, `timeout_s`, `url` |
+| [skill_manifest](../modules/skill_manifest.md) | 1 | `health_paths`, `kind`, `name`, `path`, `required`, `stage`, `timeout_s`, `url` |
 
 ### Structure
 

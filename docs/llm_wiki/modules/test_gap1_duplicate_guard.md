@@ -34,8 +34,8 @@ or ``marker.get("training_time_s") is None`` (no training executed).
 | `pytest` | `pytest` |
 | `src.core.orchestrator` | `AgentOrchestrator` |
 | `sys` | `sys` |
-| `types` | `types` |
-| `typing` | `Any`, `Dict` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `Any`, `Dict`, `cast` |
 
 ## Local dependency map
 

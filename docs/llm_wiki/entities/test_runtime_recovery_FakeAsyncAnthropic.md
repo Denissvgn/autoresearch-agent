@@ -1,6 +1,6 @@
 # _FakeAsyncAnthropic
 
-**Location:** `tests/test_runtime_recovery.py:18`
+**Location:** `tests/test_runtime_recovery.py:20`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_runtime_recovery](../modules/test_runtime_recovery.md)

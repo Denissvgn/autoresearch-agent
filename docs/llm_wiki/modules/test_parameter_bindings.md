@@ -33,6 +33,8 @@ with identical bound values, and no core branch keyed on a skill name remains.
 | `sys` | `sys` |
 | `tempfile` | `tempfile` |
 | `types` | `types` |
+| `typing` | `Any` |
+| `unittest.mock` | `MagicMock` |
 | `yaml` | `yaml` |
 
 ## Local dependency map
@@ -83,7 +85,7 @@ flowchart LR
 | Function | Signature | Decorators | Description |
 |----------|-----------|------------|-------------|
 | `_runtime` | `(skill: str) -> ManifestSkillRuntime` | — | — |
-| `_config` | `(skill: str, **params)` | — | — |
+| `_config` | `(skill: str, **params: Any)` | — | — |
 | `test_nondefault_values_trace_into_rendered_commands` | `(skill: str) -> None` | `@pytest.mark.parametrize('skill', sorted(NONDEFAULT))` | API-submitted values are visible in both rendered commands. |
 | `test_live_and_demo_binding_parity` | `(skill: str) -> None` | `@pytest.mark.parametrize('skill', sorted(NONDEFAULT))` | Live and demo commands carry identical bound flag values. |
 | `test_no_core_branch_on_skill_name` | `() -> None` | — | Bundled-skill differences live in manifest bindings, not core branches. |

@@ -1,6 +1,6 @@
 # TestEstimateCost
 
-**Location:** `tests/test_llm_provider_openai.py:222`
+**Location:** `tests/test_llm_provider_openai.py:223`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_llm_provider_openai](../modules/test_llm_provider_openai.md)

@@ -22,7 +22,7 @@ _Auto-generated from `FakeStore` in `tests/test_results_api.py`._
 | `get_session` | *(async)* `(session_id: str)` | — | — |
 | `get_iterations` | *(async)* `(research_id: str)` | — | — |
 | `get_iteration` | *(async)* `(research_id: str, iteration: int)` | — | — |
-| `get_best_iteration` | *(async)* `(research_id: str)` | — | — |
+| `get_best_iteration` | *(async)* `(research_id, **kwargs)` | — | — |
 | `get_hpo_studies` | *(async)* `(research_id: str)` | — | — |
 | `get_planned_trials` | *(async)* `(research_id: str)` | — | — |
 | `list_promotions` | *(async)* `()` | — | — |

@@ -1,6 +1,6 @@
 # NetworkPolicy
 
-**Location:** `src/core/execution_contracts.py:678`
+**Location:** `src/core/execution_contracts.py:680`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

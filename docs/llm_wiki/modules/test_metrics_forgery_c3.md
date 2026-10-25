@@ -41,8 +41,8 @@ narrowing), the runtime capability properties, and the out-of-band nonce.
 | `src.core.skill_runtime` | `ManifestSkillRuntime` |
 | `sys` | `sys` |
 | `tests.test_canonical_start_wiring` | `FakeOrchestrator`, `_configure`, `_healthy_preflight` |
-| `types` | `types` |
-| `typing` | `Any`, `Dict`, `List`, `Optional` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `Any`, `Dict`, `List`, `Optional`, `cast` |
 | `unittest.mock` | `MagicMock` |
 
 ## Local dependency map
@@ -59,6 +59,8 @@ flowchart LR
     n6["tests/test_metrics_forgery_c3.py"]
     n0 --> n4
     n2 --> n0
+    n2 --> n3
+    n2 --> n4
     n4 --> n0
     n5 --> n0
     n5 --> n1
@@ -100,8 +102,8 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [_FakeAgentLog](../entities/test_metrics_forgery_c3_FakeAgentLog.md) | 56 | — | — |
-| [_AuditStore](../entities/AuditStore.md) | 64 | — | — |
+| [_FakeAgentLog](../entities/test_metrics_forgery_c3_FakeAgentLog.md) | 57 | — | — |
+| [_AuditStore](../entities/AuditStore.md) | 65 | — | — |
 
 ## Functions
 

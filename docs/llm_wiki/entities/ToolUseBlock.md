@@ -1,6 +1,6 @@
 # ToolUseBlock
 
-**Location:** `src/core/llm_provider.py:168`
+**Location:** `src/core/llm_provider.py:189`
 **Kind:** Class
 **Bases:** —
 **Module:** [llm_provider](../modules/llm_provider.md)
@@ -38,13 +38,13 @@ flowchart LR
     n3["MockProvider.messages_create (src/core/llm_provider.py)"]
     n4["AgentOrchestrator._finalize_tool_result (src/core/orchestrator.py)"]
     n5["test_to_sdk_messages_tool_use_block (tests/test_anthropic_provider.py)"]
-    n6["test_value_types_are_frozen_and_construct_correctly (tests/test_llm_provider.py)"]
-    n7["TestToOpenAIMessages.test_assistant_with_tool_use (tests/test_llm_provider_openai.py)"]
-    n8["test_mock_provider_honors_custom_marker_prefix (tests/test_mock_provider.py)"]
-    n9["test_mock_provider_relay_only_from_newest_tool_result (tests/test_mock_provider.py)"]
-    n10["test_mock_provider_relays_governed_eval_marker (tests/test_mock_provider.py)"]
-    n11["_fake_bash_tool_use (tests/test_orchestrator_timeout.py)"]
-    n12["_ScriptedProvider.messages_create (tests/test_parallel_trials.py)"]
+    n6["_OnePerTurnScriptedProvider.messages_create (tests/test_domain_conformance.py)"]
+    n7["test_value_types_are_frozen_and_construct_correctly (tests/test_llm_provider.py)"]
+    n8["TestToOpenAIMessages.test_assistant_with_tool_use (tests/test_llm_provider_openai.py)"]
+    n9["test_mock_provider_honors_custom_marker_prefix (tests/test_mock_provider.py)"]
+    n10["test_mock_provider_relay_only_from_newest_tool_result (tests/test_mock_provider.py)"]
+    n11["test_mock_provider_relays_governed_eval_marker (tests/test_mock_provider.py)"]
+    n12["_fake_bash_tool_use (tests/test_orchestrator_timeout.py)"]
     n1 --> n0
     n2 --> n0
     n3 --> n0
@@ -63,13 +63,13 @@ flowchart LR
     click n3 "../modules/llm_provider.md"
     click n4 "../modules/orchestrator.md"
     click n5 "../modules/test_anthropic_provider.md"
-    click n6 "../modules/test_llm_provider.md"
-    click n7 "../modules/test_llm_provider_openai.md"
-    click n8 "../modules/test_mock_provider.md"
+    click n6 "../modules/test_domain_conformance.md"
+    click n7 "../modules/test_llm_provider.md"
+    click n8 "../modules/test_llm_provider_openai.md"
     click n9 "../modules/test_mock_provider.md"
     click n10 "../modules/test_mock_provider.md"
-    click n11 "../modules/test_orchestrator_timeout.md"
-    click n12 "../modules/test_parallel_trials.md"
+    click n11 "../modules/test_mock_provider.md"
+    click n12 "../modules/test_orchestrator_timeout.md"
 ```
 
 ### Summary
@@ -87,12 +87,12 @@ flowchart LR
 | `MockProvider.messages_create` | call | [llm_provider](../modules/llm_provider.md) | 2 |
 | `AgentOrchestrator._finalize_tool_result` | type_reference | [orchestrator](../modules/orchestrator.md) | — |
 | `test_to_sdk_messages_tool_use_block` | call | [test_anthropic_provider](../modules/test_anthropic_provider.md) | 1 |
+| `_OnePerTurnScriptedProvider.messages_create` | call | [test_domain_conformance](../modules/test_domain_conformance.md) | 1 |
 | `test_value_types_are_frozen_and_construct_correctly` | type_reference | [test_llm_provider](../modules/test_llm_provider.md) | — |
 | `TestToOpenAIMessages.test_assistant_with_tool_use` | call | [test_llm_provider_openai](../modules/test_llm_provider_openai.md) | 1 |
 | `test_mock_provider_honors_custom_marker_prefix` | call | [test_mock_provider](../modules/test_mock_provider.md) | 1 |
 | `test_mock_provider_relay_only_from_newest_tool_result` | call | [test_mock_provider](../modules/test_mock_provider.md) | 2 |
 | `test_mock_provider_relays_governed_eval_marker` | call | [test_mock_provider](../modules/test_mock_provider.md) | 1 |
 | `_fake_bash_tool_use` | call | [test_orchestrator_timeout](../modules/test_orchestrator_timeout.md) | 1 |
-| `_ScriptedProvider.messages_create` | call | [test_parallel_trials](../modules/test_parallel_trials.md) | 1 |
 
-> References: showing 12 of 13 logical references; 1 omitted by the 12-row generated summary limit.
+> References: showing 12 of 14 logical references; 2 omitted by the 12-row generated summary limit.

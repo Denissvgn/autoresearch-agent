@@ -106,9 +106,9 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| pause_research | _session_manager.pause_session | 804 | `_session_manager.pause_session(research_id)` |
-| pause_research | _audit | 806 | `_audit(request, action='research.pause', outcome='failure', research_id=research_id, error_message='Session not found or not running')` |
-| _audit | record_api_audit_event | 109 | `record_api_audit_event(request, _store, action=action, outcome=outcome, research_id=research_id, pipeline_id=pipeline_id, metadata=metadata, error_message=error_message)` |
+| pause_research | _session_manager.pause_session | 829 | `_session_manager.pause_session(research_id)` |
+| pause_research | _audit | 831 | `_audit(request, action='research.pause', outcome='failure', research_id=research_id, error_message='Session not found or not running')` |
+| _audit | record_api_audit_event | 110 | `record_api_audit_event(request, _store, action=action, outcome=outcome, research_id=research_id, pipeline_id=pipeline_id, metadata=metadata, error_message=error_message)` |
 | record_api_audit_event | _request_actor | 51 | `_request_actor(request)` |
 | _request_actor | getattr | 13 | `getattr(request.state, 'auth_actor', None)` |
 | _request_actor | isinstance | 14 | `isinstance(actor, AuthenticatedActor)` |
@@ -128,7 +128,7 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `pause_research` | `_session_manager.pause_session` | 804 |
+| unresolved_call | `pause_research` | `_session_manager.pause_session` | 829 |
 | external_call | `_request_actor` | `getattr` | 13 |
 | external_call | `_request_actor` | `isinstance` | 14 |
 | unresolved_call | `record_api_audit_event` | `store.record_audit_event` | 52 |

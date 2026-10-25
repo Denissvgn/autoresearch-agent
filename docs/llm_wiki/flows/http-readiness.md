@@ -149,8 +149,8 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| readiness | _store.ping | 237 | `_store.ping(data not statically known)` |
-| readiness | run_service_preflight | 241 | `run_service_preflight(targets=[...])` |
+| readiness | _store.ping | 246 | `_store.ping(data not statically known)` |
+| readiness | run_service_preflight | 250 | `run_service_preflight(targets=[...])` |
 | run_service_preflight | datetime.now(…).isoformat | 97 | `datetime.now(timezone.utc).isoformat(data not statically known)` |
 | run_service_preflight | datetime.now | 97 | `datetime.now(timezone.utc)` |
 | run_service_preflight | bool (src/core/service_preflight.py:run_service_preflight) | 99 | `bool(settings_obj.allow_unready_services)` |
@@ -173,7 +173,7 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `readiness` | `_store.ping` | 237 |
+| unresolved_call | `readiness` | `_store.ping` | 246 |
 | unresolved_call | `run_service_preflight` | `datetime.now(timezone.utc).isoformat` | 97 |
 | external_call | `run_service_preflight` | `datetime.now` | 97 |
 | external_call | `sanitize_service_url` | `urlsplit` | 43 |

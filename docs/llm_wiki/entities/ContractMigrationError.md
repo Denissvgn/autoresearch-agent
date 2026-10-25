@@ -1,6 +1,6 @@
 # ContractMigrationError
 
-**Location:** `src/core/execution_contracts.py:113`
+**Location:** `src/core/execution_contracts.py:115`
 **Kind:** Class
 **Bases:** `ContractError`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

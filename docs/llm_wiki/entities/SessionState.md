@@ -1,6 +1,6 @@
 # SessionState
 
-**Location:** `src/core/state_machine.py:44`
+**Location:** `src/core/state_machine.py:45`
 **Kind:** Enum
 **Bases:** `str`, `Enum`
 **Module:** [state_machine](../modules/state_machine.md)

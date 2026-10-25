@@ -20,7 +20,8 @@ _Auto-generated from `tests/test_marker_file_staleness.py`._
 | `src.core.results_store` | `ResultsStore` |
 | `sys` | `sys` |
 | `time` | `time` |
-| `types` | `types` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `cast` |
 
 ## Local dependency map
 

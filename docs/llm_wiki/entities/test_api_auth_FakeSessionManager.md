@@ -1,6 +1,6 @@
 # FakeSessionManager
 
-**Location:** `tests/test_api_auth.py:55`
+**Location:** `tests/test_api_auth.py:56`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_api_auth](../modules/test_api_auth.md)

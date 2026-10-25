@@ -1,6 +1,6 @@
 # PromotionPreviewRequest
 
-**Location:** `src/api/promotion.py:125`
+**Location:** `src/api/promotion.py:132`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [promotion](../modules/promotion.md)
@@ -8,6 +8,12 @@
 ## Description
 
 Unsigned discovery must be possible before an operator can sign a candidate.
+
+## Model Configuration
+
+| Setting | Value | Source |
+|---------|-------|--------|
+| `extra` | `'forbid'` | model_config |
 
 ## Validators
 

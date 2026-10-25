@@ -1,6 +1,6 @@
 # HTTPHealthCheck
 
-**Location:** `src/core/preflight.py:74`
+**Location:** `src/core/preflight.py:75`
 **Kind:** Class
 **Bases:** —
 **Module:** [preflight](../modules/preflight.md)

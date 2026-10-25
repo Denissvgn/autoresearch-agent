@@ -49,8 +49,8 @@ file target. These tests pin the C2 fixes:
 | `src.core.skill_registry` | `SkillRegistry`, `default_registry` |
 | `src.core.skill_runtime` | `ManifestSkillRuntime`, `SkillConfigError`, `materialize_skill_runtime` |
 | `sys` | `sys` |
-| `types` | `types` |
-| `typing` | `Any`, `Dict`, `List`, `Optional` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `Any`, `Dict`, `List`, `Optional`, `cast` |
 | `unittest.mock` | `MagicMock` |
 | `yaml` | `yaml`, `yaml` |
 
@@ -71,8 +71,13 @@ flowchart LR
     n1 --> n3
     n1 --> n4
     n1 --> n6
+    n2 --> n0
+    n2 --> n1
     n2 --> n4
+    n2 --> n6
     n2 --> n7
+    n3 --> n6
+    n4 --> n6
     n6 --> n5
     n7 --> n2
     n7 --> n3
@@ -119,12 +124,12 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [_FakePlanStore](../entities/FakePlanStore.md) | 175 | — | Minimal store surface for ``_refresh_phase_state``. |
-| [_GenuinenessStore](../entities/GenuinenessStore.md) | 331 | — | — |
-| [_ProbeBlockerSkill](../entities/ProbeBlockerSkill.md) | 342 | — | — |
-| [_AutoPromoteStore](../entities/AutoPromoteStore.md) | 414 | — | — |
-| [_FakeAgentLog](../entities/test_manifest_runtime_production_path_FakeAgentLog.md) | 451 | — | — |
-| [_RegistryApiSkill](../entities/RegistryApiSkill.md) | 459 | — | — |
+| [_FakePlanStore](../entities/FakePlanStore.md) | 176 | — | Minimal store surface for ``_refresh_phase_state``. |
+| [_GenuinenessStore](../entities/GenuinenessStore.md) | 332 | — | — |
+| [_ProbeBlockerSkill](../entities/ProbeBlockerSkill.md) | 343 | — | — |
+| [_AutoPromoteStore](../entities/AutoPromoteStore.md) | 415 | — | — |
+| [_FakeAgentLog](../entities/test_manifest_runtime_production_path_FakeAgentLog.md) | 452 | — | — |
+| [_RegistryApiSkill](../entities/RegistryApiSkill.md) | 460 | — | — |
 
 ## Functions
 

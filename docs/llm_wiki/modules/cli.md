@@ -39,10 +39,13 @@ Design decisions (P1-007 house style):
 | `asyncio` | `asyncio` |
 | `pathlib` | `Path` |
 | `shutil` | `shutil` |
-| `src.config` | `settings` |
+| `src.agent_cli` | `build_agent_parser`, `cmd_agent` |
+| `src.config` | `settings`, `settings` |
 | `src.core.llm_provider` | `build_provider` |
+| `src.core.objective_comparator` | `reconcile_historical_best` |
 | `src.core.plugin_runner` | `PluginRunner` |
 | `src.core.promotion_target` | `SkillPromotionError`, `SkillRegistryPromotionTarget`, `SkillRegistryPromotionTarget` |
+| `src.core.results_store` | `ResultsStore` |
 | `src.core.skill_generator` | `CommandPolicyFinding`, `SkillGenerationError`, `SkillGenerator`, `audit_command_policy` |
 | `src.core.skill_loader` | `load_skill_manifest` |
 | `src.core.skill_manifest` | `PluginCaps` |
@@ -56,54 +59,24 @@ Design decisions (P1-007 house style):
 <!-- Auto-generated local dependency summary. Do not edit by hand. -->
 ```mermaid
 flowchart LR
-    n0["src/cli.py"]
-    n1["src/config.py"]
-    n2["src/core/llm_provider.py"]
-    n3["src/core/plugin_runner.py"]
-    n4["src/core/promotion_target.py"]
-    n5["src/core/skill_generator.py"]
-    n6["src/core/skill_loader.py"]
-    n7["src/core/skill_manifest.py"]
-    n8["tests/test_cli.py"]
-    n0 --> n1
-    n0 --> n2
-    n0 --> n3
-    n0 --> n4
-    n0 --> n5
-    n0 --> n6
-    n0 --> n7
+    n0["src"]
+    n1["src/cli.py"]
+    n2["tests"]
+    n1 --> n0
     n2 --> n1
-    n3 --> n7
-    n4 --> n1
-    n5 --> n6
-    n5 --> n7
-    n6 --> n1
-    n6 --> n7
-    n8 --> n0
-    n8 --> n2
-    click n0 "../modules/cli.md"
-    click n1 "../modules/config.md"
-    click n2 "../modules/llm_provider.md"
-    click n3 "../modules/plugin_runner.md"
-    click n4 "../modules/promotion_target.md"
-    click n5 "../modules/skill_generator.md"
-    click n6 "../modules/skill_loader.md"
-    click n7 "../modules/skill_manifest.md"
-    click n8 "../modules/test_cli.md"
+    click n1 "../modules/cli.md"
 ```
+
+> Module-level dependencies exceed the generated-diagram limits, so the diagram and table below group them by top-level package. Counts report the number of module neighbors in each package.
 
 ### Internal neighbors
 
 | Direction | Module |
 |---|---|
-| Inbound | [test_cli](../modules/test_cli.md) |
-| Outbound | [config](../modules/config.md) |
-| Outbound | [llm_provider](../modules/llm_provider.md) |
-| Outbound | [plugin_runner](../modules/plugin_runner.md) |
-| Outbound | [promotion_target](../modules/promotion_target.md) |
-| Outbound | [skill_generator](../modules/skill_generator.md) |
-| Outbound | [skill_loader](../modules/skill_loader.md) |
-| Outbound | [skill_manifest](../modules/skill_manifest.md) |
+| Inbound | `tests` (3) |
+| Outbound | `src` (10) |
+
+> All 13 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Functions
 
@@ -119,4 +92,5 @@ flowchart LR
 | `_promote_flow` | *(async)* `(*, skill_id: str, findings: list[Any], args: argparse.Namespace) -> int` | — | — |
 | `_tag_promoted_skill` | `(skill_id: str, stable_dir: Path) -> None` | — | Best-effort annotated git tag ``skill/<id>/<version>`` for the promotion. |
 | `cmd_promote_skill` | *(async)* `(args: argparse.Namespace) -> int` | — | — |
+| `cmd_reconcile_bests` | *(async)* `(args: argparse.Namespace) -> int` | — | Report (or with --apply, migrate) historical bests under known objectives. |
 | `main` | `(argv: Optional[list[str]] = None) -> int` | — | — |

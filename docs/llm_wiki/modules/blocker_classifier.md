@@ -21,15 +21,20 @@ flowchart LR
     n0["src/core/blocker_classifier.py"]
     n1["src/core/config_promoter.py"]
     n2["src/core/development_gate_bundle.py"]
-    n3["src/core/research_state.py"]
+    n3["src/core/orchestrator.py"]
+    n4["src/core/research_state.py"]
     n1 --> n0
     n1 --> n2
     n2 --> n0
     n3 --> n0
+    n3 --> n1
+    n3 --> n2
+    n4 --> n0
     click n0 "../modules/blocker_classifier.md"
     click n1 "../modules/config_promoter.md"
     click n2 "../modules/development_gate_bundle.md"
-    click n3 "../modules/research_state.md"
+    click n3 "../modules/orchestrator.md"
+    click n4 "../modules/research_state.md"
 ```
 
 ### Internal neighbors
@@ -38,6 +43,7 @@ flowchart LR
 |---|---|
 | Inbound | [config_promoter](../modules/config_promoter.md) |
 | Inbound | [development_gate_bundle](../modules/development_gate_bundle.md) |
+| Inbound | [orchestrator](../modules/orchestrator.md) |
 | Inbound | [research_state](../modules/research_state.md) |
 
 ## Functions

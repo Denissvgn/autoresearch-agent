@@ -25,19 +25,23 @@ flowchart LR
     n4["src/compat/legacy_alias.py"]
     n5["src/core/config_promoter.py"]
     n6["src/core/legacy_alias.py"]
-    n7["src/core/research_manifest.py"]
-    n8["src/ws/events.py"]
-    n9["tests/test_research_config.py"]
+    n7["src/core/objective_comparator.py"]
+    n8["src/core/research_manifest.py"]
+    n9["src/ws/events.py"]
+    n10["tests/test_research_config.py"]
     n0 --> n5
     n0 --> n6
     n1 --> n6
     n2 --> n6
+    n2 --> n7
     n3 --> n6
     n5 --> n6
+    n5 --> n7
     n6 --> n4
     n7 --> n6
     n8 --> n6
     n9 --> n6
+    n10 --> n6
     click n0 "../modules/promotion.md"
     click n1 "../modules/research.md"
     click n2 "../modules/results.md"
@@ -45,9 +49,10 @@ flowchart LR
     click n4 "../modules/compat_legacy_alias.md"
     click n5 "../modules/config_promoter.md"
     click n6 "../modules/core_legacy_alias.md"
-    click n7 "../modules/research_manifest.md"
-    click n8 "../modules/events.md"
-    click n9 "../modules/test_research_config.md"
+    click n7 "../modules/objective_comparator.md"
+    click n8 "../modules/research_manifest.md"
+    click n9 "../modules/events.md"
+    click n10 "../modules/test_research_config.md"
 ```
 
 ### Internal neighbors
@@ -59,6 +64,7 @@ flowchart LR
 | Inbound | [results](../modules/results.md) |
 | Inbound | [src_api_skills](../modules/src_api_skills.md) |
 | Inbound | [config_promoter](../modules/config_promoter.md) |
+| Inbound | [objective_comparator](../modules/objective_comparator.md) |
 | Inbound | [research_manifest](../modules/research_manifest.md) |
 | Inbound | [events](../modules/events.md) |
 | Inbound | [test_research_config](../modules/test_research_config.md) |

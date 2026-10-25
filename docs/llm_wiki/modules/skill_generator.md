@@ -51,7 +51,7 @@ Design decisions (P1-007 house style):
 | `re` | `re` |
 | `src.core.skill_loader` | `load_skill_manifest` |
 | `src.core.skill_manifest` | `ManifestValidationError` |
-| `src.core.skill_registry` | `DRAFTS_SUBDIR`, `SkillRegistry` |
+| `src.core.skill_registry` | `DRAFTS_SUBDIR`, `SkillRegistry`, `DEFAULT_SKILLS_ROOT` |
 | `typing` | `Any`, `Optional` |
 | `yaml` | `_yaml` |
 

@@ -24,6 +24,7 @@ parity.
 | `output_tokens` | `int` | *required* | — |
 | `cache_read_tokens` | `int` | `0` | — |
 | `cache_write_tokens` | `int` | `0` | — |
+| `reasoning_tokens` | `int` | `0` | — |
 
 ## Methods
 
@@ -38,15 +39,15 @@ flowchart LR
     n1["_from_openai_response (src/core/llm_provider.py)"]
     n2["_from_sdk_response (src/core/llm_provider.py)"]
     n3["AnthropicProvider.estimate_cost (src/core/llm_provider.py)"]
-    n4["LLMProvider.estimate_cost (src/core/llm_provider.py)"]
-    n5["MockProvider.estimate_cost (src/core/llm_provider.py)"]
-    n6["MockProvider.messages_create (src/core/llm_provider.py)"]
-    n7["OpenAIProvider.estimate_cost (src/core/llm_provider.py)"]
-    n8["src/core/orchestrator.py"]
-    n9["test_estimate_cost_flat_sonnet_baseline (tests/test_anthropic_provider.py)"]
-    n10["test_messages_create_maps_text_and_tool_use_blocks (tests/test_anthropic_provider.py)"]
-    n11["test_value_types_are_frozen_and_construct_correctly (tests/test_llm_provider.py)"]
-    n12["TestEstimateCost.test_default_model (tests/test_llm_provider_openai.py)"]
+    n4["AnthropicProvider.price_quote (src/core/llm_provider.py)"]
+    n5["LLMProvider.estimate_cost (src/core/llm_provider.py)"]
+    n6["LLMProvider.price_quote (src/core/llm_provider.py)"]
+    n7["MockProvider.estimate_cost (src/core/llm_provider.py)"]
+    n8["MockProvider.messages_create (src/core/llm_provider.py)"]
+    n9["MockProvider.price_quote (src/core/llm_provider.py)"]
+    n10["OpenAIProvider.estimate_cost (src/core/llm_provider.py)"]
+    n11["OpenAIProvider.price_quote (src/core/llm_provider.py)"]
+    n12["AgentOrchestrator._record_usage (src/core/orchestrator.py)"]
     n1 --> n0
     n2 --> n0
     n3 --> n0
@@ -67,18 +68,18 @@ flowchart LR
     click n5 "../modules/llm_provider.md"
     click n6 "../modules/llm_provider.md"
     click n7 "../modules/llm_provider.md"
-    click n8 "../modules/orchestrator.md"
-    click n9 "../modules/test_anthropic_provider.md"
-    click n10 "../modules/test_anthropic_provider.md"
-    click n11 "../modules/test_llm_provider.md"
-    click n12 "../modules/test_llm_provider_openai.md"
+    click n8 "../modules/llm_provider.md"
+    click n9 "../modules/llm_provider.md"
+    click n10 "../modules/llm_provider.md"
+    click n11 "../modules/llm_provider.md"
+    click n12 "../modules/orchestrator.md"
 ```
 
 ### Summary
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [llm_provider](../modules/llm_provider.md) | 0 | `cache_read_tokens`, `cache_write_tokens`, `input_tokens`, `output_tokens` |
+| [llm_provider](../modules/llm_provider.md) | 0 | `cache_read_tokens`, `cache_write_tokens`, `input_tokens`, `output_tokens`, `reasoning_tokens` |
 
 ### References
 
@@ -87,14 +88,14 @@ flowchart LR
 | `_from_openai_response` | call | [llm_provider](../modules/llm_provider.md) | 1 |
 | `_from_sdk_response` | call | [llm_provider](../modules/llm_provider.md) | 1 |
 | `AnthropicProvider.estimate_cost` | type_reference | [llm_provider](../modules/llm_provider.md) | — |
+| `AnthropicProvider.price_quote` | type_reference | [llm_provider](../modules/llm_provider.md) | — |
 | `LLMProvider.estimate_cost` | type_reference | [llm_provider](../modules/llm_provider.md) | — |
+| `LLMProvider.price_quote` | type_reference | [llm_provider](../modules/llm_provider.md) | — |
 | `MockProvider.estimate_cost` | type_reference | [llm_provider](../modules/llm_provider.md) | — |
 | `MockProvider.messages_create` | call | [llm_provider](../modules/llm_provider.md) | 3 |
+| `MockProvider.price_quote` | type_reference | [llm_provider](../modules/llm_provider.md) | — |
 | `OpenAIProvider.estimate_cost` | type_reference | [llm_provider](../modules/llm_provider.md) | — |
-| `orchestrator` | import | [orchestrator](../modules/orchestrator.md) | — |
-| `test_estimate_cost_flat_sonnet_baseline` | call | [test_anthropic_provider](../modules/test_anthropic_provider.md) | 1 |
-| `test_messages_create_maps_text_and_tool_use_blocks` | call | [test_anthropic_provider](../modules/test_anthropic_provider.md) | 1 |
-| `test_value_types_are_frozen_and_construct_correctly` | type_reference | [test_llm_provider](../modules/test_llm_provider.md) | — |
-| `TestEstimateCost.test_default_model` | call | [test_llm_provider_openai](../modules/test_llm_provider_openai.md) | 1 |
+| `OpenAIProvider.price_quote` | type_reference | [llm_provider](../modules/llm_provider.md) | — |
+| `AgentOrchestrator._record_usage` | type_reference | [orchestrator](../modules/orchestrator.md) | — |
 
-> References: showing 12 of 18 logical references; 6 omitted by the 12-row generated summary limit.
+> References: showing 12 of 35 logical references; 23 omitted by the 12-row generated summary limit.

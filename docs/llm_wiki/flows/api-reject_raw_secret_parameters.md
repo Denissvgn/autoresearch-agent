@@ -70,12 +70,12 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| reject_raw_secret_parameters | parameters.items | 187 | `parameters.items(data not statically known)` |
-| reject_raw_secret_parameters | _SECRET_PARAM_KEY_RE.search | 188 | `_SECRET_PARAM_KEY_RE.search(key)` |
-| reject_raw_secret_parameters | is_secret_reference | 188 | `is_secret_reference(value)` |
-| is_secret_reference | isinstance | 182 | `isinstance(value, str)` |
-| is_secret_reference | value.startswith | 182 | `value.startswith(SECRET_WIRE_PREFIX)` |
-| reject_raw_secret_parameters | ContractError | 189 | `ContractError(...)` |
+| reject_raw_secret_parameters | parameters.items | 189 | `parameters.items(data not statically known)` |
+| reject_raw_secret_parameters | _SECRET_PARAM_KEY_RE.search | 190 | `_SECRET_PARAM_KEY_RE.search(key)` |
+| reject_raw_secret_parameters | is_secret_reference | 190 | `is_secret_reference(value)` |
+| is_secret_reference | isinstance | 184 | `isinstance(value, str)` |
+| is_secret_reference | value.startswith | 184 | `value.startswith(SECRET_WIRE_PREFIX)` |
+| reject_raw_secret_parameters | ContractError | 191 | `ContractError(...)` |
 
 ### Boundary effects
 
@@ -85,10 +85,10 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `reject_raw_secret_parameters` | `parameters.items` | 187 |
-| unresolved_call | `reject_raw_secret_parameters` | `_SECRET_PARAM_KEY_RE.search` | 188 |
-| external_call | `is_secret_reference` | `isinstance` | 182 |
-| unresolved_call | `is_secret_reference` | `value.startswith` | 182 |
+| unresolved_call | `reject_raw_secret_parameters` | `parameters.items` | 189 |
+| unresolved_call | `reject_raw_secret_parameters` | `_SECRET_PARAM_KEY_RE.search` | 190 |
+| external_call | `is_secret_reference` | `isinstance` | 184 |
+| unresolved_call | `is_secret_reference` | `value.startswith` | 184 |
 
 ## Behavior
 

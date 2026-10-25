@@ -23,8 +23,8 @@ invariant + ``classify_error`` (which backs loop-owned retry), using a fake
 | `pytest` | `pytest` |
 | `src.core.llm_provider` | `_CLAUDE_INPUT_USD_PER_TOKEN`, `_CLAUDE_OUTPUT_USD_PER_TOKEN`, `AnthropicProvider`, `ErrorClass`, `Message`, `StopReason`, `TextBlock`, `ToolDef`, `ToolResultBlock`, `ToolUseBlock`, `Usage`, `_to_sdk_messages`, `_to_sdk_tools` |
 | `sys` | `sys` |
-| `types` | `types` |
-| `typing` | `Any` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `Any`, `cast` |
 | `unittest.mock` | `AsyncMock`, `MagicMock` |
 
 ## Local dependency map
@@ -69,7 +69,7 @@ flowchart LR
 | `test_messages_create_omits_unset_temperature_and_stop_sequences` | *(async)* `()` | `@pytest.mark.asyncio` | The orchestrator never sets temperature/stop_sequences; the wire request |
 | `test_complete_returns_joined_text` | *(async)* `()` | `@pytest.mark.asyncio` | — |
 | `test_complete_passes_system_when_provided` | *(async)* `()` | `@pytest.mark.asyncio` | — |
-| `_instance_without_init` | `(cls: type, **attrs: Any) -> Any` | — | Construct an exception instance bypassing __init__ (sets attributes after). |
+| `_instance_without_init` | `(cls: type[Any], **attrs: Any) -> Any` | — | Construct an exception instance bypassing __init__ (sets attributes after). |
 | `_status_error` | `(status_code: int) -> Exception` | — | — |
 | `test_classify_error_transient_connection_exceptions` | `()` | — | APITimeout/APIConnection/InternalServer are transient (no status code). |
 | `test_classify_error_transient_status_codes` | `()` | — | 429/502/503/529 are transient; other statuses are not. |

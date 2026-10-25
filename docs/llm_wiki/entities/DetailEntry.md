@@ -1,6 +1,6 @@
 # DetailEntry
 
-**Location:** `ui/src/pages/ResearchDetail.tsx:608`
+**Location:** `ui/src/pages/ResearchDetail.tsx:642`
 **Kind:** Type alias
 **Bases:** —
 **Module:** [ResearchDetail](../modules/ResearchDetail.md)

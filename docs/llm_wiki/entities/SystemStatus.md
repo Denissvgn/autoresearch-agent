@@ -1,6 +1,6 @@
 # SystemStatus
 
-**Location:** `ui/src/api/client.ts:445`
+**Location:** `ui/src/api/client.ts:446`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

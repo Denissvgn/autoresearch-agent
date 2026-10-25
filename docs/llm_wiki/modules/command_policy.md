@@ -27,67 +27,26 @@ Command policy for the autoresearch agent's compatibility bash tool.
 <!-- Auto-generated local dependency summary. Do not edit by hand. -->
 ```mermaid
 flowchart LR
-    n0["src/core/command_policy.py"]
-    n1["src/core/command_runner.py"]
-    n2["src/core/execution_request.py"]
-    n3["src/core/fs_safety.py"]
-    n4["src/core/result_authority.py"]
-    n5["src/core/tool_access.py"]
-    n6["tests/parity/_engine.py"]
-    n7["tests/test_command_policy.py"]
-    n8["tests/test_execution_request.py"]
-    n9["tests/test_manifest_runtime_production_path.py"]
-    n10["tests/test_pinned_evaluators.py"]
-    n11["tests/test_tool_access.py"]
-    n0 --> n2
-    n0 --> n3
-    n0 --> n4
-    n0 --> n5
+    n0["src"]
+    n1["src/core/command_policy.py"]
+    n2["tests"]
+    n0 --> n1
     n1 --> n0
-    n1 --> n5
-    n6 --> n0
-    n7 --> n0
-    n7 --> n1
-    n7 --> n5
-    n8 --> n0
-    n8 --> n1
-    n8 --> n2
-    n8 --> n5
-    n9 --> n0
-    n10 --> n0
-    n10 --> n1
-    n10 --> n5
-    n11 --> n0
-    n11 --> n5
-    click n0 "../modules/command_policy.md"
-    click n1 "../modules/command_runner.md"
-    click n2 "../modules/execution_request.md"
-    click n3 "../modules/fs_safety.md"
-    click n4 "../modules/result_authority.md"
-    click n5 "../modules/tool_access.md"
-    click n6 "../modules/_engine.md"
-    click n7 "../modules/test_command_policy.md"
-    click n8 "../modules/test_execution_request.md"
-    click n9 "../modules/test_manifest_runtime_production_path.md"
-    click n10 "../modules/test_pinned_evaluators.md"
-    click n11 "../modules/test_tool_access.md"
+    n2 --> n1
+    click n1 "../modules/command_policy.md"
 ```
+
+> Module-level dependencies exceed the generated-diagram limits, so the diagram and table below group them by top-level package. Counts report the number of module neighbors in each package.
 
 ### Internal neighbors
 
 | Direction | Module |
 |---|---|
-| Inbound | [command_runner](../modules/command_runner.md) |
-| Inbound | [_engine](../modules/_engine.md) |
-| Inbound | [test_command_policy](../modules/test_command_policy.md) |
-| Inbound | [test_execution_request](../modules/test_execution_request.md) |
-| Inbound | [test_manifest_runtime_production_path](../modules/test_manifest_runtime_production_path.md) |
-| Inbound | [test_pinned_evaluators](../modules/test_pinned_evaluators.md) |
-| Inbound | [test_tool_access](../modules/test_tool_access.md) |
-| Outbound | [execution_request](../modules/execution_request.md) |
-| Outbound | [fs_safety](../modules/fs_safety.md) |
-| Outbound | [result_authority](../modules/result_authority.md) |
-| Outbound | [tool_access](../modules/tool_access.md) |
+| Inbound | `src` (2) |
+| Inbound | `tests` (6) |
+| Outbound | `src` (4) |
+
+> All 12 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 

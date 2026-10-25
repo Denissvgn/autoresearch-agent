@@ -1,6 +1,6 @@
 # SkillLeaderboard
 
-**Location:** `ui/src/api/client.ts:551`
+**Location:** `ui/src/api/client.ts:562`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)
@@ -15,8 +15,8 @@ _Auto-generated from `SkillLeaderboard` in `ui/src/api/client.ts`._
 |------|------|----------|---------|-------------|
 | `skill_id` | `string` | Yes | — | — |
 | `metric` | `{ field: string; label: string; direction: string; format: string }` | Yes | — | — |
-| `items` | `LeaderboardEntry[]` | Yes | — | — |
-| `total` | `number` | Yes | — | — |
+| `ranking_scope` | `string` | Yes | — | — |
+| `groups` | `SkillLeaderboardGroup[]` | Yes | — | — |
 
 ## Methods
 
@@ -31,4 +31,4 @@ _Auto-generated from `SkillLeaderboard` in `ui/src/api/client.ts`._
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [client](../modules/client.md) | 0 | `items`, `metric`, `skill_id`, `total` |
+| [client](../modules/client.md) | 0 | `groups`, `metric`, `ranking_scope`, `skill_id` |

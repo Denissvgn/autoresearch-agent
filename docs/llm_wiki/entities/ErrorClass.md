@@ -1,6 +1,6 @@
 # ErrorClass
 
-**Location:** `src/core/llm_provider.py:255`
+**Location:** `src/core/llm_provider.py:279`
 **Kind:** Class
 **Bases:** —
 **Module:** [llm_provider](../modules/llm_provider.md)
@@ -38,9 +38,9 @@ flowchart LR
     n3["MockProvider.classify_error (src/core/llm_provider.py)"]
     n4["OpenAIProvider.classify_error (src/core/llm_provider.py)"]
     n5["tests/test_anthropic_provider.py"]
-    n6["test_value_types_are_frozen_and_construct_correctly (tests/test_llm_provider.py)"]
-    n7["_ScriptedProvider.classify_error (tests/test_parallel_trials.py)"]
-    n8["_ScriptedProvider.classify_error (tests/test_result_authority.py)"]
+    n6["_OnePerTurnScriptedProvider.classify_error (tests/test_domain_conformance.py)"]
+    n7["test_value_types_are_frozen_and_construct_correctly (tests/test_llm_provider.py)"]
+    n8["_ScriptedProvider.classify_error (tests/test_parallel_trials.py)"]
     n1 --> n0
     n2 --> n0
     n3 --> n0
@@ -55,9 +55,9 @@ flowchart LR
     click n3 "../modules/llm_provider.md"
     click n4 "../modules/llm_provider.md"
     click n5 "../modules/test_anthropic_provider.md"
-    click n6 "../modules/test_llm_provider.md"
-    click n7 "../modules/test_parallel_trials.md"
-    click n8 "../modules/test_result_authority.md"
+    click n6 "../modules/test_domain_conformance.md"
+    click n7 "../modules/test_llm_provider.md"
+    click n8 "../modules/test_parallel_trials.md"
 ```
 
 ### Summary
@@ -78,7 +78,9 @@ flowchart LR
 | `OpenAIProvider.classify_error` | call | [llm_provider](../modules/llm_provider.md) | 3 |
 | `OpenAIProvider.classify_error` | type_reference | [llm_provider](../modules/llm_provider.md) | — |
 | `test_anthropic_provider` | import | [test_anthropic_provider](../modules/test_anthropic_provider.md) | — |
+| `_OnePerTurnScriptedProvider.classify_error` | call | [test_domain_conformance](../modules/test_domain_conformance.md) | 1 |
 | `test_value_types_are_frozen_and_construct_correctly` | type_reference | [test_llm_provider](../modules/test_llm_provider.md) | — |
 | `_ScriptedProvider.classify_error` | call | [test_parallel_trials](../modules/test_parallel_trials.md) | 1 |
 | `_ScriptedProvider.classify_error` | type_reference | [test_parallel_trials](../modules/test_parallel_trials.md) | — |
-| `_ScriptedProvider.classify_error` | call | [test_result_authority](../modules/test_result_authority.md) | 1 |
+
+> References: showing 12 of 13 logical references; 1 omitted by the 12-row generated summary limit.

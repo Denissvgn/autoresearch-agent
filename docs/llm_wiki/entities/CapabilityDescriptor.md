@@ -1,6 +1,6 @@
 # CapabilityDescriptor
 
-**Location:** `src/core/execution_contracts.py:444`
+**Location:** `src/core/execution_contracts.py:446`
 **Kind:** Pydantic model
 **Bases:** `VersionedContract`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

@@ -19,7 +19,7 @@ _Auto-generated from `ui/src/hooks/useResearch.ts`._
 
 | Signal | Values |
 |--------|--------|
-| Exports | `ResearchRealtimeBridge`, `useAgentLog`, `useBestIteration`, `useConfirmPromotion`, `useContinueSession`, `useCostEstimate`, `useDeleteSession`, `useIterations`, `useModels`, `usePauseSession`, `usePreviewPromotion`, `usePromotions`, `useResearchState`, `useResults`, `useResumeSession`, `useSession`, `useSessions`, `useSessionsPage`, `useSkillFormFields`, `useSkillLeaderboard`, `useSkillMetricSchema`, `useSkills`, `useStartResearch`, `useStatus`, `useStopSession` |
+| Exports | `ResearchRealtimeBridge`, `useAgentLog`, `useBestIteration`, `useConfirmPromotion`, `useContinueSession`, `useCostEstimate`, `useDeleteSession`, `useHarnessContext`, `useHarnesses`, `useIterations`, `useModels`, `usePauseSession`, `usePreviewPromotion`, `usePromotions`, `useResearchState`, `useResults`, `useResumeSession`, `useSession`, `useSessions`, `useSessionsPage`, `useSkillFormFields`, `useSkillLeaderboard`, `useSkillMetricSchema`, `useSkills`, `useStartResearch`, `useStatus`, `useStopSession` |
 
 ## Local dependency map
 
@@ -63,6 +63,8 @@ flowchart LR
 | `useResearchState` | `(id: string)` | — | — |
 | `useBestIteration` | `(id: string)` | — | — |
 | `useAgentLog` | `(id: string, isActive = false)` | — | — |
+| `useHarnesses` | `()` | — | — |
+| `useHarnessContext` | `(researchId: string \| null, isActive = true)` | — | — |
 | `useModels` | `()` | — | — |
 | `useSkills` | `()` | — | — |
 | `useSkillFormFields` | `(skillId: string \| null)` | — | — |

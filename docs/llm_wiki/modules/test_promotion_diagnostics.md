@@ -29,8 +29,8 @@ and broadcast payload so operators can distinguish infrastructure failures
 | `src.core` | `orchestrator` |
 | `src.core.orchestrator` | `AgentOrchestrator`, `ResearchConfig` |
 | `sys` | `sys` |
-| `types` | `types` |
-| `typing` | `Any`, `Dict`, `List`, `Optional` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `Any`, `Dict`, `List`, `Optional`, `cast` |
 
 ## Local dependency map
 

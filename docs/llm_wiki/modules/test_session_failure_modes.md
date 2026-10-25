@@ -53,8 +53,8 @@ Four scenarios:
 | `src.ws.events` | `broadcaster` |
 | `sys` | `sys` |
 | `time` | `time` |
-| `types` | `types` |
-| `typing` | `Any`, `Dict` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `Any`, `Dict`, `cast` |
 
 ## Local dependency map
 
@@ -80,8 +80,10 @@ flowchart LR
     n2 --> n8
     n5 --> n1
     n5 --> n2
+    n5 --> n6
     n5 --> n7
     n5 --> n8
+    n6 --> n1
     n6 --> n2
     n7 --> n8
     n9 --> n0
@@ -144,7 +146,7 @@ flowchart LR
 | `_healthy_preflight` | *(async)* `(*, targets = None) -> Dict[str, Any]` | — | — |
 | `_make_manager` | *(async)* `(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, mode: str) -> tuple[ResultsStore, Any, _ScriptedOrchestrator]` | — | Real SessionManager over a real SQLite store; only the orchestrator |
 | `_start_skill_session` | *(async)* `(manager: Any, **overrides: Any) -> Dict[str, Any]` | — | — |
-| `_await_terminal` | *(async)* `(store: ResultsStore, session_id: str, timeout_s: float = 2.0) -> Dict[str, Any] \| None` | — | Poll until the row leaves running/paused (P7-009 AC: 'within seconds'). |
+| `_await_terminal` | *(async)* `(store: ResultsStore, session_id: str, timeout_s: float = 15.0) -> Dict[str, Any] \| None` | — | Poll until the row leaves running/paused (P7-009 AC: 'within seconds'). |
 | `test_crashed_background_task_persists_failed_state` | *(async)* `(monkeypatch, tmp_path)` | `@pytest.mark.asyncio` | P7-009 AC: a session whose runtime raises before iterations shows |
 | `test_crash_finalizer_never_overwrites_orchestrator_terminal_state` | *(async)* `(monkeypatch, tmp_path)` | `@pytest.mark.asyncio` | P7-009 AC: a session the orchestrator already completed is untouched — |
 | `test_paused_session_crash_marks_failed` | *(async)* `(monkeypatch, tmp_path)` | `@pytest.mark.asyncio` | P7-009: the crash of a *paused* session's task also reaches ``failed`` |

@@ -57,10 +57,10 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| spa_fallback | os.path.join | 449 | `os.path.join(_ui_dist, full_path)` |
-| spa_fallback | os.path.isfile | 450 | `os.path.isfile(file_path)` |
-| spa_fallback | FileResponse | 451 | `FileResponse(file_path)` |
-| spa_fallback | FileResponse | 452 | `FileResponse(_index_html)` |
+| spa_fallback | os.path.join | 501 | `os.path.join(_ui_dist, full_path)` |
+| spa_fallback | os.path.isfile | 502 | `os.path.isfile(file_path)` |
+| spa_fallback | FileResponse | 503 | `FileResponse(file_path)` |
+| spa_fallback | FileResponse | 504 | `FileResponse(_index_html)` |
 
 ### Boundary effects
 
@@ -70,10 +70,10 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| external_call | `spa_fallback` | `os.path.join` | 449 |
-| external_call | `spa_fallback` | `os.path.isfile` | 450 |
-| external_call | `spa_fallback` | `FileResponse` | 451 |
-| external_call | `spa_fallback` | `FileResponse` | 452 |
+| external_call | `spa_fallback` | `os.path.join` | 501 |
+| external_call | `spa_fallback` | `os.path.isfile` | 502 |
+| external_call | `spa_fallback` | `FileResponse` | 503 |
+| external_call | `spa_fallback` | `FileResponse` | 504 |
 
 ## Behavior
 

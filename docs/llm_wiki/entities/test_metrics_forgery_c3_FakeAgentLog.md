@@ -1,6 +1,6 @@
 # _FakeAgentLog
 
-**Location:** `tests/test_metrics_forgery_c3.py:56`
+**Location:** `tests/test_metrics_forgery_c3.py:57`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_metrics_forgery_c3](../modules/test_metrics_forgery_c3.md)

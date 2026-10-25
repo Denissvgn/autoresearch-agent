@@ -1,6 +1,6 @@
 # PromotionScope
 
-**Location:** `src/core/skill_manifest.py:645`
+**Location:** `src/core/skill_manifest.py:742`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)
@@ -22,6 +22,7 @@ One promotion scope declaration (ARC-011 §9 ``promotion_target.scopes``).
 | `id` | `str` | `id` | Yes | No | — | — | — | — |
 | `approval_required` | `bool` | `approval_required` | No | No | `False` | — | — | — |
 | `prior_scopes` | `list[str]` | `prior_scopes` | No | No | factory: `list` | — | — | — |
+| `evidence` | `list[str]` | `evidence` | No | No | factory: `list` | — | — | — |
 
 ## Methods
 
@@ -42,7 +43,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [skill_manifest](../modules/skill_manifest.md) | 0 | `approval_required`, `id`, `prior_scopes` |
+| [skill_manifest](../modules/skill_manifest.md) | 0 | `approval_required`, `evidence`, `id`, `prior_scopes` |
 
 ### Structure
 

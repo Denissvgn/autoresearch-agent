@@ -1,6 +1,6 @@
 # TransitionResult
 
-**Location:** `src/core/state_machine.py:142`
+**Location:** `src/core/state_machine.py:143`
 **Kind:** Class
 **Bases:** —
 **Module:** [state_machine](../modules/state_machine.md)

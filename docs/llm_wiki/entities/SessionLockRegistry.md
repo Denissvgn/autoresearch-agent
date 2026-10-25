@@ -1,6 +1,6 @@
 # SessionLockRegistry
 
-**Location:** `src/core/state_machine.py:291`
+**Location:** `src/core/state_machine.py:292`
 **Kind:** Class
 **Bases:** —
 **Module:** [state_machine](../modules/state_machine.md)

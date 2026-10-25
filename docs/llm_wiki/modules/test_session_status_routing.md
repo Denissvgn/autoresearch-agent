@@ -38,7 +38,8 @@ The exhaustive transition table + concurrency stress is P0-005's job
 | `src.core.session_manager` | `ActiveSession`, `SessionManager` |
 | `src.core.state_machine` | `IllegalTransitionError`, `SessionEvent` |
 | `sys` | `sys` |
-| `types` | `types` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `cast` |
 | `unittest.mock` | `MagicMock` |
 
 ## Local dependency map
@@ -78,7 +79,7 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [_FakeAsyncAnthropic](../entities/test_session_status_routing_FakeAsyncAnthropic.md) | 39 | — | — |
+| [_FakeAsyncAnthropic](../entities/test_session_status_routing_FakeAsyncAnthropic.md) | 42 | — | — |
 
 ## Functions
 

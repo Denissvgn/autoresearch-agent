@@ -1,6 +1,6 @@
 # AgentOrchestrator
 
-**Location:** `src/core/orchestrator.py:328`
+**Location:** `src/core/orchestrator.py:348`
 **Kind:** Class
 **Bases:** —
 **Module:** [orchestrator](../modules/orchestrator.md)
@@ -22,6 +22,7 @@ Runs a Claude agent session for autonomous ML experiment tuning.
 | `request_stop` | `(research_id: str) -> None` | — | — |
 | `request_pause` | `(research_id: str) -> None` | — | — |
 | `request_resume` | `(research_id: str) -> None` | — | — |
+| `_record_usage` | *(async)* `(*, research_id: str, role: str, provider: LLMProvider, model: str, usage: Usage, turn: Optional[int] = None, iteration: Any = None) -> Optional[float]` | — | Record one metered provider call in the usage ledger (idempotent). |
 | `_call_llm_with_retry` | *(async)* `(*, messages: list[Message], system_prompt: str, research_id: str, agent_log: AgentLogWriter, turn: int, remaining_budget_s: Optional[float] = None) -> ProviderResponse` | — | Call ``provider.messages_create`` with loop-owned retry + backoff. |
 | `_compact_messages` | `(messages: list[Message], keep_recent: int = 40) -> list[Message]` | `@staticmethod` | Bound retained conversation history to avoid unbounded memory growth. |
 | `_latest_iteration_context_digest` | `(messages: list[Message]) -> Optional[str]` | `@staticmethod` | — |
@@ -35,11 +36,20 @@ Runs a Claude agent session for autonomous ML experiment tuning.
 | `_finalize_tool_result` | *(async)* `(*, block: ToolUseBlock, block_index: int, tool_execution: ToolExecutionResult, tool_meta: Dict[str, Any], config: ResearchConfig, turn: int, total_cost: float, state: TurnTrialState, cmd_str: str, trial_dir: Optional[str], pending_snapshot: Optional[str], runtime_command_id: Optional[int], command_started_at: Optional[float], agent_log: AgentLogWriter, skill: SkillRuntime, skill_policy_extension: Mapping[str, Any], nonce_bytes: Optional[bytes], skill_nonce_field: str, skill_requires_signed: bool, per_trial_recording: bool = False) -> None` | — | — |
 | `_read_marker_file_async` | *(async)* `(config: ResearchConfig, min_mtime: Optional[float] = None, trial_dir: Optional[str] = None, outputs: Optional[list] = None) -> Optional[str]` | — | — |
 | `_verify_kv_metrics` | *(async)* `(research_id: str, result: Dict[str, Any], *, turn: int, agent_log: 'AgentLogWriter', session_nonce: Optional[bytes], nonce_field: str, requires_signed: bool, source: str, pipeline_id: Optional[str] = None) -> Optional[Dict[str, Any]]` | — | W11-verify a ``---`` KV metrics block (ARC-011 review C3). |
+| `_record_invalid_result_evidence` | *(async)* `(research_id: str, config: ResearchConfig, normalized: Any, *, turn: int, source: str) -> None` | — | Explicit invalid evidence for a present-but-broken result. |
 | `_load_claude_md` | `() -> str` | — | — |
+| `set_workspace_instruction_filename` | `(filename: str) -> None` | — | The harness adapter names the workspace instruction file. |
+| `release_session` | `(research_id: str) -> None` | — | Close per-session state at lifecycle end. |
+| `load_claude_md` | `() -> str` | — | — |
+| `load_research_resume` | `(config: ResearchConfig) -> str` | — | — |
+| `build_phase_contract_block` | `(config: ResearchConfig) -> str` | — | — |
+| `research_resume_path` | `(config: ResearchConfig) -> str` | — | — |
 | `_label_result_authority` | `(marker: Dict[str, Any], tool_meta: Optional[Dict[str, Any]] = None) -> None` | `@staticmethod` | Assign the ingestion-time provenance label for a result marker. |
 | `_issue_result_receipt_if_trusted` | *(async)* `(marker: Dict[str, Any], *, research_id: str, turn: Optional[int], iteration: int, session: Optional[Dict[str, Any]]) -> Optional[str]` | — | Issue the attempt-binding receipt for a trusted-channel result. |
 | `_receipt_already_recorded` | *(async)* `(research_id: str, receipt_id: str) -> bool` | — | Whether this exact receipt already produced a recorded result. |
 | `_read_marker_file` | `(config: ResearchConfig, min_mtime: Optional[float] = None, trial_dir: Optional[str] = None, outputs: Optional[list] = None) -> Optional[str]` | — | Read and consume a marker file declared by the skill's |
+| `_research_resume_path` | `(config: ResearchConfig) -> str` | — | Where this session's cross-session resume file lives. |
+| `_generate_research_resume_file` | *(async)* `(*, config: ResearchConfig, resume_path: str) -> None` | — | Render the cross-session resume from prior recorded experiments. |
 | `_load_research_resume` | `(config: ResearchConfig) -> str` | — | Load the research resume for this instrument if it exists. |
 | `_read_research_resume_file` | `(resume_path: str) -> str` | `@staticmethod` | — |
 | `_skill_phase_plan` | `(config: ResearchConfig) -> Optional[List[Dict[str, Any]]]` | — | ARC-011 review C2-1: the session's skill-runtime phase plan. |
@@ -47,6 +57,7 @@ Runs a Claude agent session for autonomous ML experiment tuning.
 | `_extract_session_insights` | *(async)* `(research_id: str) -> None` | — | ML-60: Use Claude to extract compact insights from a completed session. |
 | `_record_command_policy_rejection` | *(async)* `(*, config: ResearchConfig, turn: int, command: str, tool_meta: Dict[str, Any]) -> None` | — | — |
 | `_guard_duplicate_training_attempt` | *(async)* `(*, config: ResearchConfig, turn: int, command: str, config_snapshot: Optional[str], planned_trial: Optional[Dict[str, Any]] = None, current_phase: Optional[str] = None) -> tuple[Optional[ToolExecutionResult], Optional[Dict[str, Any]]]` | — | Reject an already-attempted config/seed/mode/split identity. |
+| `_reject_observation` | `(*, config: ResearchConfig, turn: int, command: str, config_snapshot: Optional[str], reason: str, policy_operation: str, identity: Optional[Dict[str, Any]] = None, identity_hash: Optional[str] = None) -> tuple[ToolExecutionResult, Dict[str, Any]]` | — | Explicitly reject an observation that must never run (or re-run). |
 | `_build_baseline_link` | `(*, config: ResearchConfig, turn: int, identity: Dict[str, Any], identity_hash: str, config_snapshot: Optional[str], duplicate: Dict[str, Any]) -> tuple[ToolExecutionResult, Dict[str, Any]]` | — | Inherit a cross-session baseline instead of rejecting it. |
 | `_parse_metrics_json` | `(raw: Any) -> Dict[str, Any]` | `@staticmethod` | Best-effort parse of an iteration row's metrics_json into a dict. |
 | `_build_phase_evidence_link` | `(*, config: ResearchConfig, turn: int, identity: Dict[str, Any], identity_hash: str, config_snapshot: Optional[str], duplicate: Dict[str, Any], current_phase: str, inherited_metrics: Dict[str, Any]) -> tuple[ToolExecutionResult, Dict[str, Any]]` | — | Inherit a noop-phase's accepted evidence on a dedup hit. |
@@ -59,7 +70,9 @@ Runs a Claude agent session for autonomous ML experiment tuning.
 | `_auto_promotion_phase_state` | *(async)* `(*, research_id: str, session: Dict[str, Any], iterations: List[Dict[str, Any]]) -> Dict[str, Any]` | — | Return phase state for auto-promotion without mutating the session. |
 | `_emit_auto_promotion_skipped` | *(async)* `(*, research_id: str, config: ResearchConfig, agent_log: AgentLogWriter, reason: str, iteration: Optional[int], terminal_reason: Optional[str], incomplete_phases: List[str], promotion_allowed: bool, blockers: List[str], collection_errors: Optional[Dict[str, str]] = None) -> None` | — | Emit structured observability for expected auto-promotion skips. |
 | `_auto_promotion_preview_blockers` | `(preview: Dict[str, Any]) -> List[str]` | `@staticmethod` | — |
-| `_infer_decision` | *(async)* `(research_id: str, primary_metric: Optional[float], training_gates_passed: bool, *, config_hash: Optional[str] = None) -> str` | — | Determine keep/improve/discard by comparing against session best. |
+| `_session_goal` | *(async)* `(research_id: str, *, session: Optional[Dict[str, Any]] = None) -> tuple[str, Optional[str]]` | — | The declared goal semantics for this session: (goal, threshold_field). |
+| `_objective_comparator` | *(async)* `(research_id: str, *, session: Optional[Dict[str, Any]] = None, epsilon: Optional[float] = None) -> ObjectiveComparator` | — | Resolve the one objective comparator for this session's decisions. |
+| `_infer_decision` | *(async)* `(research_id: str, primary_metric: Optional[float], training_gates_passed: bool, *, config_hash: Optional[str] = None, metrics: Optional[Mapping[str, Any]] = None) -> str` | — | Determine keep/improve/discard by comparing against session best. |
 | `_significance_improved` | *(async)* `(research_id: str, primary_metric: float, config_hash: str) -> Optional[bool]` | — | Multi-seed significance verdict for one candidate (or None). |
 | `_record_iteration` | *(async)* `(research_id: str, iteration: int, marker: Dict[str, Any], cumulative_cost: float, *, workspace: Optional[str] = None, turn: Optional[int] = None, command: Optional[str] = None) -> None` | — | Record an iteration and broadcast the event. |
 | `_attach_consistency_report` | *(async)* `(research_id: str, iteration: int, marker: Dict[str, Any]) -> None` | — | Attach/update consistency report before overwriting an iteration. |
@@ -72,6 +85,7 @@ Runs a Claude agent session for autonomous ML experiment tuning.
 | `_maybe_all_phases_complete_terminate` | *(async)* `(*, research_id: str) -> Optional[str]` | — | Fast terminal guard: once every phase is complete, instruct the |
 | `_phase_advancement_is_genuine` | *(async)* `(research_id: str, current_phase: str, *, sample_size: int = 3) -> bool` | — | Return True when the current phase was reached by real agent |
 | `_maybe_global_stagnation_terminate` | *(async)* `(*, research_id: str, iteration_count: int) -> Optional[str]` | — | AR-7: return a system-message text when global metric stagnation is |
+| `_maybe_goal_satisfied_terminate` | *(async)* `(*, research_id: str) -> Optional[str]` | — | Goal semantics: a satisfied declared threshold condition ends the run. |
 | `_derive_terminal_reason` | *(async)* `(*, research_id: str, final_status: str, iteration_count: int, total_cost: float, config: ResearchConfig, timed_out: bool, policy_aborted: bool) -> str` | — | F9: produce a single structured token explaining why a session |
 | `_infer_failed_attempt_status` | `(tool_result: str) -> Optional[str]` | `@staticmethod` | — |
 | `_effective_tool_timeout` | `(input_data: Dict[str, Any]) -> int` | `@staticmethod` | — |
@@ -127,7 +141,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [orchestrator](../modules/orchestrator.md) | 60 | — |
+| [orchestrator](../modules/orchestrator.md) | 74 | — |
 
 ### References
 
@@ -146,4 +160,4 @@ flowchart LR
 | `test_baseline_capture_inherits_cross_session_baseline` | call | [test_baseline_capture_dedup_bypass](../modules/test_baseline_capture_dedup_bypass.md) | 1 |
 | `test_baseline_capture_no_prior_returns_none` | call | [test_baseline_capture_dedup_bypass](../modules/test_baseline_capture_dedup_bypass.md) | 1 |
 
-> References: showing 12 of 105 logical references; 93 omitted by the 12-row generated summary limit.
+> References: showing 12 of 116 logical references; 104 omitted by the 12-row generated summary limit.

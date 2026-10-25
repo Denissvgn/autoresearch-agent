@@ -36,6 +36,7 @@ to its declared ``path_template``.
 | `src.core.skill_registry` | `SkillRegistry`, `SkillRegistry` |
 | `src.core.skill_runtime` | `ManifestSkillRuntime`, `SkillConfigError` |
 | `types` | `SimpleNamespace`, `SimpleNamespace` |
+| `typing` | `Any` |
 | `unittest.mock` | `MagicMock` |
 | `yaml` | `yaml` |
 
@@ -52,8 +53,10 @@ flowchart LR
     n5["src/core/skill_loader.py"]
     n6["src/core/skill_registry.py"]
     n7["src/core/skill_runtime.py"]
-    n8["tests/test_release_promotion_safety.py"]
-    n9["tests/test_webhook_promotion.py"]
+    n8["tests/test_domain_conformance.py"]
+    n9["tests/test_promotion_policy.py"]
+    n10["tests/test_release_promotion_safety.py"]
+    n11["tests/test_webhook_promotion.py"]
     n0 --> n1
     n0 --> n2
     n0 --> n3
@@ -61,25 +64,35 @@ flowchart LR
     n2 --> n3
     n2 --> n6
     n3 --> n1
+    n3 --> n6
     n5 --> n1
     n6 --> n5
+    n7 --> n1
     n7 --> n3
     n7 --> n6
-    n8 --> n0
     n8 --> n1
-    n8 --> n2
-    n8 --> n3
     n8 --> n4
     n8 --> n6
-    n8 --> n9
-    n9 --> n0
-    n9 --> n1
+    n8 --> n11
     n9 --> n2
     n9 --> n3
     n9 --> n4
-    n9 --> n5
-    n9 --> n6
-    n9 --> n7
+    n9 --> n11
+    n10 --> n0
+    n10 --> n1
+    n10 --> n2
+    n10 --> n3
+    n10 --> n4
+    n10 --> n6
+    n10 --> n11
+    n11 --> n0
+    n11 --> n1
+    n11 --> n2
+    n11 --> n3
+    n11 --> n4
+    n11 --> n5
+    n11 --> n6
+    n11 --> n7
     click n0 "../modules/promotion.md"
     click n1 "../modules/config.md"
     click n2 "../modules/config_promoter.md"
@@ -88,14 +101,18 @@ flowchart LR
     click n5 "../modules/skill_loader.md"
     click n6 "../modules/skill_registry.md"
     click n7 "../modules/skill_runtime.md"
-    click n8 "../modules/test_release_promotion_safety.md"
-    click n9 "../modules/test_webhook_promotion.md"
+    click n8 "../modules/test_domain_conformance.md"
+    click n9 "../modules/test_promotion_policy.md"
+    click n10 "../modules/test_release_promotion_safety.md"
+    click n11 "../modules/test_webhook_promotion.md"
 ```
 
 ### Internal neighbors
 
 | Direction | Module |
 |---|---|
+| Inbound | [test_domain_conformance](../modules/test_domain_conformance.md) |
+| Inbound | [test_promotion_policy](../modules/test_promotion_policy.md) |
 | Inbound | [test_release_promotion_safety](../modules/test_release_promotion_safety.md) |
 | Outbound | [promotion](../modules/promotion.md) |
 | Outbound | [config](../modules/config.md) |

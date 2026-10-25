@@ -12,28 +12,30 @@
 ```mermaid
 sequenceDiagram
     participant p0 as wrap_command
-    participant p1 as (…).wrap
-    participant p2 as select_backend
-    participant p3 as probe_host
-    participant p4 as info.get
-    participant p5 as IsolationUnavailableError
-    participant p6 as BwrapBackend
-    participant p7 as shutil.which
-    participant p8 as subprocess.run
-    participant p9 as bool
-    p0-->>p1: (…).wrap(argv, policy=policy)
-    p0->>p2: select_backend
-    p2->>p3: probe_host
-    p2-->>p4: info.get('ready')
-    p2->>p5: IsolationUnavailableError
-    p2-->>p4: info.get('reason', 'host probe failed')
-    p2->>p6: BwrapBackend
-    p3-->>p7: shutil.which('bwrap')
-    p3-->>p8: subprocess.run([...], capture_output=True, timeout=10)
-    p3-->>p9: bool(user_ns)
+    participant p1 as UnsupportedCapabilityError
+    participant p2 as (…).wrap
+    participant p3 as select_backend
+    participant p4 as probe_host
+    participant p5 as info.get
+    participant p6 as IsolationUnavailableError
+    participant p7 as BwrapBackend
+    participant p8 as shutil.which
+    participant p9 as subprocess.run
+    participant p10 as bool
+    p0->>p1: UnsupportedCapabilityError
+    p0-->>p2: (…).wrap(argv, policy=policy)
+    p0->>p3: select_backend
+    p3->>p4: probe_host
+    p3-->>p5: info.get('ready')
+    p3->>p6: IsolationUnavailableError
+    p3-->>p5: info.get('reason', 'host probe failed')
+    p3->>p7: BwrapBackend
+    p4-->>p8: shutil.which('bwrap')
+    p4-->>p9: subprocess.run([...], capture_output=True, timeout=10)
+    p4-->>p10: bool(user_ns)
 ```
 
-> Call sequence diagram shows 10 of 10 interactions; 0 omitted to keep the visualization within the 30-interaction and generated-diagram limits, with uncertain identities omitted rather than inferred.
+> Call sequence diagram shows 11 of 11 interactions; 0 omitted to keep the visualization within the 30-interaction and generated-diagram limits, with uncertain identities omitted rather than inferred.
 
 > Captured boundary calls: external 3 of 3 (0 omitted); unresolved 3 of 3 (0 omitted). These counts cover the captured static trace.
 > Detailed flow queries retain their own coverage and limits; omitted paths may execute at runtime.
@@ -44,33 +46,36 @@ sequenceDiagram
 ```mermaid
 flowchart LR
     s1["1. wrap_command"]
-    s2["2. (…).wrap"]
-    s3["3. select_backend"]
-    s4["4. probe_host"]
-    s5["5. shutil.which"]
-    s6["6. subprocess.run"]
-    s7["7. bool"]
-    s8["8. info.get"]
-    s9["9. IsolationUnavailableError"]
-    s10["10. info.get"]
-    s11["11. BwrapBackend"]
-    s1 -. "(…).wrap(argv, policy=policy)" .-> s2
-    s1 -->|"select_backend(data not statically known)"| s3
-    s3 -->|"probe_host(data not statically known)"| s4
-    s4 -. "shutil.which('bwrap')" .-> s5
-    s4 -. "subprocess.run([...], capture_output=True, timeout=10)" .-> s6
-    s4 -. "bool(user_ns)" .-> s7
-    s3 -. "info.get('ready')" .-> s8
-    s3 -->|"IsolationUnavailableError(...)"| s9
-    s3 -. "info.get('reason', 'host probe failed')" .-> s10
-    s3 -->|"BwrapBackend(data not statically known)"| s11
+    s2["2. UnsupportedCapabilityError"]
+    s3["3. (…).wrap"]
+    s4["4. select_backend"]
+    s5["5. probe_host"]
+    s6["6. shutil.which"]
+    s7["7. subprocess.run"]
+    s8["8. bool"]
+    s9["9. info.get"]
+    s10["10. IsolationUnavailableError"]
+    s11["11. info.get"]
+    s12["12. BwrapBackend"]
+    s1 -->|"UnsupportedCapabilityError(…)"| s2
+    s1 -. "(…).wrap(argv, policy=policy)" .-> s3
+    s1 -->|"select_backend(data not statically known)"| s4
+    s4 -->|"probe_host(data not statically known)"| s5
+    s5 -. "shutil.which('bwrap')" .-> s6
+    s5 -. "subprocess.run([...], capture_output=True, timeout=10)" .-> s7
+    s5 -. "bool(user_ns)" .-> s8
+    s4 -. "info.get('ready')" .-> s9
+    s4 -->|"IsolationUnavailableError(...)"| s10
+    s4 -. "info.get('reason', 'host probe failed')" .-> s11
+    s4 -->|"BwrapBackend(data not statically known)"| s12
     b0["process subprocess.run"]
-    s4 -. "process subprocess.run" .-> b0
+    s5 -. "process subprocess.run" .-> b0
     click s1 "../modules/isolation.md"
-    click s3 "../modules/isolation.md"
+    click s2 "../modules/isolation.md"
     click s4 "../modules/isolation.md"
-    click s9 "../modules/isolation.md"
-    click s11 "../modules/isolation.md"
+    click s5 "../modules/isolation.md"
+    click s10 "../modules/isolation.md"
+    click s12 "../modules/isolation.md"
     classDef boundary stroke:#b45309,stroke-dasharray: 4 2
     class b0 boundary
 ```
@@ -80,6 +85,7 @@ flowchart LR
 | Step | Inputs | Reads | Writes | Returns |
 |---|---|---|---|---|
 | `wrap_command` | `argv: Sequence[str]`, `policy: IsolationPolicy`, `backend: Optional[BwrapBackend]` | - | - | `...` |
+| `UnsupportedCapabilityError` | - | - | - | - |
 | `(…).wrap` | - | - | - | - |
 | `select_backend` | - | - | - | `BwrapBackend(...)` |
 | `probe_host` | `bwrap_bin: Optional[str]` | `subprocess` | `info[...]`, `info[...]`, `info[...]`, `info[...]`, `info[...]` | `info`, `info` |
@@ -95,8 +101,9 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| wrap_command | (…).wrap | 208 | `(backend or select_backend()).wrap(argv, policy=policy)` |
-| wrap_command | select_backend | 208 | `select_backend(data not statically known)` |
+| wrap_command | UnsupportedCapabilityError | 209 | `UnsupportedCapabilityError('network allowlist enforcement is not available at the OS boundary on this backend; capability refused (no fallback to unrestricted egress)')` |
+| wrap_command | (…).wrap | 214 | `(backend or select_backend()).wrap(argv, policy=policy)` |
+| wrap_command | select_backend | 214 | `select_backend(data not statically known)` |
 | select_backend | probe_host | 196 | `probe_host(data not statically known)` |
 | probe_host | shutil.which | 167 | `shutil.which('bwrap')` |
 | probe_host | subprocess.run | 174 | `subprocess.run([...], capture_output=True, timeout=10)` |
@@ -116,7 +123,7 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `wrap_command` | `(backend or select_backend()).wrap` | 208 |
+| unresolved_call | `wrap_command` | `(backend or select_backend()).wrap` | 214 |
 | external_call | `probe_host` | `shutil.which` | 167 |
 | unresolved_call | `select_backend` | `info.get` | 197 |
 | unresolved_call | `select_backend` | `info.get` | 199 |

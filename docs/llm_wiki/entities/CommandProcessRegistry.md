@@ -1,6 +1,6 @@
 # CommandProcessRegistry
 
-**Location:** `src/core/command_runner.py:284`
+**Location:** `src/core/command_runner.py:287`
 **Kind:** Class
 **Bases:** —
 **Module:** [command_runner](../modules/command_runner.md)

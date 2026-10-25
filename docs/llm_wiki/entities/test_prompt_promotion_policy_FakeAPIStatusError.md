@@ -1,6 +1,6 @@
 # _FakeAPIStatusError
 
-**Location:** `tests/test_prompt_promotion_policy.py:16`
+**Location:** `tests/test_prompt_promotion_policy.py:18`
 **Kind:** Class
 **Bases:** `Exception`
 **Module:** [test_prompt_promotion_policy](../modules/test_prompt_promotion_policy.md)

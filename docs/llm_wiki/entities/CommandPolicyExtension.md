@@ -1,6 +1,6 @@
 # CommandPolicyExtension
 
-**Location:** `src/core/skill_runtime.py:101`
+**Location:** `src/core/skill_runtime.py:102`
 **Kind:** Class
 **Bases:** `TypedDict`
 **Module:** [skill_runtime](../modules/skill_runtime.md)

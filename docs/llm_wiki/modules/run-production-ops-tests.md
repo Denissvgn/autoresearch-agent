@@ -10,7 +10,6 @@ _Auto-generated from `ui/scripts/run-production-ops-tests.mjs`._
 
 | Source | Symbols |
 |--------|---------|
-| `` | ``, `` |
 | `node:assert/strict` | `assert` |
 | `node:child_process` | `execFileSync` |
 | `node:fs` | `existsSync`, `mkdirSync`, `rmSync`, `readdirSync`, `writeFileSync` |
@@ -18,6 +17,8 @@ _Auto-generated from `ui/scripts/run-production-ops-tests.mjs`._
 | `node:path` | `join`, `dirname` |
 | `node:test` | `test` |
 | `node:url` | `fileURLToPath`, `pathToFileURL` |
+| Unresolved `dynamic-import` | — (line 49) |
+| Unresolved `dynamic-import` | — (line 52) |
 
 ## Module Signals
 

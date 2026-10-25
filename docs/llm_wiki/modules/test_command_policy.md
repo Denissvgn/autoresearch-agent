@@ -23,7 +23,8 @@ _Auto-generated from `tests/test_command_policy.py`._
 | `src.core.tool_access` | `build_tool_access_context` |
 | `sys` | `sys` |
 | `time` | `time` |
-| `types` | `types` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `cast` |
 
 ## Local dependency map
 
@@ -38,6 +39,7 @@ flowchart LR
     n0 --> n3
     n1 --> n0
     n1 --> n3
+    n2 --> n0
     n2 --> n1
     n4 --> n0
     n4 --> n1
@@ -69,8 +71,8 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [_FakeAsyncAnthropic](../entities/test_command_policy_FakeAsyncAnthropic.md) | 23 | — | — |
-| [_FakeAPIStatusError](../entities/test_command_policy_FakeAPIStatusError.md) | 27 | `Exception` | — |
+| [_FakeAsyncAnthropic](../entities/test_command_policy_FakeAsyncAnthropic.md) | 25 | — | — |
+| [_FakeAPIStatusError](../entities/test_command_policy_FakeAPIStatusError.md) | 29 | `Exception` | — |
 
 ## Functions
 

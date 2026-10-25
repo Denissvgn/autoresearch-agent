@@ -129,17 +129,17 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| metrics | secret_value | 317 | `secret_value(settings.autoresearch_prometheus_token)` |
+| metrics | secret_value | 326 | `secret_value(settings.autoresearch_prometheus_token)` |
 | secret_value | isinstance | 25 | `isinstance(value, SecretStr)` |
 | secret_value | value.get_secret_value | 26 | `value.get_secret_value(data not statically known)` |
-| metrics | HTTPException | 319 | `HTTPException(status_code=404, detail='metrics endpoint disabled')` |
-| metrics | request.headers.get | 320 | `request.headers.get('authorization')` |
-| metrics | auth.lower().startswith | 321 | `auth.lower().startswith('bearer ')` |
-| metrics | auth.lower | 321 | `auth.lower(data not statically known)` |
-| metrics | HTTPException | 322 | `HTTPException(status_code=401, detail='missing bearer token')` |
-| metrics | auth.split(…)[…].strip | 323 | `auth.split(' ', 1)[1].strip(data not statically known)` |
-| metrics | auth.split | 323 | `auth.split(' ', 1)` |
-| metrics | secrets.compare_digest | 324 | `secrets.compare_digest(provided, expected)` |
+| metrics | HTTPException | 328 | `HTTPException(status_code=404, detail='metrics endpoint disabled')` |
+| metrics | request.headers.get | 329 | `request.headers.get('authorization')` |
+| metrics | auth.lower().startswith | 330 | `auth.lower().startswith('bearer ')` |
+| metrics | auth.lower | 330 | `auth.lower(data not statically known)` |
+| metrics | HTTPException | 331 | `HTTPException(status_code=401, detail='missing bearer token')` |
+| metrics | auth.split(…)[…].strip | 332 | `auth.split(' ', 1)[1].strip(data not statically known)` |
+| metrics | auth.split | 332 | `auth.split(' ', 1)` |
+| metrics | secrets.compare_digest | 333 | `secrets.compare_digest(provided, expected)` |
 
 ### Boundary effects
 
@@ -151,14 +151,14 @@ flowchart LR
 |---|---|---|---:|
 | external_call | `secret_value` | `isinstance` | 25 |
 | unresolved_call | `secret_value` | `value.get_secret_value` | 26 |
-| external_call | `metrics` | `HTTPException` | 319 |
-| unresolved_call | `metrics` | `request.headers.get` | 320 |
-| unresolved_call | `metrics` | `auth.lower().startswith` | 321 |
-| unresolved_call | `metrics` | `auth.lower` | 321 |
-| external_call | `metrics` | `HTTPException` | 322 |
-| unresolved_call | `metrics` | `auth.split(' ', 1)[1].strip` | 323 |
-| unresolved_call | `metrics` | `auth.split` | 323 |
-| external_call | `metrics` | `secrets.compare_digest` | 324 |
+| external_call | `metrics` | `HTTPException` | 328 |
+| unresolved_call | `metrics` | `request.headers.get` | 329 |
+| unresolved_call | `metrics` | `auth.lower().startswith` | 330 |
+| unresolved_call | `metrics` | `auth.lower` | 330 |
+| external_call | `metrics` | `HTTPException` | 331 |
+| unresolved_call | `metrics` | `auth.split(' ', 1)[1].strip` | 332 |
+| unresolved_call | `metrics` | `auth.split` | 332 |
+| external_call | `metrics` | `secrets.compare_digest` | 333 |
 | step_limit | `metrics` | `first 12 steps` | 0 |
 
 ## Behavior

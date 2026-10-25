@@ -1,6 +1,6 @@
 # PromotionScopeRequest
 
-**Location:** `src/api/promotion.py:138`
+**Location:** `src/api/promotion.py:147`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [promotion](../modules/promotion.md)
@@ -8,6 +8,12 @@
 ## Description
 
 _Auto-generated from `PromotionScopeRequest` in `src/api/promotion.py`._
+
+## Model Configuration
+
+| Setting | Value | Source |
+|---------|-------|--------|
+| `extra` | `'forbid'` | model_config |
 
 ## Validators
 

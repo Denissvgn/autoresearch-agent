@@ -35,7 +35,8 @@ audit-field name (``evidence_replayed_from_iteration``).
 | `src.core.research_phase_plan` | `EVIDENCE_INHERITABLE_PHASES`, `build_phase_state` |
 | `src.core.results_store` | `ResultsStore` |
 | `sys` | `sys` |
-| `types` | `types` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `cast` |
 
 ## Local dependency map
 

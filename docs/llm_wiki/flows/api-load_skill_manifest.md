@@ -138,35 +138,35 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| load_skill_manifest | isinstance (src/core/skill_loader.py:load_skill_manifest) | 383 | `isinstance(source, Mapping)` |
-| load_skill_manifest | dict | 384 | `dict(source)` |
-| load_skill_manifest | isinstance (src/core/skill_loader.py:load_skill_manifest) | 385 | `isinstance(source, Path)` |
-| load_skill_manifest | Path(…).read_text | 386 | `Path(source).read_text(encoding='utf-8')` |
-| load_skill_manifest | Path | 386 | `Path(source)` |
-| load_skill_manifest | yaml.safe_load | 387 | `yaml.safe_load(text)` |
-| load_skill_manifest | isinstance (src/core/skill_loader.py:load_skill_manifest) | 388 | `isinstance(parsed, dict)` |
-| load_skill_manifest | ManifestValidationError | 389 | `ManifestValidationError(...)` |
-| load_skill_manifest | type | 390 | `type(parsed)` |
-| load_skill_manifest | isinstance (src/core/skill_loader.py:load_skill_manifest) | 393 | `isinstance(source, str)` |
-| load_skill_manifest | Path | 396 | `Path(source)` |
+| load_skill_manifest | isinstance (src/core/skill_loader.py:load_skill_manifest) | 386 | `isinstance(source, Mapping)` |
+| load_skill_manifest | dict | 387 | `dict(source)` |
+| load_skill_manifest | isinstance (src/core/skill_loader.py:load_skill_manifest) | 388 | `isinstance(source, Path)` |
+| load_skill_manifest | Path(…).read_text | 389 | `Path(source).read_text(encoding='utf-8')` |
+| load_skill_manifest | Path | 389 | `Path(source)` |
+| load_skill_manifest | yaml.safe_load | 390 | `yaml.safe_load(text)` |
+| load_skill_manifest | isinstance (src/core/skill_loader.py:load_skill_manifest) | 391 | `isinstance(parsed, dict)` |
+| load_skill_manifest | ManifestValidationError | 392 | `ManifestValidationError(...)` |
+| load_skill_manifest | type | 393 | `type(parsed)` |
+| load_skill_manifest | isinstance (src/core/skill_loader.py:load_skill_manifest) | 396 | `isinstance(source, str)` |
+| load_skill_manifest | Path | 399 | `Path(source)` |
 
 ### Boundary effects
 
 | Kind | Target | Step | Line |
 |---|---|---|---:|
-| filesystem_read | `candidate.read_text` | `load_skill_manifest` | 398 |
+| filesystem_read | `candidate.read_text` | `load_skill_manifest` | 401 |
 
 ### Static analysis gaps
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| external_call | `load_skill_manifest` | `isinstance` | 383 |
-| external_call | `load_skill_manifest` | `isinstance` | 385 |
-| unresolved_call | `load_skill_manifest` | `Path(source).read_text` | 386 |
-| external_call | `load_skill_manifest` | `yaml.safe_load` | 387 |
+| external_call | `load_skill_manifest` | `isinstance` | 386 |
 | external_call | `load_skill_manifest` | `isinstance` | 388 |
-| external_call | `load_skill_manifest` | `type` | 390 |
-| external_call | `load_skill_manifest` | `isinstance` | 393 |
+| unresolved_call | `load_skill_manifest` | `Path(source).read_text` | 389 |
+| external_call | `load_skill_manifest` | `yaml.safe_load` | 390 |
+| external_call | `load_skill_manifest` | `isinstance` | 391 |
+| external_call | `load_skill_manifest` | `type` | 393 |
+| external_call | `load_skill_manifest` | `isinstance` | 396 |
 | step_limit | `load_skill_manifest` | `first 12 steps` | 0 |
 
 ## Behavior

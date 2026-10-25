@@ -1,6 +1,6 @@
 # SubjectInfo
 
-**Location:** `ui/src/api/client.ts:529`
+**Location:** `ui/src/api/client.ts:530`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

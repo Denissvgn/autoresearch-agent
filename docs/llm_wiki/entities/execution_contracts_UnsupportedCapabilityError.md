@@ -1,6 +1,6 @@
 # UnsupportedCapabilityError
 
-**Location:** `src/core/execution_contracts.py:105`
+**Location:** `src/core/execution_contracts.py:107`
 **Kind:** Class
 **Bases:** `ContractError`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

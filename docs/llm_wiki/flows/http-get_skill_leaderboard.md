@@ -2,7 +2,7 @@
 
 **Entry point:** `get_skill_leaderboard` (`http`)
 **Source:** [src_api_skills](../modules/src_api_skills.md)
-**Modules touched:** [compat_legacy_alias](../modules/compat_legacy_alias.md), [src_api_skills](../modules/src_api_skills.md)
+**Modules touched:** [comparison_context](../modules/comparison_context.md), [compat_legacy_alias](../modules/compat_legacy_alias.md), [src_api_skills](../modules/src_api_skills.md)
 
 ## Call sequence
 
@@ -14,53 +14,50 @@ sequenceDiagram
     participant p0 as get_skill_leaderboard
     participant p1 as _get_or_404
     participant p2 as skill_id_to_model_type
-    participant p3 as set
-    participant p4 as manifest.metric_schema.model_dump
-    participant p5 as metric_dump.get
-    participant p6 as primary.get
-    participant p7 as sorted
-    participant p8 as _store.list_sessions
-    participant p9 as str
-    participant p10 as session.get
-    participant p11 as seen_ids.add
-    participant p12 as rows.append
-    participant p13 as rows.sort
-    participant p14 as r.get
+    participant p3 as describe_comparison_context
+    participant p4 as sorted
+    participant p5 as manifest.metric_schema.model_dump
+    participant p6 as metric_dump.get
+    participant p7 as primary.get
+    participant p8 as _store.rank_leaderboard_groups
+    participant p9 as group.get
+    participant p10 as groups.append
+    participant p11 as row.get
     p0->>p1: _get_or_404
     p0->>p2: skill_id_to_model_type
-    p0-->>p3: set
-    p0-->>p4: manifest.metric_schema.model_dump(exclude_none=True, mode='json')
-    p0-->>p5: metric_dump.get('primary', {...})
-    p0-->>p6: primary.get('direction', 'higher_is_better')
-    p0-->>p7: sorted(model_type_aliases)
-    p0-->>p8: _store.list_sessions(model_type=alias, limit=500)
-    p0-->>p9: str(...)
-    p0-->>p10: session.get('id')
-    p0-->>p10: session.get('best_metric')
-    p0-->>p11: seen_ids.add(rid)
-    p0-->>p12: rows.append({...})
-    p0-->>p10: session.get('subject_id')
-    p0-->>p10: session.get('instrument')
-    p0-->>p10: session.get('variant')
-    p0-->>p10: session.get('timeframe')
-    p0-->>p10: session.get('tag')
-    p0-->>p10: session.get('status')
-    p0-->>p10: session.get('best_metric')
-    p0-->>p10: session.get('metric_name')
-    p0-->>p10: session.get('best_iteration')
-    p0-->>p10: session.get('effective_iteration_count')
-    p0-->>p10: session.get('best_iteration')
-    p0-->>p10: session.get('total_api_cost_usd')
-    p0-->>p10: session.get('started_at')
-    p0-->>p10: session.get('completed_at')
-    p0-->>p13: rows.sort(key=..., reverse=...)
-    p0-->>p14: r.get('best_metric')
-    p0-->>p14: r.get('best_metric')
+    p0->>p3: describe_comparison_context
+    p0-->>p4: sorted(...)
+    p0-->>p5: manifest.metric_schema.model_dump(exclude_none=True, mode='json')
+    p0-->>p6: metric_dump.get('primary', {...})
+    p0-->>p7: primary.get('direction', 'higher_is_better')
+    p0-->>p8: _store.rank_leaderboard_groups(model_types=aliases, direction=direction_name, limit=limit, offset=offset)
+    p0-->>p9: group.get('comparison_context')
+    p0-->>p10: groups.append({...})
+    p0-->>p11: row.get('id')
+    p0-->>p11: row.get('subject_id')
+    p0-->>p11: row.get('instrument')
+    p0-->>p11: row.get('variant')
+    p0-->>p11: row.get('timeframe')
+    p0-->>p11: row.get('tag')
+    p0-->>p11: row.get('status')
+    p0-->>p11: row.get('best_metric')
+    p0-->>p11: row.get('metric_name')
+    p0-->>p11: row.get('best_iteration')
+    p0-->>p11: row.get('effective_iteration_count')
+    p0-->>p11: row.get('best_iteration')
+    p0-->>p11: row.get('total_api_cost_usd')
+    p0-->>p11: row.get('started_at')
+    p0-->>p11: row.get('completed_at')
+    p0-->>p9: group.get('items', [...])
+    p0-->>p9: group.get('total', 0)
+    p0-->>p9: group.get('limit', limit)
+    p0-->>p9: group.get('offset', offset)
+    p0-->>p7: primary.get('field', 'primary_metric')
 ```
 
-> Call sequence diagram shows 30 of 37 interactions; 7 omitted to keep the visualization within the 30-interaction and generated-diagram limits, with uncertain identities omitted rather than inferred.
+> Call sequence diagram shows 30 of 45 interactions; 15 omitted to keep the visualization within the 30-interaction and generated-diagram limits, with uncertain identities omitted rather than inferred.
 
-> Captured boundary calls: external 3 of 5 (2 omitted); unresolved 25 of 30 (5 omitted). These counts cover the captured static trace.
+> Captured boundary calls: external 1 of 3 (2 omitted); unresolved 26 of 39 (13 omitted). These counts cover the captured static trace.
 
 Omitted captured detail, grouped by actual caller occurrence and target module:
 
@@ -69,8 +66,9 @@ Omitted captured detail, grouped by actual caller occurrence and target module:
 | `src/api/skills.py:_get_or_404` | 2 | - | unresolved | 1 |
 | `src/api/skills.py:_get_or_404` | 2 | - | external | 1 |
 | `src/compat/legacy_alias.py:skill_id_to_model_type` | 9 | - | unresolved | 1 |
-| `src/api/skills.py:get_skill_leaderboard` | 1 | - | external | 1 |
-| `src/api/skills.py:get_skill_leaderboard` | 1 | - | unresolved | 3 |
+| `src/core/comparison_context.py:describe_comparison_context` | 12 | - | external | 1 |
+| `src/core/comparison_context.py:describe_comparison_context` | 12 | - | unresolved | 9 |
+| `src/api/skills.py:get_skill_leaderboard` | 1 | - | unresolved | 2 |
 > Detailed flow queries retain their own coverage and limits; omitted paths may execute at runtime.
 
 ## Data flow
@@ -85,90 +83,95 @@ flowchart LR
     s5["5. manifest.metric_schema.model_dump"]
     s6["6. metric_dump.get"]
     s7["7. primary.get"]
-    s8["8. set"]
+    s8["8. sorted"]
     s9["9. skill_id_to_model_type"]
     s10["10. _SKILL_ID_TO_MODEL_TYPE.get"]
-    s11["11. sorted"]
-    s12["12. _store.list_sessions"]
+    s11["11. _store.rank_leaderboard_groups"]
+    s12["12. describe_comparison_context"]
     s1 -->|"_get_or_404(skill_id)"| s2
     s2 -. "_registry.get(skill_id)" .-> s3
     s2 -. "HTTPException(status_code=404, detail={...})" .-> s4
     s1 -. "manifest.metric_schema.model_dump(exclude_none=True, mode='json')" .-> s5
     s1 -. "metric_dump.get('primary', {...})" .-> s6
     s1 -. "primary.get('direction', 'higher_is_better')" .-> s7
-    s1 -. "set(data not statically known)" .-> s8
+    s1 -. "sorted(...)" .-> s8
     s1 -->|"skill_id_to_model_type(skill_id)"| s9
     s9 -. "_SKILL_ID_TO_MODEL_TYPE.get(skill_id, skill_id)" .-> s10
-    s1 -. "sorted(model_type_aliases)" .-> s11
-    s1 -. "_store.list_sessions(model_type=alias, limit=500)" .-> s12
-    b0["mutation seen_ids.add"]
-    s1 -. "mutation seen_ids.add" .-> b0
-    b1["mutation rows.append"]
-    s1 -. "mutation rows.append" .-> b1
-    b2["mutation rows.sort"]
-    s1 -. "mutation rows.sort" .-> b2
+    s1 -. "_store.rank_leaderboard_groups(model_types=aliases, direction=direction_name, limit=limit, offset=offset)" .-> s11
+    s1 -->|"describe_comparison_context(group.get(...))"| s12
+    b0["mutation groups.append"]
+    s1 -. "mutation groups.append" .-> b0
+    b1["mutation parts.append"]
+    s12 -. "mutation parts.append" .-> b1
+    b2["mutation parts.append"]
+    s12 -. "mutation parts.append" .-> b2
+    b3["mutation parts.append"]
+    s12 -. "mutation parts.append" .-> b3
     click s1 "../modules/src_api_skills.md"
     click s2 "../modules/src_api_skills.md"
     click s9 "../modules/compat_legacy_alias.md"
+    click s12 "../modules/comparison_context.md"
     classDef boundary stroke:#b45309,stroke-dasharray: 4 2
     class b0 boundary
     class b1 boundary
     class b2 boundary
+    class b3 boundary
 ```
 
 ### Step data
 
 | Step | Inputs | Reads | Writes | Returns |
 |---|---|---|---|---|
-| `get_skill_leaderboard` | `skill_id: str`, `limit: int` | `_store` | - | `{...}` |
+| `get_skill_leaderboard` | `skill_id: str`, `limit: int`, `offset: int` | `_store` | - | `{...}` |
 | `_get_or_404` | `skill_id: str` | `SkillNotRegisteredError` | - | `_registry.get(...)` |
 | `_registry.get` | - | - | - | - |
 | `HTTPException` | - | - | - | - |
 | `manifest.metric_schema.model_dump` | - | - | - | - |
 | `metric_dump.get` | - | - | - | - |
 | `primary.get` | - | - | - | - |
-| `set` | - | - | - | - |
+| `sorted` | - | - | - | - |
 | `skill_id_to_model_type` | `skill_id: str` | - | - | `''`, `_SKILL_ID_TO_MODEL_TYPE.get(...)` |
 | `_SKILL_ID_TO_MODEL_TYPE.get` | - | - | - | - |
-| `sorted` | - | - | - | - |
-| `_store.list_sessions` | - | - | - | - |
+| `_store.rank_leaderboard_groups` | - | - | - | - |
+| `describe_comparison_context` | `context: Optional[str]` | `_PIN_KEYS` | - | `{...}`, `{...}`, `{...}` |
 
 ### Call data
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| get_skill_leaderboard | _get_or_404 | 256 | `_get_or_404(skill_id)` |
-| _get_or_404 | _registry.get | 181 | `_registry.get(skill_id)` |
-| _get_or_404 | HTTPException | 183 | `HTTPException(status_code=404, detail={...})` |
-| get_skill_leaderboard | manifest.metric_schema.model_dump | 257 | `manifest.metric_schema.model_dump(exclude_none=True, mode='json')` |
-| get_skill_leaderboard | metric_dump.get | 258 | `metric_dump.get('primary', {...})` |
-| get_skill_leaderboard | primary.get | 259 | `primary.get('direction', 'higher_is_better')` |
-| get_skill_leaderboard | set | 262 | `set(data not statically known)` |
-| get_skill_leaderboard | skill_id_to_model_type | 266 | `skill_id_to_model_type(skill_id)` |
+| get_skill_leaderboard | _get_or_404 | 282 | `_get_or_404(skill_id)` |
+| _get_or_404 | _registry.get | 188 | `_registry.get(skill_id)` |
+| _get_or_404 | HTTPException | 190 | `HTTPException(status_code=404, detail={...})` |
+| get_skill_leaderboard | manifest.metric_schema.model_dump | 283 | `manifest.metric_schema.model_dump(exclude_none=True, mode='json')` |
+| get_skill_leaderboard | metric_dump.get | 284 | `metric_dump.get('primary', {...})` |
+| get_skill_leaderboard | primary.get | 285 | `primary.get('direction', 'higher_is_better')` |
+| get_skill_leaderboard | sorted | 290 | `sorted(...)` |
+| get_skill_leaderboard | skill_id_to_model_type | 291 | `skill_id_to_model_type(skill_id)` |
 | skill_id_to_model_type | _SKILL_ID_TO_MODEL_TYPE.get | 56 | `_SKILL_ID_TO_MODEL_TYPE.get(skill_id, skill_id)` |
-| get_skill_leaderboard | sorted | 267 | `sorted(model_type_aliases)` |
-| get_skill_leaderboard | _store.list_sessions | 270 | `_store.list_sessions(model_type=alias, limit=500)` |
+| get_skill_leaderboard | _store.rank_leaderboard_groups | 293 | `_store.rank_leaderboard_groups(model_types=aliases, direction=direction_name, limit=limit, offset=offset)` |
+| get_skill_leaderboard | describe_comparison_context | 300 | `describe_comparison_context(group.get(...))` |
 
 ### Boundary effects
 
 | Kind | Target | Step | Line |
 |---|---|---|---:|
-| mutation | `seen_ids.add` | `get_skill_leaderboard` | 276 |
-| mutation | `rows.append` | `get_skill_leaderboard` | 277 |
-| mutation | `rows.sort` | `get_skill_leaderboard` | 297 |
+| mutation | `groups.append` | `get_skill_leaderboard` | 301 |
+| mutation | `parts.append` | `describe_comparison_context` | 70 |
+| mutation | `parts.append` | `describe_comparison_context` | 72 |
+| mutation | `parts.append` | `describe_comparison_context` | 74 |
 
 ### Static analysis gaps
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `_get_or_404` | `_registry.get` | 181 |
-| external_call | `_get_or_404` | `HTTPException` | 183 |
-| unresolved_call | `get_skill_leaderboard` | `manifest.metric_schema.model_dump` | 257 |
-| unresolved_call | `get_skill_leaderboard` | `metric_dump.get` | 258 |
-| unresolved_call | `get_skill_leaderboard` | `primary.get` | 259 |
+| unresolved_call | `_get_or_404` | `_registry.get` | 188 |
+| external_call | `_get_or_404` | `HTTPException` | 190 |
+| unresolved_call | `get_skill_leaderboard` | `manifest.metric_schema.model_dump` | 283 |
+| unresolved_call | `get_skill_leaderboard` | `metric_dump.get` | 284 |
+| unresolved_call | `get_skill_leaderboard` | `primary.get` | 285 |
+| external_call | `get_skill_leaderboard` | `sorted` | 290 |
 | unresolved_call | `skill_id_to_model_type` | `_SKILL_ID_TO_MODEL_TYPE.get` | 56 |
-| external_call | `get_skill_leaderboard` | `sorted` | 267 |
-| unresolved_call | `get_skill_leaderboard` | `_store.list_sessions` | 270 |
+| unresolved_call | `get_skill_leaderboard` | `_store.rank_leaderboard_groups` | 293 |
 | step_limit | `get_skill_leaderboard` | `first 12 steps` | 0 |
 
 ## Behavior

@@ -44,7 +44,7 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| ensure_isolation_boundary | UnsupportedCapabilityError | 557 | `UnsupportedCapabilityError(...)` |
+| ensure_isolation_boundary | UnsupportedCapabilityError | 559 | `UnsupportedCapabilityError(...)` |
 
 ### Boundary effects
 

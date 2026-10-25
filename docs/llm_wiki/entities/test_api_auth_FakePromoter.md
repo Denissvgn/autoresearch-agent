@@ -1,6 +1,6 @@
 # FakePromoter
 
-**Location:** `tests/test_api_auth.py:215`
+**Location:** `tests/test_api_auth.py:219`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_api_auth](../modules/test_api_auth.md)
@@ -19,7 +19,7 @@ _Auto-generated from `FakePromoter` in `tests/test_api_auth.py`._
 |--------|-----------|------------|-------------|
 | `preview` | *(async)* `(research_id: str, **kwargs)` | — | — |
 | `confirm` | *(async)* `(research_id: str, **kwargs)` | — | — |
-| `rollback` | *(async)* `(*, model_type: str, instrument: str, timeframe: str, reason: str \| None = None)` | — | — |
+| `rollback` | *(async)* `(*, model_type: str, instrument: str, timeframe: str, reason: str \| None = None, reconcile_legacy: bool = False)` | — | — |
 
 ## Relationships
 

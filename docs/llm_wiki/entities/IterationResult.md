@@ -1,6 +1,6 @@
 # IterationResult
 
-**Location:** `src/core/output_parser.py:87`
+**Location:** `src/core/output_parser.py:485`
 **Kind:** Class
 **Bases:** `TypedDict`
 **Module:** [output_parser](../modules/output_parser.md)
@@ -48,7 +48,8 @@ flowchart LR
     n9["JSONMarkerParser.parse_marker (src/core/output_parser.py)"]
     n10["OutputParser.parse (src/core/output_parser.py)"]
     n11["OutputParser.parse_iteration (src/core/output_parser.py)"]
-    n12["tests/test_output_parser.py"]
+    n12["parse_and_verify_text (src/core/output_parser.py)"]
+    n13["tests/test_output_parser.py"]
     n0 --> n1
     n2 --> n0
     n3 --> n0
@@ -61,6 +62,7 @@ flowchart LR
     n10 --> n0
     n11 --> n0
     n12 --> n0
+    n13 --> n0
     click n0 "../modules/output_parser.md"
     click n2 "../modules/output_parser.md"
     click n3 "../modules/output_parser.md"
@@ -72,7 +74,8 @@ flowchart LR
     click n9 "../modules/output_parser.md"
     click n10 "../modules/output_parser.md"
     click n11 "../modules/output_parser.md"
-    click n12 "../modules/test_output_parser.md"
+    click n12 "../modules/output_parser.md"
+    click n13 "../modules/test_output_parser.md"
 ```
 
 ### Summary
@@ -101,4 +104,5 @@ flowchart LR
 | `JSONMarkerParser.parse_marker` | type_reference | [output_parser](../modules/output_parser.md) | — |
 | `OutputParser.parse` | type_reference | [output_parser](../modules/output_parser.md) | — |
 | `OutputParser.parse_iteration` | type_reference | [output_parser](../modules/output_parser.md) | — |
+| `parse_and_verify_text` | type_reference | [output_parser](../modules/output_parser.md) | — |
 | `test_output_parser` | import | [test_output_parser](../modules/test_output_parser.md) | — |

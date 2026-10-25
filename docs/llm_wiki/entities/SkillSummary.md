@@ -1,6 +1,6 @@
 # SkillSummary
 
-**Location:** `ui/src/api/client.ts:459`
+**Location:** `ui/src/api/client.ts:460`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

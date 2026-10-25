@@ -1,6 +1,6 @@
 # ManifestVersionError
 
-**Location:** `src/core/skill_manifest.py:1165`
+**Location:** `src/core/skill_manifest.py:1272`
 **Kind:** Class
 **Bases:** `ManifestValidationError`
 **Module:** [skill_manifest](../modules/skill_manifest.md)

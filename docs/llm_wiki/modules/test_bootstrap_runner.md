@@ -75,7 +75,7 @@ flowchart LR
 | [TestBootstrapArtifact](../entities/TestBootstrapArtifact.md) | 96 | — | — |
 | [TestBootstrapRunnerLive](../entities/TestBootstrapRunnerLive.md) | 131 | — | — |
 | [TestBootstrapRunnerDry](../entities/TestBootstrapRunnerDry.md) | 210 | — | — |
-| [TestBootstrapIdempotency](../entities/TestBootstrapIdempotency.md) | 274 | — | — |
+| [TestBootstrapIdempotency](../entities/TestBootstrapIdempotency.md) | 276 | — | — |
 
 ## Functions
 

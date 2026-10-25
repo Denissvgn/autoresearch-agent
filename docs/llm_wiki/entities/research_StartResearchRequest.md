@@ -1,6 +1,6 @@
 # StartResearchRequest
 
-**Location:** `src/api/research.py:469`
+**Location:** `src/api/research.py:470`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [research](../modules/research.md)
@@ -8,6 +8,12 @@
 ## Description
 
 _Auto-generated from `StartResearchRequest` in `src/api/research.py`._
+
+## Model Configuration
+
+| Setting | Value | Source |
+|---------|-------|--------|
+| `extra` | `'forbid'` | model_config |
 
 ## Validators
 
@@ -27,6 +33,7 @@ _Auto-generated from `StartResearchRequest` in `src/api/research.py`._
 | `variant` | `Optional[str]` | `variant` | No | Yes | `None` | — | '15m' | — |
 | `skill_params` | `Optional[Dict[str, Any]]` | `skill_params` | No | Yes | `None` | — | — | Canonical skill parameters, validated against the skill's param_schema. Sent alongside skill_id; ignored for legacy shape. |
 | `tag` | `Optional[str]` | `tag` | No | Yes | `None` | — | 'doge-apr01' | — |
+| `harness` | `Optional[str]` | `harness` | No | Yes | `None` | — | — | the registered harness name for this run (default: builtin); resolved through the capability descriptors, never branched on |
 | `quick_mode` | `Optional[bool]` | `quick_mode` | No | Yes | `None` | — | — | If null, uses server default (standard/full mode) |
 | `max_iterations` | `Optional[int]` | `max_iterations` | No | Yes | `None` | ge=1; le=500 | — | — |
 | `max_budget_usd` | `Optional[float]` | `max_budget_usd` | No | Yes | `None` | ge=0.1; le=500.0 | — | — |
@@ -79,7 +86,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [research](../modules/research.md) | 1 | `focus_hint`, `instrument`, `manifest`, `max_budget_usd`, `max_iterations`, `model_type`, `quick_mode`, `skill_id`, `skill_params`, `subject_id`, `tag`, `timeframe` |
+| [research](../modules/research.md) | 1 | `focus_hint`, `harness`, `instrument`, `manifest`, `max_budget_usd`, `max_iterations`, `model_type`, `quick_mode`, `skill_id`, `skill_params`, `subject_id`, `tag` |
 
 ### Structure
 

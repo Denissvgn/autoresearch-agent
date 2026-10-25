@@ -1,6 +1,6 @@
 # TestMessagesCreate
 
-**Location:** `tests/test_llm_provider_openai.py:167`
+**Location:** `tests/test_llm_provider_openai.py:168`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_llm_provider_openai](../modules/test_llm_provider_openai.md)

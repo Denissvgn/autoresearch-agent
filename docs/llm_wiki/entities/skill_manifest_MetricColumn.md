@@ -1,6 +1,6 @@
 # MetricColumn
 
-**Location:** `src/core/skill_manifest.py:277`
+**Location:** `src/core/skill_manifest.py:282`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)

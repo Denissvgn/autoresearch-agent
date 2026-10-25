@@ -1,6 +1,6 @@
 # CommandPolicy
 
-**Location:** `src/core/skill_manifest.py:417`
+**Location:** `src/core/skill_manifest.py:478`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)

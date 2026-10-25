@@ -13,6 +13,7 @@ _Auto-generated from `StartResearchRequest` in `ui/src/api/client.ts`._
 
 | Name | Type | Required | Default | Description |
 |------|------|----------|---------|-------------|
+| `harness` | `string` | No | — | — |
 | `skill_id` | `string` | No | — | — |
 | `subject_id` | `string` | No | — | — |
 | `variant` | `string` | No | — | — |
@@ -44,7 +45,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [client](../modules/client.md) | 0 | `focus_hint`, `max_budget_usd`, `max_iterations`, `quick_mode`, `skill_id`, `skill_params`, `subject_id`, `tag`, `timeout_minutes`, `variant` |
+| [client](../modules/client.md) | 0 | `focus_hint`, `harness`, `max_budget_usd`, `max_iterations`, `quick_mode`, `skill_id`, `skill_params`, `subject_id`, `tag`, `timeout_minutes`, `variant` |
 
 ### References
 

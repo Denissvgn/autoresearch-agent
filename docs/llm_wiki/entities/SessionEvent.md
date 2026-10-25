@@ -1,6 +1,6 @@
 # SessionEvent
 
-**Location:** `src/core/state_machine.py:67`
+**Location:** `src/core/state_machine.py:68`
 **Kind:** Enum
 **Bases:** `str`, `Enum`
 **Module:** [state_machine](../modules/state_machine.md)
@@ -44,9 +44,9 @@ flowchart LR
     n8["SessionStateMachine._transition_locked (src/core/state_machine.py)"]
     n9["SessionStateMachine.transition (src/core/state_machine.py)"]
     n10["tests/test_cross_worker_control.py"]
-    n11["tests/test_session_failure_modes.py"]
-    n12["tests/test_session_status_routing.py"]
-    n13["test_completing_outranked_by_more_severe (tests/test_state_machine.py)"]
+    n11["tests/test_event_outbox.py"]
+    n12["tests/test_session_failure_modes.py"]
+    n13["tests/test_session_status_routing.py"]
     n0 --> n1
     n0 --> n2
     n3 --> n0
@@ -69,9 +69,9 @@ flowchart LR
     click n8 "../modules/state_machine.md"
     click n9 "../modules/state_machine.md"
     click n10 "../modules/test_cross_worker_control.md"
-    click n11 "../modules/test_session_failure_modes.md"
-    click n12 "../modules/test_session_status_routing.md"
-    click n13 "../modules/test_state_machine.md"
+    click n11 "../modules/test_event_outbox.md"
+    click n12 "../modules/test_session_failure_modes.md"
+    click n13 "../modules/test_session_status_routing.md"
 ```
 
 ### Summary
@@ -100,8 +100,8 @@ flowchart LR
 | `SessionStateMachine.transition` | call | [state_machine](../modules/state_machine.md) | 1 |
 | `SessionStateMachine.transition` | type_reference | [state_machine](../modules/state_machine.md) | — |
 | `test_cross_worker_control` | import | [test_cross_worker_control](../modules/test_cross_worker_control.md) | — |
+| `test_event_outbox` | import | [test_event_outbox](../modules/test_event_outbox.md) | — |
 | `test_session_failure_modes` | import | [test_session_failure_modes](../modules/test_session_failure_modes.md) | — |
 | `test_session_status_routing` | import | [test_session_status_routing](../modules/test_session_status_routing.md) | — |
-| `test_completing_outranked_by_more_severe` | type_reference | [test_state_machine](../modules/test_state_machine.md) | — |
 
-> References: showing 12 of 16 logical references; 4 omitted by the 12-row generated summary limit.
+> References: showing 12 of 17 logical references; 5 omitted by the 12-row generated summary limit.

@@ -1,6 +1,6 @@
 # ResearchSessionManifest
 
-**Location:** `src/core/research_manifest.py:73`
+**Location:** `src/core/research_manifest.py:74`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [research_manifest](../modules/research_manifest.md)
@@ -59,6 +59,7 @@ Complete immutable manifest for one autonomous research session.
 | `subject_id` | `Optional[str]` | `subject_id` | No | Yes | `None` | — | — | — |
 | `variant` | `Optional[str]` | `variant` | No | Yes | `None` | — | — | — |
 | `skill` | `Optional[Dict[str, Any]]` | `skill` | No | Yes | `None` | — | — | — |
+| `run_spec` | `Optional[Dict[str, Any]]` | `run_spec` | No | Yes | `None` | — | — | — |
 
 ## Methods
 
@@ -78,22 +79,28 @@ flowchart LR
     n0["ResearchSessionManifest (src/core/research_manifest.py)"]
     n1["BaseModel"]
     n2["build_research_manifest (src/core/research_manifest.py)"]
-    n3["manifest_pretty_json (src/core/research_manifest.py)"]
-    n4["ResearchSessionManifest._require_manifest_sections (src/core/research_manifest.py)"]
-    n5["ResearchSessionManifest.with_hash (src/core/research_manifest.py)"]
-    n6["tests/test_research_manifest.py"]
+    n3["load_persisted_manifest (src/core/research_manifest.py)"]
+    n4["manifest_pretty_json (src/core/research_manifest.py)"]
+    n5["ResearchSessionManifest._require_manifest_sections (src/core/research_manifest.py)"]
+    n6["ResearchSessionManifest.with_hash (src/core/research_manifest.py)"]
+    n7["src/core/run_spec.py"]
+    n8["tests/test_research_manifest.py"]
     n0 --> n1
     n2 --> n0
     n3 --> n0
     n4 --> n0
     n5 --> n0
     n6 --> n0
+    n7 --> n0
+    n8 --> n0
     click n0 "../modules/research_manifest.md"
     click n2 "../modules/research_manifest.md"
     click n3 "../modules/research_manifest.md"
     click n4 "../modules/research_manifest.md"
     click n5 "../modules/research_manifest.md"
-    click n6 "../modules/test_research_manifest.md"
+    click n6 "../modules/research_manifest.md"
+    click n7 "../modules/run_spec.md"
+    click n8 "../modules/test_research_manifest.md"
 ```
 
 ### Summary
@@ -114,7 +121,10 @@ flowchart LR
 |---|---|---|---:|
 | `build_research_manifest` | call | [research_manifest](../modules/research_manifest.md) | 1 |
 | `build_research_manifest` | type_reference | [research_manifest](../modules/research_manifest.md) | — |
+| `load_persisted_manifest` | call | [research_manifest](../modules/research_manifest.md) | 1 |
+| `load_persisted_manifest` | type_reference | [research_manifest](../modules/research_manifest.md) | — |
 | `manifest_pretty_json` | type_reference | [research_manifest](../modules/research_manifest.md) | — |
 | `ResearchSessionManifest._require_manifest_sections` | type_reference | [research_manifest](../modules/research_manifest.md) | — |
 | `ResearchSessionManifest.with_hash` | type_reference | [research_manifest](../modules/research_manifest.md) | — |
+| `run_spec` | import | [run_spec](../modules/run_spec.md) | — |
 | `test_research_manifest` | import | [test_research_manifest](../modules/test_research_manifest.md) | — |

@@ -1,6 +1,6 @@
 # ProductionCandidate
 
-**Location:** `ui/src/api/client.ts:333`
+**Location:** `ui/src/api/client.ts:334`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

@@ -75,4 +75,4 @@ flowchart LR
 | `AgentOrchestrator._drain_oldest_pending_trial` | call | [orchestrator](../modules/orchestrator.md) | 1 |
 | `AgentOrchestrator._finalize_tool_result` | type_reference | [orchestrator](../modules/orchestrator.md) | — |
 
-> References: showing 12 of 14 logical references; 2 omitted by the 12-row generated summary limit.
+> References: showing 12 of 16 logical references; 4 omitted by the 12-row generated summary limit.

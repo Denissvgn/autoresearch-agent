@@ -14,6 +14,7 @@ _Auto-generated from `tests/test_api_auth.py`._
 | `base64` | `base64` |
 | `fastapi` | `FastAPI`, `WebSocket`, `WebSocketDisconnect` |
 | `fastapi.testclient` | `TestClient` |
+| `json` | `json` |
 | `logging` | `logging` |
 | `os` | `os` |
 | `pathlib` | `Path` |
@@ -22,6 +23,7 @@ _Auto-generated from `tests/test_api_auth.py`._
 | `src.api.auth` | `require_websocket_auth` |
 | `src.config` | `Settings`, `settings` |
 | `starlette.testclient` | `WebSocketDenialResponse` |
+| `typing` | `Any` |
 
 ## Local dependency map
 
@@ -73,9 +75,9 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [FakeSessionManager](../entities/test_api_auth_FakeSessionManager.md) | 55 | — | — |
-| [FakeStore](../entities/test_api_auth_FakeStore.md) | 90 | — | — |
-| [FakePromoter](../entities/test_api_auth_FakePromoter.md) | 215 | — | — |
+| [FakeSessionManager](../entities/test_api_auth_FakeSessionManager.md) | 56 | — | — |
+| [FakeStore](../entities/test_api_auth_FakeStore.md) | 91 | — | — |
+| [FakePromoter](../entities/test_api_auth_FakePromoter.md) | 219 | — | — |
 
 ## Functions
 

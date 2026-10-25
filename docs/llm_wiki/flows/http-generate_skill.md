@@ -39,19 +39,19 @@ sequenceDiagram
     participant p15 as build_generation_prompt
     participant p16 as MockProvider
     participant p17 as SkillGenerationError
-    participant p18 as AnthropicProvider
+    participant p18 as _str_setting
     participant p19 as secret_value
-    participant p20 as OpenAIProvider
+    participant p20 as AnthropicProvider
     participant p21 as SkillGenerator._write_draft
     participant p22 as GeneratedDraft
-    participant p23 as _request_actor
-    participant p24 as ProviderCapabilities
-    participant p25 as CommandPolicyFinding
-    participant p26 as ManifestValidationError
-    participant p27 as ManifestVersionError
-    participant p28 as _interpolate_string
+    participant p23 as OpenAIProvider
+    participant p24 as _request_actor
+    participant p25 as ProviderCapabilities
+    participant p26 as CommandPolicyFinding
+    participant p27 as ManifestValidationError
+    participant p28 as ManifestVersionError
     participant p29 as HTTPException
-    participant p30 as _demo_requested
+    participant p30 as (…).strip().lower
     p0->>p1: _audit
     p0->>p2: build_provider
     p0->>p3: SkillGenerator.generate
@@ -69,24 +69,24 @@ sequenceDiagram
     p3->>p15: build_generation_prompt
     p2->>p16: MockProvider
     p3->>p17: SkillGenerationError
-    p2->>p18: AnthropicProvider
+    p2->>p18: _str_setting
     p2->>p19: secret_value
-    p2->>p20: OpenAIProvider
+    p2->>p20: AnthropicProvider
     p3->>p21: SkillGenerator._write_draft
     p3->>p22: GeneratedDraft
-    p5->>p23: _request_actor
-    p7->>p24: ProviderCapabilities
-    p10->>p25: CommandPolicyFinding
-    p11->>p26: ManifestValidationError
-    p11->>p27: ManifestVersionError
-    p13->>p28: _interpolate_string
+    p2->>p23: OpenAIProvider
+    p5->>p24: _request_actor
+    p7->>p25: ProviderCapabilities
+    p10->>p26: CommandPolicyFinding
+    p11->>p27: ManifestValidationError
+    p11->>p28: ManifestVersionError
     p0-->>p29: HTTPException(status_code=403, detail={...})
-    p2-->>p30: _demo_requested
+    p2-->>p30: (…).strip().lower
 ```
 
-> Call sequence diagram shows 30 of 140 interactions; 110 omitted to keep the visualization within the 30-interaction and generated-diagram limits, with uncertain identities omitted rather than inferred.
+> Call sequence diagram shows 30 of 164 interactions; 134 omitted to keep the visualization within the 30-interaction and generated-diagram limits, with uncertain identities omitted rather than inferred.
 
-> Captured boundary calls: external 1 of 51 (50 omitted); unresolved 1 of 41 (40 omitted). These counts cover the captured static trace.
+> Captured boundary calls: external 1 of 60 (59 omitted); unresolved 1 of 44 (43 omitted). These counts cover the captured static trace.
 
 Omitted captured detail, grouped by actual caller occurrence and target module:
 
@@ -96,11 +96,11 @@ Omitted captured detail, grouped by actual caller occurrence and target module:
 | `src/api/audit.py:record_api_audit_event` | 3 | - | unresolved | 1 |
 | `src/api/audit.py:request_metadata` | 8 | [src/api/audit.py](../modules/audit.md) | internal | 1 |
 | `src/api/audit.py:request_metadata` | 8 | - | unresolved | 3 |
-| `src/core/llm_provider.py:build_provider` | 14 | - | unresolved | 4 |
-| `src/core/llm_provider.py:build_provider` | 14 | - | external | 5 |
-| `src/config.py:secret_value` | 25 | - | external | 1 |
-| `src/config.py:secret_value` | 25 | - | unresolved | 1 |
-> Omission summary shows 8 of 35 groups; 27 further groups are not expanded here. Counts above include all omitted interactions.
+| `src/core/llm_provider.py:build_provider` | 14 | - | unresolved | 6 |
+| `src/core/llm_provider.py:build_provider` | 14 | - | external | 12 |
+| `src/core/llm_provider.py:_str_setting` | 26 | - | external | 2 |
+| `src/core/llm_provider.py:_str_setting` | 26 | - | unresolved | 1 |
+> Omission summary shows 8 of 38 groups; 30 further groups are not expanded here. Counts above include all omitted interactions.
 > Detailed flow queries retain their own coverage and limits; omitted paths may execute at runtime.
 
 ## Data flow
@@ -147,7 +147,7 @@ flowchart LR
 
 | Step | Inputs | Reads | Writes | Returns |
 |---|---|---|---|---|
-| `generate_skill` | `body: GenerateSkillRequest`, `request: Request` | `settings`, `settings` | - | `{...}` |
+| `generate_skill` | `body: GenerateSkillRequest`, `request: Request` | `settings`, `settings`, `settings`, `settings`, `settings`, `settings` | - | `{...}` |
 | `_audit` | `request: Request`, `action: str`, `outcome: str`, `metadata: dict[str, Any] \| None`, `error_message: str \| None` | `_store`, `_store` | - | `None`, `...` |
 | `record_api_audit_event` | `request: Request`, `store`, `action: str`, `outcome: str`, `research_id: str \| None`, `pipeline_id: str \| None`, `metadata: dict[str, Any] \| None`, `error_message: str \| None` | - | - | `...` |
 | `_request_actor` | `request: Request` | `AuthenticatedActor` | - | `...` |
@@ -164,8 +164,8 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| generate_skill | _audit | 479 | `_audit(request, action='skills.generate', outcome='denied', metadata={...}, error_message='skill generator is disabled')` |
-| _audit | record_api_audit_event | 168 | `record_api_audit_event(request, _store, action=action, outcome=outcome, metadata=metadata, error_message=error_message)` |
+| generate_skill | _audit | 525 | `_audit(request, action='skills.generate', outcome='denied', metadata={...}, error_message='skill generator is disabled')` |
+| _audit | record_api_audit_event | 175 | `record_api_audit_event(request, _store, action=action, outcome=outcome, metadata=metadata, error_message=error_message)` |
 | record_api_audit_event | _request_actor | 51 | `_request_actor(request)` |
 | _request_actor | getattr (src/api/audit.py:_request_actor) | 13 | `getattr(request.state, 'auth_actor', None)` |
 | _request_actor | isinstance (src/api/audit.py:_request_actor) | 14 | `isinstance(actor, AuthenticatedActor)` |

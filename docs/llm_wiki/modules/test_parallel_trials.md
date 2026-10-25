@@ -55,30 +55,40 @@ flowchart LR
     n3["src/core/results_store.py"]
     n4["src/core/skill_registry.py"]
     n5["src/core/trial_workspace.py"]
-    n6["tests/test_parallel_trials.py"]
+    n6["tests/test_domain_conformance.py"]
+    n7["tests/test_parallel_trials.py"]
     n1 --> n0
     n2 --> n0
     n2 --> n1
+    n2 --> n4
     n2 --> n5
     n6 --> n0
     n6 --> n1
     n6 --> n2
     n6 --> n3
     n6 --> n4
-    n6 --> n5
+    n6 --> n7
+    n7 --> n0
+    n7 --> n1
+    n7 --> n2
+    n7 --> n3
+    n7 --> n4
+    n7 --> n5
     click n0 "../modules/config.md"
     click n1 "../modules/llm_provider.md"
     click n2 "../modules/orchestrator.md"
     click n3 "../modules/results_store.md"
     click n4 "../modules/skill_registry.md"
     click n5 "../modules/trial_workspace.md"
-    click n6 "../modules/test_parallel_trials.md"
+    click n6 "../modules/test_domain_conformance.md"
+    click n7 "../modules/test_parallel_trials.md"
 ```
 
 ### Internal neighbors
 
 | Direction | Module |
 |---|---|
+| Inbound | [test_domain_conformance](../modules/test_domain_conformance.md) |
 | Outbound | [config](../modules/config.md) |
 | Outbound | [llm_provider](../modules/llm_provider.md) |
 | Outbound | [orchestrator](../modules/orchestrator.md) |

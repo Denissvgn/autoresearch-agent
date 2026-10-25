@@ -63,16 +63,18 @@ genuine ``OperationalError`` propagate (P0-009).
 | `asyncio` | `asyncio` |
 | `collections` | `Counter`, `defaultdict` |
 | `contextlib` | `asynccontextmanager` |
-| `datetime` | `datetime`, `timezone` |
+| `datetime` | `datetime`, `timedelta`, `timezone` |
 | `hashlib` | `hashlib` |
 | `json` | `json` |
 | `logging` | `logging` |
 | `os` | `os` |
+| `sqlite3` | `sqlite3` |
 | `src.core.artifact_reference` | `normalize_artifact_references_in_mapping`, `normalize_optional_artifact_ref` |
 | `src.core.gate_status` | `consistency_report_passed`, `normalize_training_gate_aliases` |
+| `src.core.objective_comparator` | `ObjectiveComparator`, `select_best_row` |
 | `src.core.observability` | `OBSERVABILITY_SCHEMA_VERSION`, `alert_suggestions`, `log_research_event` |
 | `src.core.pagination` | `clamp_limit` |
-| `typing` | `Any`, `AsyncIterator`, `Dict`, `List`, `Optional`, `Protocol`, `Sequence` |
+| `typing` | `Any`, `AsyncIterator`, `Dict`, `List`, `Mapping`, `Optional`, `Protocol`, `Sequence` |
 | `uuid` | `uuid` |
 
 ## Local dependency map
@@ -96,8 +98,8 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Inbound | `src` (8) |
-| Inbound | `tests` (5) |
-| Outbound | `src` (4) |
+| Inbound | `tests` (17) |
+| Outbound | `src` (5) |
 
 ### External packages
 
@@ -105,14 +107,18 @@ flowchart LR
 |---|---:|---:|
 | python | 1 | 1 |
 
-> All 17 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 30 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [StateStore](../entities/StateStore.md) | 774 | `Protocol` | Storage abstraction for research sessions, iterations, and promotions. |
-| [SQLiteStateStore](../entities/SQLiteStateStore.md) | 1295 | — | SQLite-specific implementation of :class:`StateStore`. |
+| [CapacityExceeded](../entities/CapacityExceeded.md) | 988 | `RuntimeError` | Raised when admitting work would exceed the configured global limit. |
+| [BudgetExceeded](../entities/BudgetExceeded.md) | 992 | `RuntimeError` | Raised when a reservation would oversubscribe the strict known budget. |
+| [StaleFenceError](../entities/StaleFenceError.md) | 996 | `ValueError` | Raised when a write carries a fence epoch older than the current one. |
+| [StateStore](../entities/StateStore.md) | 1000 | `Protocol` | Storage abstraction for research sessions, iterations, and promotions. |
+| [_TaskReentrantLock](../entities/TaskReentrantLock.md) | 1673 | — | An asyncio lock reentrant within one task. |
+| [SQLiteStateStore](../entities/SQLiteStateStore.md) | 1703 | — | SQLite-specific implementation of :class:`StateStore`. |
 
 ## Functions
 
@@ -137,3 +143,8 @@ flowchart LR
 | `_migrate_to_v4` | *(async)* `(db: aiosqlite.Connection) -> None` | — | Promotion waiver + effective-iteration counter on ``research_sessions``. |
 | `_migrate_to_v5` | *(async)* `(db: aiosqlite.Connection) -> None` | — | Cursor-pagination supporting indexes (ARC-011 P0-015..019). |
 | `_migrate_to_v6` | *(async)* `(db: aiosqlite.Connection) -> None` | — | P3-019: native canonical skill columns on ``research_sessions``. |
+| `_migrate_to_v10` | *(async)* `(db: aiosqlite.Connection) -> None` | — | Transactional event outbox for cross-worker delivery and replay. |
+| `_migrate_to_v11` | *(async)* `(db: aiosqlite.Connection) -> None` | — | Comparable-context identity for direction-aware leaderboard ranking. |
+| `_migrate_to_v9` | *(async)* `(db: aiosqlite.Connection) -> None` | — | Usage ledger and budget reservations (append-only accounting). |
+| `_migrate_to_v8` | *(async)* `(db: aiosqlite.Connection) -> None` | — | Work reservations: atomic admission and ownership fencing. |
+| `_migrate_to_v7` | *(async)* `(db: aiosqlite.Connection) -> None` | — | Secret references live separately from the value-bearing manifest. |

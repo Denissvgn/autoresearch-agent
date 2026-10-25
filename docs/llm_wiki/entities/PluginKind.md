@@ -4,7 +4,7 @@
 **Kind:** Type alias
 **Bases:** —
 **Module:** [skill_manifest](../modules/skill_manifest.md)
-**Target:** `Literal['parser', 'preflight', 'resolve_identity', 'bootstrap']`
+**Target:** `Literal['parser', 'preflight', 'resolve_identity', 'bootstrap', 'phase_advancement']`
 
 ## Description
 

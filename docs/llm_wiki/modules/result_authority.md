@@ -46,19 +46,35 @@ retroactively):
 flowchart LR
     n0["src/core/command_policy.py"]
     n1["src/core/execution_contracts.py"]
-    n2["src/core/result_authority.py"]
-    n3["tests/test_result_authority.py"]
-    n4["tests/test_trust_boundary_qualification.py"]
-    n0 --> n2
-    n2 --> n1
-    n3 --> n1
-    n3 --> n2
-    n4 --> n2
+    n2["src/core/orchestrator.py"]
+    n3["src/core/research_kernel.py"]
+    n4["src/core/result_authority.py"]
+    n5["tests/test_harness_contracts_g4.py"]
+    n6["tests/test_research_kernel.py"]
+    n7["tests/test_result_authority.py"]
+    n8["tests/test_trust_boundary_qualification.py"]
+    n0 --> n4
+    n2 --> n0
+    n2 --> n4
+    n3 --> n4
+    n4 --> n1
+    n5 --> n3
+    n5 --> n4
+    n6 --> n3
+    n6 --> n4
+    n7 --> n1
+    n7 --> n2
+    n7 --> n4
+    n8 --> n4
     click n0 "../modules/command_policy.md"
     click n1 "../modules/execution_contracts.md"
-    click n2 "../modules/result_authority.md"
-    click n3 "../modules/test_result_authority.md"
-    click n4 "../modules/test_trust_boundary_qualification.md"
+    click n2 "../modules/orchestrator.md"
+    click n3 "../modules/research_kernel.md"
+    click n4 "../modules/result_authority.md"
+    click n5 "../modules/test_harness_contracts_g4.md"
+    click n6 "../modules/test_research_kernel.md"
+    click n7 "../modules/test_result_authority.md"
+    click n8 "../modules/test_trust_boundary_qualification.md"
 ```
 
 ### Internal neighbors
@@ -66,6 +82,10 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Inbound | [command_policy](../modules/command_policy.md) |
+| Inbound | [orchestrator](../modules/orchestrator.md) |
+| Inbound | [research_kernel](../modules/research_kernel.md) |
+| Inbound | [test_harness_contracts_g4](../modules/test_harness_contracts_g4.md) |
+| Inbound | [test_research_kernel](../modules/test_research_kernel.md) |
 | Inbound | [test_result_authority](../modules/test_result_authority.md) |
 | Inbound | [test_trust_boundary_qualification](../modules/test_trust_boundary_qualification.md) |
 | Outbound | [execution_contracts](../modules/execution_contracts.md) |

@@ -71,13 +71,13 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| list_audit_events | _store.list_audit_events | 728 | `_store.list_audit_events(limit=limit, action=action, research_id=research_id, pipeline_id=pipeline_id)` |
-| list_audit_events | event.get | 739 | `event.get('actor_id')` |
-| list_audit_events | isinstance | 741 | `isinstance(actor_id, str)` |
-| list_audit_events | actor_id.startswith | 742 | `actor_id.startswith('token_sha256:')` |
-| list_audit_events | len | 743 | `len(actor_id)` |
-| list_audit_events | len | 743 | `len('token_sha256:')` |
-| list_audit_events | len | 745 | `len('token_sha256:')` |
+| list_audit_events | _store.list_audit_events | 753 | `_store.list_audit_events(limit=limit, action=action, research_id=research_id, pipeline_id=pipeline_id)` |
+| list_audit_events | event.get | 764 | `event.get('actor_id')` |
+| list_audit_events | isinstance | 766 | `isinstance(actor_id, str)` |
+| list_audit_events | actor_id.startswith | 767 | `actor_id.startswith('token_sha256:')` |
+| list_audit_events | len | 768 | `len(actor_id)` |
+| list_audit_events | len | 768 | `len('token_sha256:')` |
+| list_audit_events | len | 770 | `len('token_sha256:')` |
 
 ### Boundary effects
 
@@ -87,10 +87,10 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `list_audit_events` | `_store.list_audit_events` | 728 |
-| unresolved_call | `list_audit_events` | `event.get` | 739 |
-| external_call | `list_audit_events` | `isinstance` | 741 |
-| unresolved_call | `list_audit_events` | `actor_id.startswith` | 742 |
+| unresolved_call | `list_audit_events` | `_store.list_audit_events` | 753 |
+| unresolved_call | `list_audit_events` | `event.get` | 764 |
+| external_call | `list_audit_events` | `isinstance` | 766 |
+| unresolved_call | `list_audit_events` | `actor_id.startswith` | 767 |
 
 ## Behavior
 

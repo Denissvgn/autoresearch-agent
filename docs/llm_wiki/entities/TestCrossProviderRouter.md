@@ -1,6 +1,6 @@
 # TestCrossProviderRouter
 
-**Location:** `tests/test_skill_prompt_engineering_e2e.py:125`
+**Location:** `tests/test_skill_prompt_engineering_e2e.py:128`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_skill_prompt_engineering_e2e](../modules/test_skill_prompt_engineering_e2e.md)

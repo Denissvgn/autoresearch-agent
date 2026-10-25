@@ -30,29 +30,37 @@ flowchart LR
     n7["src/core/output_parser.py"]
     n8["src/core/postgres_state_store.py"]
     n9["src/core/research_state.py"]
-    n10["src/core/state_store.py"]
+    n10["src/core/skill_runtime.py"]
+    n11["src/core/state_store.py"]
     n0 --> n2
     n0 --> n4
     n0 --> n9
     n1 --> n2
     n1 --> n3
     n1 --> n4
-    n1 --> n10
+    n1 --> n11
     n2 --> n4
     n3 --> n4
     n5 --> n2
     n5 --> n4
+    n6 --> n1
     n6 --> n2
+    n6 --> n3
     n6 --> n4
     n6 --> n5
     n6 --> n7
     n6 --> n10
+    n6 --> n11
     n7 --> n4
     n8 --> n4
-    n8 --> n10
+    n8 --> n11
     n9 --> n2
     n9 --> n4
     n10 --> n4
+    n10 --> n6
+    n10 --> n7
+    n10 --> n11
+    n11 --> n4
     click n0 "../modules/results.md"
     click n1 "../modules/config_promoter.md"
     click n2 "../modules/consistency_validator.md"
@@ -63,7 +71,8 @@ flowchart LR
     click n7 "../modules/output_parser.md"
     click n8 "../modules/postgres_state_store.md"
     click n9 "../modules/research_state.md"
-    click n10 "../modules/state_store.md"
+    click n10 "../modules/skill_runtime.md"
+    click n11 "../modules/state_store.md"
 ```
 
 ### Internal neighbors
@@ -79,6 +88,7 @@ flowchart LR
 | Inbound | [output_parser](../modules/output_parser.md) |
 | Inbound | [postgres_state_store](../modules/postgres_state_store.md) |
 | Inbound | [research_state](../modules/research_state.md) |
+| Inbound | [skill_runtime](../modules/skill_runtime.md) |
 | Inbound | [state_store](../modules/state_store.md) |
 
 ## Functions

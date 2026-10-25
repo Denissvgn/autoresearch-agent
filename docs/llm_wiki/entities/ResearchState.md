@@ -1,6 +1,6 @@
 # ResearchState
 
-**Location:** `ui/src/api/client.ts:254`
+**Location:** `ui/src/api/client.ts:255`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

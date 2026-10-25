@@ -4,7 +4,7 @@
 
 ## Description
 
-Example prompt-registry receiver (P1-3).
+Example prompt-registry receiver.
 
 A tiny FastAPI service that exercises the ``registry_api`` / ``webhook``
 promotion target end-to-end:
@@ -35,7 +35,7 @@ SKILL.yaml ``promotion_target.primary.register_endpoint`` ->
 | Source | Symbols |
 |--------|---------|
 | `__future__` | `annotations` |
-| `fastapi` | `FastAPI`, `HTTPException`, `Header`, `Request` |
+| `fastapi` | `FastAPI`, `Header`, `HTTPException`, `Request` |
 | `os` | `os` |
 | `pydantic` | `BaseModel` |
 | `time` | `time` |

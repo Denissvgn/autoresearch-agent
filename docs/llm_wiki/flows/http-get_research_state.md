@@ -2,16 +2,20 @@
 
 **Entry point:** `get_research_state` (`http`)
 **Source:** [results](../modules/results.md)
-**Modules touched:** [artifact_reference](../modules/artifact_reference.md), [blocker_classifier](../modules/blocker_classifier.md), [consistency_validator](../modules/consistency_validator.md), and 6 more
+**Modules touched:** [artifact_reference](../modules/artifact_reference.md), [blocker_classifier](../modules/blocker_classifier.md), [compat_legacy_alias](../modules/compat_legacy_alias.md), and 10 more
 
 **Complete modules touched:**
 
 - [artifact_reference](../modules/artifact_reference.md)
 - [blocker_classifier](../modules/blocker_classifier.md)
+- [compat_legacy_alias](../modules/compat_legacy_alias.md)
 - [consistency_validator](../modules/consistency_validator.md)
+- [execution_contracts](../modules/execution_contracts.md)
 - [gate_status](../modules/gate_status.md)
 - [legacy_phase_tables](../modules/legacy_phase_tables.md)
+- [objective_comparator](../modules/objective_comparator.md)
 - [observability](../modules/observability.md)
+- [research_kernel](../modules/research_kernel.md)
 - [research_phase_plan](../modules/research_phase_plan.md)
 - [research_state](../modules/research_state.md)
 - [results](../modules/results.md)
@@ -43,15 +47,15 @@ sequenceDiagram
     participant p17 as _mlflow_links
     participant p18 as _paper_status
     participant p19 as _best_candidate_row
-    participant p20 as _iteration_budget_reached
+    participant p20 as rank_rows
     participant p21 as _candidate_summary
-    participant p22 as _completed_phase_ids
-    participant p23 as _blocked_reason
-    participant p24 as _promotion_blockers
-    participant p25 as _promotion_scope_status
-    participant p26 as _rl_replay_status
-    participant p27 as _supervised_feature_readiness_status
-    participant p28 as _rl_oos_provenance_status
+    participant p22 as _iteration_budget_reached
+    participant p23 as _completed_phase_ids
+    participant p24 as _blocked_reason
+    participant p25 as _promotion_blockers
+    participant p26 as _promotion_scope_status
+    participant p27 as _rl_replay_status
+    participant p28 as _supervised_feature_readiness_status
     participant p29 as HTTPException (src/api/results.py:get_research_state)
     participant p30 as _store.get_iterations
     p0->>p1: _resolve_result_context
@@ -73,22 +77,22 @@ sequenceDiagram
     p2->>p17: _mlflow_links
     p2->>p18: _paper_status
     p10->>p19: _best_candidate_row
-    p11->>p20: _iteration_budget_reached
+    p8->>p20: rank_rows
     p8->>p21: _candidate_summary
-    p7->>p22: _completed_phase_ids
-    p7->>p23: _blocked_reason
-    p10->>p24: _promotion_blockers
-    p10->>p25: _promotion_scope_status
-    p10->>p26: _rl_replay_status
-    p10->>p27: _supervised_feature_readiness_status
-    p10->>p28: _rl_oos_provenance_status
+    p11->>p22: _iteration_budget_reached
+    p7->>p23: _completed_phase_ids
+    p7->>p24: _blocked_reason
+    p10->>p25: _promotion_blockers
+    p10->>p26: _promotion_scope_status
+    p10->>p27: _rl_replay_status
+    p10->>p28: _supervised_feature_readiness_status
     p0-->>p29: HTTPException (src/api/results.py:get_research_state)(status_code=404, detail='Phase session not found yet')
     p0-->>p30: _store.get_iterations(session[...])
 ```
 
-> Call sequence diagram shows 30 of 991 interactions; 961 omitted to keep the visualization within the 30-interaction and generated-diagram limits, with uncertain identities omitted rather than inferred.
+> Call sequence diagram shows 30 of 1072 interactions; 1042 omitted to keep the visualization within the 30-interaction and generated-diagram limits, with uncertain identities omitted rather than inferred.
 
-> Captured boundary calls: external 1 of 220 (219 omitted); unresolved 1 of 526 (525 omitted). These counts cover the captured static trace.
+> Captured boundary calls: external 1 of 243 (242 omitted); unresolved 1 of 558 (557 omitted). These counts cover the captured static trace.
 
 Omitted captured detail, grouped by actual caller occurrence and target module:
 
@@ -102,7 +106,7 @@ Omitted captured detail, grouped by actual caller occurrence and target module:
 | `src/api/results.py:_decode_session_payload` | 21 | - | external | 4 |
 | `src/api/results.py:_decode_session_payload` | 21 | - | unresolved | 1 |
 | `src/api/results.py:get_research_state` | 1 | - | unresolved | 6 |
-> Omission summary shows 8 of 243 groups; 235 further groups are not expanded here. Counts above include all omitted interactions.
+> Omission summary shows 8 of 266 groups; 258 further groups are not expanded here. Counts above include all omitted interactions.
 > Detailed flow queries retain their own coverage and limits; omitted paths may execute at runtime.
 
 > Trace truncated at the depth limit; deeper calls are omitted.
@@ -165,36 +169,36 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| get_research_state | _resolve_result_context | 581 | `_resolve_result_context(research_id)` |
-| _resolve_result_context | research_id.startswith | 342 | `research_id.startswith('pipe_')` |
-| _resolve_result_context | _store.get_pipeline | 343 | `_store.get_pipeline(research_id)` |
-| _resolve_result_context | HTTPException (src/api/results.py:_resolve_result_context) | 345 | `HTTPException(status_code=404, detail='Pipeline not found')` |
-| _resolve_result_context | _decode_pipeline_payload | 346 | `_decode_pipeline_payload(pipeline)` |
-| _decode_pipeline_payload | dict (src/api/results.py:_decode_pipeline_payload) | 56 | `dict(pipeline)` |
-| _decode_pipeline_payload | decoded.get (src/api/results.py:_decode_pipeline_payload) | 63 | `decoded.get(source)` |
-| _decode_pipeline_payload | isinstance (src/api/results.py:_decode_pipeline_payload) | 67 | `isinstance(raw, str)` |
-| _decode_pipeline_payload | json.loads (src/api/results.py:_decode_pipeline_payload) | 67 | `json.loads(raw)` |
-| _decode_pipeline_payload | isinstance (src/api/results.py:_decode_pipeline_payload) | 70 | `isinstance(parsed, fallback_type)` |
-| _resolve_result_context | pipeline.get (src/api/results.py:_resolve_result_context) | 350 | `pipeline.get(...)` |
+| get_research_state | _resolve_result_context | 591 | `_resolve_result_context(research_id)` |
+| _resolve_result_context | research_id.startswith | 346 | `research_id.startswith('pipe_')` |
+| _resolve_result_context | _store.get_pipeline | 347 | `_store.get_pipeline(research_id)` |
+| _resolve_result_context | HTTPException (src/api/results.py:_resolve_result_context) | 349 | `HTTPException(status_code=404, detail='Pipeline not found')` |
+| _resolve_result_context | _decode_pipeline_payload | 350 | `_decode_pipeline_payload(pipeline)` |
+| _decode_pipeline_payload | dict (src/api/results.py:_decode_pipeline_payload) | 60 | `dict(pipeline)` |
+| _decode_pipeline_payload | decoded.get (src/api/results.py:_decode_pipeline_payload) | 67 | `decoded.get(source)` |
+| _decode_pipeline_payload | isinstance (src/api/results.py:_decode_pipeline_payload) | 71 | `isinstance(raw, str)` |
+| _decode_pipeline_payload | json.loads (src/api/results.py:_decode_pipeline_payload) | 71 | `json.loads(raw)` |
+| _decode_pipeline_payload | isinstance (src/api/results.py:_decode_pipeline_payload) | 74 | `isinstance(parsed, fallback_type)` |
+| _resolve_result_context | pipeline.get (src/api/results.py:_resolve_result_context) | 354 | `pipeline.get(...)` |
 
 ### Boundary effects
 
 | Kind | Target | Step | Line |
 |---|---|---|---:|
-| mutation | `sessions.append` | `_resolve_result_context` | 358 |
+| mutation | `sessions.append` | `_resolve_result_context` | 362 |
 
 ### Static analysis gaps
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `_resolve_result_context` | `research_id.startswith` | 342 |
-| unresolved_call | `_resolve_result_context` | `_store.get_pipeline` | 343 |
-| external_call | `_resolve_result_context` | `HTTPException` | 345 |
-| unresolved_call | `_decode_pipeline_payload` | `decoded.get` | 63 |
-| external_call | `_decode_pipeline_payload` | `isinstance` | 67 |
-| external_call | `_decode_pipeline_payload` | `json.loads` | 67 |
-| external_call | `_decode_pipeline_payload` | `isinstance` | 70 |
-| unresolved_call | `_resolve_result_context` | `pipeline.get` | 350 |
+| unresolved_call | `_resolve_result_context` | `research_id.startswith` | 346 |
+| unresolved_call | `_resolve_result_context` | `_store.get_pipeline` | 347 |
+| external_call | `_resolve_result_context` | `HTTPException` | 349 |
+| unresolved_call | `_decode_pipeline_payload` | `decoded.get` | 67 |
+| external_call | `_decode_pipeline_payload` | `isinstance` | 71 |
+| external_call | `_decode_pipeline_payload` | `json.loads` | 71 |
+| external_call | `_decode_pipeline_payload` | `isinstance` | 74 |
+| unresolved_call | `_resolve_result_context` | `pipeline.get` | 354 |
 | step_limit | `get_research_state` | `first 12 steps` | 0 |
 | truncated_flow | `get_research_state` | `depth limit` | 0 |
 

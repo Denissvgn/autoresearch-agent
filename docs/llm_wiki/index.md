@@ -6,11 +6,11 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 
 | Surface | Count | Start here |
 |---|---:|---|
-| Entities | 444 | [Open section](#entities) |
-| Modules | 260 | [Open section](#modules) |
-| Workflows | 15 | [Open section](#workflows) |
+| Entities | 573 | [Open section](#entities) |
+| Modules | 346 | [Open section](#modules) |
+| Workflows | 20 | [Open section](#workflows) |
 | Guides | 0 | No pages |
-| Entry-point flows | 123 | [Open section](#entry-point-flows) |
+| Entry-point flows | 181 | [Open section](#entry-point-flows) |
 | Infrastructure | 3 | [Open section](#infrastructure) |
 | HTTP API contracts | 0 | No pages |
 | Dependency architecture | 2 | [Open section](#dependency-architecture) |
@@ -22,13 +22,26 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [ActiveSession](entities/ActiveSession.md)
 - [AdvancementMode](entities/AdvancementMode.md)
 - [AdvancementRule](entities/AdvancementRule.md)
+- [AdvancementVerdict](entities/AdvancementVerdict.md)
+- [AgentAuthError](entities/AgentAuthError.md)
+- [AgentClient](entities/AgentClient.md)
+- [AgentClientError](entities/AgentClientError.md)
+- [AgentConflictError](entities/AgentConflictError.md)
+- [AgentLimitError](entities/AgentLimitError.md)
 - [AgentLogEntry](entities/AgentLogEntry.md)
 - [AgentLogWriter](entities/AgentLogWriter.md)
 - [AgentLog_Props](entities/AgentLog_Props.md)
 - [AgentOrchestrator](entities/AgentOrchestrator.md)
+- [AgentRunRequest](entities/AgentRunRequest.md)
 - [AnthropicProvider](entities/AnthropicProvider.md)
+- [ArtifactError](entities/ArtifactError.md)
+- [ArtifactLimits](entities/ArtifactLimits.md)
 - [ArtifactRef](entities/ArtifactRef.md)
+- [ArtifactStore](entities/ArtifactStore.md)
 - [ArtifactStoreTarget](entities/ArtifactStoreTarget.md)
+- [AttemptFn](entities/AttemptFn.md)
+- [AttemptPlan](entities/AttemptPlan.md)
+- [AttemptResult](entities/AttemptResult.md)
 - [AuditStore](entities/AuditStore.md)
 - [AuthenticatedActor](entities/AuthenticatedActor.md)
 - [AutoPromoteStore](entities/AutoPromoteStore.md)
@@ -37,15 +50,28 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [BlockerDetailShape](entities/BlockerDetailShape.md)
 - [BootstrapOutcome](entities/BootstrapOutcome.md)
 - [BootstrapRunner](entities/BootstrapRunner.md)
+- [BudgetDecision](entities/BudgetDecision.md)
 - [BudgetDimensions](entities/BudgetDimensions.md)
+- [BudgetExceeded](entities/BudgetExceeded.md)
+- [BuiltinHarnessAdapter](entities/BuiltinHarnessAdapter.md)
 - [BwrapBackend](entities/BwrapBackend.md)
+- [Candidate](entities/Candidate.md)
+- [CandidateBundle](entities/CandidateBundle.md)
 - [CandidateData](entities/CandidateData.md)
 - [CandidateIdentity](entities/CandidateIdentity.md)
+- [CandidateSubmission](entities/CandidateSubmission.md)
 - [CapabilityDescriptor](entities/CapabilityDescriptor.md)
+- [CapacityExceeded](entities/CapacityExceeded.md)
 - [CapturingBroadcaster](entities/CapturingBroadcaster.md)
 - [Category](entities/Category.md)
+- [Cell](entities/Cell.md)
 - [ClassificationResult](entities/ClassificationResult.md)
+- [ClaudeCodeHarnessAdapter](entities/ClaudeCodeHarnessAdapter.md)
+- [ClaudeRunConfig](entities/ClaudeRunConfig.md)
 - [ClipboardCopy_Props](entities/ClipboardCopy_Props.md)
+- [ClosableProvider](entities/ClosableProvider.md)
+- [CodexHarnessAdapter](entities/CodexHarnessAdapter.md)
+- [CodexRunConfig](entities/CodexRunConfig.md)
 - [CommandDecision](entities/CommandDecision.md)
 - [CommandPolicy](entities/CommandPolicy.md)
 - [CommandPolicyExtension](entities/CommandPolicyExtension.md)
@@ -53,6 +79,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [CommandProcessRegistry](entities/CommandProcessRegistry.md)
 - [CommandRunResult](entities/CommandRunResult.md)
 - [CompactPromotion](entities/CompactPromotion.md)
+- [Comparison](entities/Comparison.md)
 - [ConfigDiff_Props](entities/ConfigDiff_Props.md)
 - [ConfigPromoter](entities/ConfigPromoter.md)
 - [ConsistencyReport](entities/ConsistencyReport.md)
@@ -60,27 +87,49 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [ContractError](entities/ContractError.md)
 - [ContractMigrationError](entities/ContractMigrationError.md)
 - [ControlFakeOrchestrator](entities/ControlFakeOrchestrator.md)
-- [CostEstimate](entities/CostEstimate.md)
+- [ControlledLocalScorer](entities/ControlledLocalScorer.md)
+- [CredentialDenied](entities/CredentialDenied.md)
+- [CredentialExpired](entities/CredentialExpired.md)
+- [CredentialRevoked](entities/CredentialRevoked.md)
+- [DatasetTampered](entities/DatasetTampered.md)
 - [DecisionVocabulary](entities/DecisionVocabulary.md)
+- [Decl](entities/Decl.md)
 - [DelimitedKVParser](entities/DelimitedKVParser.md)
 - [DensityName](entities/DensityName.md)
 - [DetailEntry](entities/DetailEntry.md)
+- [DeterministicDriver](entities/DeterministicDriver.md)
 - [DiffLine](entities/DiffLine.md)
 - [DomainClassifier](entities/DomainClassifier.md)
 - [DrainOutcome](entities/DrainOutcome.md)
+- [DriverHost](entities/DriverHost.md)
+- [DriverHostConfig](entities/DriverHostConfig.md)
+- [DriverOutcome](entities/DriverOutcome.md)
+- [DriverProtocolError](entities/DriverProtocolError.md)
+- [DupStore](entities/DupStore.md)
 - [DynamicFormFields_Props](entities/DynamicFormFields_Props.md)
 - [EmbeddingBackend](entities/EmbeddingBackend.md)
 - [EnvironmentIdentity](entities/EnvironmentIdentity.md)
 - [ErrorClass](entities/ErrorClass.md)
 - [EstimateCostRequest](entities/EstimateCostRequest.md)
+- [EvalReport](entities/EvalReport.md)
+- [EvalRequirements](entities/EvalRequirements.md)
 - [EventBroadcaster](entities/EventBroadcaster.md)
+- [EventReader](entities/EventReader.md)
+- [EvidenceDecision](entities/EvidenceDecision.md)
 - [ExecutionConfig](entities/ExecutionConfig.md)
 - [FailureRecord](entities/FailureRecord.md)
+- [FakeAnthropicClient](entities/FakeAnthropicClient.md)
+- [FakeArtifactStore](entities/FakeArtifactStore.md)
+- [FakeCompletions](entities/FakeCompletions.md)
+- [FakeHarnessAdapter](entities/FakeHarnessAdapter.md)
+- [FakeMessages](entities/FakeMessages.md)
 - [FakeMlflowAsyncClient](entities/FakeMlflowAsyncClient.md)
 - [FakeMlflowResponse](entities/FakeMlflowResponse.md)
+- [FakeOpenAIClient](entities/FakeOpenAIClient.md)
 - [FakeOrchestrator](entities/FakeOrchestrator.md)
 - [FakePlanStore](entities/FakePlanStore.md)
 - [FakePromoter](entities/FakePromoter.md)
+- [FakeRegistry](entities/FakeRegistry.md)
 - [FakeWS](entities/FakeWS.md)
 - [FeatureReadinessChannel](entities/FeatureReadinessChannel.md)
 - [FeatureReadinessSummary](entities/FeatureReadinessSummary.md)
@@ -88,7 +137,9 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [FieldTypes](entities/FieldTypes.md)
 - [FilesystemSafetyError](entities/FilesystemSafetyError.md)
 - [FormField](entities/FormField.md)
+- [Gate](entities/Gate.md)
 - [GateBundles](entities/GateBundles.md)
+- [GateResult](entities/GateResult.md)
 - [GenerateSkillRequest](entities/GenerateSkillRequest.md)
 - [GeneratedDraft](entities/GeneratedDraft.md)
 - [GeneratedSkillDraft](entities/GeneratedSkillDraft.md)
@@ -96,9 +147,26 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [GitBranchTarget](entities/GitBranchTarget.md)
 - [GovernedCommandRunner](entities/GovernedCommandRunner.md)
 - [HTTPHealthCheck](entities/HTTPHealthCheck.md)
+- [HarnessAdapter](entities/HarnessAdapter.md)
+- [HarnessCapabilityEntry](entities/HarnessCapabilityEntry.md)
 - [HarnessConfig](entities/HarnessConfig.md)
+- [HarnessContext](entities/HarnessContext.md)
+- [HarnessContextPanelProps](entities/HarnessContextPanelProps.md)
+- [HarnessContractError](entities/HarnessContractError.md)
+- [HarnessDescriptor](entities/HarnessDescriptor.md)
+- [HarnessErrorRecord](entities/HarnessErrorRecord.md)
+- [HarnessEvent](entities/HarnessEvent.md)
+- [HarnessIdentity](entities/HarnessIdentity.md)
+- [HarnessLifecycleError](entities/HarnessLifecycleError.md)
+- [HarnessPickerProps](entities/HarnessPickerProps.md)
 - [HarnessPreferences](entities/HarnessPreferences.md)
+- [HarnessPreflightCheck](entities/HarnessPreflightCheck.md)
+- [HarnessProposal](entities/HarnessProposal.md)
+- [HarnessRegistry](entities/HarnessRegistry.md)
+- [HarnessRequirementError](entities/HarnessRequirementError.md)
+- [HarnessVersionError](entities/HarnessVersionError.md)
 - [HeadTailBuffer](entities/HeadTailBuffer.md)
+- [Host](entities/Host.md)
 - [HpoStudy](entities/HpoStudy.md)
 - [HpoStudyResult](entities/HpoStudyResult.md)
 - [HpoTrial](entities/HpoTrial.md)
@@ -122,6 +190,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [IterationResult](entities/IterationResult.md)
 - [IterationsTable_Props](entities/IterationsTable_Props.md)
 - [JSONMarkerParser](entities/JSONMarkerParser.md)
+- [KernelDriver](entities/KernelDriver.md)
 - [LLMConfig](entities/LLMConfig.md)
 - [LLMProvider](entities/LLMProvider.md)
 - [LeaderboardEntry](entities/LeaderboardEntry.md)
@@ -129,29 +198,50 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [LegacyFieldCompat](entities/LegacyFieldCompat.md)
 - [LegacyRunInputs](entities/LegacyRunInputs.md)
 - [LexicalEmbeddingBackend](entities/LexicalEmbeddingBackend.md)
+- [LifecycleAction](entities/LifecycleAction.md)
+- [LifecycleRequest](entities/LifecycleRequest.md)
 - [LifecycleTransitionResult](entities/LifecycleTransitionResult.md)
+- [LocalFileCheck](entities/LocalFileCheck.md)
+- [LoopbackService](entities/LoopbackService.md)
 - [ManifestSkillRuntime](entities/ManifestSkillRuntime.md)
 - [ManifestValidationError](entities/ManifestValidationError.md)
 - [ManifestVersionError](entities/ManifestVersionError.md)
+- [Measurement](entities/Measurement.md)
+- [MeasurementProtocol](entities/MeasurementProtocol.md)
+- [MeasurementStore](entities/MeasurementStore.md)
 - [Message](entities/Message.md)
 - [MetricChartProps](entities/MetricChartProps.md)
 - [MetricConstraint](entities/MetricConstraint.md)
 - [MetricDef](entities/MetricDef.md)
 - [MetricDiagnostic](entities/MetricDiagnostic.md)
 - [MetricGoal](entities/MetricGoal.md)
+- [MetricObjective](entities/MetricObjective.md)
 - [MetricPoint](entities/MetricPoint.md)
 - [MetricsChart_Props](entities/MetricsChart_Props.md)
+- [MinimizationDecision](entities/MinimizationDecision.md)
 - [MockProvider](entities/MockProvider.md)
+- [MockWebSocket](entities/MockWebSocket.md)
 - [ModelInfo](entities/ModelInfo.md)
+- [ModelRoles](entities/ModelRoles.md)
+- [MultiObjectiveError](entities/MultiObjectiveError.md)
 - [NetworkPolicy](entities/NetworkPolicy.md)
+- [NormalizedResult](entities/NormalizedResult.md)
+- [ObjectiveComparator](entities/ObjectiveComparator.md)
+- [ObjectiveContextError](entities/ObjectiveContextError.md)
+- [ObjectiveDecision](entities/ObjectiveDecision.md)
 - [ObjectiveDirection](entities/ObjectiveDirection.md)
 - [ObjectiveGoal](entities/ObjectiveGoal.md)
+- [ObjectiveMetric](entities/ObjectiveMetric.md)
 - [ObjectivePolicy](entities/ObjectivePolicy.md)
+- [ObjectiveSpec](entities/ObjectiveSpec.md)
 - [ObservationIdentity](entities/ObservationIdentity.md)
+- [OfflineDemoScorer](entities/OfflineDemoScorer.md)
+- [OnePerTurnScriptedProvider](entities/OnePerTurnScriptedProvider.md)
 - [OosProvenanceSummary](entities/OosProvenanceSummary.md)
 - [OpenAIProvider](entities/OpenAIProvider.md)
 - [OperatorConstraints](entities/OperatorConstraints.md)
 - [OpsTone](entities/OpsTone.md)
+- [OrchestratorProbe](entities/OrchestratorProbe.md)
 - [OutputCallback](entities/OutputCallback.md)
 - [OutputParser](entities/OutputParser.md)
 - [OutputParserConfig](entities/OutputParserConfig.md)
@@ -168,9 +258,14 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [PhaseAdvancementOverride](entities/PhaseAdvancementOverride.md)
 - [PhaseBarItem](entities/PhaseBarItem.md)
 - [PhaseBarProps](entities/PhaseBarProps.md)
+- [PinnedDataset](entities/PinnedDataset.md)
+- [PluginAdvancementError](entities/PluginAdvancementError.md)
+- [PluginAdvancementFailed](entities/PluginAdvancementFailed.md)
+- [PluginAdvancementRejected](entities/PluginAdvancementRejected.md)
 - [PluginCaps](entities/PluginCaps.md)
 - [PluginEntry](entities/PluginEntry.md)
 - [PluginKind](entities/PluginKind.md)
+- [PluginReceipt](entities/PluginReceipt.md)
 - [PluginResult](entities/PluginResult.md)
 - [PluginRunBody](entities/PluginRunBody.md)
 - [PluginRunner](entities/PluginRunner.md)
@@ -181,6 +276,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [PreflightEntry](entities/PreflightEntry.md)
 - [PreflightKind](entities/PreflightKind.md)
 - [PrimaryMetric](entities/PrimaryMetric.md)
+- [Probe](entities/Probe.md)
 - [ProbeBlockerSkill](entities/ProbeBlockerSkill.md)
 - [ProcessResourceCaps](entities/ProcessResourceCaps.md)
 - [ProductionAuditEvent](entities/ProductionAuditEvent.md)
@@ -191,6 +287,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [ProductionWarning](entities/ProductionWarning.md)
 - [ProductionWarningShape](entities/ProductionWarningShape.md)
 - [Promotion](entities/Promotion.md)
+- [PromotionDecision](entities/PromotionDecision.md)
 - [PromotionGateCheck](entities/PromotionGateCheck.md)
 - [PromotionGateEvaluation](entities/PromotionGateEvaluation.md)
 - [PromotionKind](entities/PromotionKind.md)
@@ -205,7 +302,12 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [ProviderCapabilities](entities/ProviderCapabilities.md)
 - [ProviderCapabilityMismatch](entities/ProviderCapabilityMismatch.md)
 - [ProviderResponse](entities/ProviderResponse.md)
+- [QualificationResult](entities/QualificationResult.md)
+- [QueryHandler](entities/QueryHandler.md)
 - [RecordingTarget](entities/RecordingTarget.md)
+- [RecoveryBlocker](entities/RecoveryBlocker.md)
+- [RecoveryReport](entities/RecoveryReport.md)
+- [RecoveryRequired](entities/RecoveryRequired.md)
 - [RegisterResponse](entities/RegisterResponse.md)
 - [RegistryApiSkill](entities/RegistryApiSkill.md)
 - [RegistryApiTarget](entities/RegistryApiTarget.md)
@@ -215,6 +317,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [RequestIdHeaderParam](entities/RequestIdHeaderParam.md)
 - [RequiredCapabilities](entities/RequiredCapabilities.md)
 - [ResearchConfig](entities/ResearchConfig.md)
+- [ResearchOutcome](entities/ResearchOutcome.md)
 - [ResearchSession](entities/ResearchSession.md)
 - [ResearchSessionManifest](entities/ResearchSessionManifest.md)
 - [ResearchSkillManifest](entities/ResearchSkillManifest.md)
@@ -225,6 +328,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [ResolvedRunInputs](entities/ResolvedRunInputs.md)
 - [ResourceLimits](entities/ResourceLimits.md)
 - [ResultReceipt](entities/ResultReceipt.md)
+- [ResultSpec](entities/ResultSpec.md)
 - [RlProfitSummary](entities/RlProfitSummary.md)
 - [RollbackStatusSummary](entities/RollbackStatusSummary.md)
 - [RowExtractor](entities/RowExtractor.md)
@@ -233,9 +337,17 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [RunSpec](entities/RunSpec.md)
 - [RuntimeResumeRequest](entities/RuntimeResumeRequest.md)
 - [SQLiteStateStore](entities/SQLiteStateStore.md)
+- [ScalarProxyRejected](entities/ScalarProxyRejected.md)
+- [ScopeNode](entities/ScopeNode.md)
 - [ScopeOption](entities/ScopeOption.md)
+- [ScopePolicyError](entities/ScopePolicyError.md)
+- [ScopedAuthError](entities/ScopedAuthError.md)
+- [ScopedPrincipal](entities/ScopedPrincipal.md)
 - [ScopedPromotionMetadata](entities/ScopedPromotionMetadata.md)
+- [ScorerClient](entities/ScorerClient.md)
+- [ScorerIdentity](entities/ScorerIdentity.md)
 - [ScorerRef](entities/ScorerRef.md)
+- [ScorerUnavailable](entities/ScorerUnavailable.md)
 - [ScriptedOpenAIClient](entities/ScriptedOpenAIClient.md)
 - [ScriptedOrchestrator](entities/ScriptedOrchestrator.md)
 - [SecondaryMetric](entities/SecondaryMetric.md)
@@ -252,14 +364,16 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [SessionRecord](entities/SessionRecord.md)
 - [SessionState](entities/SessionState.md)
 - [SessionStateMachine](entities/SessionStateMachine.md)
-- [Settings](entities/Settings.md)
 - [SignificanceConfig](entities/SignificanceConfig.md)
+- [Skill](entities/Skill.md)
 - [SkillConfigError](entities/SkillConfigError.md)
 - [SkillDefaults](entities/SkillDefaults.md)
 - [SkillGenerationError](entities/SkillGenerationError.md)
 - [SkillGenerator](entities/SkillGenerator.md)
+- [SkillHostServices](entities/SkillHostServices.md)
 - [SkillLayout](entities/SkillLayout.md)
 - [SkillLeaderboard](entities/SkillLeaderboard.md)
+- [SkillLeaderboardGroup](entities/SkillLeaderboardGroup.md)
 - [SkillLifecycleEvent](entities/SkillLifecycleEvent.md)
 - [SkillLifecycleMachine](entities/SkillLifecycleMachine.md)
 - [SkillLifecycleState](entities/SkillLifecycleState.md)
@@ -276,13 +390,14 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [SkillRuntime](entities/SkillRuntime.md)
 - [SkillSummary](entities/SkillSummary.md)
 - [SkipCallback](entities/SkipCallback.md)
+- [SkipOwner](entities/SkipOwner.md)
 - [SlowFakeWS](entities/SlowFakeWS.md)
 - [SnapshotCollector](entities/SnapshotCollector.md)
 - [SparklineProps](entities/SparklineProps.md)
+- [StaleFenceError](entities/StaleFenceError.md)
 - [StatProps](entities/StatProps.md)
 - [StateStore](entities/StateStore.md)
 - [StopReason](entities/StopReason.md)
-- [Store](entities/Store.md)
 - [StreamDelta](entities/StreamDelta.md)
 - [StructuredHPOConfig](entities/StructuredHPOConfig.md)
 - [StructuredHPOPlan](entities/StructuredHPOPlan.md)
@@ -297,6 +412,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [SystemStatus](entities/SystemStatus.md)
 - [TCPConnectCheck](entities/TCPConnectCheck.md)
 - [Tab](entities/Tab.md)
+- [TaskReentrantLock](entities/TaskReentrantLock.md)
 - [TestAdaptiveNoopReasonFallback](entities/TestAdaptiveNoopReasonFallback.md)
 - [TestApiEnvelopeSelection](entities/TestApiEnvelopeSelection.md)
 - [TestAppendFindings](entities/TestAppendFindings.md)
@@ -375,7 +491,11 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [TurnTrialState](entities/TurnTrialState.md)
 - [UIConfig](entities/UIConfig.md)
 - [UnenforceableResourceCapabilityError](entities/UnenforceableResourceCapabilityError.md)
+- [UnsupportedIdentityResolveError](entities/UnsupportedIdentityResolveError.md)
+- [UnsupportedModelSetting](entities/UnsupportedModelSetting.md)
+- [UnsupportedPhaseAdvancementError](entities/UnsupportedPhaseAdvancementError.md)
 - [Usage](entities/Usage.md)
+- [UsageEvent](entities/UsageEvent.md)
 - [VariantDescriptor](entities/VariantDescriptor.md)
 - [VariantsConfig](entities/VariantsConfig.md)
 - [VerifiedResult](entities/VerifiedResult.md)
@@ -385,9 +505,12 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [WebhookDeliveryError](entities/WebhookDeliveryError.md)
 - [WebhookPromotionTarget](entities/WebhookPromotionTarget.md)
 - [WebhookTarget](entities/WebhookTarget.md)
+- [Workload](entities/Workload.md)
+- [Workspace](entities/Workspace.md)
 - [WorkspaceBounds](entities/WorkspaceBounds.md)
 - [WorkspaceConfig](entities/WorkspaceConfig.md)
 - [YieldingFakeWS](entities/YieldingFakeWS.md)
+- [client_CostEstimate](entities/client_CostEstimate.md)
 - [client_MetricColumn](entities/client_MetricColumn.md)
 - [client_MetricSchema](entities/client_MetricSchema.md)
 - [client_PromotionApproval](entities/client_PromotionApproval.md)
@@ -395,10 +518,13 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [client_PromotionScope](entities/client_PromotionScope.md)
 - [client_PromotionScopeRequest](entities/client_PromotionScopeRequest.md)
 - [client_StartResearchRequest](entities/client_StartResearchRequest.md)
+- [config_Settings](entities/config_Settings.md)
 - [execution_contracts_ExecutionRequest](entities/execution_contracts_ExecutionRequest.md)
 - [execution_contracts_UnsupportedCapabilityError](entities/execution_contracts_UnsupportedCapabilityError.md)
 - [execution_request_ExecutionRequest](entities/execution_request_ExecutionRequest.md)
+- [harness_contract_UnsupportedCapabilityError](entities/harness_contract_UnsupportedCapabilityError.md)
 - [isolation_UnsupportedCapabilityError](entities/isolation_UnsupportedCapabilityError.md)
+- [llm_provider_CostEstimate](entities/llm_provider_CostEstimate.md)
 - [promotion_PromotionApproval](entities/promotion_PromotionApproval.md)
 - [promotion_PromotionPreviewRequest](entities/promotion_PromotionPreviewRequest.md)
 - [promotion_PromotionScopeRequest](entities/promotion_PromotionScopeRequest.md)
@@ -429,6 +555,7 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [test_config_promoter_gate_bundle_FakePromotionStore](entities/test_config_promoter_gate_bundle_FakePromotionStore.md)
 - [test_domain_classifier_StubSettings](entities/test_domain_classifier_StubSettings.md)
 - [test_gate_status_contract_FakePromotionStore](entities/test_gate_status_contract_FakePromotionStore.md)
+- [test_goal_phase_semantics_Store](entities/test_goal_phase_semantics_Store.md)
 - [test_leaderboard_api_FakeStore](entities/test_leaderboard_api_FakeStore.md)
 - [test_main_operational_endpoints_FakeSessionManager](entities/test_main_operational_endpoints_FakeSessionManager.md)
 - [test_main_operational_endpoints_FakeStore](entities/test_main_operational_endpoints_FakeStore.md)
@@ -447,8 +574,10 @@ This page is an exhaustive reference inventory of the selected source. Task-orie
 - [test_promotion_target_FakeStore](entities/test_promotion_target_FakeStore.md)
 - [test_prompt_promotion_policy_FakeAPIStatusError](entities/test_prompt_promotion_policy_FakeAPIStatusError.md)
 - [test_prompt_promotion_policy_FakeAsyncAnthropic](entities/test_prompt_promotion_policy_FakeAsyncAnthropic.md)
+- [test_provider_roles_Settings](entities/test_provider_roles_Settings.md)
 - [test_research_api_compat_FakeSessionManager](entities/test_research_api_compat_FakeSessionManager.md)
 - [test_research_api_compat_FakeStore](entities/test_research_api_compat_FakeStore.md)
+- [test_research_api_integration_Store](entities/test_research_api_integration_Store.md)
 - [test_result_authority_ScriptedProvider](entities/test_result_authority_ScriptedProvider.md)
 - [test_results_api_FakeStore](entities/test_results_api_FakeStore.md)
 - [test_runtime_recovery_FakeAPIStatusError](entities/test_runtime_recovery_FakeAPIStatusError.md)
@@ -477,10 +606,14 @@ Retained history; these declarations are absent from the selected source invento
 - [Dashboard](modules/Dashboard.md) - `ui/src/pages/Dashboard.tsx`
 - [DynamicFormFields](modules/DynamicFormFields.md) - `ui/src/components/DynamicFormFields.tsx`
 - [DynamicFormFields.test](modules/DynamicFormFields.test.md) - `ui/src/components/__tests__/DynamicFormFields.test.tsx`
+- [HarnessContextPanel](modules/HarnessContextPanel.md) - `ui/src/components/HarnessContextPanel.tsx`
+- [HarnessPicker](modules/HarnessPicker.md) - `ui/src/components/HarnessPicker.tsx`
+- [HarnessUI.test](modules/HarnessUI.test.md) - `ui/src/components/__tests__/HarnessUI.test.tsx`
 - [History](modules/History.md) - `ui/src/pages/History.tsx`
 - [IterationsTable](modules/IterationsTable.md) - `ui/src/components/IterationsTable.tsx`
 - [IterationsTable.test](modules/IterationsTable.test.md) - `ui/src/components/__tests__/IterationsTable.test.tsx`
 - [Leaderboard](modules/Leaderboard.md) - `ui/src/pages/Leaderboard.tsx`
+- [Leaderboard.test](modules/Leaderboard.test.md) - `ui/src/pages/__tests__/Leaderboard.test.tsx`
 - [MetricsChart](modules/MetricsChart.md) - `ui/src/components/MetricsChart.tsx`
 - [MetricsChart.test](modules/MetricsChart.test.md) - `ui/src/components/__tests__/MetricsChart.test.tsx`
 - [NewResearch](modules/NewResearch.md) - `ui/src/pages/NewResearch.tsx`
@@ -496,26 +629,37 @@ Retained history; these declarations are absent from the selected source invento
 - [StatusBadge](modules/StatusBadge.md) - `ui/src/components/StatusBadge.tsx`
 - [Topbar](modules/Topbar.md) - `ui/src/components/hifi/Topbar.tsx`
 - [_engine](modules/_engine.md) - ARC-011 X-002 parity engine.
+- [agent](modules/agent.md) - Scoped research operations for attached agents.
+- [agent_cli](modules/agent_cli.md) - Attached-agent CLI: machine-readable commands over the agent API.
+- [agent_client](modules/agent_client.md) - HTTP client for the attached-agent API.
 - [agent_tools](modules/agent_tools.md) - Agent tool surface — the 5 sandboxed tools + path safety (P1-1 split).
 - [artifact_reference](modules/artifact_reference.md) - Artifact reference normalization for autoresearch metadata.
 - [audit](modules/audit.md) - Audit helpers for protected autoresearch API endpoints.
 - [auth](modules/auth.md) - Authentication dependencies for the autoresearch API.
 - [blocker_classifier](modules/blocker_classifier.md) - Structured promotion blocker classification for operator-facing previews.
 - [bootstrap_runner](modules/bootstrap_runner.md) - Bootstrap runner — execute a skill's ``bootstrap.py`` at session start (ARC-011 P5-005 / P5-006 / P5-008).
+- [builtin_harness](modules/builtin_harness.md) - The built-in provider/tool loop as a harness adapter.
 - [capture](modules/capture.md) - ARC-011 X-002 parity fixture capture.
 - [check_doc_references](modules/check_doc_references.md) - Referenced-doc integrity guard.
 - [check_domain_coupling](modules/check_domain_coupling.md) - Domain-coupling guard: fail when TRAID-platform vocabulary creeps back in.
 - [check_execution_ledger](modules/check_execution_ledger.md) - Execution-ledger validator: fail closed on inconsistent task state.
 - [check_legacy_vocab_branching](modules/check_legacy_vocab_branching.md) - Legacy-vocabulary branching guard.
+- [ci_qualification_gates](modules/ci_qualification_gates.md) - Named qualification gates for CI — enforceable compatibility claims.
+- [claude_code_harness](modules/claude_code_harness.md) - Claude Code harness adapter: the second independent external harness.
 - [cli](modules/cli.md) - autoresearch CLI — operator entry points (P2 Skill SDK).
 - [client](modules/client.md) - `ui/src/api/client.ts`
 - [code-refactor_bootstrap](modules/code-refactor_bootstrap.md) - Bootstrap for code-refactor skill. ABI: JSON stdin -> JSON stdout.
 - [code-refactor_eval_run](modules/code-refactor_eval_run.md) - Code-refactor eval scorer (P0-2). Offline: syntax + lint + test ledger.
+- [code_evaluator](modules/code_evaluator.md) - The isolated code evaluator: real tests, lint, and types.
+- [codex_harness](modules/codex_harness.md) - Codex harness adapter: the first independent external harness.
 - [command_policy](modules/command_policy.md) - Command policy for the autoresearch agent's compatibility bash tool.
 - [command_runner](modules/command_runner.md) - Governed subprocess runner for autoresearch agent commands.
+- [comparison_context](modules/comparison_context.md) - Comparable-context identity for result ranking.
 - [compat_legacy_alias](modules/compat_legacy_alias.md) - Legacy alias registry (moved to src/compat — P1-2).
 - [config](modules/config.md) - Configuration for the autoresearch-agent service.
 - [config_promoter](modules/config_promoter.md) - Config promoter — previews and writes winning configs to the host bind mount.
+- [conformance_bootstrap](modules/conformance_bootstrap.md) - Bootstrap for the conformance probe skill. ABI: JSON stdin -> JSON stdout.
+- [conformance_eval_run](modules/conformance_eval_run.md) - Deterministic conformance evaluator (fixture skill package asset).
 - [consistency_validator](modules/consistency_validator.md) - Cross-service consistency validation for autoresearch candidates.
 - [core_legacy_alias](modules/core_legacy_alias.md) - Back-compat shim (P1-2): the legacy alias registry moved to src/compat/legacy_alias.py; every importer keeps working.
 - [dataset](modules/dataset.md) - Bounded JSONL data loading shared by the packaged bootstrap and evaluator.
@@ -525,56 +669,86 @@ Retained history; these declarations are absent from the selected source invento
 - [development_inference_validation](modules/development_inference_validation.md) - Inference reload/parity validation summaries for development promotion.
 - [development_signal_health](modules/development_signal_health.md) - Development direction-signal health summaries for promotion metadata.
 - [domain_classifier](modules/domain_classifier.md) - Embedding-based domain classifier (ARC-011 P5-016 / P5-018 / P5-019).
+- [driver_host](modules/driver_host.md) - Managed process-driver host: custom drivers under qualified isolation.
 - [events](modules/events.md) - WebSocket broadcast manager for real-time experiment events.
-- [examples_prompt-registry_main](modules/examples_prompt-registry_main.md) - Example prompt-registry receiver (P1-3).
+- [examples_prompt-registry_main](modules/examples_prompt-registry_main.md) - Example prompt-registry receiver.
 - [execution_contracts](modules/execution_contracts.md) - Versioned research and execution contracts.
 - [execution_request](modules/execution_request.md) - One resolved execution request shared by policy and subprocesses.
 - [experiment_parser](modules/experiment_parser.md) - Parse prepare.py stdout output into structured metrics.
 - [fs_safety](modules/fs_safety.md) - Descriptor-relative, no-follow filesystem primitives.
 - [gate_status](modules/gate_status.md) - Compatibility helpers for autoresearch gate-status fields.
+- [goal_semantics](modules/goal_semantics.md) - Declarative optimize/satisfice goal semantics (no expressions, no plugins).
+- [harness_adapter](modules/harness_adapter.md) - Harness adapters and registry: identity, capabilities, and run-spec pins.
+- [harness_conformance](modules/harness_conformance.md) - Reusable harness conformance suite and a deterministic fake adapter.
+- [harness_contract](modules/harness_contract.md) - Harness contract: the versioned vocabulary between kernel and harnesses.
+- [harness_qualification](modules/harness_qualification.md) - Harness contract qualification (G4): one shared contract, honest claims.
+- [harnesses](modules/harnesses.md) - Harness capability descriptors, provenance, and usage context.
 - [http_headers](modules/http_headers.md) - Request-header binding for the autoresearch API.
 - [index](modules/index.md) - `ui/src/skill-plugins/index.ts`
 - [insights_feedback](modules/insights_feedback.md) - Insights feedback loop (ARC-011 P5-027 / P5-030).
+- [instruction_assembly](modules/instruction_assembly.md) - Instruction assembly: common research directives vs harness specifics.
 - [isolation](modules/isolation.md) - Enforced process isolation: mounts, identity, and network at the OS boundary.
 - [iteration_context](modules/iteration_context.md) - Compact iteration context digests for autoresearch agents.
 - [iteration_snapshot](modules/iteration_snapshot.md) - Server-owned immutable snapshots for autoresearch iteration attempts.
+- [jsonl_driver](modules/jsonl_driver.md) - Custom JSONL driver: a managed external research driver.
+- [latency_benchmark](modules/latency_benchmark.md) - Measured latency minimization over an agent-owned loopback service.
 - [legacy_phase_tables](modules/legacy_phase_tables.md) - Historical trading-skill phase tables (moved to src/compat — P1-2).
 - [llm_provider](modules/llm_provider.md) - ``LLMProvider`` protocol + normalized value types + ``AnthropicProvider`` (ARC-011 P1-001 / P1-002).
 - [log_writer](modules/log_writer.md) - Persistent agent log writer — captures the full Claude conversation to JSONL.
 - [migrate_sqlite_to_postgres](modules/migrate_sqlite_to_postgres.md) - SQLite → Postgres data migration.
 - [ml_enrichment](modules/ml_enrichment.md) - Legacy ML enrichment helpers (moved to src/compat — P1-2).
+- [multiobjective](modules/multiobjective.md) - Multiobjective (Pareto) result and promotion semantics.
+- [objective_comparator](modules/objective_comparator.md) - One objective comparator for every winner-selection path.
 - [observability](modules/observability.md) - Production observability helpers for autoresearch operations.
 - [orchestrator](modules/orchestrator.md) - Agent orchestrator — drives Claude via the Anthropic SDK with tool use.
 - [output_digest](modules/output_digest.md) - Track D2: digest bash tool output before it enters the agent's context.
 - [output_parser](modules/output_parser.md) - ``OutputParser`` protocol + concrete parsers (ARC-011 P1-010..012).
 - [pagination](modules/pagination.md) - Opaque keyset-cursor pagination helpers (ARC-011 P0-015..019).
 - [parity_conftest](modules/parity_conftest.md) - pytest configuration for the ARC-011 parity suite.
+- [phase_resolver](modules/phase_resolver.md) - Phase-advancement resolver: the G1 plugin escape, executed for real.
+- [phases](modules/phases.md) - Adaptive phase-advancement plugin (motivating skill case 1).
+- [phases_bad_schema](modules/phases_bad_schema.md) - `tests/fixtures/skill_cases/adversarial/phases_bad_schema.py`
+- [phases_egress](modules/phases_egress.md) - `tests/fixtures/skill_cases/adversarial/phases_egress.py`
+- [phases_env_spy](modules/phases_env_spy.md) - `tests/fixtures/skill_cases/adversarial/phases_env_spy.py`
+- [phases_tamper](modules/phases_tamper.md) - `tests/fixtures/skill_cases/adversarial/phases_tamper.py`
+- [phases_timeout](modules/phases_timeout.md) - `tests/fixtures/skill_cases/adversarial/phases_timeout.py`
 - [plugin_runner](modules/plugin_runner.md) - Governed subprocess runner for skill-supplied plugins (ARC-011 X-004 / P5-005).
 - [postcss.config](modules/postcss.config.md) - `ui/postcss.config.js`
 - [postgres_state_store](modules/postgres_state_store.md) - ``PostgresStateStore`` — the multi-worker Postgres backend (ARC-011 P6-002).
 - [preflight](modules/preflight.md) - ``PreflightCheck`` protocol + concrete checks (ARC-011 P1-019..021).
+- [pricing](modules/pricing.md) - Small pricing library: the fixture project's first module.
 - [primitives](modules/primitives.md) - `ui/src/components/hifi/primitives.tsx`
 - [process_limits](modules/process_limits.md) - Bounded resource use, output, and cancellation for candidate subprocesses.
 - [productionOps](modules/productionOps.md) - `ui/src/utils/productionOps.ts`
 - [promotion](modules/promotion.md) - Config promotion endpoints — preview and confirm pushing configs to host.
 - [promotion_approval](modules/promotion_approval.md) - Pure production-approval v2 encoding and candidate binding (no I/O).
+- [promotion_policy](modules/promotion_policy.md) - Compiled promotion policy: scope graph and domain evidence requirements.
 - [promotion_target](modules/promotion_target.md) - ``PromotionTarget`` protocol + ``FilePathPromotionTarget`` implementation (ARC-011 P1-015 / P1-016).
 - [prompt-engineering_bootstrap](modules/prompt-engineering_bootstrap.md) - P4-015 — Minimal bootstrap.py for the prompt-engineering skill (ARC-011).
 - [prompt-engineering_eval_run](modules/prompt-engineering_eval_run.md) - Fail-closed prompt scoring with an explicit remote endpoint or demo mode.
+- [prompt_scorer](modules/prompt_scorer.md) - The prompt-evaluation domain: a controlled real scorer, pinned data.
 - [registry](modules/registry.md) - `ui/src/skill-plugins/registry.ts`
 - [research](modules/research.md) - Research session management endpoints.
+- [research_kernel](modules/research_kernel.md) - The research kernel: lifecycle decisions without harness types.
 - [research_manifest](modules/research_manifest.md) - Immutable research-session manifests for autoresearch runs.
 - [research_phase_plan](modules/research_phase_plan.md) - Phase-state helpers for autoresearch sessions (live machinery).
+- [research_resume](modules/research_resume.md) - Cross-session research resume: the summary domain bridge.
 - [research_state](modules/research_state.md) - Operator-facing autoresearch state summaries.
 - [result_artifact](modules/result_artifact.md) - Result artifact preservation for autoresearch iterations.
 - [result_authority](modules/result_authority.md) - Authoritative evaluator results: receipts, verification, and honest labels.
 - [results](modules/results.md) - Experiment results query endpoints.
 - [results_store](modules/results_store.md) - Deprecated back-compat shim (ARC-011 P1-006 / P1-007).
 - [run-production-ops-tests](modules/run-production-ops-tests.md) - `ui/scripts/run-production-ops-tests.mjs`
+- [run_artifacts](modules/run_artifacts.md) - Local content-addressed artifact store: bundles, publication, retention.
+- [run_compatibility_matrix](modules/run_compatibility_matrix.md) - Run the full initial compatibility matrix (G5) on an exact commit.
+- [run_restore](modules/run_restore.md) - Explicit run restore and recovery assessment.
+- [run_spec](modules/run_spec.md) - The resolved run specification: immutable inputs, digests, secret refs.
+- [scoped_credentials](modules/scoped_credentials.md) - Run/attempt-scoped credentials for attached agents.
 - [service_preflight](modules/service_preflight.md) - Service dependency preflight checks for autoresearch sessions.
 - [session_manager](modules/session_manager.md) - Session manager — tracks active asyncio tasks for research sessions.
 - [significance](modules/significance.md) - Multi-seed mean±std significance (P2 ops defaults).
 - [skill_generator](modules/skill_generator.md) - Skill generator (ARC-011 P5-021..026).
+- [skill_host_services](modules/skill_host_services.md) - Skill host services: the explicit context a skill runtime may use.
 - [skill_lifecycle](modules/skill_lifecycle.md) - Skill lifecycle state machine (ARC-011 P5-010).
 - [skill_loader](modules/skill_loader.md) - Skill-manifest loader (ARC-011 P2-002).
 - [skill_manifest](modules/skill_manifest.md) - ``research_skill.v1`` manifest schema (ARC-011 P2-001).
@@ -587,8 +761,11 @@ Retained history; these declarations are absent from the selected source invento
 - [state_machine](modules/state_machine.md) - Session state machine — the authoritative session-lifecycle writer.
 - [state_store](modules/state_store.md) - ``StateStore`` protocol + ``SQLiteStateStore`` implementation (ARC-011 P1-006 / P1-007).
 - [subjects](modules/subjects.md) - Subject & variant enumeration endpoints.
+- [support_matrix](modules/support_matrix.md) - Machine-readable support matrix for manifest declarations.
 - [tailwind.config](modules/tailwind.config.md) - /** @type {import('tailwindcss').Config} */
 - [test_adaptive_noop_reason_fallback](modules/test_adaptive_noop_reason_fallback.md) - Tests for adaptive_feature_noop_reason fallback logic in direction prepare.py.
+- [test_agent_api](modules/test_agent_api.md) - Attached-agent API: scoped authority, validation, and contract tests.
+- [test_agent_cli](modules/test_agent_cli.md) - Attached-agent CLI: schemas, exit codes, redaction, reconnect.
 - [test_anthropic_provider](modules/test_anthropic_provider.md) - Unit tests for ``AnthropicProvider`` — the SDK boundary translator (ARC-011 P1-002).
 - [test_api_auth](modules/test_api_auth.md) - `tests/test_api_auth.py`
 - [test_async_tool_path](modules/test_async_tool_path.md) - Tests for the sync tool-dispatch path (ARC-011 P1-029 / P1-030).
@@ -596,10 +773,17 @@ Retained history; these declarations are absent from the selected source invento
 - [test_auto_promote_terminate_waiver](modules/test_auto_promote_terminate_waiver.md) - Tests for the TERMINATE_REQUEST promotion waiver.
 - [test_auto_promotion_readiness](modules/test_auto_promotion_readiness.md) - `tests/test_auto_promotion_readiness.py`
 - [test_baseline_capture_dedup_bypass](modules/test_baseline_capture_dedup_bypass.md) - Tests for the baseline_capture cross-session dedup bypass.
+- [test_behavior](modules/test_behavior.md) - Protected behavior tests: the fixed expected test set.
 - [test_bootstrap_runner](modules/test_bootstrap_runner.md) - BootstrapRunner tests (ARC-011 P5-005 / P5-006 / P5-008 / P5-009).
+- [test_builtin_harness](modules/test_builtin_harness.md) - The built-in harness adapter: conformance, kernel routing, instructions, cleanup, and provider parity.
 - [test_canonical_start_wiring](modules/test_canonical_start_wiring.md) - ARC-011 implementation review C1 (2026-08-15) — canonical start wiring.
+- [test_ci_qualification_gates](modules/test_ci_qualification_gates.md) - CI qualification gates: deliberate negative fixtures for every guard.
+- [test_claude_code_harness](modules/test_claude_code_harness.md) - Claude Code harness adapter: protocol fixtures and common contracts.
 - [test_cli](modules/test_cli.md) - CLI tests for the P2 Skill SDK (``autoresearch new-skill`` / ``promote-skill``).
+- [test_code_refactor_domain](modules/test_code_refactor_domain.md) - The code-refactor domain: real test/lint/type evidence over bundles.
+- [test_codex_harness](modules/test_codex_harness.md) - Codex harness adapter: recorded protocol fixtures and common contracts.
 - [test_command_policy](modules/test_command_policy.md) - `tests/test_command_policy.py`
+- [test_compatibility_matrix](modules/test_compatibility_matrix.md) - G5 compatibility matrix: structure and honesty guards.
 - [test_config_promoter_atomic](modules/test_config_promoter_atomic.md) - P0-012 — Crash-during-write promotion tests.
 - [test_config_promoter_gate_bundle](modules/test_config_promoter_gate_bundle.md) - `tests/test_config_promoter_gate_bundle.py`
 - [test_contract_examples](modules/test_contract_examples.md) - Tests for the serialized contract examples under examples/contracts/v1/.
@@ -609,10 +793,15 @@ Retained history; these declarations are absent from the selected source invento
 - [test_deployment_inputs](modules/test_deployment_inputs.md) - `tests/test_deployment_inputs.py`
 - [test_distributed_state_store](modules/test_distributed_state_store.md) - ARC-011 P6-007 — distributed concurrency tests (the Phase-6 exit gate).
 - [test_domain_classifier](modules/test_domain_classifier.md) - Domain classifier tests (ARC-011 P5-016..020).
+- [test_domain_conformance](modules/test_domain_conformance.md) - Domain conformance: complete workflows over the supported declarations.
+- [test_domain_semantics_extension](modules/test_domain_semantics_extension.md) - Domain semantics extension: the two motivating skill cases.
+- [test_driver_host](modules/test_driver_host.md) - Managed process-driver host: transport, supervision, and isolation.
 - [test_duplicate_phase_advancement_guard](modules/test_duplicate_phase_advancement_guard.md) - Post-``res_99469dfc1088`` defense-in-depth — rejected-duplicate iterations must not count toward phase advancement.
 - [test_duplicate_rejection_budget](modules/test_duplicate_rejection_budget.md) - Tests for duplicate-rejection budget decoupling.
+- [test_durable_operation_qualification](modules/test_durable_operation_qualification.md) - Durable-operation qualification: fault injection with real process death.
 - [test_estimate_cost_api](modules/test_estimate_cost_api.md) - POST /research/estimate-cost tests (P2 ops).
 - [test_event_broadcaster_concurrency](modules/test_event_broadcaster_concurrency.md) - P0-014 — EventBroadcaster concurrency stress tests.
+- [test_event_outbox](modules/test_event_outbox.md) - Transactional event outbox: cross-worker delivery, replay, and resync.
 - [test_evidence_artifact_validation](modules/test_evidence_artifact_validation.md) - AR-5: Tests for artifact-bound evidence-key validation for promotion-family phases.
 - [test_execution_concurrency](modules/test_execution_concurrency.md) - Execution-config plumbing tests (P1-4).
 - [test_execution_contracts](modules/test_execution_contracts.md) - Tests for the versioned research and execution contracts.
@@ -632,7 +821,11 @@ Retained history; these declarations are absent from the selected source invento
 - [test_gate_bundle_production_economics](modules/test_gate_bundle_production_economics.md) - MQ-B5 — production-scope unconditional post-cost economic gate.
 - [test_gate_status_contract](modules/test_gate_status_contract.md) - `tests/test_gate_status_contract.py`
 - [test_generalization_falsifiability](modules/test_generalization_falsifiability.md) - Automated §7.14 generalization falsifiability suite (ARC-011 P3-030, §8.2/§8.3).
+- [test_goal_phase_semantics](modules/test_goal_phase_semantics.md) - Tests for explicit goal and phase semantics.
 - [test_hardening_phase1_to_5](modules/test_hardening_phase1_to_5.md) - Tests for the autoresearch-agent hardening backlog (phases 1–5).
+- [test_harness_contracts_g4](modules/test_harness_contracts_g4.md) - G4 qualification: one shared contract across every harness surface.
+- [test_harness_sdk](modules/test_harness_sdk.md) - Harness SDK: adapters, registry, capability negotiation, conformance.
+- [test_harnesses_api](modules/test_harnesses_api.md) - Harness capability descriptors and run context: the UI's data source.
 - [test_headroom_hint](modules/test_headroom_hint.md) - DM-14 — per-phase ``headroom_hint`` surfaced in the state JSON + appended to ``next_action`` when budget is tight.
 - [test_insights_feedback](modules/test_insights_feedback.md) - Insights feedback loop tests (ARC-011 P5-027 / P5-028 / P5-029 / P5-030).
 - [test_issue10b_declined_outcome](modules/test_issue10b_declined_outcome.md) - Issue 10B — outcome taxonomy: distinguish ``declined`` from ``failed``.
@@ -642,7 +835,9 @@ Retained history; these declarations are absent from the selected source invento
 - [test_iteration_cost_attribution](modules/test_iteration_cost_attribution.md) - Fix F: per-iteration API cost attribution.
 - [test_iteration_snapshot](modules/test_iteration_snapshot.md) - `tests/test_iteration_snapshot.py`
 - [test_iteration_snapshot_canonical_payload](modules/test_iteration_snapshot_canonical_payload.md) - AR-1: Tests for canonical_config_payload / canonical_config_hash hardening.
+- [test_latency_benchmark](modules/test_latency_benchmark.md) - Measured latency minimization: controls, noise, contention, promotion.
 - [test_leaderboard_api](modules/test_leaderboard_api.md) - GET /skills/{id}/leaderboard contract tests (P0-4).
+- [test_leaderboard_comparability](modules/test_leaderboard_comparability.md) - Comparable-context leaderboard ranking over real storage history.
 - [test_llm_provider](modules/test_llm_provider.md) - Structural / contract tests for the ``LLMProvider`` protocol + types (ARC-011 P1-001) and the ``AnthropicProvider`` (P1-002).
 - [test_llm_provider_openai](modules/test_llm_provider_openai.md) - P4-011 — Cross-provider parity tests for ``OpenAIProvider`` (ARC-011 R4/R5).
 - [test_log_writer](modules/test_log_writer.md) - `tests/test_log_writer.py`
@@ -651,10 +846,13 @@ Retained history; these declarations are absent from the selected source invento
 - [test_marker_file_staleness](modules/test_marker_file_staleness.md) - `tests/test_marker_file_staleness.py`
 - [test_metrics_forgery](modules/test_metrics_forgery.md) - P4-006 — Metrics forgery rejection tests (ARC-011 W11 anti-forgery).
 - [test_metrics_forgery_c3](modules/test_metrics_forgery_c3.md) - ARC-011 implementation review C3 (2026-08-15) — W11 anti-forgery fixes.
+- [test_migration_restore_qualification](modules/test_migration_restore_qualification.md) - Migration and restore qualification: upgraded databases keep their past.
 - [test_mlflow_run_id_contract](modules/test_mlflow_run_id_contract.md) - `tests/test_mlflow_run_id_contract.py`
 - [test_mock_provider](modules/test_mock_provider.md) - MockProvider + demo-mode routing tests (P0-3).
 - [test_non_ml_session_e2e](modules/test_non_ml_session_e2e.md) - ARC-012 P7-011 — the API-level non-ML end-to-end proof.
+- [test_objective_comparator](modules/test_objective_comparator.md) - Tests for the one objective comparator shared by every winner-selection path.
 - [test_observability](modules/test_observability.md) - `tests/test_observability.py`
+- [test_observation_identity](modules/test_observation_identity.md) - Tests for candidate identity separated from repeated observations.
 - [test_openapi_contract](modules/test_openapi_contract.md) - `tests/test_openapi_contract.py`
 - [test_orchestrator_command_audit](modules/test_orchestrator_command_audit.md) - `tests/test_orchestrator_command_audit.py`
 - [test_orchestrator_config_snapshot_inheritance](modules/test_orchestrator_config_snapshot_inheritance.md) - AR-3: Tests for auto-inheritance of config_snapshot on promotion-family phases.
@@ -679,24 +877,35 @@ Retained history; these declarations are absent from the selected source invento
 - [test_postgres_sqlite_parity](modules/test_postgres_sqlite_parity.md) - ARC-011 P6-002b — dual-backend parity sweep.
 - [test_postgres_state_store](modules/test_postgres_state_store.md) - ARC-011 P6-002a — PostgresStateStore write-path tests.
 - [test_preflight](modules/test_preflight.md) - Structural / contract tests for the ``PreflightCheck`` protocol (ARC-011 P1-019) and the ``HTTPHealthCheck`` / ``TCPConnectCheck`` implementations (P1-020), plus the P1-021 dispatch migration in ``service_preflight``.
+- [test_preflight_support_matrix](modules/test_preflight_support_matrix.md) - Tests for preflight enforcement and published executable support.
 - [test_process_limits](modules/test_process_limits.md) - Bounded resource use, output, and cancellation acceptance tests.
 - [test_promotion_approval](modules/test_promotion_approval.md) - P0-020 / P0-021 — Mandatory signed production approval bound to a candidate (W18 v2).
 - [test_promotion_diagnostics](modules/test_promotion_diagnostics.md) - Gap 3 — auto-promotion skip diagnostics include collection errors.
+- [test_promotion_policy](modules/test_promotion_policy.md) - Promotion policy acceptance: compiled scope graph, canonical identity, effects.
 - [test_promotion_target](modules/test_promotion_target.md) - Structural / contract tests for the ``PromotionTarget`` protocol (ARC-011 P1-015) and the ``FilePathPromotionTarget`` implementation (P1-016), plus the P1-017 wiring of ``ConfigPromoter`` to delegate its file-write surface to the target.
+- [test_prompt_evaluation_domain](modules/test_prompt_evaluation_domain.md) - The prompt-evaluation domain: pinned data, a controlled real scorer.
 - [test_prompt_evaluator](modules/test_prompt_evaluator.md) - Prompt evaluator/bootstrap fail-closed regressions; no external services.
 - [test_prompt_promotion_policy](modules/test_prompt_promotion_policy.md) - `tests/test_prompt_promotion_policy.py`
+- [test_provider_roles](modules/test_provider_roles.md) - Provider/model roles and capabilities resolve consistently on every path.
 - [test_release_promotion_safety](modules/test_release_promotion_safety.md) - Release regressions for durable remote rollback and candidate binding.
 - [test_replay_fixture](modules/test_replay_fixture.md) - AR-9: Smoke tests for the replay_iterations fixture infrastructure.
 - [test_research_api_compat](modules/test_research_api_compat.md) - Research-API backward-compatibility test suite (ARC-011 P3-020, GEN-001/002/004).
 - [test_research_api_integration](modules/test_research_api_integration.md) - ARC-011 Phase 3 — HTTP-level integration tests (P3-015/016/017).
 - [test_research_config](modules/test_research_config.md) - ResearchConfig generalization tests (ARC-011 P2-020).
+- [test_research_kernel](modules/test_research_kernel.md) - Kernel boundary and characterization tests.
 - [test_research_manifest](modules/test_research_manifest.md) - `tests/test_research_manifest.py`
+- [test_research_resume](modules/test_research_resume.md) - Cross-session research resume: generated at setup, read by prompts.
 - [test_result_artifact_ingestion](modules/test_result_artifact_ingestion.md) - `tests/test_result_artifact_ingestion.py`
 - [test_result_authority](modules/test_result_authority.md) - Evaluator-result authority: receipts, provenance labels, and replay tests.
+- [test_result_semantics](modules/test_result_semantics.md) - Normalized result contract: declared parser semantics, explicit invalid evidence, and identical rules for stdout and artifact collection.
 - [test_results_api](modules/test_results_api.md) - `tests/test_results_api.py`
 - [test_results_store_manifest_snapshots](modules/test_results_store_manifest_snapshots.md) - `tests/test_results_store_manifest_snapshots.py`
 - [test_results_store_migrations](modules/test_results_store_migrations.md) - Tests for ARC-011 P0-008 / P0-009 / P0-010 — migration error surfacing.
 - [test_rl_phase_tracing](modules/test_rl_phase_tracing.md) - RL progress-tracing fixes (issue #3 from RL-TRAINING-ISSUES-ANALYSIS).
+- [test_run_artifacts](modules/test_run_artifacts.md) - Content-addressed artifacts: bundles, safe imports, atomic retention.
+- [test_run_restore](modules/test_run_restore.md) - Run restore: pinned-contract reconstruction and explicit recovery states.
+- [test_run_spec_persistence](modules/test_run_spec_persistence.md) - Resolved run spec persistence: round-trip, migrations, legacy read.
+- [test_run_workspace_isolation](modules/test_run_workspace_isolation.md) - Run workspace isolation: unique roots and retained parent references.
 - [test_runtime_recovery](modules/test_runtime_recovery.md) - `tests/test_runtime_recovery.py`
 - [test_service_preflight](modules/test_service_preflight.md) - `tests/test_service_preflight.py`
 - [test_session_failure_modes](modules/test_session_failure_modes.md) - AR-10: End-to-end replay tests for the res_a1ba6cbd520f failure mode, plus the ARC-012 Wave-2 session failure-semantics suite (P7-009/P7-010; see the Wave-2 section at the bottom of this file).
@@ -713,18 +922,24 @@ Retained history; these declarations are absent from the selected source invento
 - [test_stagnation_phase_genuineness](modules/test_stagnation_phase_genuineness.md) - Tests for phase-genuineness check on the stagnation exemption.
 - [test_state_machine](modules/test_state_machine.md) - Unit tests for ``SessionStateMachine`` (ARC-011 P0-002).
 - [test_state_store](modules/test_state_store.md) - Structural / contract tests for the ``StateStore`` protocol (ARC-011 P1-006) and the ``SQLiteStateStore`` implementation (P1-007).
+- [test_store_persistence_contracts](modules/test_store_persistence_contracts.md) - Persistence contracts shared by both stores: selection and promotion.
+- [test_store_transaction_serialization](modules/test_store_transaction_serialization.md) - Transaction-span serialization on the shared SQLite connection.
 - [test_terminal_phase_contract](modules/test_terminal_phase_contract.md) - Fix D/G: terminal-phase contract.
 - [test_tool_access](modules/test_tool_access.md) - Tool-dispatch authorization regressions for the shared file-tool context.
 - [test_trial_workspace](modules/test_trial_workspace.md) - Per-workdir trial state tests (P2 — ``execution.concurrency`` prerequisite).
 - [test_trust_boundary_qualification](modules/test_trust_boundary_qualification.md) - Trusted-execution-boundary qualification lane.
+- [test_usage_ledger](modules/test_usage_ledger.md) - Usage ledger: idempotent accounting with explicit cost knowledge.
 - [test_webhook_promotion](modules/test_webhook_promotion.md) - Webhook promotion target tests (P1-3).
+- [test_work_reservations](modules/test_work_reservations.md) - Work reservations: atomic admission, ownership leases, and write fencing.
 - [test_ws_event_enrichment](modules/test_ws_event_enrichment.md) - P3-018 — WebSocket event payload enrichment tests (ARC-011 C-stream).
 - [tests_conftest](modules/tests_conftest.md) - `tests/conftest.py`
 - [tool_access](modules/tool_access.md) - Shared file-tool authorization: one context for every file operation.
+- [totals](modules/totals.md) - Order totals: the fixture project's second module.
 - [trial_workspace](modules/trial_workspace.md) - Per-workdir trial state (P2 — the ``execution.concurrency`` prerequisite).
 - [types](modules/types.md) - `ui/src/skill-plugins/types.ts`
 - [ui_src_main](modules/ui_src_main.md) - `ui/src/main.tsx`
 - [ui_src_pages_Skills](modules/ui_src_pages_Skills.md) - `ui/src/pages/Skills.tsx`
+- [usage_ledger](modules/usage_ledger.md) - Append-only, idempotent usage ledger with explicit cost knowledge.
 - [useResearch](modules/useResearch.md) - `ui/src/hooks/useResearch.ts`
 - [useWebSocket](modules/useWebSocket.md) - `ui/src/hooks/useWebSocket.tsx`
 - [vite.config](modules/vite.config.md) - `ui/vite.config.ts`
@@ -742,12 +957,17 @@ Retained history; these declarations are absent from the selected source invento
 - [ConfigPromoter_preview](workflows/ConfigPromoter_preview.md) - entry: `config_promoter.ConfigPromoter.preview`
 - [GovernedCommandRunner_run](workflows/GovernedCommandRunner_run.md) - entry: `command_runner.GovernedCommandRunner.run`
 - [PostgresStateStore_add_iteration](workflows/PostgresStateStore_add_iteration.md) - entry: `postgres_state_store.PostgresStateStore.add_iteration`
+- [SQLiteStateStore_add_iteration](workflows/SQLiteStateStore_add_iteration.md) - entry: `state_store.SQLiteStateStore.add_iteration`
+- [SessionManager__continue_session_unlocked](workflows/SessionManager__continue_session_unlocked.md) - entry: `session_manager.SessionManager._continue_session_unlocked`
 - [SessionManager__run_skill_bootstrap](workflows/SessionManager__run_skill_bootstrap.md) - entry: `session_manager.SessionManager._run_skill_bootstrap`
+- [SessionManager__validate_session_skill](workflows/SessionManager__validate_session_skill.md) - entry: `session_manager.SessionManager._validate_session_skill`
+- [build_default_registry](workflows/build_default_registry.md) - entry: `harnesses.build_default_registry`
 - [candidate_summary](workflows/candidate_summary.md) - entry: `research_state._candidate_summary`
 - [enrich_iteration](workflows/enrich_iteration.md) - entry: `results._enrich_iteration`
 - [evaluate_command_policy](workflows/evaluate_command_policy.md) - entry: `command_policy.evaluate_command_policy`
 - [lifespan](workflows/lifespan.md) - entry: `main.lifespan`
 - [promoter_for_session](workflows/promoter_for_session.md) - entry: `promotion._promoter_for_session`
+- [skill_manifest_defaults](workflows/skill_manifest_defaults.md) - entry: `research_manifest._skill_manifest_defaults`
 
 <a id="entry-point-flows"></a>
 <a id="user-flows"></a>
@@ -758,63 +978,103 @@ Retained history; these declarations are absent from the selected source invento
 - [api-allocate_trial_dir](flows/api-allocate_trial_dir.md) - entry: `allocate_trial_dir`
 - [api-append_findings](flows/api-append_findings.md) - entry: `append_findings`
 - [api-apply_defaults](flows/api-apply_defaults.md) - entry: `apply_defaults`
+- [api-assemble_instructions](flows/api-assemble_instructions.md) - entry: `assemble_instructions`
 - [api-audit_command_policy](flows/api-audit_command_policy.md) - entry: `audit_command_policy`
 - [api-best_config_hash](flows/api-best_config_hash.md) - entry: `best_config_hash`
+- [api-best_other_config_hash](flows/api-best_other_config_hash.md) - entry: `best_other_config_hash`
 - [api-bounded_drain](flows/api-bounded_drain.md) - entry: `bounded_drain`
 - [api-build_generation_prompt](flows/api-build_generation_prompt.md) - entry: `build_generation_prompt`
 - [api-build_provider](flows/api-build_provider.md) - entry: `build_provider`
+- [api-build_run_spec](flows/api-build_run_spec.md) - entry: `build_run_spec`
 - [api-build_trial_context](flows/api-build_trial_context.md) - entry: `build_trial_context`
+- [api-bundle_digest](flows/api-bundle_digest.md) - entry: `bundle_digest`
 - [api-canonical_digest](flows/api-canonical_digest.md) - entry: `canonical_digest`
+- [api-canonical_spec_json](flows/api-canonical_spec_json.md) - entry: `canonical_spec_json`
+- [api-clear_revocations](flows/api-clear_revocations.md) - entry: `clear_revocations`
+- [api-compile_scope_graph](flows/api-compile_scope_graph.md) - entry: `compile_scope_graph`
+- [api-default_artifact_root](flows/api-default_artifact_root.md) - entry: `default_artifact_root`
 - [api-ensure_capabilities_allowed](flows/api-ensure_capabilities_allowed.md) - entry: `ensure_capabilities_allowed`
 - [api-ensure_isolation_boundary](flows/api-ensure_isolation_boundary.md) - entry: `ensure_isolation_boundary`
 - [api-ensure_minimum_capabilities](flows/api-ensure_minimum_capabilities.md) - entry: `ensure_minimum_capabilities`
 - [api-ensure_request_matches_run_spec](flows/api-ensure_request_matches_run_spec.md) - entry: `ensure_request_matches_run_spec`
+- [api-extract_raw_result](flows/api-extract_raw_result.md) - entry: `extract_raw_result`
+- [api-file_digests](flows/api-file_digests.md) - entry: `file_digests`
+- [api-goal_decision](flows/api-goal_decision.md) - entry: `goal_decision`
+- [api-goal_outcome](flows/api-goal_outcome.md) - entry: `goal_outcome`
+- [api-harness_tool_instructions](flows/api-harness_tool_instructions.md) - entry: `harness_tool_instructions`
 - [api-is_known_model_type](flows/api-is_known_model_type.md) - entry: `is_known_model_type`
 - [api-is_legal_transition](flows/api-is_legal_transition.md) - entry: `is_legal_transition`
+- [api-is_secret_param_name](flows/api-is_secret_param_name.md) - entry: `is_secret_param_name`
 - [api-is_secret_reference](flows/api-is_secret_reference.md) - entry: `is_secret_reference`
 - [api-is_trial_eligible_command](flows/api-is_trial_eligible_command.md) - entry: `is_trial_eligible_command`
+- [api-issue_scoped_credential](flows/api-issue_scoped_credential.md) - entry: `issue_scoped_credential`
 - [api-load_layout](flows/api-load_layout.md) - entry: `load_layout`
 - [api-load_skill_manifest](flows/api-load_skill_manifest.md) - entry: `load_skill_manifest`
 - [api-materialize_skill_runtime](flows/api-materialize_skill_runtime.md) - entry: `materialize_skill_runtime`
 - [api-mean_std](flows/api-mean_std.md) - entry: `mean_std`
 - [api-model_type_to_skill_id](flows/api-model_type_to_skill_id.md) - entry: `model_type_to_skill_id`
+- [api-normalize_result](flows/api-normalize_result.md) - entry: `normalize_result`
+- [api-objective_comparator_for_manifest](flows/api-objective_comparator_for_manifest.md) - entry: `objective_comparator_for_manifest`
+- [api-objective_comparator_for_skill_id](flows/api-objective_comparator_for_skill_id.md) - entry: `objective_comparator_for_skill_id`
 - [api-objective_policy_from_skill_metric](flows/api-objective_policy_from_skill_metric.md) - entry: `objective_policy_from_skill_metric`
+- [api-package_digests](flows/api-package_digests.md) - entry: `package_digests`
+- [api-parse_and_verify_text](flows/api-parse_and_verify_text.md) - entry: `parse_and_verify_text`
+- [api-parse_result_text](flows/api-parse_result_text.md) - entry: `parse_result_text`
 - [api-phases_for_model](flows/api-phases_for_model.md) - entry: `phases_for_model`
 - [api-preflight_check_from_target](flows/api-preflight_check_from_target.md) - entry: `preflight_check_from_target`
 - [api-prior_findings_path](flows/api-prior_findings_path.md) - entry: `prior_findings_path`
 - [api-probe_host](flows/api-probe_host.md) - entry: `probe_host`
 - [api-promotion_target_from_manifest](flows/api-promotion_target_from_manifest.md) - entry: `promotion_target_from_manifest`
+- [api-provenance_report](flows/api-provenance_report.md) - entry: `provenance_report`
+- [api-qualification_status](flows/api-qualification_status.md) - entry: `qualification_status`
+- [api-rank_rows](flows/api-rank_rows.md) - entry: `rank_rows`
 - [api-read_legacy_session_manifest](flows/api-read_legacy_session_manifest.md) - entry: `read_legacy_session_manifest`
 - [api-read_legacy_start_request](flows/api-read_legacy_start_request.md) - entry: `read_legacy_start_request`
+- [api-reconcile_historical_best](flows/api-reconcile_historical_best.md) - entry: `reconcile_historical_best`
 - [api-reject_raw_secret_parameters](flows/api-reject_raw_secret_parameters.md) - entry: `reject_raw_secret_parameters`
 - [api-render_findings_markdown](flows/api-render_findings_markdown.md) - entry: `render_findings_markdown`
 - [api-render_path_template](flows/api-render_path_template.md) - entry: `render_path_template`
+- [api-render_workspace_instructions](flows/api-render_workspace_instructions.md) - entry: `render_workspace_instructions`
 - [api-resolve_and_validate](flows/api-resolve_and_validate.md) - entry: `resolve_and_validate`
+- [api-resolve_effective_provider](flows/api-resolve_effective_provider.md) - entry: `resolve_effective_provider`
 - [api-resolve_run_inputs](flows/api-resolve_run_inputs.md) - entry: `resolve_run_inputs`
+- [api-revoke_scoped_credential](flows/api-revoke_scoped_credential.md) - entry: `revoke_scoped_credential`
 - [api-rlimit_prefix](flows/api-rlimit_prefix.md) - entry: `rlimit_prefix`
+- [api-runtime_identity](flows/api-runtime_identity.md) - entry: `runtime_identity`
 - [api-samples_from_rows](flows/api-samples_from_rows.md) - entry: `samples_from_rows`
 - [api-sanitize_path_segment](flows/api-sanitize_path_segment.md) - entry: `sanitize_path_segment`
 - [api-schema_to_json_schema](flows/api-schema_to_json_schema.md) - entry: `schema_to_json_schema`
+- [api-scope_requirements](flows/api-scope_requirements.md) - entry: `scope_requirements`
 - [api-select_backend](flows/api-select_backend.md) - entry: `select_backend`
+- [api-select_best_row](flows/api-select_best_row.md) - entry: `select_best_row`
 - [api-selectable_for](flows/api-selectable_for.md) - entry: `selectable_for`
 - [api-session_workspace_path](flows/api-session_workspace_path.md) - entry: `session_workspace_path`
 - [api-signal_violation](flows/api-signal_violation.md) - entry: `signal_violation`
 - [api-significance_verdict](flows/api-significance_verdict.md) - entry: `significance_verdict`
 - [api-skill_id_to_model_type](flows/api-skill_id_to_model_type.md) - entry: `skill_id_to_model_type`
+- [api-snapshot_parent_workspace](flows/api-snapshot_parent_workspace.md) - entry: `snapshot_parent_workspace`
+- [api-split_secret_params](flows/api-split_secret_params.md) - entry: `split_secret_params`
 - [api-stage_trial_or_none](flows/api-stage_trial_or_none.md) - entry: `stage_trial_or_none`
 - [api-stage_trial_workspace](flows/api-stage_trial_workspace.md) - entry: `stage_trial_workspace`
+- [api-support_descriptor](flows/api-support_descriptor.md) - entry: `support_descriptor`
 - [api-target_state](flows/api-target_state.md) - entry: `target_state`
 - [api-terminate_process_tree](flows/api-terminate_process_tree.md) - entry: `terminate_process_tree`
+- [api-threshold_evidence](flows/api-threshold_evidence.md) - entry: `threshold_evidence`
+- [api-toolchain_diagnostics](flows/api-toolchain_diagnostics.md) - entry: `toolchain_diagnostics`
 - [api-trial_marker_candidates](flows/api-trial_marker_candidates.md) - entry: `trial_marker_candidates`
 - [api-unsupported_schema_keywords](flows/api-unsupported_schema_keywords.md) - entry: `unsupported_schema_keywords`
+- [api-validate_manifest_support](flows/api-validate_manifest_support.md) - entry: `validate_manifest_support`
 - [api-validate_path_template](flows/api-validate_path_template.md) - entry: `validate_path_template`
 - [api-validate_resolved](flows/api-validate_resolved.md) - entry: `validate_resolved`
 - [api-validate_secret_list](flows/api-validate_secret_list.md) - entry: `validate_secret_list`
+- [api-verify_run_spec](flows/api-verify_run_spec.md) - entry: `verify_run_spec`
+- [api-verify_scoped_credential](flows/api-verify_scoped_credential.md) - entry: `verify_scoped_credential`
 - [api-wrap_command](flows/api-wrap_command.md) - entry: `wrap_command`
 
 **http**
 
 - [http-continue_research](flows/http-continue_research.md) - entry: `continue_research`
+- [http-create_or_attach_run](flows/http-create_or_attach_run.md) - entry: `create_or_attach_run`
 - [http-delete_research](flows/http-delete_research.md) - entry: `delete_research`
 - [http-download_agent_log](flows/http-download_agent_log.md) - entry: `download_agent_log`
 - [http-download_config](flows/http-download_config.md) - entry: `download_config`
@@ -823,6 +1083,7 @@ Retained history; these declarations are absent from the selected source invento
 - [http-generate_skill](flows/http-generate_skill.md) - entry: `generate_skill`
 - [http-get_agent_log](flows/http-get_agent_log.md) - entry: `get_agent_log`
 - [http-get_best_iteration](flows/http-get_best_iteration.md) - entry: `get_best_iteration`
+- [http-get_harness](flows/http-get_harness.md) - entry: `get_harness`
 - [http-get_hpo_studies](flows/http-get_hpo_studies.md) - entry: `get_hpo_studies`
 - [http-get_iteration](flows/http-get_iteration.md) - entry: `get_iteration`
 - [http-get_iterations](flows/http-get_iterations.md) - entry: `get_iterations`
@@ -836,13 +1097,17 @@ Retained history; these declarations are absent from the selected source invento
 - [http-get_skill_leaderboard](flows/http-get_skill_leaderboard.md) - entry: `get_skill_leaderboard`
 - [http-get_skill_metric_schema](flows/http-get_skill_metric_schema.md) - entry: `get_skill_metric_schema`
 - [http-get_skill_param_schema](flows/http-get_skill_param_schema.md) - entry: `get_skill_param_schema`
+- [http-get_skill_support](flows/http-get_skill_support.md) - entry: `get_skill_support`
 - [http-get_skill_versions](flows/http-get_skill_versions.md) - entry: `get_skill_versions`
 - [http-health-main](flows/http-health-main.md) - entry: `health`
 - [http-health-main-2](flows/http-health-main-2.md) - entry: `health`
 - [http-health-test_api_auth](flows/http-health-test_api_auth.md) - entry: `health`
 - [http-health-test_skills_api](flows/http-health-test_skills_api.md) - entry: `health`
 - [http-info](flows/http-info.md) - entry: `info`
+- [http-inspect_results](flows/http-inspect_results.md) - entry: `inspect_results`
+- [http-lifecycle_control](flows/http-lifecycle_control.md) - entry: `lifecycle_control`
 - [http-list_audit_events](flows/http-list_audit_events.md) - entry: `list_audit_events`
+- [http-list_harnesses](flows/http-list_harnesses.md) - entry: `list_harnesses`
 - [http-list_models](flows/http-list_models.md) - entry: `list_models`
 - [http-list_promotions](flows/http-list_promotions.md) - entry: `list_promotions`
 - [http-list_prompts](flows/http-list_prompts.md) - entry: `list_prompts`
@@ -857,15 +1122,22 @@ Retained history; these declarations are absent from the selected source invento
 - [http-promote_confirm](flows/http-promote_confirm.md) - entry: `promote_confirm`
 - [http-promote_preview](flows/http-promote_preview.md) - entry: `promote_preview`
 - [http-promote_prompt](flows/http-promote_prompt.md) - entry: `promote_prompt`
+- [http-promotion_preview](flows/http-promotion_preview.md) - entry: `promotion_preview`
 - [http-readiness](flows/http-readiness.md) - entry: `readiness`
 - [http-register_prompt](flows/http-register_prompt.md) - entry: `register_prompt`
 - [http-reload_skills](flows/http-reload_skills.md) - entry: `reload_skills`
+- [http-request_evaluation](flows/http-request_evaluation.md) - entry: `request_evaluation`
+- [http-research_harness_context](flows/http-research_harness_context.md) - entry: `research_harness_context`
 - [http-resume_research](flows/http-resume_research.md) - entry: `resume_research`
 - [http-rollback_development_promotion](flows/http-rollback_development_promotion.md) - entry: `rollback_development_promotion`
+- [http-run_constraints](flows/http-run_constraints.md) - entry: `run_constraints`
+- [http-run_events](flows/http-run_events.md) - entry: `run_events`
 - [http-runtime_resume_research](flows/http-runtime_resume_research.md) - entry: `runtime_resume_research`
+- [http-score](flows/http-score.md) - entry: `score`
 - [http-spa_fallback](flows/http-spa_fallback.md) - entry: `spa_fallback`
 - [http-start_research](flows/http-start_research.md) - entry: `start_research`
 - [http-stop_research](flows/http-stop_research.md) - entry: `stop_research`
+- [http-submit_candidate](flows/http-submit_candidate.md) - entry: `submit_candidate`
 - [http-system_status](flows/http-system_status.md) - entry: `system_status`
 
 **process**
@@ -874,16 +1146,22 @@ Retained history; these declarations are absent from the selected source invento
 - [process-bootstrap-bootstrap](flows/process-bootstrap-bootstrap.md) - entry: `main`
 - [process-bootstrap-bootstrap-2](flows/process-bootstrap-bootstrap-2.md) - entry: `main`
 - [process-bootstrap-bootstrap-3](flows/process-bootstrap-bootstrap-3.md) - entry: `main`
+- [process-bootstrap-bootstrap-4](flows/process-bootstrap-bootstrap-4.md) - entry: `main`
 - [process-capture](flows/process-capture.md) - entry: `main`
 - [process-check_doc_references](flows/process-check_doc_references.md) - entry: `main`
 - [process-check_domain_coupling](flows/process-check_domain_coupling.md) - entry: `main`
 - [process-check_execution_ledger](flows/process-check_execution_ledger.md) - entry: `main`
 - [process-check_legacy_vocab_branching](flows/process-check_legacy_vocab_branching.md) - entry: `main`
+- [process-ci_qualification_gates](flows/process-ci_qualification_gates.md) - entry: `main`
+- [process-jsonl_driver](flows/process-jsonl_driver.md) - entry: `main`
 - [process-main](flows/process-main.md) - entry: `__main__`
 - [process-migrate_sqlite_to_postgres](flows/process-migrate_sqlite_to_postgres.md) - entry: `main`
+- [process-phases](flows/process-phases.md) - entry: `main`
 - [process-run-run](flows/process-run-run.md) - entry: `main`
 - [process-run-run-2](flows/process-run-run-2.md) - entry: `main`
 - [process-run-run-3](flows/process-run-run-3.md) - entry: `main`
+- [process-run-run-4](flows/process-run-run-4.md) - entry: `main`
+- [process-run_compatibility_matrix](flows/process-run_compatibility_matrix.md) - entry: `main`
 
 ## Infrastructure
 

@@ -12,7 +12,7 @@ Governed subprocess runner for autoresearch agent commands.
 |--------|---------|
 | `__future__` | `annotations` |
 | `codecs` | `codecs` |
-| `dataclasses` | `dataclass` |
+| `dataclasses` | `dataclass`, `replace` |
 | `fcntl` | `fcntl` |
 | `os` | `os` |
 | `pathlib` | `Path` |
@@ -20,9 +20,10 @@ Governed subprocess runner for autoresearch agent commands.
 | `re` | `re` |
 | `selectors` | `selectors` |
 | `signal` | `signal` |
+| `src.config` | `get_settings` |
 | `src.core.command_policy` | `CommandDecision`, `evaluate_command_policy` |
-| `src.core.isolation` | `IsolationPolicy` |
-| `src.core.process_limits` | `TreeResourceGuard`, `terminate_process_tree` |
+| `src.core.isolation` | `IsolationPolicy`, `IsolationError`, `wrap_command` |
+| `src.core.process_limits` | `TreeResourceGuard`, `ProcessResourceCaps`, `TreeResourceGuard`, `UnenforceableResourceCapabilityError`, `rlimit_prefix`, `signal_violation`, `terminate_process_tree` |
 | `src.core.tool_access` | `ToolAccessContext` |
 | `stat` | `stat` |
 | `subprocess` | `subprocess` |
@@ -52,9 +53,9 @@ flowchart LR
 
 | Direction | Module |
 |---|---|
-| Inbound | `src` (2) |
+| Inbound | `src` (3) |
 | Inbound | `tests` (9) |
-| Outbound | `src` (4) |
+| Outbound | `src` (5) |
 
 ### External packages
 
@@ -62,7 +63,7 @@ flowchart LR
 |---|---:|---:|
 | python | 1 | 1 |
 
-> All 15 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 17 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 
@@ -70,11 +71,11 @@ flowchart LR
 |-------|------|------|----------------|-------------|
 | [_HeadTailBuffer](../entities/HeadTailBuffer.md) | Class | 40 | — | Retain a fixed-size head and rolling tail, including for newline-free data. |
 | [_SessionOutputLog](../entities/SessionOutputLog.md) | Class | 74 | — | Append child output under a shared session logs byte quota. |
-| [OutputStream](../entities/OutputStream.md) | Type alias | 255 | `Literal['stdout', 'stderr']` | — |
-| [OutputCallback](../entities/OutputCallback.md) | Type alias | 256 | `Callable[[OutputStream, str], None]` | — |
-| [CommandRunResult](../entities/CommandRunResult.md) | Class | 260 | — | — |
-| [CommandProcessRegistry](../entities/CommandProcessRegistry.md) | Class | 284 | — | Thread-safe registry of in-flight governed subprocesses, keyed by session. |
-| [GovernedCommandRunner](../entities/GovernedCommandRunner.md) | Class | 346 | — | Validate and execute one approved command without invoking a shell. |
+| [OutputStream](../entities/OutputStream.md) | Type alias | 258 | `Literal['stdout', 'stderr']` | — |
+| [OutputCallback](../entities/OutputCallback.md) | Type alias | 259 | `Callable[[OutputStream, str], None]` | — |
+| [CommandRunResult](../entities/CommandRunResult.md) | Class | 263 | — | — |
+| [CommandProcessRegistry](../entities/CommandProcessRegistry.md) | Class | 287 | — | Thread-safe registry of in-flight governed subprocesses, keyed by session. |
+| [GovernedCommandRunner](../entities/GovernedCommandRunner.md) | Class | 349 | — | Validate and execute one approved command without invoking a shell. |
 
 ## Functions
 

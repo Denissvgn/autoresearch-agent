@@ -38,7 +38,7 @@ read-only; nothing outside the declared roots is visible.
 ```mermaid
 flowchart LR
     n0["IsolationPolicy (src/core/isolation.py)"]
-    n1["GovernedCommandRunner.run (src/core/command_runner.py)"]
+    n1["src/core/command_runner.py"]
     n2["BwrapBackend.wrap (src/core/isolation.py)"]
     n3["wrap_command (src/core/isolation.py)"]
     n4["PluginRunner._isolation_plan (src/core/plugin_runner.py)"]
@@ -87,7 +87,7 @@ flowchart LR
 
 | Reference | Kind | Source | Call sites |
 |---|---|---|---:|
-| `GovernedCommandRunner.run` | type_reference | [command_runner](../modules/command_runner.md) | — |
+| `command_runner` | import | [command_runner](../modules/command_runner.md) | — |
 | `BwrapBackend.wrap` | type_reference | [isolation](../modules/isolation.md) | — |
 | `wrap_command` | type_reference | [isolation](../modules/isolation.md) | — |
 | `PluginRunner._isolation_plan` | call | [plugin_runner](../modules/plugin_runner.md) | 1 |

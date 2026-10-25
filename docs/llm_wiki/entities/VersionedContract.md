@@ -13,6 +13,12 @@ Subclasses declare their expected version as a class attribute and give
 ``schema_version`` the matching default. Any other version — a newer
 writer or a corrupted artifact — fails explicitly at parse time.
 
+## Model Configuration
+
+| Setting | Value | Source |
+|---------|-------|--------|
+| `extra` | `'forbid'` | model_config |
+
 ## Validators
 
 | Method | Scope | Fields | Mode | Options |

@@ -20,8 +20,10 @@ Autoresearch Agent — FastAPI application entry point.
 | `logging` | `logging` |
 | `os` | `os` |
 | `secrets` | `secrets` |
-| `src.api` | `promotion`, `research`, `results`, `skills`, `subjects` |
+| `src.api` | `harnesses`, `promotion`, `research`, `results`, `skills`, `subjects` |
+| `src.api.agent` | `router` |
 | `src.api.auth` | `require_api_auth`, `require_websocket_auth` |
+| `src.api.harnesses` | `router` |
 | `src.api.promotion` | `router` |
 | `src.api.research` | `router` |
 | `src.api.results` | `router` |
@@ -36,7 +38,7 @@ Autoresearch Agent — FastAPI application entry point.
 | `src.core.session_manager` | `SessionManager` |
 | `src.core.skill_registry` | `SkillRegistry` |
 | `src.core.state_store` | `StateStore` |
-| `src.ws.events` | `broadcaster` |
+| `src.ws.events` | `broadcaster`, `plan_catchup`, `poll_events`, `snapshot_with_cursor` |
 | `typing` | `Any`, `AsyncIterator` |
 
 ## Local dependency map
@@ -58,8 +60,8 @@ flowchart LR
 
 | Direction | Module |
 |---|---|
-| Inbound | `tests` (3) |
-| Outbound | `src` (16) |
+| Inbound | `tests` (4) |
+| Outbound | `src` (18) |
 
 ### External packages
 
@@ -67,7 +69,7 @@ flowchart LR
 |---|---:|---:|
 | python | 1 | 1 |
 
-> All 19 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 22 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Functions
 

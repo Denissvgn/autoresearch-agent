@@ -1,6 +1,6 @@
 # OpenAIProvider
 
-**Location:** `src/core/llm_provider.py:782`
+**Location:** `src/core/llm_provider.py:851`
 **Kind:** Class
 **Bases:** —
 **Module:** [llm_provider](../modules/llm_provider.md)
@@ -27,11 +27,12 @@ requires ``openai >= 1.0``.
 
 | Method | Signature | Decorators | Description |
 |--------|-----------|------------|-------------|
-| `__init__` | `(*, base_url: str, api_key: str, timeout_s: float) -> None` | — | — |
+| `__init__` | `(*, base_url: str, api_key: str, timeout_s: float, provider_name: str = 'openai', zero_cost_fallback: bool = False) -> None` | — | — |
 | `messages_create` | *(async)* `(*, model: str, system: str, messages: list[Message], tools: list[ToolDef], max_tokens: int, temperature: float \| None = None, stop_sequences: list[str] \| None = None) -> ProviderResponse` | — | One model turn via ``chat.completions.create``. |
 | `complete` | *(async)* `(*, model: str, prompt: str, max_tokens: int, system: str \| None = None) -> str` | — | One-shot text completion (insights / Haiku path). |
 | `stream` | *(async)* `(**kwargs: Any) -> AsyncIterator[StreamDelta]` | — | Token streaming (OPTIONAL in v1; D-stream). Not implemented for OpenAI. |
-| `estimate_cost` | `(model: str, usage: Usage) -> float` | — | Per-model USD cost for an OpenAI call. |
+| `estimate_cost` | `(model: str, usage: Usage) -> float` | — | Per-model USD cost for an OpenAI or OpenAI-compatible call. |
+| `price_quote` | `(model: str, usage: Usage) -> CostEstimate` | — | Basis-snapshotted OpenAI cost; unknown cloud models are unavailable, |
 | `capabilities` | `() -> ProviderCapabilities` | — | — |
 | `classify_error` | `(exc: Exception) -> ErrorClass` | — | Classify an OpenAI SDK exception for loop-owned retry. |
 
@@ -43,21 +44,27 @@ flowchart LR
     n0["OpenAIProvider (src/core/llm_provider.py)"]
     n1["build_provider (src/core/llm_provider.py)"]
     n2["_make_provider (tests/test_llm_provider_openai.py)"]
-    n3["tests/test_skill_prompt_engineering_e2e.py"]
+    n3["_openai_provider (tests/test_provider_roles.py)"]
+    n4["tests/test_skill_prompt_engineering_e2e.py"]
+    n5["_openai (tests/test_usage_ledger.py)"]
     n1 --> n0
     n2 --> n0
     n3 --> n0
+    n4 --> n0
+    n5 --> n0
     click n0 "../modules/llm_provider.md"
     click n1 "../modules/llm_provider.md"
     click n2 "../modules/test_llm_provider_openai.md"
-    click n3 "../modules/test_skill_prompt_engineering_e2e.md"
+    click n3 "../modules/test_provider_roles.md"
+    click n4 "../modules/test_skill_prompt_engineering_e2e.md"
+    click n5 "../modules/test_usage_ledger.md"
 ```
 
 ### Summary
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [llm_provider](../modules/llm_provider.md) | 7 | — |
+| [llm_provider](../modules/llm_provider.md) | 8 | — |
 
 ### References
 
@@ -66,4 +73,7 @@ flowchart LR
 | `build_provider` | call | [llm_provider](../modules/llm_provider.md) | 1 |
 | `_make_provider` | call | [test_llm_provider_openai](../modules/test_llm_provider_openai.md) | 1 |
 | `_make_provider` | type_reference | [test_llm_provider_openai](../modules/test_llm_provider_openai.md) | — |
+| `_openai_provider` | call | [test_provider_roles](../modules/test_provider_roles.md) | 1 |
 | `test_skill_prompt_engineering_e2e` | import | [test_skill_prompt_engineering_e2e](../modules/test_skill_prompt_engineering_e2e.md) | — |
+| `_openai` | call | [test_usage_ledger](../modules/test_usage_ledger.md) | 1 |
+| `_openai` | type_reference | [test_usage_ledger](../modules/test_usage_ledger.md) | — |

@@ -29,7 +29,7 @@ and every record carries an honest, never-upgraded provenance label.
 | `src.core` | `orchestrator`, `skill_registry` |
 | `src.core.agent_tools` | `_execute_tool` |
 | `src.core.execution_contracts` | `canonical_digest` |
-| `src.core.llm_provider` | `Usage` |
+| `src.core.llm_provider` | `ProviderResponse`, `StopReason`, `TextBlock`, `ToolUseBlock`, `Usage`, `ProviderResponse`, `StopReason`, `TextBlock`, `Usage`, `ProviderCapabilities`, `ErrorClass`, `Usage` |
 | `src.core.orchestrator` | `AgentOrchestrator`, `ResearchConfig` |
 | `src.core.result_authority` | `AUTHORITY_MODEL_PROPOSED`, `AUTHORITY_NONCE_ONLY`, `AUTHORITY_RECEIPT_VERIFIED`, `AUTHORITY_UNVERIFIED_IMPORTED`, `issue_result_receipt`, `result_payload`, `verify_result_receipt`, `protected_result_names` |
 | `src.core.results_store` | `ResultsStore` |
@@ -61,6 +61,8 @@ flowchart LR
     n4 --> n0
     n4 --> n1
     n4 --> n3
+    n4 --> n5
+    n4 --> n7
     n5 --> n2
     n9 --> n0
     n9 --> n1

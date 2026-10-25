@@ -1,6 +1,6 @@
 # ConfigPromoter
 
-**Location:** `src/core/config_promoter.py:131`
+**Location:** `src/core/config_promoter.py:142`
 **Kind:** Class
 **Bases:** —
 **Module:** [config_promoter](../modules/config_promoter.md)
@@ -21,17 +21,22 @@ Handles preview and confirmation of config promotion to host.
 | `_target_descriptor` | `(path: str) -> Dict[str, Any]` | — | — |
 | `preview` | *(async)* `(research_id: str, *, scope: str = DEVELOPMENT_PROMOTION_SCOPE, approval: Optional[Dict[str, Any]] = None) -> Dict[str, Any]` | — | Dry-run promotion: returns the diff/preview without writing. |
 | `confirm` | *(async)* `(research_id: str, *, scope: str = DEVELOPMENT_PROMOTION_SCOPE, approval: Optional[Dict[str, Any]] = None) -> Dict[str, Any]` | — | Execute the promotion: write best config to host bind mount. |
+| `_effect_idempotency_key` | `(*, skill_id: str, target_identity: str, iteration: Any, config_yaml: str, scope: str) -> str` | `@staticmethod` | Canonical idempotency key for one promotion effect. |
+| `_promotion_by_effect_key` | *(async)* `(effect_key: str) -> Optional[Dict[str, Any]]` | — | An existing promotion recorded under this effect key, if any. |
+| `_update_promotion_metadata` | *(async)* `(promotion: Mapping[str, Any], metadata: Dict[str, Any]) -> Optional[Dict[str, Any]]` | — | — |
+| `reconcile_promotion_effect` | *(async)* `(promotion: Mapping[str, Any]) -> Dict[str, Any]` | — | Resolve one pending effect intent against the external target. |
 | `_confirm_scoped_promotion` | *(async)* `(research_id: str, *, scope: str, approval: Optional[Dict[str, Any]]) -> Dict[str, Any]` | — | Record a paper/canary/production stage decision without rewriting dev config. |
 | `_model_version_components` | `(metrics_payload: Dict[str, Any]) -> tuple[str \| None, Any]` | `@staticmethod` | — |
 | `_model_version_tag` | `(metrics_payload: Dict[str, Any]) -> str` | `@classmethod` | — |
 | `_build_scoped_promotion_metadata` | *(async)* `(*, preview: Dict[str, Any], session: Dict[str, Any], metrics_payload: Dict[str, Any], scope: str, approval: Optional[Dict[str, Any]]) -> Dict[str, Any]` | — | Create an auditable decision artifact for non-development scopes. |
-| `rollback` | *(async)* `(*, model_type: str, instrument: str, timeframe: str, reason: Optional[str] = None) -> Dict[str, Any]` | — | Restore the latest development promotion for an instrument/timeframe. |
+| `rollback` | *(async)* `(*, model_type: str, instrument: str, timeframe: str, reason: Optional[str] = None, reconcile_legacy: bool = False) -> Dict[str, Any]` | — | Restore the latest development promotion for an instrument/timeframe. |
 | `_build_development_promotion_metadata` | `(*, research_id: str, iteration: int, model_type: str, instrument: str, timeframe: str, target_path: str, best_iteration: Dict[str, Any], metrics_payload: Dict[str, Any], gates_passed: bool, training_gates_passed: bool, development_gate_bundle_passed: bool, consistency_report_passed: bool, quality_baseline_passed: bool, gate_bundle_evaluation: Dict[str, Any], candidate_pool_record: Dict[str, Any], promotion_allowed: bool, rollback_readiness: Dict[str, Any], smoke_validation: Dict[str, Any], signal_health: Dict[str, Any], inference_reload_validation: Dict[str, Any], consistency_report: Dict[str, Any], quality_baseline_evaluation: Dict[str, Any]) -> Dict[str, Any]` | — | Create the auditable development promotion decision artifact. |
 | `_finalize_development_promotion_metadata` | `(*, metadata: Dict[str, Any], metadata_path: str, promotion_record_created: bool) -> Dict[str, Any]` | — | — |
 | `_finalize_scoped_promotion_metadata` | `(*, metadata: Dict[str, Any], metadata_path: str, promotion_record_created: bool) -> Dict[str, Any]` | — | — |
 | `_normalize_promotion_scope` | `(scope: str \| None) -> str` | `@staticmethod` | — |
+| `_compiled_scope_graph` | `(session: Optional[Dict[str, Any]])` | `@staticmethod` | The declared scope graph for the session skill, or None (legacy). |
 | `_required_prior_scopes` | `(scope: str) -> list[str]` | `@staticmethod` | — |
-| `_latest_promotion_record` | *(async)* `(*, model_type: str, instrument: str, timeframe: str, scope: str) -> Optional[Dict[str, Any]]` | — | — |
+| `_latest_promotion_record` | *(async)* `(*, model_type: str, instrument: str, timeframe: str, scope: str, skill_id: Optional[str] = None, target_identity: Optional[str] = None) -> Optional[Dict[str, Any]]` | — | The latest promotion record for one scope. |
 | `_compact_promotion_record` | `(promotion: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]` | `@staticmethod` | — |
 | `_decision_chain` | `(*, development_metadata: Dict[str, Any], prior_promotions: Dict[str, Optional[Dict[str, Any]]], current_scope: str, current_allowed: bool, current_blockers: list[str]) -> list[Dict[str, Any]]` | — | — |
 | `_rollback_targets` | `(*, prior_promotions: Dict[str, Optional[Dict[str, Any]]], current_scope: str, current_target: Optional[str]) -> Dict[str, Optional[str]]` | — | — |
@@ -67,7 +72,8 @@ Handles preview and confirmation of config promotion to host.
 | `_best_iteration_with_preflight` | `(best_iteration: Dict[str, Any], *, rollback_readiness: Dict[str, Any], smoke_validation: Dict[str, Any], signal_health: Dict[str, Any], inference_reload_validation: Dict[str, Any]) -> Dict[str, Any]` | — | — |
 | `_inference_payload` | `(metrics_payload: Dict[str, Any]) -> Dict[str, Any]` | `@staticmethod` | — |
 | `_tsfm_fallback_validation` | `(metrics_payload: Dict[str, Any]) -> Dict[str, Any]` | — | — |
-| `_build_quality_baseline_evaluation` | *(async)* `(*, research_id: str, best_iteration: Dict[str, Any], model_type: str, instrument: str, timeframe: str) -> Dict[str, Any]` | — | — |
+| `_build_quality_baseline_evaluation` | *(async)* `(*, research_id: str, best_iteration: Dict[str, Any], model_type: str, instrument: str, timeframe: str, comparator: Optional[ObjectiveComparator] = None) -> Dict[str, Any]` | — | — |
+| `_build_replication_qualification` | *(async)* `(*, research_id: str, best_iteration: Dict[str, Any], comparator: ObjectiveComparator, scope: str) -> Dict[str, Any]` | — | Visible replication status; blocking for production-scope promotion. |
 | `_latest_eligible_development_baseline` | *(async)* `(*, model_type: str, instrument: str, timeframe: str) -> Optional[Dict[str, Any]]` | — | — |
 | `_development_baseline_matches` | `(promotion: Dict[str, Any], *, model_type: str, instrument: str, timeframe: str) -> bool` | `@classmethod` | — |
 | `_development_baseline_eligible` | `(promotion: Dict[str, Any]) -> bool` | `@classmethod` | — |
@@ -140,7 +146,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [config_promoter](../modules/config_promoter.md) | 73 | — |
+| [config_promoter](../modules/config_promoter.md) | 79 | — |
 
 ### References
 
@@ -159,4 +165,4 @@ flowchart LR
 | `test_confirm_writes_rollback_snapshot_and_rollback_restores_previous_config` | call | [test_config_promoter_gate_bundle](../modules/test_config_promoter_gate_bundle.md) | 2 |
 | `test_paper_scope_remains_local_only` | call | [test_config_promoter_gate_bundle](../modules/test_config_promoter_gate_bundle.md) | 1 |
 
-> References: showing 12 of 57 logical references; 45 omitted by the 12-row generated summary limit.
+> References: showing 12 of 66 logical references; 54 omitted by the 12-row generated summary limit.

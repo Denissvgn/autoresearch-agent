@@ -2,15 +2,17 @@
 
 **Entry point:** `get_best_iteration` (`http`)
 **Source:** [results](../modules/results.md)
-**Modules touched:** [artifact_reference](../modules/artifact_reference.md), [compat_legacy_alias](../modules/compat_legacy_alias.md), [consistency_validator](../modules/consistency_validator.md), and 3 more
+**Modules touched:** [artifact_reference](../modules/artifact_reference.md), [compat_legacy_alias](../modules/compat_legacy_alias.md), [consistency_validator](../modules/consistency_validator.md), and 5 more
 
 **Complete modules touched:**
 
 - [artifact_reference](../modules/artifact_reference.md)
 - [compat_legacy_alias](../modules/compat_legacy_alias.md)
 - [consistency_validator](../modules/consistency_validator.md)
+- [execution_contracts](../modules/execution_contracts.md)
 - [gate_status](../modules/gate_status.md)
 - [ml_enrichment](../modules/ml_enrichment.md)
+- [objective_comparator](../modules/objective_comparator.md)
 - [results](../modules/results.md)
 
 ## Call sequence
@@ -22,70 +24,70 @@
 sequenceDiagram
     participant p0 as get_best_iteration
     participant p1 as _resolve_result_context
-    participant p2 as _enrich_iteration
-    participant p3 as training_gates_passed_from
-    participant p4 as first_valid_artifact_ref
-    participant p5 as build_consistency_report
-    participant p6 as _rl_economic_replay_summary
-    participant p7 as _feature_readiness_metrics
-    participant p8 as _rl_economic_replay_payload
-    participant p9 as _adaptive_schema_flags_blocker
-    participant p10 as _rl_channel_provenance
-    participant p11 as _rl_feature_bundle_hash
-    participant p12 as _rl_nested_validation_present
-    participant p13 as _rl_multi_seed_present
-    participant p14 as _rl_required_metrics_present
-    participant p15 as _rl_unsafe_feature_provenance
-    participant p16 as _rl_replay_assumptions_present
-    participant p17 as _rl_replay_worse_than_baseline
-    participant p18 as check_adaptive_feature_sweep
-    participant p19 as check_evidence_artifact
-    participant p20 as _adaptive_feature_evidence
-    participant p21 as _rl_metric_value
-    participant p22 as _feature_schema_flags
-    participant p23 as _decode_pipeline_payload
-    participant p24 as _decode_session_payload
-    participant p25 as parse_consistency_report
-    participant p26 as _rl_economic_replay
-    participant p27 as model_type_to_skill_id
-    participant p28 as coerce_bool
+    participant p2 as objective_comparator_for_skill_id
+    participant p3 as _enrich_iteration
+    participant p4 as ObjectiveComparator
+    participant p5 as training_gates_passed_from
+    participant p6 as objective_comparator_for_manifest
+    participant p7 as first_valid_artifact_ref
+    participant p8 as build_consistency_report
+    participant p9 as _rl_economic_replay_summary
+    participant p10 as _feature_readiness_metrics
+    participant p11 as objective_policy_from_skill_metric
+    participant p12 as ObjectiveComparator.resolve
+    participant p13 as _rl_economic_replay_payload
+    participant p14 as _adaptive_schema_flags_blocker
+    participant p15 as _rl_channel_provenance
+    participant p16 as _rl_feature_bundle_hash
+    participant p17 as _rl_nested_validation_present
+    participant p18 as _rl_multi_seed_present
+    participant p19 as _rl_required_metrics_present
+    participant p20 as _rl_unsafe_feature_provenance
+    participant p21 as _rl_replay_assumptions_present
+    participant p22 as _rl_replay_worse_than_baseline
+    participant p23 as check_adaptive_feature_sweep
+    participant p24 as check_evidence_artifact
+    participant p25 as _adaptive_feature_evidence
+    participant p26 as _rl_metric_value
+    participant p27 as _feature_schema_flags
+    participant p28 as ObjectiveContextError
     participant p29 as HTTPException (src/api/results.py:get_best_iteration)
     participant p30 as _store.get_best_iteration
     p0->>p1: _resolve_result_context
-    p0->>p2: _enrich_iteration
-    p2->>p3: training_gates_passed_from
-    p2->>p4: first_valid_artifact_ref
-    p2->>p5: build_consistency_report
-    p2->>p6: _rl_economic_replay_summary
-    p2->>p7: _feature_readiness_metrics
-    p5->>p8: _rl_economic_replay_payload
-    p5->>p9: _adaptive_schema_flags_blocker
-    p5->>p10: _rl_channel_provenance
-    p5->>p11: _rl_feature_bundle_hash
-    p5->>p12: _rl_nested_validation_present
-    p5->>p13: _rl_multi_seed_present
-    p5->>p14: _rl_required_metrics_present
-    p5->>p15: _rl_unsafe_feature_provenance
-    p5->>p16: _rl_replay_assumptions_present
-    p5->>p17: _rl_replay_worse_than_baseline
-    p5->>p18: check_adaptive_feature_sweep
-    p5->>p19: check_evidence_artifact
-    p9->>p20: _adaptive_feature_evidence
-    p14->>p21: _rl_metric_value
-    p9->>p22: _feature_schema_flags
-    p1->>p23: _decode_pipeline_payload
-    p1->>p24: _decode_session_payload
-    p2->>p25: parse_consistency_report
-    p2->>p26: _rl_economic_replay
-    p2->>p27: model_type_to_skill_id
-    p3->>p28: coerce_bool
+    p0->>p2: objective_comparator_for_skill_id
+    p0->>p3: _enrich_iteration
+    p0->>p4: ObjectiveComparator
+    p3->>p5: training_gates_passed_from
+    p2->>p6: objective_comparator_for_manifest
+    p3->>p7: first_valid_artifact_ref
+    p3->>p8: build_consistency_report
+    p3->>p9: _rl_economic_replay_summary
+    p3->>p10: _feature_readiness_metrics
+    p6->>p11: objective_policy_from_skill_metric
+    p6->>p12: ObjectiveComparator.resolve
+    p8->>p13: _rl_economic_replay_payload
+    p8->>p14: _adaptive_schema_flags_blocker
+    p8->>p15: _rl_channel_provenance
+    p8->>p16: _rl_feature_bundle_hash
+    p8->>p17: _rl_nested_validation_present
+    p8->>p18: _rl_multi_seed_present
+    p8->>p19: _rl_required_metrics_present
+    p8->>p20: _rl_unsafe_feature_provenance
+    p8->>p21: _rl_replay_assumptions_present
+    p8->>p22: _rl_replay_worse_than_baseline
+    p8->>p23: check_adaptive_feature_sweep
+    p8->>p24: check_evidence_artifact
+    p14->>p25: _adaptive_feature_evidence
+    p19->>p26: _rl_metric_value
+    p14->>p27: _feature_schema_flags
+    p2->>p28: ObjectiveContextError
     p0-->>p29: HTTPException (src/api/results.py:get_best_iteration)(status_code=404, detail='Phase session not found yet')
-    p0-->>p30: _store.get_best_iteration(session[...])
+    p0-->>p30: _store.get_best_iteration(session[...], objective=objective_comparator_for_skill_id(...))
 ```
 
-> Call sequence diagram shows 30 of 595 interactions; 565 omitted to keep the visualization within the 30-interaction and generated-diagram limits, with uncertain identities omitted rather than inferred.
+> Call sequence diagram shows 30 of 625 interactions; 595 omitted to keep the visualization within the 30-interaction and generated-diagram limits, with uncertain identities omitted rather than inferred.
 
-> Captured boundary calls: external 1 of 126 (125 omitted); unresolved 1 of 352 (351 omitted). These counts cover the captured static trace.
+> Captured boundary calls: external 1 of 139 (138 omitted); unresolved 1 of 356 (355 omitted). These counts cover the captured static trace.
 
 Omitted captured detail, grouped by actual caller occurrence and target module:
 
@@ -93,13 +95,13 @@ Omitted captured detail, grouped by actual caller occurrence and target module:
 | --- | --- | --- | --- | --- |
 | `src/api/results.py:_resolve_result_context` | 2 | - | unresolved | 8 |
 | `src/api/results.py:_resolve_result_context` | 2 | - | external | 4 |
+| `src/api/results.py:_resolve_result_context` | 2 | [src/api/results.py](../modules/results.md) | internal | 2 |
 | `src/api/results.py:_decode_pipeline_payload` | 6 | - | external | 4 |
 | `src/api/results.py:_decode_pipeline_payload` | 6 | - | unresolved | 1 |
 | `src/api/results.py:_decode_session_payload` | 21 | - | external | 4 |
 | `src/api/results.py:_decode_session_payload` | 21 | - | unresolved | 1 |
-| `src/api/results.py:get_best_iteration` | 1 | - | external | 1 |
-| `src/api/results.py:_enrich_iteration` | 30 | - | external | 15 |
-> Omission summary shows 8 of 99 groups; 91 further groups are not expanded here. Counts above include all omitted interactions.
+| `src/core/objective_comparator.py:objective_comparator_for_skill_id` | 29 | - | unresolved | 2 |
+> Omission summary shows 8 of 113 groups; 105 further groups are not expanded here. Counts above include all omitted interactions.
 > Detailed flow queries retain their own coverage and limits; omitted paths may execute at runtime.
 
 ## Data flow
@@ -160,36 +162,36 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| get_best_iteration | _resolve_result_context | 501 | `_resolve_result_context(research_id)` |
-| _resolve_result_context | research_id.startswith | 342 | `research_id.startswith('pipe_')` |
-| _resolve_result_context | _store.get_pipeline | 343 | `_store.get_pipeline(research_id)` |
-| _resolve_result_context | HTTPException (src/api/results.py:_resolve_result_context) | 345 | `HTTPException(status_code=404, detail='Pipeline not found')` |
-| _resolve_result_context | _decode_pipeline_payload | 346 | `_decode_pipeline_payload(pipeline)` |
-| _decode_pipeline_payload | dict (src/api/results.py:_decode_pipeline_payload) | 56 | `dict(pipeline)` |
-| _decode_pipeline_payload | decoded.get (src/api/results.py:_decode_pipeline_payload) | 63 | `decoded.get(source)` |
-| _decode_pipeline_payload | isinstance (src/api/results.py:_decode_pipeline_payload) | 67 | `isinstance(raw, str)` |
-| _decode_pipeline_payload | json.loads (src/api/results.py:_decode_pipeline_payload) | 67 | `json.loads(raw)` |
-| _decode_pipeline_payload | isinstance (src/api/results.py:_decode_pipeline_payload) | 70 | `isinstance(parsed, fallback_type)` |
-| _resolve_result_context | pipeline.get | 350 | `pipeline.get(...)` |
+| get_best_iteration | _resolve_result_context | 505 | `_resolve_result_context(research_id)` |
+| _resolve_result_context | research_id.startswith | 346 | `research_id.startswith('pipe_')` |
+| _resolve_result_context | _store.get_pipeline | 347 | `_store.get_pipeline(research_id)` |
+| _resolve_result_context | HTTPException (src/api/results.py:_resolve_result_context) | 349 | `HTTPException(status_code=404, detail='Pipeline not found')` |
+| _resolve_result_context | _decode_pipeline_payload | 350 | `_decode_pipeline_payload(pipeline)` |
+| _decode_pipeline_payload | dict (src/api/results.py:_decode_pipeline_payload) | 60 | `dict(pipeline)` |
+| _decode_pipeline_payload | decoded.get (src/api/results.py:_decode_pipeline_payload) | 67 | `decoded.get(source)` |
+| _decode_pipeline_payload | isinstance (src/api/results.py:_decode_pipeline_payload) | 71 | `isinstance(raw, str)` |
+| _decode_pipeline_payload | json.loads (src/api/results.py:_decode_pipeline_payload) | 71 | `json.loads(raw)` |
+| _decode_pipeline_payload | isinstance (src/api/results.py:_decode_pipeline_payload) | 74 | `isinstance(parsed, fallback_type)` |
+| _resolve_result_context | pipeline.get | 354 | `pipeline.get(...)` |
 
 ### Boundary effects
 
 | Kind | Target | Step | Line |
 |---|---|---|---:|
-| mutation | `sessions.append` | `_resolve_result_context` | 358 |
+| mutation | `sessions.append` | `_resolve_result_context` | 362 |
 
 ### Static analysis gaps
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `_resolve_result_context` | `research_id.startswith` | 342 |
-| unresolved_call | `_resolve_result_context` | `_store.get_pipeline` | 343 |
-| external_call | `_resolve_result_context` | `HTTPException` | 345 |
-| unresolved_call | `_decode_pipeline_payload` | `decoded.get` | 63 |
-| external_call | `_decode_pipeline_payload` | `isinstance` | 67 |
-| external_call | `_decode_pipeline_payload` | `json.loads` | 67 |
-| external_call | `_decode_pipeline_payload` | `isinstance` | 70 |
-| unresolved_call | `_resolve_result_context` | `pipeline.get` | 350 |
+| unresolved_call | `_resolve_result_context` | `research_id.startswith` | 346 |
+| unresolved_call | `_resolve_result_context` | `_store.get_pipeline` | 347 |
+| external_call | `_resolve_result_context` | `HTTPException` | 349 |
+| unresolved_call | `_decode_pipeline_payload` | `decoded.get` | 67 |
+| external_call | `_decode_pipeline_payload` | `isinstance` | 71 |
+| external_call | `_decode_pipeline_payload` | `json.loads` | 71 |
+| external_call | `_decode_pipeline_payload` | `isinstance` | 74 |
+| unresolved_call | `_resolve_result_context` | `pipeline.get` | 354 |
 | step_limit | `get_best_iteration` | `first 12 steps` | 0 |
 
 ## Behavior

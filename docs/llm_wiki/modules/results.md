@@ -24,6 +24,7 @@ Experiment results query endpoints.
 | `src.core.gate_status` | `training_gates_passed_from` |
 | `src.core.legacy_alias` | `model_type_to_skill_id` |
 | `src.core.log_writer` | `AgentLogWriter`, `_format_entry` |
+| `src.core.objective_comparator` | `ObjectiveComparator`, `objective_comparator_for_skill_id` |
 | `src.core.pagination` | `MAX_PAGE_SIZE`, `build_cursor_page`, `decode_cursor` |
 | `src.core.research_state` | `build_research_state` |
 | `typing` | `Any`, `Dict`, `List`, `Mapping`, `Optional` |
@@ -50,7 +51,7 @@ flowchart LR
 |---|---|
 | Inbound | `src` (1) |
 | Inbound | `tests` (7) |
-| Outbound | `src` (9) |
+| Outbound | `src` (10) |
 
 ### External packages
 
@@ -58,7 +59,7 @@ flowchart LR
 |---|---:|---:|
 | python | 1 | 1 |
 
-> All 17 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 18 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Functions
 
@@ -76,7 +77,7 @@ flowchart LR
 | `get_results` | *(async)* `(research_id: str)` | `@router.get('/research/{research_id}/results')` | Full experiment history for a research session. |
 | `get_iterations` | *(async)* `(research_id: str, limit: Optional[int] = Query(default=None, ge=1, le=MAX_PAGE_SIZE), cursor: Optional[str] = None)` | `@router.get('/research/{research_id}/iterations')` | Iterations with metrics and config snapshots. |
 | `get_iteration` | *(async)* `(research_id: str, iteration_num: int)` | `@router.get('/research/{research_id}/iterations/{iteration_num}')` | Single iteration detail. |
-| `get_best_iteration` | *(async)* `(research_id: str)` | `@router.get('/research/{research_id}/best')` | Best iteration (highest primary metric with training gates passed). |
+| `get_best_iteration` | *(async)* `(research_id: str)` | `@router.get('/research/{research_id}/best')` | Best iteration (the objective comparator's winner among gates-passing runs). |
 | `get_agent_log` | *(async)* `(research_id: str, after: Optional[int] = Query(default=None, description='Return only entries after this line number (0-based)'), format: Optional[str] = Query(default=None, description="Set to 'json' for raw structured entries"))` | `@router.get('/research/{research_id}/agent-log')` | Agent conversation log — full Claude transcript captured during execution. |
 | `get_hpo_studies` | *(async)* `(research_id: str)` | `@router.get('/research/{research_id}/hpo-studies')` | HPO study results for a research session. |
 | `get_research_state` | *(async)* `(research_id: str)` | `@router.get('/research/{research_id}/state')` | Operator-facing session state, reconstructable from DB rows only. |

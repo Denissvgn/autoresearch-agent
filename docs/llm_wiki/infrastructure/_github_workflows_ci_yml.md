@@ -13,17 +13,20 @@
 
 | Job | Display Name | Runs On | Needs | Steps |
 |---|---|---|---|---:|
-| `test` | `Lint and Test` | `ubuntu-latest` | — | 16 |
+| `test` | `Lint and Test` | `ubuntu-latest` | — | 17 |
 | `smoke` | `Docker Smoke` | `ubuntu-latest` | — | 2 |
-| `distributed` | `Distributed (Postgres)` | `ubuntu-latest` | — | 5 |
+| `distributed` | `Distributed (Postgres)` | `ubuntu-latest` | — | 6 |
 | `ui` | `UI Build` | `ubuntu-latest` | — | 7 |
+| `qualification-gates` | `Qualification Gates` | `ubuntu-latest` | — | 7 |
+| `live-qualification` | `Live Qualification (opt-in)` | `ubuntu-latest` | — | 7 |
 
 ### test
 
-- `Checkout repository` - uses `actions/checkout@v4`
-- `Set up Python` - uses `actions/setup-python@v5`
+- `Checkout repository` - uses `actions/checkout@v7`
+- `Set up Python` - uses `actions/setup-python@v7`
+- `Install sandbox prerequisites (bubblewrap + userns)` - runs `sudo apt-get update sudo apt-get install -y --no-install-recommends bubblewrap sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 \|\| true`
 - `Install Poetry` - runs `python -m pip install --upgrade pip pip install poetry`
-- `Install dependencies` - runs `poetry install --no-interaction --no-ansi --no-root`
+- `Install dependencies` - runs `poetry config virtualenvs.in-project true poetry install --no-interaction --no-ansi --no-root`
 - `Poetry metadata check` - runs `poetry check`
 - `Lockfile check` - runs `poetry check --lock`
 - `Build release archives` - runs `# Poison local-only directories so archive checks catch broad includes. trap 'rm -rf skills/_drafts/ci-sentinel skills/ci-unbundled' EXIT mkdir -p skills/_drafts/ci-sentinel skills/ci-unbundled printf 'not a release asset\n' > skills/_drafts/ci-sentinel/SKILL.yaml printf 'not a release asset\n' > skills/ci-unbundled/SKILL.yaml poetry build --output "$RUNNER_TEMP/release-dist"`
@@ -39,26 +42,47 @@
 
 ### smoke
 
-- `Checkout repository` - uses `actions/checkout@v4`
+- `Checkout repository` - uses `actions/checkout@v7`
 - `Smoke test the built image` - runs `scripts/smoke_docker.sh`
 
 ### distributed
 
-- `Checkout repository` - uses `actions/checkout@v4`
-- `Set up Python` - uses `actions/setup-python@v5`
+- `Checkout repository` - uses `actions/checkout@v7`
+- `Set up Python` - uses `actions/setup-python@v7`
+- `Install sandbox prerequisites (bubblewrap + userns)` - runs `sudo apt-get update sudo apt-get install -y --no-install-recommends bubblewrap sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 \|\| true`
 - `Install Poetry` - runs `python -m pip install --upgrade pip pip install poetry`
-- `Install dependencies` - runs `poetry install --no-interaction --no-ansi --no-root`
+- `Install dependencies` - runs `poetry config virtualenvs.in-project true poetry install --no-interaction --no-ansi --no-root`
 - `Pytest (postgres + distributed markers)` - runs `poetry run pytest -m "postgres or distributed" -vv`
 
 ### ui
 
-- `Checkout repository` - uses `actions/checkout@v4`
-- `Set up Node` - uses `actions/setup-node@v4`
+- `Checkout repository` - uses `actions/checkout@v7`
+- `Set up Node` - uses `actions/setup-node@v7`
 - `Install dependencies` - runs `npm ci --ignore-scripts`
 - `Typecheck` - runs `npx --no-install tsc --noEmit --types vitest/globals,@testing-library/jest-dom`
 - `Vitest` - runs `npm run test:unit -- --pool=forks --maxWorkers=1 --minWorkers=1 --no-file-parallelism`
 - `Build` - runs `npx vite build`
 - `Production ops tests` - runs `node scripts/run-production-ops-tests.mjs`
+
+### qualification-gates
+
+- `Checkout repository` - uses `actions/checkout@v7`
+- `Set up Python` - uses `actions/setup-python@v7`
+- `Install sandbox prerequisites (bubblewrap + userns)` - runs `sudo apt-get update sudo apt-get install -y --no-install-recommends bubblewrap sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 \|\| true`
+- `Install Poetry` - runs `python -m pip install --upgrade pip pip install poetry`
+- `Install dependencies` - runs `poetry config virtualenvs.in-project true poetry install --no-interaction --no-ansi --no-root`
+- `Run qualification gates` - runs `poetry run python scripts/ci_qualification_gates.py`
+- `Archive sanitized gate evidence` - uses `actions/upload-artifact@v7`
+
+### live-qualification
+
+- `Checkout repository` - uses `actions/checkout@v7`
+- `Set up Python` - uses `actions/setup-python@v7`
+- `Install sandbox prerequisites (bubblewrap + userns)` - runs `sudo apt-get update sudo apt-get install -y --no-install-recommends bubblewrap sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 \|\| true`
+- `Install Poetry` - runs `python -m pip install --upgrade pip pip install poetry`
+- `Install dependencies` - runs `poetry config virtualenvs.in-project true poetry install --no-interaction --no-ansi --no-root`
+- `Run live qualification gates` - runs `poetry run python scripts/ci_qualification_gates.py --live --gate live-external`
+- `Archive sanitized live evidence` - uses `actions/upload-artifact@v7`
 
 ## Notes
 

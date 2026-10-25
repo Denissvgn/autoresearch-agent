@@ -1,6 +1,6 @@
 # IntegrationDirection
 
-**Location:** `src/core/execution_contracts.py:412`
+**Location:** `src/core/execution_contracts.py:414`
 **Kind:** Type alias
 **Bases:** —
 **Module:** [execution_contracts](../modules/execution_contracts.md)

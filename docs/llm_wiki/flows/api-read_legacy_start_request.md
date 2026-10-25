@@ -163,38 +163,38 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| read_legacy_start_request | _check_rejected_fields | 1457 | `_check_rejected_fields(payload)` |
-| _check_rejected_fields | payload.get (src/core/execution_contra….py:_check_rejected_fields) | 1326 | `payload.get(entry.legacy_field)` |
-| _check_rejected_fields | _is_requested | 1327 | `_is_requested(value)` |
-| _check_rejected_fields | issues.append | 1328 | `issues.append({...})` |
-| _check_rejected_fields | absent.append | 1339 | `absent.append(entry.legacy_field)` |
-| _check_rejected_fields | ContractMigrationError | 1341 | `ContractMigrationError(..., issues=issues)` |
-| _check_rejected_fields | sorted | 1343 | `sorted(...)` |
-| read_legacy_start_request | _require_identity | 1458 | `_require_identity(payload)` |
-| _require_identity | payload.get (src/core/execution_contracts.py:_require_identity) | 1352 | `payload.get('skill_id')` |
-| _require_identity | str (src/core/execution_contracts.py:_require_identity) | 1353 | `str(payload[...])` |
-| _require_identity | consumed.append (src/core/execution_contracts.py:_require_identity) | 1354 | `consumed.append('skill_id')` |
+| read_legacy_start_request | _check_rejected_fields | 1459 | `_check_rejected_fields(payload)` |
+| _check_rejected_fields | payload.get (src/core/execution_contra….py:_check_rejected_fields) | 1328 | `payload.get(entry.legacy_field)` |
+| _check_rejected_fields | _is_requested | 1329 | `_is_requested(value)` |
+| _check_rejected_fields | issues.append | 1330 | `issues.append({...})` |
+| _check_rejected_fields | absent.append | 1341 | `absent.append(entry.legacy_field)` |
+| _check_rejected_fields | ContractMigrationError | 1343 | `ContractMigrationError(..., issues=issues)` |
+| _check_rejected_fields | sorted | 1345 | `sorted(...)` |
+| read_legacy_start_request | _require_identity | 1460 | `_require_identity(payload)` |
+| _require_identity | payload.get (src/core/execution_contracts.py:_require_identity) | 1354 | `payload.get('skill_id')` |
+| _require_identity | str (src/core/execution_contracts.py:_require_identity) | 1355 | `str(payload[...])` |
+| _require_identity | consumed.append (src/core/execution_contracts.py:_require_identity) | 1356 | `consumed.append('skill_id')` |
 
 ### Boundary effects
 
 | Kind | Target | Step | Line |
 |---|---|---|---:|
-| mutation | `consumed.append` | `read_legacy_start_request` | 1470 |
-| mutation | `consumed.append` | `read_legacy_start_request` | 1475 |
-| mutation | `consumed.append` | `read_legacy_start_request` | 1479 |
-| mutation | `consumed.append` | `read_legacy_start_request` | 1482 |
-| mutation | `issues.append` | `_check_rejected_fields` | 1328 |
-| mutation | `absent.append` | `_check_rejected_fields` | 1339 |
-| mutation | `consumed.append` | `_require_identity` | 1354 |
-| mutation | `consumed.append` | `_require_identity` | 1357 |
+| mutation | `consumed.append` | `read_legacy_start_request` | 1472 |
+| mutation | `consumed.append` | `read_legacy_start_request` | 1477 |
+| mutation | `consumed.append` | `read_legacy_start_request` | 1481 |
+| mutation | `consumed.append` | `read_legacy_start_request` | 1484 |
+| mutation | `issues.append` | `_check_rejected_fields` | 1330 |
+| mutation | `absent.append` | `_check_rejected_fields` | 1341 |
+| mutation | `consumed.append` | `_require_identity` | 1356 |
+| mutation | `consumed.append` | `_require_identity` | 1359 |
 
 ### Static analysis gaps
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `_check_rejected_fields` | `payload.get` | 1326 |
-| external_call | `_check_rejected_fields` | `sorted` | 1343 |
-| unresolved_call | `_require_identity` | `payload.get` | 1352 |
+| unresolved_call | `_check_rejected_fields` | `payload.get` | 1328 |
+| external_call | `_check_rejected_fields` | `sorted` | 1345 |
+| unresolved_call | `_require_identity` | `payload.get` | 1354 |
 | step_limit | `read_legacy_start_request` | `first 12 steps` | 0 |
 
 ## Behavior

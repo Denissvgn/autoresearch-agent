@@ -21,7 +21,8 @@ _Auto-generated from `tests/test_runtime_recovery.py`._
 | `src.core.results_store` | `ResultsStore` |
 | `src.core.session_manager` | `SessionManager` |
 | `sys` | `sys` |
-| `types` | `types` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `cast` |
 
 ## Local dependency map
 
@@ -60,8 +61,8 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [_FakeAsyncAnthropic](../entities/test_runtime_recovery_FakeAsyncAnthropic.md) | 18 | — | — |
-| [_FakeAPIStatusError](../entities/test_runtime_recovery_FakeAPIStatusError.md) | 22 | `Exception` | — |
+| [_FakeAsyncAnthropic](../entities/test_runtime_recovery_FakeAsyncAnthropic.md) | 20 | — | — |
+| [_FakeAPIStatusError](../entities/test_runtime_recovery_FakeAPIStatusError.md) | 24 | `Exception` | — |
 
 ## Functions
 

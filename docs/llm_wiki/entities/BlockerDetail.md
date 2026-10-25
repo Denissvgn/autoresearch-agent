@@ -1,6 +1,6 @@
 # BlockerDetail
 
-**Location:** `ui/src/api/client.ts:347`
+**Location:** `ui/src/api/client.ts:348`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

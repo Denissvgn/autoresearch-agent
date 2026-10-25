@@ -16,7 +16,9 @@ Operator-facing autoresearch state summaries.
 | `src.core.blocker_classifier` | `blocker_details` |
 | `src.core.consistency_validator` | `parse_consistency_report` |
 | `src.core.gate_status` | `training_gates_passed_from`, `training_gates_passed_from_iteration` |
+| `src.core.objective_comparator` | `ObjectiveComparator`, `objective_comparator_for_skill_id`, `rank_rows`, `select_best_row` |
 | `src.core.observability` | `alert_suggestions` |
+| `src.core.research_kernel` | `decide_budget` |
 | `src.core.research_phase_plan` | `build_phase_state` |
 | `typing` | `Any`, `Dict`, `Iterable`, `List`, `Optional` |
 
@@ -25,54 +27,26 @@ Operator-facing autoresearch state summaries.
 <!-- Auto-generated local dependency summary. Do not edit by hand. -->
 ```mermaid
 flowchart LR
-    n0["src/api/results.py"]
-    n1["src/core/artifact_reference.py"]
-    n2["src/core/blocker_classifier.py"]
-    n3["src/core/consistency_validator.py"]
-    n4["src/core/gate_status.py"]
-    n5["src/core/observability.py"]
-    n6["src/core/research_phase_plan.py"]
-    n7["src/core/research_state.py"]
-    n8["tests/test_mlflow_run_id_contract.py"]
+    n0["src"]
+    n1["src/core/research_state.py"]
+    n2["tests"]
     n0 --> n1
-    n0 --> n3
-    n0 --> n4
-    n0 --> n7
-    n3 --> n1
-    n3 --> n4
-    n6 --> n1
-    n6 --> n3
-    n7 --> n1
-    n7 --> n2
-    n7 --> n3
-    n7 --> n4
-    n7 --> n5
-    n7 --> n6
-    n8 --> n3
-    n8 --> n7
-    click n0 "../modules/results.md"
-    click n1 "../modules/artifact_reference.md"
-    click n2 "../modules/blocker_classifier.md"
-    click n3 "../modules/consistency_validator.md"
-    click n4 "../modules/gate_status.md"
-    click n5 "../modules/observability.md"
-    click n6 "../modules/research_phase_plan.md"
-    click n7 "../modules/research_state.md"
-    click n8 "../modules/test_mlflow_run_id_contract.md"
+    n1 --> n0
+    n2 --> n1
+    click n1 "../modules/research_state.md"
 ```
+
+> Module-level dependencies exceed the generated-diagram limits, so the diagram and table below group them by top-level package. Counts report the number of module neighbors in each package.
 
 ### Internal neighbors
 
 | Direction | Module |
 |---|---|
-| Inbound | [results](../modules/results.md) |
-| Inbound | [test_mlflow_run_id_contract](../modules/test_mlflow_run_id_contract.md) |
-| Outbound | [artifact_reference](../modules/artifact_reference.md) |
-| Outbound | [blocker_classifier](../modules/blocker_classifier.md) |
-| Outbound | [consistency_validator](../modules/consistency_validator.md) |
-| Outbound | [gate_status](../modules/gate_status.md) |
-| Outbound | [observability](../modules/observability.md) |
-| Outbound | [research_phase_plan](../modules/research_phase_plan.md) |
+| Inbound | `src` (1) |
+| Inbound | `tests` (3) |
+| Outbound | `src` (8) |
+
+> All 12 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Functions
 
@@ -80,7 +54,7 @@ flowchart LR
 |----------|-----------|------------|-------------|
 | `build_research_state` | `(*, session: Dict[str, Any], iterations: Iterable[Dict[str, Any]], hpo_studies: Iterable[Dict[str, Any]], promotions: Iterable[Dict[str, Any]], planned_trials: Iterable[Dict[str, Any]] = (), audit_events: Iterable[Dict[str, Any]] = ()) -> Dict[str, Any]` | — | Build a reconstructable state payload without reading workspace files. |
 | `_session_phase_state` | `(session: Dict[str, Any]) -> Optional[Dict[str, Any]]` | — | — |
-| `_top_candidates` | `(iterations: List[Dict[str, Any]]) -> List[Dict[str, Any]]` | — | — |
+| `_top_candidates` | `(iterations: List[Dict[str, Any]], *, comparator: ObjectiveComparator) -> List[Dict[str, Any]]` | — | — |
 | `_failed_or_pruned` | `(iterations: List[Dict[str, Any]]) -> List[Dict[str, Any]]` | — | — |
 | `_candidate_summary` | `(row: Dict[str, Any]) -> Dict[str, Any]` | — | — |
 | `_duplicate_rejections` | `(iterations: List[Dict[str, Any]]) -> List[Dict[str, Any]]` | — | — |
@@ -105,7 +79,7 @@ flowchart LR
 | `_has_unfinished_phase` | `(phase_state: Dict[str, Any]) -> bool` | — | — |
 | `_promotion_is_blocked` | `(production_operations: Dict[str, Any]) -> bool` | — | — |
 | `_production_operations_summary` | `(*, session: Dict[str, Any], iterations: List[Dict[str, Any]], promotions: List[Dict[str, Any]], latest_promotion: Optional[Dict[str, Any]], audit_events: List[Dict[str, Any]], phase_state: Dict[str, Any]) -> Dict[str, Any]` | — | — |
-| `_best_candidate_row` | `(iterations: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]` | — | — |
+| `_best_candidate_row` | `(iterations: List[Dict[str, Any]], *, comparator: ObjectiveComparator) -> Optional[Dict[str, Any]]` | — | — |
 | `_operations_candidate` | `(row: Optional[Dict[str, Any]], metrics: Dict[str, Any], snapshot: Dict[str, Any]) -> Optional[Dict[str, Any]]` | — | — |
 | `_promotion_blockers` | `(session: Dict[str, Any], latest_promotion: Optional[Dict[str, Any]]) -> List[str]` | — | — |
 | `_promotion_scope_status` | `(*, session: Dict[str, Any], promotions: List[Dict[str, Any]], best_row: Optional[Dict[str, Any]], promotion_blockers: List[str], metrics: Dict[str, Any], phase_state: Dict[str, Any]) -> List[Dict[str, Any]]` | — | — |

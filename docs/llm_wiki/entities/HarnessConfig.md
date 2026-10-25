@@ -1,6 +1,6 @@
 # HarnessConfig
 
-**Location:** `src/core/execution_contracts.py:769`
+**Location:** `src/core/execution_contracts.py:771`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

@@ -1,6 +1,6 @@
 # MetricDiagnostic
 
-**Location:** `ui/src/pages/ResearchDetail.tsx:604`
+**Location:** `ui/src/pages/ResearchDetail.tsx:638`
 **Kind:** Type alias
 **Bases:** —
 **Module:** [ResearchDetail](../modules/ResearchDetail.md)

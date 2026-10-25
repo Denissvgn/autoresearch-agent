@@ -1,7 +1,7 @@
 # PostgresStateStore_add_iteration
 
 **Entry point:** `postgres_state_store.PostgresStateStore.add_iteration`
-**Modules involved:** [artifact_reference](../modules/artifact_reference.md), [observability](../modules/observability.md), [postgres_state_store](../modules/postgres_state_store.md), [state_store](../modules/state_store.md)
+**Modules involved:** [artifact_reference](../modules/artifact_reference.md), [objective_comparator](../modules/objective_comparator.md), [observability](../modules/observability.md), [postgres_state_store](../modules/postgres_state_store.md), [state_store](../modules/state_store.md)
 
 > Record an iteration. ``metrics_json``/``all_gates_passed`` are
 normalized exactly as in SQLiteStateStore (see
@@ -18,14 +18,16 @@ the session's ``best_iteration``/``best_metric`` do not advance.
 <!-- Auto-generated static call-chain projection. Reviewed runtime ordering, branching, and side effects belong in Behavior. -->
 1. `state_store._normalized_iteration_metrics_json`
 2. `artifact_reference.normalize_optional_artifact_ref`
-3. `state_store._json_object`
+3. `objective_comparator.ObjectiveComparator`
 4. `state_store._json_object`
-5. `observability.log_research_event`
-6. `state_store._attempt_outcome`
+5. `state_store._json_object`
+6. `observability.log_research_event`
+7. `state_store._attempt_outcome`
 
 ## Touches
 
 - [artifact_reference](../modules/artifact_reference.md)
+- [objective_comparator](../modules/objective_comparator.md)
 - [observability](../modules/observability.md)
 - [postgres_state_store](../modules/postgres_state_store.md)
 - [state_store](../modules/state_store.md)

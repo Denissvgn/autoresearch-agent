@@ -41,6 +41,8 @@ immutability after acceptance.
 | `sys` | `sys` |
 | `time` | `time` |
 | `types` | `types` |
+| `typing` | `Any` |
+| `unittest.mock` | `MagicMock` |
 | `yaml` | `yaml` |
 
 ## Local dependency map
@@ -58,9 +60,12 @@ flowchart LR
     n7["src/core/skill_runtime.py"]
     n8["tests/test_trust_boundary_qualification.py"]
     n1 --> n2
+    n2 --> n0
     n2 --> n4
+    n3 --> n0
     n3 --> n4
     n6 --> n0
+    n7 --> n0
     n8 --> n0
     n8 --> n1
     n8 --> n2

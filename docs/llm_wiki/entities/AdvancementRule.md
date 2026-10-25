@@ -1,6 +1,6 @@
 # AdvancementRule
 
-**Location:** `src/core/skill_runtime.py:155`
+**Location:** `src/core/skill_runtime.py:167`
 **Kind:** Class
 **Bases:** `TypedDict`
 **Module:** [skill_runtime](../modules/skill_runtime.md)
@@ -17,6 +17,8 @@ descriptor the manifest future can express declaratively.
 | Name | Type | Presence | Description |
 |------|------|----------|-------------|
 | `evidence_keys` | `tuple[str, ...]` | *optional* | — |
+| `min_observations` | `int` | *optional* | — |
+| `max_observations` | `int` | *optional* | — |
 
 ## Methods
 
@@ -43,7 +45,7 @@ flowchart LR
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [skill_runtime](../modules/skill_runtime.md) | 0 | `evidence_keys` |
+| [skill_runtime](../modules/skill_runtime.md) | 0 | `evidence_keys`, `max_observations`, `min_observations` |
 
 ### Structure
 

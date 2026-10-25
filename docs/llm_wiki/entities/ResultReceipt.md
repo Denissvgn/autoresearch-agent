@@ -1,6 +1,6 @@
 # ResultReceipt
 
-**Location:** `src/core/execution_contracts.py:580`
+**Location:** `src/core/execution_contracts.py:582`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

@@ -1,6 +1,6 @@
 # _FakeAsyncAnthropic
 
-**Location:** `tests/test_prompt_promotion_policy.py:12`
+**Location:** `tests/test_prompt_promotion_policy.py:14`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_prompt_promotion_policy](../modules/test_prompt_promotion_policy.md)

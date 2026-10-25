@@ -1,6 +1,6 @@
 # PrimaryMetric
 
-**Location:** `src/core/skill_manifest.py:263`
+**Location:** `src/core/skill_manifest.py:267`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)

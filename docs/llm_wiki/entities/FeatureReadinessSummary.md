@@ -1,6 +1,6 @@
 # FeatureReadinessSummary
 
-**Location:** `ui/src/api/client.ts:400`
+**Location:** `ui/src/api/client.ts:401`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

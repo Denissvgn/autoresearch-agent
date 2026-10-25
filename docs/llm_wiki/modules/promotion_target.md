@@ -53,9 +53,15 @@ Design decisions baked in here:
 | `__future__` | `annotations` |
 | `asyncio` | `asyncio` |
 | `dataclasses` | `dataclass` |
+| `datetime` | `datetime`, `timezone` |
+| `hashlib` | `hashlib` |
+| `httpx` | `httpx` |
 | `os` | `os` |
 | `pathlib` | `Path` |
+| `shutil` | `shutil`, `shutil` |
 | `src.config` | `settings` |
+| `src.core.skill_paths` | `validate_path_template`, `render_path_template` |
+| `src.core.skill_registry` | `DEFAULT_SKILLS_ROOT`, `DRAFTS_SUBDIR` |
 | `tempfile` | `tempfile` |
 | `typing` | `Any`, `Optional`, `Protocol` |
 
@@ -64,73 +70,32 @@ Design decisions baked in here:
 <!-- Auto-generated local dependency summary. Do not edit by hand. -->
 ```mermaid
 flowchart LR
-    n0["src/api/promotion.py"]
-    n1["src/cli.py"]
-    n2["src/config.py"]
-    n3["src/core/config_promoter.py"]
-    n4["src/core/promotion_target.py"]
-    n5["src/core/skill_runtime.py"]
-    n6["tests/test_config_promoter_atomic.py"]
-    n7["tests/test_manifest_runtime_production_path.py"]
-    n8["tests/test_promotion_target.py"]
-    n9["tests/test_release_promotion_safety.py"]
-    n10["tests/test_skill_lifecycle.py"]
-    n11["tests/test_webhook_promotion.py"]
-    n0 --> n2
-    n0 --> n3
-    n0 --> n4
-    n1 --> n2
-    n1 --> n4
-    n3 --> n2
-    n3 --> n4
-    n4 --> n2
-    n5 --> n4
-    n6 --> n4
-    n7 --> n3
-    n7 --> n4
-    n7 --> n5
-    n8 --> n3
-    n8 --> n4
-    n9 --> n0
-    n9 --> n2
-    n9 --> n3
-    n9 --> n4
-    n9 --> n11
-    n10 --> n4
-    n11 --> n0
-    n11 --> n2
-    n11 --> n3
-    n11 --> n4
-    n11 --> n5
-    click n0 "../modules/promotion.md"
-    click n1 "../modules/cli.md"
-    click n2 "../modules/config.md"
-    click n3 "../modules/config_promoter.md"
-    click n4 "../modules/promotion_target.md"
-    click n5 "../modules/skill_runtime.md"
-    click n6 "../modules/test_config_promoter_atomic.md"
-    click n7 "../modules/test_manifest_runtime_production_path.md"
-    click n8 "../modules/test_promotion_target.md"
-    click n9 "../modules/test_release_promotion_safety.md"
-    click n10 "../modules/test_skill_lifecycle.md"
-    click n11 "../modules/test_webhook_promotion.md"
+    n0["src"]
+    n1["src/core/promotion_target.py"]
+    n2["tests"]
+    n0 --> n1
+    n1 --> n0
+    n2 --> n1
+    click n1 "../modules/promotion_target.md"
 ```
+
+> Module-level dependencies exceed the generated-diagram limits, so the diagram and table below group them by top-level package. Counts report the number of module neighbors in each package.
 
 ### Internal neighbors
 
 | Direction | Module |
 |---|---|
-| Inbound | [promotion](../modules/promotion.md) |
-| Inbound | [cli](../modules/cli.md) |
-| Inbound | [config_promoter](../modules/config_promoter.md) |
-| Inbound | [skill_runtime](../modules/skill_runtime.md) |
-| Inbound | [test_config_promoter_atomic](../modules/test_config_promoter_atomic.md) |
-| Inbound | [test_manifest_runtime_production_path](../modules/test_manifest_runtime_production_path.md) |
-| Inbound | [test_promotion_target](../modules/test_promotion_target.md) |
-| Inbound | [test_release_promotion_safety](../modules/test_release_promotion_safety.md) |
-| Inbound | [test_skill_lifecycle](../modules/test_skill_lifecycle.md) |
-| Inbound | [test_webhook_promotion](../modules/test_webhook_promotion.md) |
-| Outbound | [config](../modules/config.md) |
+| Inbound | `src` (4) |
+| Inbound | `tests` (7) |
+| Outbound | `src` (3) |
+
+### External packages
+
+| Language | Used packages | Undeclared packages |
+|---|---:|---:|
+| python | 1 | 0 |
+
+> All 14 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Classes
 

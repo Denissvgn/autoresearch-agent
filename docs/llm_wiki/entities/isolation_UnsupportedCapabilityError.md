@@ -25,17 +25,20 @@ flowchart LR
     n0["UnsupportedCapabilityError (src/core/isolation.py)"]
     n1["IsolationError (src/core/isolation.py)"]
     n2["BwrapBackend.wrap (src/core/isolation.py)"]
-    n3["src/core/plugin_runner.py"]
-    n4["tests/test_execution_isolation.py"]
+    n3["wrap_command (src/core/isolation.py)"]
+    n4["src/core/plugin_runner.py"]
+    n5["tests/test_execution_isolation.py"]
     n0 --> n1
     n2 --> n0
     n3 --> n0
     n4 --> n0
+    n5 --> n0
     click n0 "../modules/isolation.md"
     click n1 "../modules/isolation.md"
     click n2 "../modules/isolation.md"
-    click n3 "../modules/plugin_runner.md"
-    click n4 "../modules/test_execution_isolation.md"
+    click n3 "../modules/isolation.md"
+    click n4 "../modules/plugin_runner.md"
+    click n5 "../modules/test_execution_isolation.md"
 ```
 
 ### Summary
@@ -55,5 +58,6 @@ flowchart LR
 | Reference | Kind | Source | Call sites |
 |---|---|---|---:|
 | `BwrapBackend.wrap` | call | [isolation](../modules/isolation.md) | 1 |
+| `wrap_command` | call | [isolation](../modules/isolation.md) | 1 |
 | `plugin_runner` | import | [plugin_runner](../modules/plugin_runner.md) | — |
 | `test_execution_isolation` | import | [test_execution_isolation](../modules/test_execution_isolation.md) | — |

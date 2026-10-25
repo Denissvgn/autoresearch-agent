@@ -1,6 +1,6 @@
 # FailureRecord
 
-**Location:** `src/core/execution_contracts.py:569`
+**Location:** `src/core/execution_contracts.py:571`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

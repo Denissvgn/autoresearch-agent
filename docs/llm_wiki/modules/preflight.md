@@ -46,10 +46,12 @@ Design decisions baked in here:
 | Source | Symbols |
 |--------|---------|
 | `__future__` | `annotations` |
+| `dataclasses` | `dataclass` |
 | `httpx` | `httpx` |
+| `pathlib` | `Path` |
 | `src.core` | `service_preflight` |
 | `src.core.service_preflight` | `ServicePreflightTarget` |
-| `typing` | `Any`, `Protocol` |
+| `typing` | `Any`, `Optional`, `Protocol` |
 
 ## Local dependency map
 
@@ -58,17 +60,28 @@ Design decisions baked in here:
 flowchart LR
     n0["src/core/preflight.py"]
     n1["src/core/service_preflight.py"]
-    n2["src/core/skill_runtime.py"]
-    n3["tests/test_preflight.py"]
+    n2["src/core/session_manager.py"]
+    n3["src/core/skill_runtime.py"]
+    n4["tests/test_preflight.py"]
+    n5["tests/test_preflight_support_matrix.py"]
     n0 --> n1
     n1 --> n0
     n2 --> n0
+    n2 --> n1
+    n2 --> n3
     n3 --> n0
     n3 --> n1
+    n4 --> n0
+    n4 --> n1
+    n5 --> n0
+    n5 --> n2
+    n5 --> n3
     click n0 "../modules/preflight.md"
     click n1 "../modules/service_preflight.md"
-    click n2 "../modules/skill_runtime.md"
-    click n3 "../modules/test_preflight.md"
+    click n2 "../modules/session_manager.md"
+    click n3 "../modules/skill_runtime.md"
+    click n4 "../modules/test_preflight.md"
+    click n5 "../modules/test_preflight_support_matrix.md"
 ```
 
 ### Internal neighbors
@@ -76,8 +89,10 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Inbound | [service_preflight](../modules/service_preflight.md) |
+| Inbound | [session_manager](../modules/session_manager.md) |
 | Inbound | [skill_runtime](../modules/skill_runtime.md) |
 | Inbound | [test_preflight](../modules/test_preflight.md) |
+| Inbound | [test_preflight_support_matrix](../modules/test_preflight_support_matrix.md) |
 | Outbound | [service_preflight](../modules/service_preflight.md) |
 
 ### External packages
@@ -90,9 +105,10 @@ flowchart LR
 
 | Class | Line | Bases | Description |
 |-------|------|-------|-------------|
-| [PreflightCheck](../entities/PreflightCheck.md) | 49 | `Protocol` | A single service-dependency health check (ARC-011 P1-019). |
-| [HTTPHealthCheck](../entities/HTTPHealthCheck.md) | 74 | — | HTTP health-endpoint probe (ARC-011 P1-020). |
-| [TCPConnectCheck](../entities/TCPConnectCheck.md) | 103 | — | TCP-connect probe (ARC-011 P1-020). |
+| [PreflightCheck](../entities/PreflightCheck.md) | 50 | `Protocol` | A single service-dependency health check (ARC-011 P1-019). |
+| [HTTPHealthCheck](../entities/HTTPHealthCheck.md) | 75 | — | HTTP health-endpoint probe (ARC-011 P1-020). |
+| [LocalFileCheck](../entities/LocalFileCheck.md) | 105 | — | A declared local-file prerequisite (no transport involved). |
+| [TCPConnectCheck](../entities/TCPConnectCheck.md) | 138 | — | TCP-connect probe (ARC-011 P1-020). |
 
 ## Functions
 

@@ -1,6 +1,6 @@
 # MetricSchema
 
-**Location:** `ui/src/api/client.ts:521`
+**Location:** `ui/src/api/client.ts:522`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

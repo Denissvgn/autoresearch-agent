@@ -1,6 +1,6 @@
 # VariantsConfig
 
-**Location:** `src/core/skill_manifest.py:195`
+**Location:** `src/core/skill_manifest.py:197`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)

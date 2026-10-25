@@ -150,16 +150,16 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| promote_preview | PromotionPreviewRequest | 314 | `PromotionPreviewRequest(data not statically known)` |
-| promote_preview | _approval_payload | 315 | `_approval_payload(payload.approval)` |
-| _approval_payload | hasattr | 187 | `hasattr(approval, 'model_dump')` |
-| _approval_payload | approval.model_dump | 188 | `approval.model_dump(exclude_none=True)` |
-| _approval_payload | approval.dict | 189 | `approval.dict(exclude_none=True)` |
-| promote_preview | _promoter_for_session | 317 | `_promoter_for_session(research_id)` |
-| _promoter_for_session | _store.get_session | 267 | `_store.get_session(research_id)` |
-| _promoter_for_session | session.get | 272 | `session.get('skill_id')` |
-| _promoter_for_session | session.get | 274 | `session.get('model_type')` |
-| _promoter_for_session | model_type_to_skill_id | 278 | `model_type_to_skill_id(model_type)` |
+| promote_preview | PromotionPreviewRequest | 325 | `PromotionPreviewRequest(data not statically known)` |
+| promote_preview | _approval_payload | 326 | `_approval_payload(payload.approval)` |
+| _approval_payload | hasattr | 198 | `hasattr(approval, 'model_dump')` |
+| _approval_payload | approval.model_dump | 199 | `approval.model_dump(exclude_none=True)` |
+| _approval_payload | approval.dict | 200 | `approval.dict(exclude_none=True)` |
+| promote_preview | _promoter_for_session | 328 | `_promoter_for_session(research_id)` |
+| _promoter_for_session | _store.get_session | 278 | `_store.get_session(research_id)` |
+| _promoter_for_session | session.get | 283 | `session.get('skill_id')` |
+| _promoter_for_session | session.get | 285 | `session.get('model_type')` |
+| _promoter_for_session | model_type_to_skill_id | 289 | `model_type_to_skill_id(model_type)` |
 | model_type_to_skill_id | _MODEL_TYPE_TO_SKILL_ID.get | 45 | `_MODEL_TYPE_TO_SKILL_ID.get(model_type, model_type)` |
 
 ### Boundary effects
@@ -170,11 +170,11 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| external_call | `_approval_payload` | `hasattr` | 187 |
-| unresolved_call | `_approval_payload` | `approval.model_dump` | 188 |
-| unresolved_call | `_promoter_for_session` | `_store.get_session` | 267 |
-| unresolved_call | `_promoter_for_session` | `session.get` | 272 |
-| unresolved_call | `_promoter_for_session` | `session.get` | 274 |
+| external_call | `_approval_payload` | `hasattr` | 198 |
+| unresolved_call | `_approval_payload` | `approval.model_dump` | 199 |
+| unresolved_call | `_promoter_for_session` | `_store.get_session` | 278 |
+| unresolved_call | `_promoter_for_session` | `session.get` | 283 |
+| unresolved_call | `_promoter_for_session` | `session.get` | 285 |
 | unresolved_call | `model_type_to_skill_id` | `_MODEL_TYPE_TO_SKILL_ID.get` | 45 |
 | step_limit | `promote_preview` | `first 12 steps` | 0 |
 

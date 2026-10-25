@@ -21,7 +21,9 @@ LLM call is scripted.
 | `pathlib` | `Path` |
 | `pytest` | `pytest` |
 | `src` | `cli` |
+| `src.config` | `get_settings`, `settings` |
 | `src.core` | `llm_provider` |
+| `src.core.isolation` | `probe_host` |
 | `sys` | `sys` |
 | `typing` | `Any` |
 | `yaml` | `yaml` |
@@ -32,14 +34,22 @@ LLM call is scripted.
 ```mermaid
 flowchart LR
     n0["src/cli.py"]
-    n1["src/core/llm_provider.py"]
-    n2["tests/test_cli.py"]
+    n1["src/config.py"]
+    n2["src/core/isolation.py"]
+    n3["src/core/llm_provider.py"]
+    n4["tests/test_cli.py"]
     n0 --> n1
-    n2 --> n0
-    n2 --> n1
+    n0 --> n3
+    n3 --> n1
+    n4 --> n0
+    n4 --> n1
+    n4 --> n2
+    n4 --> n3
     click n0 "../modules/cli.md"
-    click n1 "../modules/llm_provider.md"
-    click n2 "../modules/test_cli.md"
+    click n1 "../modules/config.md"
+    click n2 "../modules/isolation.md"
+    click n3 "../modules/llm_provider.md"
+    click n4 "../modules/test_cli.md"
 ```
 
 ### Internal neighbors
@@ -47,6 +57,8 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Outbound | [cli](../modules/cli.md) |
+| Outbound | [config](../modules/config.md) |
+| Outbound | [isolation](../modules/isolation.md) |
 | Outbound | [llm_provider](../modules/llm_provider.md) |
 
 ### External packages

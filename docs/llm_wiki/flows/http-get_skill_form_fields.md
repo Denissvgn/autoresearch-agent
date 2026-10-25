@@ -89,31 +89,31 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| get_skill_form_fields | _get_or_404 | 233 | `_get_or_404(skill_id)` |
-| _get_or_404 | _registry.get | 181 | `_registry.get(skill_id)` |
-| _get_or_404 | HTTPException | 183 | `HTTPException(status_code=404, detail={...})` |
-| get_skill_form_fields | _form_fields | 234 | `_form_fields(manifest)` |
-| _form_fields | list | 130 | `list(manifest.ui.form_fields)` |
-| _form_fields | manifest.param_schema.properties.items | 134 | `manifest.param_schema.properties.items(data not statically known)` |
-| _form_fields | prop.model_dump | 144 | `prop.model_dump(exclude_none=True)` |
-| _form_fields | {'minimum': 'min', 'maximum': 'max'}.get | 147 | `{'minimum': 'min', 'maximum': 'max'}.get(bound_key, bound_key)` |
-| _form_fields | fields.append | 149 | `fields.append(field)` |
+| get_skill_form_fields | _get_or_404 | 240 | `_get_or_404(skill_id)` |
+| _get_or_404 | _registry.get | 188 | `_registry.get(skill_id)` |
+| _get_or_404 | HTTPException | 190 | `HTTPException(status_code=404, detail={...})` |
+| get_skill_form_fields | _form_fields | 241 | `_form_fields(manifest)` |
+| _form_fields | list | 137 | `list(manifest.ui.form_fields)` |
+| _form_fields | manifest.param_schema.properties.items | 141 | `manifest.param_schema.properties.items(data not statically known)` |
+| _form_fields | prop.model_dump | 151 | `prop.model_dump(exclude_none=True)` |
+| _form_fields | {'minimum': 'min', 'maximum': 'max'}.get | 154 | `{'minimum': 'min', 'maximum': 'max'}.get(bound_key, bound_key)` |
+| _form_fields | fields.append | 156 | `fields.append(field)` |
 
 ### Boundary effects
 
 | Kind | Target | Step | Line |
 |---|---|---|---:|
-| mutation | `fields.append` | `_form_fields` | 149 |
+| mutation | `fields.append` | `_form_fields` | 156 |
 
 ### Static analysis gaps
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| unresolved_call | `_get_or_404` | `_registry.get` | 181 |
-| external_call | `_get_or_404` | `HTTPException` | 183 |
-| unresolved_call | `_form_fields` | `manifest.param_schema.properties.items` | 134 |
-| unresolved_call | `_form_fields` | `prop.model_dump` | 144 |
-| unresolved_call | `_form_fields` | `{'minimum': 'min', 'maximum': 'max'}.get` | 147 |
+| unresolved_call | `_get_or_404` | `_registry.get` | 188 |
+| external_call | `_get_or_404` | `HTTPException` | 190 |
+| unresolved_call | `_form_fields` | `manifest.param_schema.properties.items` | 141 |
+| unresolved_call | `_form_fields` | `prop.model_dump` | 151 |
+| unresolved_call | `_form_fields` | `{'minimum': 'min', 'maximum': 'max'}.get` | 154 |
 
 ## Behavior
 

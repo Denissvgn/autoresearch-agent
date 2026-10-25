@@ -23,6 +23,7 @@ Postgres); the dedicated ``postgres`` CI job (P6-007) wires the service.
 | `os` | `os` |
 | `pytest` | `pytest` |
 | `src.core.postgres_state_store` | `PostgresStateStore` |
+| `typing` | `AsyncIterator` |
 | `uuid` | `uuid` |
 
 ## Local dependency map
@@ -32,15 +33,20 @@ Postgres); the dedicated ``postgres`` CI job (P6-007) wires the service.
 flowchart LR
     n0["src/core/postgres_state_store.py"]
     n1["tests/test_postgres_state_store.py"]
+    n2["tests/test_store_persistence_contracts.py"]
     n1 --> n0
+    n2 --> n0
+    n2 --> n1
     click n0 "../modules/postgres_state_store.md"
     click n1 "../modules/test_postgres_state_store.md"
+    click n2 "../modules/test_store_persistence_contracts.md"
 ```
 
 ### Internal neighbors
 
 | Direction | Module |
 |---|---|
+| Inbound | [test_store_persistence_contracts](../modules/test_store_persistence_contracts.md) |
 | Outbound | [postgres_state_store](../modules/postgres_state_store.md) |
 
 ### External packages
@@ -55,7 +61,7 @@ flowchart LR
 |----------|-----------|------------|-------------|
 | `_base_dsn` | `() -> str \| None` | — | — |
 | `_admin_dsn` | `() -> str \| None` | `@pytest.fixture(scope='module')` | — |
-| `pg_dsn` | *(async)* `(_admin_dsn: str \| None) -> str` | `@pytest.fixture()` | A per-test throwaway database (or skip). |
+| `pg_dsn` | *(async)* `(_admin_dsn: str \| None) -> AsyncIterator[str]` | `@pytest.fixture()` | A per-test throwaway database (or skip). |
 | `pg_store` | *(async)* `(pg_dsn: str)` | `@pytest.fixture()` | A fresh PostgresStateStore per test against the throwaway DB. |
 | `_insert_session_row` | *(async)* `(store, session_id: str) -> None` | — | Insert a research_sessions row directly, bypassing create_session. |
 | `test_initialize_creates_schema_and_sets_version` | *(async)* `(pg_store)` | — | — |

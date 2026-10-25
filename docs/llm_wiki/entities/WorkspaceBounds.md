@@ -1,6 +1,6 @@
 # WorkspaceBounds
 
-**Location:** `src/core/execution_contracts.py:669`
+**Location:** `src/core/execution_contracts.py:671`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

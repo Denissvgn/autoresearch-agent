@@ -11,9 +11,10 @@ _Auto-generated from `ui/src/pages/NewResearch.tsx`._
 | Source | Symbols |
 |--------|---------|
 | `../components/DynamicFormFields` | `DynamicFormFields` |
+| `../components/HarnessPicker` | `HarnessPicker` |
 | `../components/SkillPicker` | `SkillPicker` |
 | `../components/hifi/primitives` | `Field`, `Icon` |
-| `../hooks/useResearch` | `useModels`, `useStartResearch`, `useSkills`, `useSkillFormFields`, `useCostEstimate` |
+| `../hooks/useResearch` | `useModels`, `useStartResearch`, `useSkills`, `useSkillFormFields`, `useCostEstimate`, `useHarnesses` |
 | `react` | `useEffect`, `useMemo`, `useState` |
 | `react-router-dom` | `Link`, `useNavigate` |
 
@@ -31,27 +32,30 @@ _Auto-generated from `ui/src/pages/NewResearch.tsx`._
 flowchart LR
     n0["ui/src/App.tsx"]
     n1["ui/src/components/DynamicFormFields.tsx"]
-    n2["ui/src/components/hifi/primitives.tsx"]
-    n3["ui/src/components/SkillPicker.tsx"]
-    n4["ui/src/hooks/useResearch.ts"]
-    n5["ui/src/pages/__tests__/NewResearch.test.tsx"]
-    n6["ui/src/pages/NewResearch.tsx"]
-    n0 --> n2
-    n0 --> n4
-    n0 --> n6
-    n1 --> n2
-    n5 --> n6
-    n6 --> n1
-    n6 --> n2
-    n6 --> n3
-    n6 --> n4
+    n2["ui/src/components/HarnessPicker.tsx"]
+    n3["ui/src/components/hifi/primitives.tsx"]
+    n4["ui/src/components/SkillPicker.tsx"]
+    n5["ui/src/hooks/useResearch.ts"]
+    n6["ui/src/pages/__tests__/NewResearch.test.tsx"]
+    n7["ui/src/pages/NewResearch.tsx"]
+    n0 --> n3
+    n0 --> n5
+    n0 --> n7
+    n1 --> n3
+    n6 --> n7
+    n7 --> n1
+    n7 --> n2
+    n7 --> n3
+    n7 --> n4
+    n7 --> n5
     click n0 "../modules/App.md"
     click n1 "../modules/DynamicFormFields.md"
-    click n2 "../modules/primitives.md"
-    click n3 "../modules/SkillPicker.md"
-    click n4 "../modules/useResearch.md"
-    click n5 "../modules/NewResearch.test.md"
-    click n6 "../modules/NewResearch.md"
+    click n2 "../modules/HarnessPicker.md"
+    click n3 "../modules/primitives.md"
+    click n4 "../modules/SkillPicker.md"
+    click n5 "../modules/useResearch.md"
+    click n6 "../modules/NewResearch.test.md"
+    click n7 "../modules/NewResearch.md"
 ```
 
 ### Internal neighbors
@@ -61,6 +65,7 @@ flowchart LR
 | Inbound | [App](../modules/App.md) |
 | Inbound | [NewResearch.test](../modules/NewResearch.test.md) |
 | Outbound | [DynamicFormFields](../modules/DynamicFormFields.md) |
+| Outbound | [HarnessPicker](../modules/HarnessPicker.md) |
 | Outbound | [primitives](../modules/primitives.md) |
 | Outbound | [SkillPicker](../modules/SkillPicker.md) |
 | Outbound | [useResearch](../modules/useResearch.md) |

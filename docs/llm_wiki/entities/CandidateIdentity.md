@@ -1,6 +1,6 @@
 # CandidateIdentity
 
-**Location:** `src/core/execution_contracts.py:243`
+**Location:** `src/core/execution_contracts.py:245`
 **Kind:** Pydantic model
 **Bases:** `VersionedContract`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

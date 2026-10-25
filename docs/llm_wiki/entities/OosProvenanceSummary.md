@@ -1,6 +1,6 @@
 # OosProvenanceSummary
 
-**Location:** `ui/src/api/client.ts:406`
+**Location:** `ui/src/api/client.ts:407`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

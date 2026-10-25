@@ -1,6 +1,6 @@
 # Message
 
-**Location:** `src/core/llm_provider.py:202`
+**Location:** `src/core/llm_provider.py:223`
 **Kind:** Class
 **Bases:** —
 **Module:** [llm_provider](../modules/llm_provider.md)
@@ -42,8 +42,8 @@ flowchart LR
     n7["OpenAIProvider.messages_create (src/core/llm_provider.py)"]
     n8["AgentOrchestrator._call_llm_with_retry (src/core/orchestrator.py)"]
     n9["AgentOrchestrator._compact_messages (src/core/orchestrator.py)"]
-    n10["AgentOrchestrator._latest_iteration_context_digest (src/core/orchestrator.py)"]
-    n11["AgentOrchestrator.run (src/core/orchestrator.py)"]
+    n10["AgentOrchestrator._extract_session_insights (src/core/orchestrator.py)"]
+    n11["AgentOrchestrator._latest_iteration_context_digest (src/core/orchestrator.py)"]
     n1 --> n0
     n2 --> n0
     n3 --> n0
@@ -89,7 +89,7 @@ flowchart LR
 | `AgentOrchestrator._call_llm_with_retry` | type_reference | [orchestrator](../modules/orchestrator.md) | — |
 | `AgentOrchestrator._compact_messages` | call | [orchestrator](../modules/orchestrator.md) | 1 |
 | `AgentOrchestrator._compact_messages` | type_reference | [orchestrator](../modules/orchestrator.md) | — |
+| `AgentOrchestrator._extract_session_insights` | call | [orchestrator](../modules/orchestrator.md) | 1 |
 | `AgentOrchestrator._latest_iteration_context_digest` | type_reference | [orchestrator](../modules/orchestrator.md) | — |
-| `AgentOrchestrator.run` | call | [orchestrator](../modules/orchestrator.md) | 7 |
 
-> References: showing 12 of 30 logical references; 18 omitted by the 12-row generated summary limit.
+> References: showing 12 of 31 logical references; 19 omitted by the 12-row generated summary limit.

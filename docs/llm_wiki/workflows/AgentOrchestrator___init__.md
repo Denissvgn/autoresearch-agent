@@ -9,8 +9,9 @@
 1. `state_machine.SessionStateMachine`
 2. `command_runner.CommandProcessRegistry`
 3. `llm_provider.build_provider`
-4. `output_parser.DelimitedKVParser`
-5. `output_parser.JSONMarkerParser`
+4. `llm_provider.resolve_effective_provider`
+5. `output_parser.DelimitedKVParser`
+6. `output_parser.JSONMarkerParser`
 
 ## Touches
 

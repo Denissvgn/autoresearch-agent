@@ -1,6 +1,6 @@
 # ProductionWarning
 
-**Location:** `ui/src/api/client.ts:376`
+**Location:** `ui/src/api/client.ts:377`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

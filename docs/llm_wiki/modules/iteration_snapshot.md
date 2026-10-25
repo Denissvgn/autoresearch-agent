@@ -20,7 +20,7 @@ Server-owned immutable snapshots for autoresearch iteration attempts.
 | `shlex` | `shlex` |
 | `src.core` | `fs_safety` |
 | `src.core.artifact_reference` | `normalize_optional_artifact_ref` |
-| `typing` | `Any`, `Dict`, `Mapping`, `Optional` |
+| `typing` | `Any`, `Dict`, `Mapping`, `Optional`, `Sequence` |
 | `yaml` | `yaml` |
 
 ## Local dependency map
@@ -43,8 +43,8 @@ flowchart LR
 
 | Direction | Module |
 |---|---|
-| Inbound | `src` (1) |
-| Inbound | `tests` (9) |
+| Inbound | `src` (2) |
+| Inbound | `tests` (11) |
 | Outbound | `src` (2) |
 
 ### External packages
@@ -53,16 +53,23 @@ flowchart LR
 |---|---:|---:|
 | python | 1 | 0 |
 
-> All 12 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 15 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+
+## Classes
+
+| Class | Line | Bases | Description |
+|-------|------|-------|-------------|
+| [UnsupportedIdentityResolveError](../entities/UnsupportedIdentityResolveError.md) | 53 | `ValueError` | Raised when an identity resolver mode is declared but unsupported. |
 
 ## Functions
 
 | Function | Signature | Decorators | Description |
 |----------|-----------|------------|-------------|
+| `evaluation_context_hash` | `(context: Any) -> Optional[str]` | — | Digest of the evaluator/data/environment/fidelity context, or None. |
 | `build_iteration_attempt_snapshot` | `(*, research_id: str, iteration: int, turn: int, command: str, config_snapshot: Any, workspace: str, marker: Optional[Dict[str, Any]] = None) -> Dict[str, Any]` | — | Build a server-owned attempt snapshot for one trial. |
 | `canonical_config_hash` | `(config_snapshot: Any) -> Optional[str]` | — | Hash config content after semantic YAML/JSON canonicalization. |
 | `canonical_config_payload` | `(config_snapshot: Any) -> Any` | — | Return a stable representation of a config snapshot. |
-| `build_trial_identity` | `(*, instrument: str, timeframe: str, model_type: str, command: Optional[str], config_snapshot: Any, quick_mode: bool, marker: Optional[Mapping[str, Any]] = None, source_model_ids: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]` | — | Build a duplicate-detection identity for one planned/training attempt. |
+| `build_trial_identity` | `(*, instrument: str, timeframe: str, model_type: str, command: Optional[str], config_snapshot: Any, quick_mode: bool, marker: Optional[Mapping[str, Any]] = None, source_model_ids: Optional[Mapping[str, Any]] = None, hash_fields: Optional[Sequence[str]] = None, resolve_mode: str = 'declarative', evaluation_context: Optional[Mapping[str, Any]] = None, repeat_index: Optional[int] = None) -> Dict[str, Any]` | — | Build an observation identity for one planned/training attempt. |
 | `trial_identity_hash` | `(identity: Mapping[str, Any]) -> Optional[str]` | — | Return a stable SHA-256 hash for a trial identity. |
 | `write_iteration_attempt_snapshot` | `(*, workspace: str, snapshot: Dict[str, Any]) -> str` | — | Persist an attempt snapshot JSON file under the session workspace. |
 | `_environment_metadata` | `() -> Dict[str, Any]` | — | — |

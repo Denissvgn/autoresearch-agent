@@ -1,6 +1,6 @@
 # VerifiedResult
 
-**Location:** `src/core/execution_contracts.py:602`
+**Location:** `src/core/execution_contracts.py:604`
 **Kind:** Pydantic model
 **Bases:** `VersionedContract`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

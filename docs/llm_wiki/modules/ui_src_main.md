@@ -11,7 +11,7 @@ _Auto-generated from `ui/src/main.tsx`._
 | Source | Symbols |
 |--------|---------|
 | `./App` | `App` |
-| `./index.css` | `` |
+| `./index.css` | — |
 | `@tanstack/react-query` | `QueryClient`, `QueryClientProvider` |
 | `react` | `React` |
 | `react-dom/client` | `ReactDOM` |

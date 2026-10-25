@@ -1,6 +1,6 @@
 # TestClassifyError
 
-**Location:** `tests/test_llm_provider_openai.py:200`
+**Location:** `tests/test_llm_provider_openai.py:201`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_llm_provider_openai](../modules/test_llm_provider_openai.md)

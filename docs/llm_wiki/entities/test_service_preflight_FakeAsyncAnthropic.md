@@ -1,6 +1,6 @@
 # _FakeAsyncAnthropic
 
-**Location:** `tests/test_service_preflight.py:15`
+**Location:** `tests/test_service_preflight.py:17`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_service_preflight](../modules/test_service_preflight.md)

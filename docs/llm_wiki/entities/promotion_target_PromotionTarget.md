@@ -38,21 +38,18 @@ flowchart LR
     n1["Protocol"]
     n2["ConfigPromoter.__init__ (src/core/config_promoter.py)"]
     n3["promotion_target_from_manifest (src/core/promotion_target.py)"]
-    n4["ManifestSkillRuntime.promotion_target (src/core/skill_runtime.py)"]
-    n5["SkillRuntime.promotion_target (src/core/skill_runtime.py)"]
-    n6["tests/test_promotion_target.py"]
+    n4["src/core/skill_runtime.py"]
+    n5["tests/test_promotion_target.py"]
     n0 --> n1
     n2 --> n0
     n3 --> n0
     n4 --> n0
     n5 --> n0
-    n6 --> n0
     click n0 "../modules/promotion_target.md"
     click n2 "../modules/config_promoter.md"
     click n3 "../modules/promotion_target.md"
     click n4 "../modules/skill_runtime.md"
-    click n5 "../modules/skill_runtime.md"
-    click n6 "../modules/test_promotion_target.md"
+    click n5 "../modules/test_promotion_target.md"
 ```
 
 ### Summary
@@ -73,6 +70,5 @@ flowchart LR
 |---|---|---|---:|
 | `ConfigPromoter.__init__` | type_reference | [config_promoter](../modules/config_promoter.md) | — |
 | `promotion_target_from_manifest` | type_reference | [promotion_target](../modules/promotion_target.md) | — |
-| `ManifestSkillRuntime.promotion_target` | type_reference | [skill_runtime](../modules/skill_runtime.md) | — |
-| `SkillRuntime.promotion_target` | type_reference | [skill_runtime](../modules/skill_runtime.md) | — |
+| `skill_runtime` | import | [skill_runtime](../modules/skill_runtime.md) | — |
 | `test_promotion_target` | import | [test_promotion_target](../modules/test_promotion_target.md) | — |

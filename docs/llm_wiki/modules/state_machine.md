@@ -38,6 +38,7 @@ transition tables are recorded in this module).
 | `src.core.state_store` | `StateStore` |
 | `src.ws.events` | `EventBroadcaster` |
 | `typing` | `Any`, `AsyncIterator`, `Dict`, `FrozenSet`, `Optional`, `Tuple`, `Union` |
+| `uuid` | `uuid` |
 
 ## Local dependency map
 
@@ -51,10 +52,11 @@ flowchart LR
     n4["src/ws/events.py"]
     n5["tests/test_cross_worker_control.py"]
     n6["tests/test_distributed_state_store.py"]
-    n7["tests/test_fencing_tokens.py"]
-    n8["tests/test_session_failure_modes.py"]
-    n9["tests/test_session_status_routing.py"]
-    n10["tests/test_state_machine.py"]
+    n7["tests/test_event_outbox.py"]
+    n8["tests/test_fencing_tokens.py"]
+    n9["tests/test_session_failure_modes.py"]
+    n10["tests/test_session_status_routing.py"]
+    n11["tests/test_state_machine.py"]
     n0 --> n2
     n0 --> n3
     n0 --> n4
@@ -70,17 +72,20 @@ flowchart LR
     n6 --> n1
     n6 --> n2
     n6 --> n4
-    n7 --> n0
     n7 --> n2
+    n7 --> n3
     n7 --> n4
     n8 --> n0
-    n8 --> n1
     n8 --> n2
     n8 --> n4
+    n9 --> n0
     n9 --> n1
     n9 --> n2
+    n9 --> n4
+    n10 --> n1
     n10 --> n2
-    n10 --> n4
+    n11 --> n2
+    n11 --> n4
     click n0 "../modules/orchestrator.md"
     click n1 "../modules/session_manager.md"
     click n2 "../modules/state_machine.md"
@@ -88,10 +93,11 @@ flowchart LR
     click n4 "../modules/events.md"
     click n5 "../modules/test_cross_worker_control.md"
     click n6 "../modules/test_distributed_state_store.md"
-    click n7 "../modules/test_fencing_tokens.md"
-    click n8 "../modules/test_session_failure_modes.md"
-    click n9 "../modules/test_session_status_routing.md"
-    click n10 "../modules/test_state_machine.md"
+    click n7 "../modules/test_event_outbox.md"
+    click n8 "../modules/test_fencing_tokens.md"
+    click n9 "../modules/test_session_failure_modes.md"
+    click n10 "../modules/test_session_status_routing.md"
+    click n11 "../modules/test_state_machine.md"
 ```
 
 ### Internal neighbors
@@ -102,6 +108,7 @@ flowchart LR
 | Inbound | [session_manager](../modules/session_manager.md) |
 | Inbound | [test_cross_worker_control](../modules/test_cross_worker_control.md) |
 | Inbound | [test_distributed_state_store](../modules/test_distributed_state_store.md) |
+| Inbound | [test_event_outbox](../modules/test_event_outbox.md) |
 | Inbound | [test_fencing_tokens](../modules/test_fencing_tokens.md) |
 | Inbound | [test_session_failure_modes](../modules/test_session_failure_modes.md) |
 | Inbound | [test_session_status_routing](../modules/test_session_status_routing.md) |
@@ -113,13 +120,13 @@ flowchart LR
 
 | Class | Kind | Line | Bases / Target | Description |
 |-------|------|------|----------------|-------------|
-| [SessionState](../entities/SessionState.md) | Enum | 44 | `str`, `Enum` | The 13 session lifecycle states (ARC-011 §3). |
-| [SessionEvent](../entities/SessionEvent.md) | Enum | 67 | `str`, `Enum` | Events that drive session state transitions (ARC-011 §4.1). |
-| [IllegalTransitionError](../entities/IllegalTransitionError.md) | Class | 124 | `RuntimeError` | Raised when an event is not legal from the session's current state. |
-| [TransitionResult](../entities/TransitionResult.md) | Class | 142 | — | Outcome of a ``transition()`` call. |
-| [_TransitionSpec](../entities/TransitionSpec.md) | Class | 163 | — | Declarative description of a transition's writes and side-effects. |
-| [SessionLockRegistry](../entities/SessionLockRegistry.md) | Class | 291 | — | Per-session ``asyncio.Lock`` registry for ``transition()``. |
-| [SessionStateMachine](../entities/SessionStateMachine.md) | Class | 328 | — | The single legal writer of ``research_sessions.status``. |
+| [SessionState](../entities/SessionState.md) | Enum | 45 | `str`, `Enum` | The 13 session lifecycle states (ARC-011 §3). |
+| [SessionEvent](../entities/SessionEvent.md) | Enum | 68 | `str`, `Enum` | Events that drive session state transitions (ARC-011 §4.1). |
+| [IllegalTransitionError](../entities/IllegalTransitionError.md) | Class | 125 | `RuntimeError` | Raised when an event is not legal from the session's current state. |
+| [TransitionResult](../entities/TransitionResult.md) | Class | 143 | — | Outcome of a ``transition()`` call. |
+| [_TransitionSpec](../entities/TransitionSpec.md) | Class | 164 | — | Declarative description of a transition's writes and side-effects. |
+| [SessionLockRegistry](../entities/SessionLockRegistry.md) | Class | 292 | — | Per-session ``asyncio.Lock`` registry for ``transition()``. |
+| [SessionStateMachine](../entities/SessionStateMachine.md) | Class | 329 | — | The single legal writer of ``research_sessions.status``. |
 
 ## Functions
 

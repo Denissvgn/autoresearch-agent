@@ -1,6 +1,6 @@
 # TestBootstrapIdempotency
 
-**Location:** `tests/test_bootstrap_runner.py:274`
+**Location:** `tests/test_bootstrap_runner.py:276`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_bootstrap_runner](../modules/test_bootstrap_runner.md)

@@ -1,6 +1,6 @@
 # Tab
 
-**Location:** `ui/src/pages/ResearchDetail.tsx:29`
+**Location:** `ui/src/pages/ResearchDetail.tsx:31`
 **Kind:** Type alias
 **Bases:** —
 **Module:** [ResearchDetail](../modules/ResearchDetail.md)

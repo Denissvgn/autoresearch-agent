@@ -10,7 +10,7 @@ _Auto-generated from `ui/vitest.setup.ts`._
 
 | Source | Symbols |
 |--------|---------|
-| `@testing-library/jest-dom/vitest` | `` |
+| `@testing-library/jest-dom/vitest` | — |
 
 ## Local dependency map
 

@@ -85,16 +85,16 @@ flowchart LR
 
 | From | To | Line | Call |
 |---|---|---:|---|
-| significance_verdict | len (src/core/significance.py:significance_verdict) | 72 | `len(candidate)` |
-| significance_verdict | len (src/core/significance.py:significance_verdict) | 72 | `len(reference)` |
-| significance_verdict | mean_std | 74 | `mean_std(candidate)` |
-| mean_std | len (src/core/significance.py:mean_std) | 45 | `len(values)` |
-| mean_std | ValueError | 47 | `ValueError('mean_std requires at least one value')` |
-| mean_std | sum | 48 | `sum(values)` |
-| mean_std | sum | 51 | `sum(...)` |
-| significance_verdict | mean_std | 75 | `mean_std(reference)` |
-| significance_verdict | len (src/core/significance.py:significance_verdict) | 82 | `len(candidate)` |
-| significance_verdict | len (src/core/significance.py:significance_verdict) | 82 | `len(reference)` |
+| significance_verdict | len (src/core/significance.py:significance_verdict) | 74 | `len(candidate)` |
+| significance_verdict | len (src/core/significance.py:significance_verdict) | 74 | `len(reference)` |
+| significance_verdict | mean_std | 76 | `mean_std(candidate)` |
+| mean_std | len (src/core/significance.py:mean_std) | 47 | `len(values)` |
+| mean_std | ValueError | 49 | `ValueError('mean_std requires at least one value')` |
+| mean_std | sum | 50 | `sum(values)` |
+| mean_std | sum | 53 | `sum(...)` |
+| significance_verdict | mean_std | 77 | `mean_std(reference)` |
+| significance_verdict | len (src/core/significance.py:significance_verdict) | 84 | `len(candidate)` |
+| significance_verdict | len (src/core/significance.py:significance_verdict) | 84 | `len(reference)` |
 
 ### Boundary effects
 
@@ -104,9 +104,9 @@ flowchart LR
 
 | Kind | Step | Target | Line |
 |---|---|---|---:|
-| external_call | `mean_std` | `ValueError` | 47 |
-| external_call | `mean_std` | `sum` | 48 |
-| external_call | `mean_std` | `sum` | 51 |
+| external_call | `mean_std` | `ValueError` | 49 |
+| external_call | `mean_std` | `sum` | 50 |
+| external_call | `mean_std` | `sum` | 53 |
 
 ## Behavior
 

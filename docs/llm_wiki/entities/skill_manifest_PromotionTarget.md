@@ -1,6 +1,6 @@
 # PromotionTarget
 
-**Location:** `src/core/skill_manifest.py:776`
+**Location:** `src/core/skill_manifest.py:877`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [skill_manifest](../modules/skill_manifest.md)
@@ -46,12 +46,15 @@ flowchart LR
     n1["BaseModel"]
     n2["FilePathPromotionTarget._validate_path_template (src/core/skill_manifest.py)"]
     n3["PromotionTarget._registry_scope_needs_production (src/core/skill_manifest.py)"]
+    n4["test_manifest_rejects_invalid_scope_graph_at_load (tests/test_promotion_policy.py)"]
     n0 --> n1
     n2 --> n0
     n3 --> n0
+    n4 --> n0
     click n0 "../modules/skill_manifest.md"
     click n2 "../modules/skill_manifest.md"
     click n3 "../modules/skill_manifest.md"
+    click n4 "../modules/test_promotion_policy.md"
 ```
 
 ### Summary
@@ -72,3 +75,4 @@ flowchart LR
 |---|---|---|---:|
 | `FilePathPromotionTarget._validate_path_template` | type_reference | [skill_manifest](../modules/skill_manifest.md) | — |
 | `PromotionTarget._registry_scope_needs_production` | type_reference | [skill_manifest](../modules/skill_manifest.md) | — |
+| `test_manifest_rejects_invalid_scope_graph_at_load` | call | [test_promotion_policy](../modules/test_promotion_policy.md) | 1 |

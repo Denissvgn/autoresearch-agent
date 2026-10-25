@@ -1,6 +1,6 @@
 # HpoTrial
 
-**Location:** `ui/src/api/client.ts:227`
+**Location:** `ui/src/api/client.ts:228`
 **Kind:** Class
 **Bases:** —
 **Module:** [client](../modules/client.md)

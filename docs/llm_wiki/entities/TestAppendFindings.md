@@ -1,6 +1,6 @@
 # TestAppendFindings
 
-**Location:** `tests/test_insights_feedback.py:28`
+**Location:** `tests/test_insights_feedback.py:29`
 **Kind:** Class
 **Bases:** —
 **Module:** [test_insights_feedback](../modules/test_insights_feedback.md)

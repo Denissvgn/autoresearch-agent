@@ -1,6 +1,6 @@
 # ResolutionRecord
 
-**Location:** `src/core/execution_contracts.py:1008`
+**Location:** `src/core/execution_contracts.py:1010`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

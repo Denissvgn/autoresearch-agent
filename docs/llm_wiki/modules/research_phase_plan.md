@@ -24,7 +24,9 @@ the manifest; nothing in this module may grow new historical vocabulary.
 | `src.compat.legacy_phase_tables` | `_PHASE_PRIMARY_SWEEP_KEYS`, `DIRECTION_PHASES`, `FALLBACK_PHASES`, `RL_OOS_EVIDENCE_KEYS`, `VOLATILITY_PHASES`, `phases_for_model` |
 | `src.core.artifact_reference` | `normalize_optional_artifact_ref` |
 | `src.core.consistency_validator` | `ACCEPTED_ADAPTIVE_NOOP_REASONS`, `EVIDENCE_ARTIFACT_PHASES`, `_is_synthetic_promotion_iteration`, `check_adaptive_feature_sweep`, `check_evidence_artifact` |
-| `typing` | `Any`, `Dict`, `Iterable`, `List`, `Optional` |
+| `src.core.objective_comparator` | `ObjectiveComparator`, `objective_comparator_for_skill_id` |
+| `src.core.skill_registry` | `default_registry` |
+| `typing` | `Any`, `Dict`, `Iterable`, `List`, `Mapping`, `Optional`, `Sequence` |
 
 ## Local dependency map
 
@@ -47,10 +49,10 @@ flowchart LR
 | Direction | Module |
 |---|---|
 | Inbound | `src` (3) |
-| Inbound | `tests` (15) |
-| Outbound | `src` (3) |
+| Inbound | `tests` (17) |
+| Outbound | `src` (5) |
 
-> All 21 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
+> All 25 module neighbor(s) are summarized by package because the module-level view exceeds the 12-node limit.
 
 ## Functions
 
@@ -60,7 +62,8 @@ flowchart LR
 | `phase_state_json` | `(state: Dict[str, Any]) -> str` | — | — |
 | `incomplete_phase_ids` | `(state: Dict[str, Any]) -> List[str]` | — | Return phase ids whose status is not 'completed' in a built state. |
 | `phase_cap_exceeded` | `(state: Dict[str, Any], iterations_in_phase: int) -> bool` | — | True when the active phase's `max_iterations` cap has been reached. |
-| `_completed_phase_ids` | `(iterations: List[Dict[str, Any]], hpo_studies: List[Dict[str, Any]], promotions: List[Dict[str, Any]], model_type: Optional[str]) -> set[str]` | — | Mark phases complete using a hybrid contract: |
+| `_declared_phases_for_session` | `(session: Mapping[str, Any]) -> Optional[List[Mapping[str, Any]]]` | — | The skill manifest's declared phase rules for this session, or None. |
+| `_completed_phase_ids` | `(iterations: List[Dict[str, Any]], hpo_studies: List[Dict[str, Any]], promotions: List[Dict[str, Any]], model_type: Optional[str], comparator: Optional['ObjectiveComparator'] = None, phases: Optional[Sequence[Mapping[str, Any]]] = None) -> set[str]` | — | Mark phases complete using a hybrid contract: |
 | `_is_rejected_duplicate` | `(iteration: Dict[str, Any]) -> bool` | — | True when the iteration row was rejected by canonical-config dedup |
 | `_is_failed_iteration` | `(iteration: Dict[str, Any]) -> bool` | — | True when the iteration's training run failed (no valid result). |
 | `_hpo_study_completed` | `(hpo_studies: List[Dict[str, Any]]) -> bool` | — | True when the ``hpo_screening`` phase has nothing left to screen. |
@@ -90,6 +93,6 @@ flowchart LR
 | `_int_value` | `(value: Any, *, default: int = 0) -> int` | — | — |
 | `_truthy` | `(value: Any) -> bool` | — | — |
 | `_parse_json` | `(raw: Any) -> Any` | — | — |
-| `_metrics_of` | `(it: Dict[str, Any]) -> Dict[str, Any]` | — | Return the parsed metrics_json dict for an iteration row, or {}. |
+| `_metrics_of` | `(it: Mapping[str, Any]) -> Dict[str, Any]` | — | Return the parsed metrics_json dict for an iteration row, or {}. |
 | `_prior_run_ids_for_phase` | `(iterations: List[Dict[str, Any]], phase_id: str) -> frozenset` | — | Collect mlflow_run_ids from iterations that do NOT carry phase evidence. |
-| `_prior_best_metrics` | `(iterations: List[Dict[str, Any]]) -> Dict[str, Any]` | — | Return metrics of the best non-promotion-family iteration. |
+| `_prior_best_metrics` | `(iterations: Sequence[Mapping[str, Any]], *, comparator: Optional['ObjectiveComparator'] = None) -> Dict[str, Any]` | — | Return metrics of the best non-promotion-family iteration. |

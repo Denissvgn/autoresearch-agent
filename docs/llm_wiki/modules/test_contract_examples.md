@@ -16,6 +16,7 @@ round-trip through JSON unchanged.
 | `__future__` | `annotations` |
 | `json` | `json` |
 | `pathlib` | `Path` |
+| `pydantic` | `BaseModel` |
 | `pytest` | `pytest` |
 | `src.core` | `execution_contracts` |
 | `typing` | `Any` |
@@ -42,7 +43,7 @@ flowchart LR
 
 | Language | Used packages | Undeclared packages |
 |---|---:|---:|
-| python | 1 | 1 |
+| python | 2 | 1 |
 
 ## Functions
 
@@ -50,7 +51,7 @@ flowchart LR
 |----------|-----------|------------|-------------|
 | `_bundles` | `() -> list[tuple[str, dict[str, Any]]]` | — | — |
 | `_bundle` | `(name: str) -> dict[str, Any]` | — | — |
-| `_round_trip` | `(model: type, payload: dict[str, Any]) -> Any` | — | — |
+| `_round_trip` | `(model: type[BaseModel], payload: dict[str, Any]) -> Any` | — | — |
 | `test_every_example_file_parses_with_identity_fields` | `() -> None` | — | — |
 | `test_integration_bundles_cover_both_directions_and_three_domains` | `() -> None` | — | — |
 | `test_integration_bundle_contracts_validate_and_agree` | `(name: str) -> None` | `@pytest.mark.parametrize('name', [f'{integration}-{domain}' for domain in sorted(DOMAIN_DIRECTIONS) for integration in ('managed', 'attached')])` | — |

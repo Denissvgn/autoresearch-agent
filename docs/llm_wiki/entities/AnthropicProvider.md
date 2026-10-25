@@ -1,6 +1,6 @@
 # AnthropicProvider
 
-**Location:** `src/core/llm_provider.py:497`
+**Location:** `src/core/llm_provider.py:533`
 **Kind:** Class
 **Bases:** —
 **Module:** [llm_provider](../modules/llm_provider.md)
@@ -29,6 +29,7 @@ loop-owned retry (``orchestrator.py`` ``_call_llm_with_retry``) reads
 | `complete` | *(async)* `(*, model: str, prompt: str, max_tokens: int, system: str \| None = None) -> str` | — | One-shot text completion (insights / Haiku path). |
 | `stream` | *(async)* `(**kwargs: Any) -> AsyncIterator[StreamDelta]` | — | Token streaming (OPTIONAL in v1; D-stream). Not implemented for Anthropic. |
 | `estimate_cost` | `(model: str, usage: Usage) -> float` | — | Flat Sonnet-3.5-baseline USD cost (parity with pre-refactor accounting). |
+| `price_quote` | `(model: str, usage: Usage) -> CostEstimate` | — | Basis-snapshotted Anthropic cost: flat baseline plus cache tokens. |
 | `capabilities` | `() -> ProviderCapabilities` | — | — |
 | `classify_error` | `(exc: Exception) -> ErrorClass` | — | Classify an SDK exception for loop-owned retry. |
 
@@ -46,6 +47,8 @@ flowchart LR
     n6["test_classify_error_transient_connection_exceptions (tests/test_anthropic_provider.py)"]
     n7["test_classify_error_transient_status_codes (tests/test_anthropic_provider.py)"]
     n8["test_estimate_cost_flat_sonnet_baseline (tests/test_anthropic_provider.py)"]
+    n9["_anthropic_provider (tests/test_provider_roles.py)"]
+    n10["_anthropic (tests/test_usage_ledger.py)"]
     n1 --> n0
     n2 --> n0
     n3 --> n0
@@ -54,6 +57,8 @@ flowchart LR
     n6 --> n0
     n7 --> n0
     n8 --> n0
+    n9 --> n0
+    n10 --> n0
     click n0 "../modules/llm_provider.md"
     click n1 "../modules/llm_provider.md"
     click n2 "../modules/orchestrator.md"
@@ -63,13 +68,15 @@ flowchart LR
     click n6 "../modules/test_anthropic_provider.md"
     click n7 "../modules/test_anthropic_provider.md"
     click n8 "../modules/test_anthropic_provider.md"
+    click n9 "../modules/test_provider_roles.md"
+    click n10 "../modules/test_usage_ledger.md"
 ```
 
 ### Summary
 
 | Module | Methods | Attributes |
 |---|---:|---|
-| [llm_provider](../modules/llm_provider.md) | 7 | — |
+| [llm_provider](../modules/llm_provider.md) | 8 | — |
 
 ### References
 
@@ -84,3 +91,6 @@ flowchart LR
 | `test_classify_error_transient_connection_exceptions` | call | [test_anthropic_provider](../modules/test_anthropic_provider.md) | 1 |
 | `test_classify_error_transient_status_codes` | call | [test_anthropic_provider](../modules/test_anthropic_provider.md) | 1 |
 | `test_estimate_cost_flat_sonnet_baseline` | call | [test_anthropic_provider](../modules/test_anthropic_provider.md) | 1 |
+| `_anthropic_provider` | call | [test_provider_roles](../modules/test_provider_roles.md) | 1 |
+| `_anthropic` | call | [test_usage_ledger](../modules/test_usage_ledger.md) | 1 |
+| `_anthropic` | type_reference | [test_usage_ledger](../modules/test_usage_ledger.md) | — |

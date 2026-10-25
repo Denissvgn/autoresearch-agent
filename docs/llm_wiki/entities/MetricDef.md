@@ -1,6 +1,6 @@
 # MetricDef
 
-**Location:** `ui/src/pages/ResearchDetail.tsx:603`
+**Location:** `ui/src/pages/ResearchDetail.tsx:637`
 **Kind:** Type alias
 **Bases:** —
 **Module:** [ResearchDetail](../modules/ResearchDetail.md)

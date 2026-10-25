@@ -30,7 +30,8 @@ agent having to perturb a research-irrelevant knob.
 | `src.core.research_phase_plan` | `build_phase_state` |
 | `src.core.results_store` | `ResultsStore` |
 | `sys` | `sys` |
-| `types` | `types` |
+| `types` | `types`, `ModuleType` |
+| `typing` | `cast` |
 
 ## Local dependency map
 

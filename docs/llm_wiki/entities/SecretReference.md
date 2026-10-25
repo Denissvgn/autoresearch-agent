@@ -1,6 +1,6 @@
 # SecretReference
 
-**Location:** `src/core/execution_contracts.py:142`
+**Location:** `src/core/execution_contracts.py:144`
 **Kind:** Pydantic model
 **Bases:** `BaseModel`
 **Module:** [execution_contracts](../modules/execution_contracts.md)

@@ -1,6 +1,6 @@
 # _FakeAPIStatusError
 
-**Location:** `tests/test_orchestrator_command_audit.py:16`
+**Location:** `tests/test_orchestrator_command_audit.py:18`
 **Kind:** Class
 **Bases:** `Exception`
 **Module:** [test_orchestrator_command_audit](../modules/test_orchestrator_command_audit.md)
